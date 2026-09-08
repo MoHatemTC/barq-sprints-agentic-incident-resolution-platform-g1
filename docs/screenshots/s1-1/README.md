@@ -11,7 +11,7 @@ Required/recommended files:
 4. `04-populated-ai-fields.png` — distinct suggestion/resolution plus attribution and timing. **Captured.**
 5. `05-confidence-validation.png` — rejected out-of-range value and clear error. **Captured.**
 6. `06-update-set-contents.png` — final scoped update-set contents.
-7. `07-secondary-import-preview.png` — clean preview on the secondary instance.
+7. `07-secondary-import-preview.png` — clean preview on the secondary instance. **Captured.**
 8. `08-secondary-import-verification.png` — imported form/fields working on the secondary instance.
 
 Use a dedicated synthetic test Incident rather than real personal/customer data.

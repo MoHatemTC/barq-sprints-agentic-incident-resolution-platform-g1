@@ -35,7 +35,7 @@ Do not request a formal review until every required item is checked.
 - [x] Suggestion/resolution rationale is included.
 - [x] Scope, validation, lifecycle, and permission assumptions are documented.
 - [x] Required Incident form screenshots are readable.
-- [ ] Supporting Studio, choice, validation, and update-set screenshots are included.
+- [x] Supporting Studio, choice, validation, and update-set preview screenshots are included.
 - [x] Current screenshots contain no credentials or secrets.
 - [x] No `TBD`, `REPLACE_WITH`, or placeholder text remains.
 
@@ -45,8 +45,8 @@ Do not request a formal review until every required item is checked.
 - [x] Final update set is Complete.
 - [x] XML was exported through the official ServiceNow SDK and never hand-edited.
 - [x] XML is stored in `servicenow/ai_incident_orchestrator/`.
-- [ ] XML was previewed on a clean secondary PDI of the same release.
-- [ ] Preview produced no unresolved errors or missing dependencies.
+- [x] XML was previewed on a clean secondary PDI of the same release.
+- [x] Preview produced 39 inserts, zero deletes, zero collisions, and no unresolved errors.
 - [ ] Commit completed without manual configuration/repair.
 - [ ] Application, fields, form, choices, and validation were retested after import.
 - [ ] Import evidence is recorded in the dictionary/screenshots.
