@@ -4,7 +4,7 @@ Place final PNG screenshots in this directory. Do not include credentials, token
 
 Required/recommended files:
 
-1. `01-studio-application-scope.png` — application name and generated scope.
+1. `01-studio-application-scope.png` — application name and generated scope. **Captured.**
 2. `02-incident-ai-section.png` — complete readable Incident form section.
 3. `03-processing-state-choices.png` — all five required choices.
 4. `04-populated-ai-fields.png` — distinct suggestion/resolution plus attribution and timing.
@@ -14,4 +14,3 @@ Required/recommended files:
 8. `08-secondary-import-verification.png` — imported form/fields working on the secondary instance.
 
 Use a dedicated synthetic test Incident rather than real personal/customer data.
-

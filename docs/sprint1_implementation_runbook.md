@@ -26,9 +26,19 @@ The W0.5 CAD notes may be compared later but do not block implementation. Do not
 6. Create/select an in-progress update set named **BARQ G1 - S1.1 - AI Incident Orchestrator** in the same application scope.
 7. Confirm both pickers before creating any artifact. Never use the Global/default update set.
 
-## 3. Create scoped columns on Incident
+## 3. Create scoped columns on Incident — fast Table Builder path
 
-Create the fields listed in `docs/sprint1_field_model.md` on Incident `[incident]` while the scoped application is active. Allow ServiceNow to generate the scope-prefixed column names, then replace every `TBD_FROM_PDI` in the dictionary with the exact names.
+Use ServiceNow's integrated Table Builder rather than creating thirteen separate Dictionary Entry files:
+
+1. Confirm the platform scope is **AI Incident Orchestrator** and the current update set is **BARQ G1 - S1.1 - AI Incident Orchestrator**.
+2. In the main ServiceNow application navigator, enter `incident.builder`.
+3. Open Incident in Table Builder and remain on **Data > Fields**.
+4. Confirm Table Builder's selected scope is AI Incident Orchestrator; stop if it shows Global.
+5. Select **+ Add new field** for each row listed in `docs/sprint1_field_model.md`.
+6. Allow ServiceNow to generate the `x_2215032_ai_inc_0_...` names. Never create a `u_...` field.
+7. Save the fields together, then record the exact generated names in the dictionary.
+
+The individual **Create File > Table Column** form remains a valid fallback if Table Builder refuses cross-scope columns, but it is slower and should not be the primary workflow.
 
 Recommended creation order:
 
