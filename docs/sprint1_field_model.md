@@ -94,4 +94,6 @@ The W0.5 CAD notes remain useful for comparison, but their absence does not bloc
 - Export verification: 39 update records; zero `DELETE` actions
 - Source verification Incident: `INC0010018`
 - Source verification date: `2026-09-08`
-- Secondary import verification: Not yet performed; requires an authorized teammate's clean Australia-release PDI.
+- Secondary preview: Passed with 39 inserts, zero updates, zero deletes, zero collisions, and no unresolved errors.
+- Secondary commit: Completed successfully on `2026-09-08` without manual configuration or repair.
+- Secondary functional verification: Pending confirmation of the imported fields/form on the teammate PDI.
