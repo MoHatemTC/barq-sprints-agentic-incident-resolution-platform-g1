@@ -48,8 +48,8 @@ Do not request a formal review until every required item is checked.
 - [x] XML was previewed on a clean secondary PDI of the same release.
 - [x] Preview produced 39 inserts, zero deletes, zero collisions, and no unresolved errors.
 - [x] Commit completed with 39 inserted records and without manual configuration/repair.
-- [ ] Application, fields, form, choices, and validation were retested after import.
-- [ ] Import evidence is recorded in the dictionary/screenshots.
+- [x] Application fields, form section, processing-state default, and confidence validation were retested after import.
+- [x] Import evidence is recorded in the dictionary and screenshots.
 
 ## GitHub and submission
 

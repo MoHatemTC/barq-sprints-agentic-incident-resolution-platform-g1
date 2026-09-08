@@ -96,4 +96,4 @@ The W0.5 CAD notes remain useful for comparison, but their absence does not bloc
 - Source verification date: `2026-09-08`
 - Secondary preview: Passed with 39 inserts, zero updates, zero deletes, zero collisions, and no unresolved errors.
 - Secondary commit: Completed successfully on `2026-09-08` without manual configuration or repair.
-- Secondary functional verification: Pending confirmation of the imported fields/form on the teammate PDI.
+- Secondary functional verification: Passed on `2026-09-08`; the Incident form displayed the imported section/fields and rejected an out-of-range confidence value with the expected error.
