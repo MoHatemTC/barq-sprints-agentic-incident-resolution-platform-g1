@@ -98,3 +98,4 @@ The W0.5 CAD notes remain useful for comparison, but their absence does not bloc
 - Secondary preview: Passed with 39 inserts, zero updates, zero deletes, zero collisions, and no unresolved errors.
 - Secondary commit: Completed successfully on `2026-09-08` without manual configuration or repair.
 - Secondary functional verification: Passed on `2026-09-08`; the Incident form displayed the imported section/fields and automatically removed an out-of-range confidence value while showing the expected error.
+- Confidence boundary verification: The form accepted inclusive boundary values `0` and `1` without validation errors.
