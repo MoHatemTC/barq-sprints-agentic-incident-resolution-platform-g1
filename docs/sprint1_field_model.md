@@ -10,7 +10,7 @@
 - Owner: Ali Ezz
 - Human reviewer: Aya Ashraf
 - Deadline: Sunday, September 13, 2026 at 11:59 PM Cairo time
-- Status: Implemented and verified on the source PDI; final XML exported; secondary-PDI import verification pending
+- Status: Implemented, exported, and verified on source PDI `dev434590` and secondary PDI `dev204871`
 
 ## Design contract
 
@@ -35,6 +35,36 @@ All fields must be created while **AI Incident Orchestrator** is the active appl
 | AI Human Review Required | `x_2215032_ai_inc_0_ai_human_review_required` | True/False | Default `false`; `true` or `false` | Risk/confidence routing or approval workflow | Integration identity sets the requirement; authorized reviewers complete the related approval process | Means **review required**: the automated run has flagged the Incident for human inspection or sign-off. It is distinct from Human Lock. |
 | AI Human Lock | `x_2215032_ai_inc_0_ai_human_lock` | True/False | Default `false`; `true` or `false` | Authorized human fulfiller | Human-controlled; integration identity reads only and must not clear it | Hard safety override. When true, event eligibility and every later write path must halt automated AI processing. |
 | AI Failure Reason | `x_2215032_ai_inc_0_ai_failure_reason` | Large String (4000) | Blank unless a run fails; explicit diagnostic text on failure | Orchestrator/worker through the integration identity | Integration identity writes; support users read | Makes a failed attempt diagnosable. When state becomes `failed`, this field should be populated and Processing End recorded. |
+
+## Exact writer and permission contract
+
+The table below makes the intended S1.2 ACL contract explicit for every field. The existing application roles are `x_2215032_ai_inc_0.user` and `x_2215032_ai_inc_0.admin`. Mohamed's S1.2 workstream will create and assign the least-privilege OAuth writer role `x_2215032_ai_inc_0.integration_writer`; naming it here defines the contract but does not claim that S1.1 implements the ACLs.
+
+The **persistence component** is the component that performs the ServiceNow Table API write. Agent/graph nodes produce values but do not receive direct ServiceNow credentials.
+
+| Field | Value-producing component | Persistence component | Intended write role(s) | Intended read role(s) |
+|---|---|---|---|---|
+| AI Enabled | Authorized Incident fulfiller | ServiceNow Incident form | `x_2215032_ai_inc_0.user`, `x_2215032_ai_inc_0.admin`; explicitly deny `x_2215032_ai_inc_0.integration_writer` | App user/admin and integration writer |
+| AI Processing State | Backend Incident Orchestrator lifecycle controller | Backend ServiceNow Writer using OAuth/Table API | `x_2215032_ai_inc_0.integration_writer`; `x_2215032_ai_inc_0.admin` only for controlled recovery | App user/admin and integration writer |
+| AI Classification | LangGraph Classification Agent node | Backend ServiceNow Writer using OAuth/Table API | `x_2215032_ai_inc_0.integration_writer` | App user/admin and integration writer |
+| AI Confidence | Confidence Evaluation/Guardrail node | Backend ServiceNow Writer using OAuth/Table API | `x_2215032_ai_inc_0.integration_writer` | App user/admin and integration writer |
+| AI Suggestion | Resolution Generation Agent node | Backend ServiceNow Writer using OAuth/Table API | `x_2215032_ai_inc_0.integration_writer` | App user/admin and integration writer |
+| AI Resolution | Safe Action Executor after approval, or authorized human reviewer | Backend ServiceNow Writer or ServiceNow Incident form | `x_2215032_ai_inc_0.integration_writer` only after safe/approved execution; `x_2215032_ai_inc_0.user`; `x_2215032_ai_inc_0.admin` | App user/admin and integration writer |
+| AI Model Name | Backend run-metadata recorder | Backend ServiceNow Writer using OAuth/Table API | `x_2215032_ai_inc_0.integration_writer` | App user/admin and integration writer |
+| AI Agent Version | Backend run-metadata recorder | Backend ServiceNow Writer using OAuth/Table API | `x_2215032_ai_inc_0.integration_writer` | App user/admin and integration writer |
+| AI Processing Start | Backend worker claim/start handler | Backend ServiceNow Writer using OAuth/Table API | `x_2215032_ai_inc_0.integration_writer` | App user/admin and integration writer |
+| AI Processing End | Backend completion/failure handler | Backend ServiceNow Writer using OAuth/Table API | `x_2215032_ai_inc_0.integration_writer` | App user/admin and integration writer |
+| AI Human Review Required | Risk/Confidence Router and approval workflow | Backend ServiceNow Writer using OAuth/Table API; approval workflow clears after review | `x_2215032_ai_inc_0.integration_writer`; `x_2215032_ai_inc_0.user` and `.admin` for the human review transition | App user/admin and integration writer |
+| AI Human Lock | Authorized Incident fulfiller or risk owner | ServiceNow Incident form | `x_2215032_ai_inc_0.user`, `x_2215032_ai_inc_0.admin`; explicitly deny `x_2215032_ai_inc_0.integration_writer` | App user/admin and integration writer |
+| AI Failure Reason | Backend worker error handler | Backend ServiceNow Writer using OAuth/Table API | `x_2215032_ai_inc_0.integration_writer` | App user/admin and integration writer |
+
+Permission rules:
+
+- The OAuth integration identity receives only `x_2215032_ai_inc_0.integration_writer`; it must not receive `admin`.
+- Human Lock and AI Enabled are human-controlled. The integration identity may read them for eligibility but cannot write or clear them.
+- AI Suggestion remains machine-authored. AI Resolution may be written only after an approved/safe action or by an authorized human fulfiller.
+- Application users may read AI-produced audit fields; only the integration writer and explicitly listed human roles may update them.
+- S1.2 owns implementation and automated testing of these field ACLs.
 
 ## Suggestion and resolution separation
 

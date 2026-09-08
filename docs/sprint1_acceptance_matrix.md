@@ -17,7 +17,7 @@ This matrix maps Ahmed Mansour's S1.1 brief to concrete implementation and evide
 | Exported ServiceNow update-set XML | Completed update set exported through the official ServiceNow SDK | `servicenow/ai_incident_orchestrator/ai_incident_orchestrator_s1_1.xml`; 39 records; zero delete actions |
 | Markdown field dictionary | Types, values, writers, intended permissions, lifecycle, scope, and rationale documented | `docs/sprint1_field_model.md` |
 | Incident-form screenshots | Scope, layout, values, choices, and validation captured | `docs/screenshots/s1-1/` |
-| Clean import without manual repair | Preview and commit on authorized teammate PDI `dev204871` | `07-secondary-import-preview.png`: 39 inserts and zero collisions; `08-secondary-import-committed.png`; `09-secondary-import-verification.png` |
+| Clean import without manual repair | Preview and commit on authorized teammate PDI `dev204871` | `docs/sprint1_secondary_import_verification.md`; `07-secondary-import-preview.png`: 39 inserts and zero collisions; `08-secondary-import-committed.png`; `09-secondary-import-verification.png` |
 | Reproducible implementation | Official ServiceNow SDK project and implementation runbook | `servicenow/ai_incident_orchestrator/sdk-app/`; `docs/sprint1_implementation_runbook.md`; `npm run build` passes |
 
 ## Scope boundary
