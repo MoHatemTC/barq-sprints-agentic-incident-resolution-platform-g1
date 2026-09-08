@@ -23,7 +23,7 @@ Do not request a formal review until every required item is checked.
 - [x] The approved Incident Default view contains an AI Incident Orchestrator section.
 - [x] All required fields are present exactly once in the section metadata.
 - [x] Confidence accepts boundary values 0 and 1 on the Incident form.
-- [x] Confidence rejects 1.01 on the Incident form, restores the prior valid value, and displays a clear error.
+- [x] Confidence rejects 1.1 on the Incident form, restores the prior valid value, and displays a clear error.
 - [x] Suggestion and Resolution retain different values on source Incident `INC0010018`.
 - [x] Start/end timestamps persist and are queryable on the source PDI.
 - [x] Failed state and Failure Reason persist on the source PDI.
