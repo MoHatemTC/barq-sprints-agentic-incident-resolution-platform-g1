@@ -1,6 +1,11 @@
-def main():
-    print("Hello from barq-sprints-agentic-incident-resolution-platform-g1!")
+from fastapi import FastAPI
+
+app = FastAPI(
+    title="BARQ Agentic Incident Resolution Platform",
+    version="0.1.0",
+)
 
 
-if __name__ == "__main__":
-    main()
+@app.get("/")
+async def health_check() -> dict[str, str]:
+    return {"status": "ok"}
