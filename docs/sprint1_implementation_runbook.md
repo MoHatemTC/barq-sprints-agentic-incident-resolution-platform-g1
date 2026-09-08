@@ -26,19 +26,22 @@ The W0.5 CAD notes may be compared later but do not block implementation. Do not
 6. Create/select an in-progress update set named **BARQ G1 - S1.1 - AI Incident Orchestrator** in the same application scope.
 7. Confirm both pickers before creating any artifact. Never use the Global/default update set.
 
-## 3. Create scoped columns on Incident — fast Table Builder path
+## 3. Create scoped columns on Incident — implemented SDK path
 
-Use ServiceNow's integrated Table Builder rather than creating thirteen separate Dictionary Entry files:
+The schema is source-controlled under `servicenow/ai_incident_orchestrator/sdk-app/` and deployed with the official ServiceNow SDK. This avoids thirteen slow form submissions while producing normal scoped application metadata.
 
-1. Confirm the platform scope is **AI Incident Orchestrator** and the current update set is **BARQ G1 - S1.1 - AI Incident Orchestrator**.
-2. In the main ServiceNow application navigator, enter `incident.builder`.
-3. Open Incident in Table Builder and remain on **Data > Fields**.
-4. Confirm Table Builder's selected scope is AI Incident Orchestrator; stop if it shows Global.
-5. Select **+ Add new field** for each row listed in `docs/sprint1_field_model.md`.
-6. Allow ServiceNow to generate the `x_2215032_ai_inc_0_...` names. Never create a `u_...` field.
-7. Save the fields together, then record the exact generated names in the dictionary.
+1. Install Node.js 20 or newer.
+2. From `servicenow/ai_incident_orchestrator/sdk-app/`, run `npm ci`.
+3. Add a local SDK credential alias with `npx now-sdk auth --add <instance-url> --alias barq-pdi`. Credentials stay in the operating-system credential manager and must never be committed.
+4. Run `npm run build`.
+5. Run `npm run deploy -- --auth barq-pdi`.
+6. Verify the fields on Incident and confirm their `sys_scope` and `sys_package` both reference AI Incident Orchestrator.
 
-The individual **Create File > Table Column** form remains a valid fallback if Table Builder refuses cross-scope columns, but it is slower and should not be the primary workflow.
+The source of truth is split into three files:
+
+- `src/fluent/incident-fields.now.ts` — thirteen scoped Incident columns and five processing-state choices;
+- `src/fluent/incident-form-layout.now.ts` — the Default-view form section and field placement;
+- `src/fluent/confidence-validation.now.ts` — scoped form validation for the confidence invariant.
 
 Recommended creation order:
 
@@ -62,11 +65,9 @@ Choice values for AI Processing State must be exactly:
 | Complete | `complete` | 400 |
 | Failed | `failed` | 500 |
 
-## 4. Add server-side confidence validation
+## 4. Add scoped confidence validation
 
-Create a scoped **before insert / before update** Business Rule on Incident. Run it only when AI Confidence is not empty and changes. Copy the reference logic from `servicenow/ai_incident_orchestrator/reference/validate_ai_confidence.js`, replacing the placeholder with the exact ServiceNow column name.
-
-The rule must accept 0 and 1, reject values below 0 or above 1, show a clear error, and abort the invalid database write. Client-only validation is insufficient because later integrations write through the Table API.
+The implementation uses scoped onChange and onSubmit Client Scripts because ServiceNow does not permit a scripted scoped before Business Rule to abort changes on the Global-scope Incident table. Creating a Global rule would violate the task's zero-Global-artifacts requirement. The form scripts reject values below 0 or above 1, while every downstream API writer must enforce the identical invariant before calling the Table API. Their source is `sdk-app/src/fluent/confidence-validation.now.ts`.
 
 ## 5. Configure the Incident form
 
@@ -90,12 +91,12 @@ Use a dedicated test Incident and record its number.
 
 - Confirm all expected fields and choices appear.
 - Save confidence values `0`, `0.50`, and `1`; all must succeed.
-- Attempt `-0.01` and `1.01`; both must fail without changing the record.
+- Attempt `-0.01` and `1.01` in the Incident form; both must be rejected without changing the record.
 - Save different Suggestion and Resolution values; confirm neither overwrites the other.
 - Save start/end timestamps and confirm they can be filtered/reported.
 - Set Failed plus a Failure Reason and confirm it persists.
 - Verify Human Lock is human-writable and intended to be integration-read-only after ACL integration.
-- Verify every field, choice, form section, and Business Rule shows the application scope.
+- Verify every field, choice, form section, and Client Script shows the application scope.
 - Inspect the Global/default update set and confirm it contains no S1.1 records.
 
 ## 7. Capture evidence

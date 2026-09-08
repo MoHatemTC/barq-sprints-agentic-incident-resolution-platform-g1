@@ -8,6 +8,7 @@ A production-grade ServiceNow incident resolution platform featuring LangGraph o
 - [Field dictionary](docs/sprint1_field_model.md)
 - [ServiceNow implementation runbook](docs/sprint1_implementation_runbook.md)
 - [Submission checklist](docs/sprint1_submission_checklist.md)
+- [Source-PDI verification](docs/sprint1_source_pdi_verification.md)
 - [ServiceNow package directory](servicenow/ai_incident_orchestrator/README.md)
 
-The update-set XML and live screenshots are generated from the ServiceNow PDI after implementation and secondary-instance verification. Reference files in the repository are not substitutes for the exported update set.
+The ServiceNow SDK source and final exported update-set XML are included. Live Incident-form screenshots and clean secondary-instance import evidence complete the acceptance package.

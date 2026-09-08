@@ -5,6 +5,7 @@ Place final PNG screenshots in this directory. Do not include credentials, token
 Required/recommended files:
 
 1. `01-studio-application-scope.png` — application name and generated scope. **Captured.**
+   `01b-current-scoped-update-set.png` — working scoped update set selected. **Captured.**
 2. `02-incident-ai-section.png` — complete readable Incident form section.
 3. `03-processing-state-choices.png` — all five required choices.
 4. `04-populated-ai-fields.png` — distinct suggestion/resolution plus attribution and timing.
