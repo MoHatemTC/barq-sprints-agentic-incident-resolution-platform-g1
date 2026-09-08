@@ -8,15 +8,15 @@ Do not request a formal review until every required item is checked.
 - [ ] Exact scope name is recorded in `docs/sprint1_field_model.md`.
 - [ ] No S1.1 artifact resides in Global scope or the Global/default update set.
 - [ ] Processing State includes all five required internal values.
-- [ ] Classification type and vocabulary are mentor-approved.
+- [ ] Classification is String (100) and the initial expected labels are documented without constraining S1.4.
 - [ ] Confidence is Decimal and server-side bounded to 0–1 inclusive.
 - [ ] Suggestion and Resolution are separate fields.
 - [ ] Model Name and Agent Version are present.
 - [ ] Processing Start and Processing End are Date/Time fields.
-- [ ] Human Review semantics are confirmed and implemented.
+- [ ] Human Review is implemented as “review required.”
 - [ ] Human Lock is dedicated and documented as a hard automation stop.
 - [ ] Failure Reason captures explicit failed-run information.
-- [ ] AI Enabled decision is documented and implemented if approved.
+- [ ] AI Enabled is implemented as a Boolean with default false.
 
 ## Form and behavior
 
@@ -56,7 +56,8 @@ Do not request a formal review until every required item is checked.
 - [ ] Work is on `feature/s1-1-ai-incident-field-model`, not directly on `main`.
 - [ ] `git diff --check` passes.
 - [ ] The feature branch is pushed.
-- [ ] A pull request into `main` is open and accessible.
+- [x] A draft pull request into `main` is open and accessible.
+- [ ] Aya Ashraf has completed the human PR review.
 - [ ] Every repository link was opened and verified.
 - [ ] Airtable status is updated when access becomes available.
 - [ ] Sarah receives the PR/repository, XML, dictionary, and screenshot links.
@@ -85,4 +86,3 @@ I verified that every link is accessible and that the update set previews, commi
 
 Please let me know if you need any clarification. Thank you.
 ```
-
