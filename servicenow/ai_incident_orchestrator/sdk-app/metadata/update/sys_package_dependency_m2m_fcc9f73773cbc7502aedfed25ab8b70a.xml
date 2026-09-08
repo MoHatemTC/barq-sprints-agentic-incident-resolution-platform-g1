@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_package_dependency_m2m">
+    <sys_package_dependency_m2m action="INSERT_OR_UPDATE">
+        <dependency display_value="Incident" source="com.snc.incident">bae1e180a56503108bb220b7a4d21250</dependency>
+        <min_version>1.0.0</min_version>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-09-08 02:09:06</sys_created_on>
+        <sys_id>fcc9f73773cbc7502aedfed25ab8b70a</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-09-08 02:09:06</sys_updated_on>
+    </sys_package_dependency_m2m>
+</record_update>

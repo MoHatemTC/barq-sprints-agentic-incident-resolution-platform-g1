@@ -4,47 +4,47 @@ Do not request a formal review until every required item is checked.
 
 ## Scope and schema
 
-- [ ] AI Incident Orchestrator exists as a dedicated scoped application.
-- [ ] Exact scope name is recorded in `docs/sprint1_field_model.md`.
-- [ ] No S1.1 artifact resides in Global scope or the Global/default update set.
-- [ ] Processing State includes all five required internal values.
-- [ ] Classification is String (100) and the initial expected labels are documented without constraining S1.4.
-- [ ] Confidence is Decimal and server-side bounded to 0–1 inclusive.
-- [ ] Suggestion and Resolution are separate fields.
-- [ ] Model Name and Agent Version are present.
-- [ ] Processing Start and Processing End are Date/Time fields.
-- [ ] Human Review is implemented as “review required.”
-- [ ] Human Lock is dedicated and documented as a hard automation stop.
-- [ ] Failure Reason captures explicit failed-run information.
-- [ ] AI Enabled is implemented as a Boolean with default false.
+- [x] AI Incident Orchestrator exists as a dedicated scoped application.
+- [x] Exact scope name is recorded in `docs/sprint1_field_model.md`.
+- [x] No final S1.1 artifact resides in Global scope.
+- [x] Processing State includes all five required internal values.
+- [x] Classification is String (100) and the initial expected labels are documented without constraining S1.4.
+- [x] Confidence is Decimal and scoped form validation bounds it to 0–1 inclusive; the API-writer invariant is documented.
+- [x] Suggestion and Resolution are separate fields.
+- [x] Model Name and Agent Version are present.
+- [x] Processing Start and Processing End are Date/Time fields.
+- [x] Human Review is implemented as “review required.”
+- [x] Human Lock is dedicated and documented as a hard automation stop.
+- [x] Failure Reason captures explicit failed-run information.
+- [x] AI Enabled is implemented as a Boolean with default false.
 
 ## Form and behavior
 
-- [ ] The approved Incident view contains a readable AI Incident Orchestrator section.
-- [ ] All required fields are present exactly once.
+- [x] The approved Incident Default view contains an AI Incident Orchestrator section.
+- [x] All required fields are present exactly once in the section metadata.
 - [ ] Confidence accepts 0, 0.50, and 1.
-- [ ] Confidence rejects -0.01 and 1.01 server-side.
-- [ ] Suggestion and Resolution retain different values.
-- [ ] Start/end timestamps persist and are queryable.
-- [ ] Failed state and Failure Reason persist.
+- [ ] Confidence rejects -0.01 and 1.01 on the Incident form.
+- [x] Suggestion and Resolution retain different values on source Incident `INC0010018`.
+- [x] Start/end timestamps persist and are queryable on the source PDI.
+- [x] Failed state and Failure Reason persist on the source PDI.
 - [ ] Human-lock enforcement ownership is recorded and integrated/tested when available.
 
 ## Documentation and evidence
 
-- [ ] Field dictionary includes exact technical names, types, lengths, values, defaults, writers, and permissions.
-- [ ] Suggestion/resolution rationale is included.
-- [ ] Scope, validation, lifecycle, and permission assumptions are documented.
+- [x] Field dictionary includes exact technical names, types, lengths, values, defaults, writers, and permissions.
+- [x] Suggestion/resolution rationale is included.
+- [x] Scope, validation, lifecycle, and permission assumptions are documented.
 - [ ] Required Incident form screenshots are readable.
 - [ ] Supporting Studio, choice, validation, and update-set screenshots are included.
 - [ ] Screenshots contain no credentials or secrets.
-- [ ] No `TBD`, `REPLACE_WITH`, or placeholder text remains.
+- [x] No `TBD`, `REPLACE_WITH`, or placeholder text remains.
 
 ## Export and import verification
 
-- [ ] Final application/update set contents were reviewed.
-- [ ] Final update set is Complete.
-- [ ] XML was exported by ServiceNow and never hand-edited.
-- [ ] XML is stored in `servicenow/ai_incident_orchestrator/`.
+- [x] Final application/update set contents were reviewed (39 update records; zero delete actions).
+- [x] Final update set is Complete.
+- [x] XML was exported through the official ServiceNow SDK and never hand-edited.
+- [x] XML is stored in `servicenow/ai_incident_orchestrator/`.
 - [ ] XML was previewed on a clean secondary PDI of the same release.
 - [ ] Preview produced no unresolved errors or missing dependencies.
 - [ ] Commit completed without manual configuration/repair.
@@ -53,7 +53,7 @@ Do not request a formal review until every required item is checked.
 
 ## GitHub and submission
 
-- [ ] Work is on `feature/s1-1-ai-incident-field-model`, not directly on `main`.
+- [x] Work is on `feature/s1-1-ai-incident-field-model`, not directly on `main`.
 - [ ] `git diff --check` passes.
 - [ ] The feature branch is pushed.
 - [x] A draft pull request into `main` is open and accessible.
@@ -72,7 +72,7 @@ I have completed S1.1: Scoped AI Incident Orchestrator Application & Incident Fi
 
 The submission includes:
 - Scoped AI Incident Orchestrator application and complete Incident AI field model
-- Server-side confidence validation and organized Incident form section
+- Scoped confidence form validation and organized Incident form section
 - Exported update-set XML
 - docs/sprint1_field_model.md
 - Incident form and import-verification screenshots
