@@ -54,11 +54,11 @@ Do not request a formal review until every required item is checked.
 ## GitHub and submission
 
 - [x] Work is on `feature/s1-1-ai-incident-field-model`, not directly on `main`.
-- [ ] `git diff --check` passes.
-- [ ] The feature branch is pushed.
+- [x] `git diff --check` passes.
+- [x] The feature branch is pushed.
 - [x] A draft pull request into `main` is open and accessible.
 - [ ] Aya Ashraf has completed the human PR review.
-- [ ] Every repository link was opened and verified.
+- [x] The draft PR and repository links were opened and verified.
 - [ ] Airtable status is updated when access becomes available.
 - [ ] Sarah receives the PR/repository, XML, dictionary, and screenshot links.
 - [ ] Formal review is requested only after all checks pass.
