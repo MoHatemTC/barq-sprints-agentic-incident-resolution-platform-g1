@@ -25,10 +25,10 @@ fix:
     uv run ruff check . --fix
     uv run ruff format .
 
+typecheck:
+    uv run mypy src
+
 check:
     just lint
     just typecheck
     just test
-
-precommit:
-    uv run pre-commit run --all-files
