@@ -8,7 +8,7 @@ Verification performed on September 8, 2026 against source PDI `dev434590` on th
 - Scope: `x_2215032_ai_inc_0`
 - Application sys_id: `51a63bbf738bc7502aedfed25ab8b789`
 - Final published update set: AI Incident Orchestrator
-- Final update set sys_id: `4fc6308073530b502aedfed25ab8b7ab`
+- Final update set sys_id: `a76c850473170b502aedfed25ab8b7bc`
 - Final state: Complete
 - Exported package: `servicenow/ai_incident_orchestrator/ai_incident_orchestrator_s1_1.xml`
 - Package inspection: 39 update records and zero `DELETE` actions

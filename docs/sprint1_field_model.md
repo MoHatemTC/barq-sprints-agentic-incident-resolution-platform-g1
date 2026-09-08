@@ -88,8 +88,8 @@ The W0.5 CAD notes remain useful for comparison, but their absence does not bloc
 - Source PDI: `dev434590` (Australia release)
 - Application scope: `x_2215032_ai_inc_0`
 - Final published update set: `AI Incident Orchestrator`
-- Final update set sys_id: `4fc6308073530b502aedfed25ab8b7ab`
-- Final update set state/completed: `Complete` / `2026-09-08 06:35:46`
+- Final update set sys_id: `a76c850473170b502aedfed25ab8b7bc`
+- Final update set state/completed: `Complete` / `2026-09-08 08:10:16`
 - Exported XML: `servicenow/ai_incident_orchestrator/ai_incident_orchestrator_s1_1.xml`
 - Export verification: 39 update records; zero `DELETE` actions
 - Source verification Incident: `INC0010018`

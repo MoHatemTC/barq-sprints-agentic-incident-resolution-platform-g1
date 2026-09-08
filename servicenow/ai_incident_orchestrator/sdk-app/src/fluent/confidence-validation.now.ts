@@ -21,8 +21,8 @@ export const validateAiConfidenceOnChange = ClientScript({
         if (isLoading || newValue === '') return;
         var value = Number(newValue);
         if (!isFinite(value) || value < 0 || value > 1) {
-            g_form.showErrorBox('x_2215032_ai_inc_0_ai_confidence', 'AI Confidence must be between 0.00 and 1.00.', true);
             g_form.setValue('x_2215032_ai_inc_0_ai_confidence', oldValue || '');
+            g_form.showErrorBox('x_2215032_ai_inc_0_ai_confidence', 'AI Confidence must be between 0.00 and 1.00.', true);
         } else {
             g_form.hideFieldMsg('x_2215032_ai_inc_0_ai_confidence', true);
         }
