@@ -5,7 +5,8 @@
 - Work item: S1.1 — Scoped AI Incident Orchestrator Application & Incident Field Model
 - Application: AI Incident Orchestrator
 - Target table: Incident `[incident]`
-- Application scope: `TBD_FROM_PDI`
+- Application scope: `x_2215032_ai_inc_0`
+- Application sys_id: `51a63bbf738bc7502aedfed25ab8b789`
 - Owner: Ali Ezz
 - Human reviewer: Aya Ashraf
 - Deadline: Sunday, September 13, 2026 at 11:59 PM Cairo time
@@ -86,8 +87,8 @@ The W0.5 CAD notes remain useful for comparison, but their absence does not bloc
 
 Complete this section before submission.
 
-- Source PDI: `TBD_FROM_PDI`
-- Application scope: `TBD_FROM_PDI`
+- Source PDI: `dev434590` (Australia release)
+- Application scope: `x_2215032_ai_inc_0`
 - Update set name: `TBD_FROM_PDI`
 - Update set sys_id: `TBD_FROM_PDI`
 - Secondary test instance: `TBD_FROM_PDI`
