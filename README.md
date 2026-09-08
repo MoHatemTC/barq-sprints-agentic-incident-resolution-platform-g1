@@ -10,6 +10,7 @@ A production-grade ServiceNow incident resolution platform featuring LangGraph o
 - [Submission checklist](docs/sprint1_submission_checklist.md)
 - [Acceptance evidence matrix](docs/sprint1_acceptance_matrix.md)
 - [Source-PDI verification](docs/sprint1_source_pdi_verification.md)
+- [Secondary-PDI clean-import verification](docs/sprint1_secondary_import_verification.md)
 - [ServiceNow package directory](servicenow/ai_incident_orchestrator/README.md)
 - [Exported ServiceNow update set](servicenow/ai_incident_orchestrator/ai_incident_orchestrator_s1_1.xml)
 - [Screenshot evidence](docs/screenshots/s1-1/)
