@@ -90,7 +90,6 @@ tmp/
 # =========================
 # Docker
 # =========================
-
 docker-compose.override.yml
 
 # =========================
@@ -111,3 +110,10 @@ site/
 # Local tooling
 # =========================
 .justfile.local
+
+# =========================
+# Data
+# =========================
+data/
+!data/coverage_matrix.csv
+!data/corpus/
