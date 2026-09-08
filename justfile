@@ -28,7 +28,11 @@ fix:
 typecheck:
     uv run mypy src
 
+precommit:
+    uv run pre-commit run --all-files  
+
 check:
     just lint
     just typecheck
     just test
+
