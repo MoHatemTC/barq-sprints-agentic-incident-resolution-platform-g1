@@ -60,8 +60,8 @@ Do not request a formal review until every required item is checked.
 - [ ] Aya Ashraf has completed the human PR review.
 - [x] The PR and repository links were opened and verified.
 - [ ] Airtable status is updated when access becomes available.
-- [ ] Sarah receives the PR/repository, XML, dictionary, and screenshot links.
-- [ ] Formal review is requested only after all checks pass.
+- [x] Sarah received the PR, XML, dictionary, acceptance matrix, and screenshot links.
+- [x] Formal review attempt 1 was requested after the initial checks; Sarah's two documentation findings are addressed in commit `a49a4b2`.
 
 ## Submission message
 
