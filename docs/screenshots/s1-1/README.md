@@ -6,10 +6,10 @@ Required/recommended files:
 
 1. `01-studio-application-scope.png` — application name and generated scope. **Captured.**
    `01b-current-scoped-update-set.png` — working scoped update set selected. **Captured.**
-2. `02-incident-ai-section.png` — complete readable Incident form section.
-3. `03-processing-state-choices.png` — all five required choices.
-4. `04-populated-ai-fields.png` — distinct suggestion/resolution plus attribution and timing.
-5. `05-confidence-validation.png` — rejected out-of-range value and clear error.
+2. `02-incident-ai-section.png` — complete readable Incident form section. **Captured.**
+3. `03-processing-state-choices.png` — all five required choices. **Captured.**
+4. `04-populated-ai-fields.png` — distinct suggestion/resolution plus attribution and timing. **Captured.**
+5. `05-confidence-validation.png` — rejected out-of-range value and clear error. **Captured.**
 6. `06-update-set-contents.png` — final scoped update-set contents.
 7. `07-secondary-import-preview.png` — clean preview on the secondary instance.
 8. `08-secondary-import-verification.png` — imported form/fields working on the secondary instance.
