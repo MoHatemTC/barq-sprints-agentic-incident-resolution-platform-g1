@@ -8,6 +8,7 @@ A production-grade ServiceNow incident resolution platform featuring LangGraph o
 - [Field dictionary](docs/sprint1_field_model.md)
 - [ServiceNow implementation runbook](docs/sprint1_implementation_runbook.md)
 - [Submission checklist](docs/sprint1_submission_checklist.md)
+- [Acceptance evidence matrix](docs/sprint1_acceptance_matrix.md)
 - [Source-PDI verification](docs/sprint1_source_pdi_verification.md)
 - [ServiceNow package directory](servicenow/ai_incident_orchestrator/README.md)
 - [Exported ServiceNow update set](servicenow/ai_incident_orchestrator/ai_incident_orchestrator_s1_1.xml)
