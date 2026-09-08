@@ -27,7 +27,7 @@ Do not request a formal review until every required item is checked.
 - [x] Suggestion and Resolution retain different values on source Incident `INC0010018`.
 - [x] Start/end timestamps persist and are queryable on the source PDI.
 - [x] Failed state and Failure Reason persist on the source PDI.
-- [ ] Human-lock enforcement ownership is recorded and integrated/tested when available.
+- [x] Human-lock enforcement ownership is recorded; runtime eligibility enforcement is explicitly assigned to downstream S1.3.
 
 ## Documentation and evidence
 

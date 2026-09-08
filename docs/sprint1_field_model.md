@@ -94,6 +94,7 @@ The W0.5 CAD notes remain useful for comparison, but their absence does not bloc
 - Export verification: 39 update records; zero `DELETE` actions
 - Source verification Incident: `INC0010018`
 - Source verification date: `2026-09-08`
+- Secondary test PDI: `dev204871` (authorized teammate instance)
 - Secondary preview: Passed with 39 inserts, zero updates, zero deletes, zero collisions, and no unresolved errors.
 - Secondary commit: Completed successfully on `2026-09-08` without manual configuration or repair.
-- Secondary functional verification: Passed on `2026-09-08`; the Incident form displayed the imported section/fields and rejected an out-of-range confidence value with the expected error.
+- Secondary functional verification: Passed on `2026-09-08`; the Incident form displayed the imported section/fields and automatically removed an out-of-range confidence value while showing the expected error.

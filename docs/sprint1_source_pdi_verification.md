@@ -21,6 +21,6 @@ Verification performed on September 8, 2026 against source PDI `dev434590` on th
 - Two scoped Client Scripts validate AI Confidence on change and on submit.
 - Synthetic Incident `INC0010018` stores distinct suggestion/resolution values, model attribution, timing, review/lock flags, and failure information.
 
-## Boundary still awaiting external evidence
+## Secondary-instance verification
 
-The clean import must be previewed, committed, and retested on an authorized teammate's clean PDI running the Australia release. This document does not claim that external verification before it occurs.
+The exported XML was previewed and committed on authorized teammate PDI `dev204871`. Preview reported 39 inserts, zero updates, zero deletes, and zero collisions. Commit completed without manual repair. An existing Incident then displayed the imported AI Incident Orchestrator section, fields, processing-state default, and confidence validation; an out-of-range value was automatically removed with the expected error.
