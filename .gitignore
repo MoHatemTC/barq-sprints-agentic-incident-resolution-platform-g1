@@ -1,23 +1,18 @@
 # =========================
-
 # Python
-
 # =========================
-
 **pycache**/
 *.py[cod]
 *$py.class
 *.so
 
 # Virtual environments
-
 .venv/
 venv/
 env/
 ENV/
 
 # Python packaging
-
 build/
 dist/
 *.egg-info/
@@ -25,27 +20,20 @@ dist/
 pip-wheel-metadata/
 
 # =========================
-
 # Environment & Secrets
-
 # =========================
-
 .env
 .env.*
 !.env.example
 
 # Certificates / private keys
-
 *.pem
 *.key
 *.crt
 
 # =========================
-
 # Testing / Coverage
-
 # =========================
-
 .pytest_cache/
 .coverage
 .coverage.*
@@ -54,85 +42,59 @@ coverage.xml
 *.cover
 
 # =========================
-
 # Type Checking
-
 # =========================
-
 .mypy_cache/
 .dmypy.json
 dmypy.json
 .pyre/
 
 # =========================
-
 # Ruff
-
 # =========================
-
 .ruff_cache/
 
 # =========================
-
 # Jupyter
-
 # =========================
-
 .ipynb_checkpoints/
 
 # =========================
-
 # IDEs / Editors
-
 # =========================
-
 .vscode/
 .idea/
 *.iml
 
 # =========================
-
 # OS
-
 # =========================
-
 .DS_Store
 Thumbs.db
 *.swp
 *.swo
 
 # =========================
-
 # Logs
-
 # =========================
-
 *.log
 logs/
 
 # =========================
-
 # Application-generated data
-
 # =========================
-
-data/
 tmp/
 *.sqlite
 *.sqlite3
 
 # =========================
-
 # Docker
-
 # =========================
 
 docker-compose.override.yml
 
 # =========================
-
 # Local secrets / credentials
-
 # =========================
 
 secrets/
@@ -141,17 +103,11 @@ credentials/
 *.token
 
 # =========================
-
 # Generated documentation
-
 # =========================
-
 site/
 
 # =========================
-
 # Local tooling
-
 # =========================
-
 .justfile.local
