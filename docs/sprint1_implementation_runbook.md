@@ -2,18 +2,19 @@
 
 This runbook implements only Ali's S1.1 assignment. It does not take ownership of the AI Execution Log, OAuth identity/ACL package, Sprint 2 Business Rule, outbound REST message, or backend work unless the mentor explicitly reassigns those items.
 
-## 1. Resolve the schema decisions
+## 1. Confirm the implementation baseline
 
-Before finalizing fields, ask the mentor for:
+The mentor confirmed:
 
-- the W0.5 CAD design notes and technical naming convention;
-- the classification vocabulary;
-- whether AI Enabled is required now;
-- the meaning of Human Review;
-- the Incident form view to configure;
-- ACL ownership and the secondary import-test instance.
+- ServiceNow-generated scope-prefixed column names; no Global `u_` fields;
+- AI Enabled is included now for S1.3 eligibility;
+- AI Classification is String (100), with the taxonomy refined by S1.4;
+- Human Review means review required;
+- Mohamed owns formal OAuth/ACL implementation in S1.2;
+- the AI section is placed on the Default Incident view;
+- an authorized teammate's clean same-release PDI is used for import testing.
 
-The scoped application and draft field records may be started while these answers are pending. Do not invent final taxonomy values or submit unresolved placeholders.
+The W0.5 CAD notes may be compared later but do not block implementation. Do not submit unresolved PDI placeholders.
 
 ## 2. Create the scoped application
 
@@ -31,7 +32,7 @@ Create the fields listed in `docs/sprint1_field_model.md` on Incident `[incident
 
 Recommended creation order:
 
-1. AI Enabled, if approved
+1. AI Enabled
 2. AI Processing State and its choices
 3. AI Classification
 4. AI Confidence
@@ -59,13 +60,13 @@ The rule must accept 0 and 1, reject values below 0 or above 1, show a clear err
 
 ## 5. Configure the Incident form
 
-Create a section named **AI Incident Orchestrator** on the mentor-approved form view.
+Create a section named **AI Incident Orchestrator** on the **Default** Incident form view.
 
 Recommended two-column order:
 
 | Left | Right |
 |---|---|
-| AI Enabled (if approved) | AI Processing State |
+| AI Enabled | AI Processing State |
 | AI Classification | AI Confidence |
 | AI Model Name | AI Agent Version |
 | AI Processing Start | AI Processing End |
@@ -126,6 +127,5 @@ If no clean second PDI is available, ask the mentor to supply one or approve a t
 4. Inspect `git diff --check` and `git status --short`.
 5. Commit and push the feature branch.
 6. Open a pull request into `main`; do not push the task directly to `main` even though it is currently unprotected.
-7. Ask at least one teammate to review scope, naming, and repository placement.
+7. Ask Aya Ashraf to perform the human pull-request review before merge.
 8. Send the PR/repository links to Sarah Nader and update Airtable to the appropriate ready-for-review status.
-
