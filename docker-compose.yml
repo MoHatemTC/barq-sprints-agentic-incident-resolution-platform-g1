@@ -1,0 +1,101 @@
+# =============================================================================
+# Docker Compose — BARQ AI Incident Resolution Platform
+# =============================================================================
+# Services:
+#   1. qdrant: Vector store for dual dense (384d) + sparse (BM25) KB retrieval
+#   2. postgres: Relational store for incident tracking, execution logs, audit
+#   3. redis: Fast key-value store and message broker for task queues
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Qdrant — Vector Database (Sprint 1+)
+  # ---------------------------------------------------------------------------
+  qdrant:
+    image: qdrant/qdrant:v1.14.0
+    container_name: barq-qdrant
+    restart: unless-stopped
+    ports:
+      - "${QDRANT_HTTP_PORT:-6333}:6333"
+      - "${QDRANT_GRPC_PORT:-6334}:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    environment:
+      - QDRANT__SERVICE__HTTP_PORT=6333
+      - QDRANT__SERVICE__GRPC_PORT=6334
+      - QDRANT__LOG_LEVEL=${QDRANT_LOG_LEVEL:-INFO}
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/6333' || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    networks:
+      - barq-network
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL — Relational Database (Sprint 2+)
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: barq-postgres
+    restart: unless-stopped
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-barq_incident}
+      POSTGRES_USER: ${POSTGRES_USER:-barq}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-barq_dev_password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-barq} -d ${POSTGRES_DB:-barq_incident} || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    networks:
+      - barq-network
+
+  # ---------------------------------------------------------------------------
+  # Redis — Caching & Message Broker (Sprint 2+)
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: barq-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    command: >
+      redis-server
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD:-barq_redis_password}
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a ${REDIS_PASSWORD:-barq_redis_password} ping | grep PONG || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    networks:
+      - barq-network
+
+# -----------------------------------------------------------------------------
+# Networks
+# -----------------------------------------------------------------------------
+networks:
+  barq-network:
+    name: barq-network
+    driver: bridge
+
+# -----------------------------------------------------------------------------
+# Named Volumes (Persistent across container lifecycle)
+# -----------------------------------------------------------------------------
+volumes:
+  qdrant_data:
+    name: barq_qdrant_data
+  postgres_data:
+    name: barq_postgres_data
+  redis_data:
+    name: barq_redis_data
