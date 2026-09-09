@@ -114,6 +114,6 @@ site/
 # =========================
 # Data
 # =========================
-data/
+data/*
 !data/coverage_matrix.csv
 !data/corpus/
