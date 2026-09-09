@@ -1,8 +1,15 @@
 # AI Incident Orchestrator
 
+[![CI](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/actions/workflows/ci.yml/badge.svg)](../../actions/workflows/ci.yml)
+[![Sprint 1](https://img.shields.io/github/milestones/progress/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/1)](../../milestone/1)
+
 Agentic incident resolution on ServiceNow: event-driven, observable, and guardrailed. A Business Rule inside a scoped ServiceNow application evaluates eligibility when an incident is created or meaningfully updated, then emits a minimal event carrying identifiers only. A FastAPI webhook authenticates it, validates the schema, checks idempotency and returns `202` without ever waiting on a model. Work is queued in Redis and executed by Celery workers running an explicit LangGraph state machine over hybrid retrieval from Qdrant, with operational state and audit in PostgreSQL and per-node tracing in Langfuse.
 
 **Explicitly out of scope, by design:** polling of any kind, Kubernetes, and admin-credential authentication.
+
+Built by BARQ × Sprints G1 across four one-week sprints. See [TEAM.md](TEAM.md) for who
+owns what, and [docs/ROADMAP.md](docs/ROADMAP.md) for the full four-sprint scope — this
+repository currently implements Sprint 1 only.
 
 ---
 
@@ -52,6 +59,10 @@ Retrieval and operational state are deliberately separate: Qdrant holds vectors 
 | `docs/` | Sprint deliverables, field dictionary, verification records, screenshots |
 | `docker-compose.yml` | Qdrant, PostgreSQL and Redis. Ports bind to `127.0.0.1` by default |
 | `.github/workflows/ci.yml` | Lint, format check, type-check and tests on every PR |
+| `.github/workflows/codeql.yml` | Weekly and per-PR security scanning of `src/`, `scripts/`, `tests/` |
+| `.github/workflows/labeler.yml`, `.github/labeler.yml` | Auto-labels PRs by which task's paths they touch |
+| `TEAM.md` | Who owns which task, and the other project roles |
+| `docs/ROADMAP.md` | The full four-sprint PRD scope, not just what is built so far |
 
 Several `src/app` modules are intentionally empty. They mark the agreed structure for work that lands in later sprints; the table above says which.
 
@@ -98,15 +109,15 @@ All thirteen Incident columns carry the `x_2215032_ai_inc_0_ai_` prefix. **Scrip
 
 ## Sprint 1 — Platform Build
 
-Goal: the platform side exists as a real ServiceNow application, with an audit trail and an identity a risk owner would sign off. Covers FR-01, FR-02 and FR-06.
+Goal: the platform side exists as a real ServiceNow application, with an audit trail and an identity a risk owner would sign off. Covers FR-01, FR-02 and FR-06. Tracked in the [Sprint 1 milestone](../../milestone/1); Sprints 2–4 are [scoped in the roadmap](docs/ROADMAP.md) with their own milestones for planning, ahead of implementation.
 
-| Task | Scope |
-|---|---|
-| S1.1 | Scoped application and Incident field model |
-| S1.2 | AI Execution Log table, OAuth integration identity, field-level ACLs |
-| S1.3 | Eligibility Business Rule and identifier-only outbound event |
-| S1.4 | Knowledge corpus, ServiceNow KB, Qdrant hybrid collection |
-| S1.5 | ServiceNow Table API client and incident write-back |
+| Task | Scope | Owner |
+|---|---|---|
+| S1.1 | Scoped application and Incident field model | [@ali-ezz](https://github.com/ali-ezz) |
+| S1.2 | AI Execution Log table, OAuth integration identity, field-level ACLs | [@MohamedAbdelaiem](https://github.com/MohamedAbdelaiem) |
+| S1.3 | Eligibility Business Rule and identifier-only outbound event | [@ahmedtamer101](https://github.com/ahmedtamer101) |
+| S1.4 | Knowledge corpus, ServiceNow KB, Qdrant hybrid collection | [@kerolos-mohsen](https://github.com/kerolos-mohsen) |
+| S1.5 | ServiceNow Table API client and incident write-back | [@Tasneemmohammed0](https://github.com/Tasneemmohammed0) |
 
 **Definition of done — the target state, not a claim about today.** The application exports cleanly as an update set; an execution log record can be written through the API by the integration user; and no admin credential exists anywhere in the repository or configuration. Progress against each clause is tracked in the Sprint 1 issues.
 
