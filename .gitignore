@@ -117,3 +117,4 @@ site/
 data/*
 !data/coverage_matrix.csv
 !data/corpus/
+src/app/ignored_folder
