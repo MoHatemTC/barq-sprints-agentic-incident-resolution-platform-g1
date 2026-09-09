@@ -1,5 +1,8 @@
 # Documentation index
 
+See [ROADMAP.md](ROADMAP.md) for the full four-sprint PRD scope, and
+[../TEAM.md](../TEAM.md) for who owns each task.
+
 ## Sprint 1 — Platform Build
 
 Covers FR-01, FR-02 and FR-06.
