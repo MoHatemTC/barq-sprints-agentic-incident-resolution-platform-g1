@@ -7,7 +7,7 @@ import { ClientScript } from '@servicenow/sdk/core'
  */
 export const validateAiConfidenceOnChange = ClientScript({
     $id: Now.ID['validate_ai_confidence_on_change'],
-    name: 'AI Incident Orchestrator - Validate Confidence',
+    name: 'AI IO - Validate Confidence (Change)',
     table: 'incident',
     type: 'onChange',
     field: 'x_2215032_ai_inc_0_ai_confidence',
