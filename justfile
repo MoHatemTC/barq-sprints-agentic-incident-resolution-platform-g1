@@ -31,8 +31,10 @@ typecheck:
 precommit:
     uv run pre-commit run --all-files  
 
+# Everything CI runs, in the same order.
 check:
     just lint
+    uv run ruff format --check .
     just typecheck
     just test
 
