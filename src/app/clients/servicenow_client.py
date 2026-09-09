@@ -16,6 +16,7 @@ from app.exceptions.servicenow import (
     ServiceNowTimeoutError,
     ServiceNowValidationError,
 )
+from app.models.incident import Incident
 
 logger = structlog.getLogger(__name__)
 
@@ -42,6 +43,10 @@ class ServiceNowClient:
 
     async def __aexit__(self, *exc_info: object) -> None:
         await self.aclose()
+
+    async def get_incident(self, sys_id: str) -> Incident:
+        result = await self._request("GET", f"/api/now/table/incident/{sys_id}")
+        return Incident.model_validate(result)
 
     async def _request(
         self,
@@ -102,7 +107,7 @@ class ServiceNowClient:
                     method, path, params=params, json=json, _retry_on_auth_failure=False
                 )
 
-            return self._parse_response(response, method=method, path=path)
+        return self._parse_response(response, method=method, path=path)
 
     @staticmethod
     def _parse_response(response: httpx.Response, *, method: str, path: str) -> Any:
@@ -128,7 +133,7 @@ class ServiceNowClient:
             )
         if response.status_code in (
             status.HTTP_400_BAD_REQUEST,
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
         ):
             raise ServiceNowValidationError(
                 f"ServiceNow rejected the payload for {method} {path}",
