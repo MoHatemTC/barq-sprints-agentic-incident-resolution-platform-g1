@@ -13,7 +13,7 @@
         "types": "now-sdk dependencies"
     },
     "devDependencies": {
-        "@servicenow/sdk": "4.8.0",
+        "@servicenow/sdk": "4.11.2",
         "@servicenow/glide": "27.0.5"
     }
 }
