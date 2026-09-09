@@ -48,6 +48,19 @@ class ServiceNowClient:
         result = await self._request("GET", f"/api/now/table/incident/{sys_id}")
         return Incident.model_validate(result)
 
+    async def find_incident_by_number(self, number: str) -> Incident | None:
+        result = await self._request(
+            "GET",
+            "/api/now/table/incident",
+            params={"sysparm_query": f"number={number}", "sysparm_limit": 1},
+        )
+        incidents = result if isinstance(result, list) else []
+        if incidents:
+            return Incident.model_validate(incidents[0])
+        return None
+
+    ###################################################
+
     async def _request(
         self,
         method: str,
