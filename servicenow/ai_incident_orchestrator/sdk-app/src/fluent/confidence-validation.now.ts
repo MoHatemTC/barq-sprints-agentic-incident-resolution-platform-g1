@@ -7,7 +7,7 @@ import { ClientScript } from '@servicenow/sdk/core'
  */
 export const validateAiConfidenceOnChange = ClientScript({
     $id: Now.ID['validate_ai_confidence_on_change'],
-    name: 'AI IO - Validate Confidence (Change)',
+    name: 'AI Incident Orchestrator - Validate Confidence',
     table: 'incident',
     type: 'onChange',
     field: 'x_2215032_ai_inc_0_ai_confidence',
@@ -22,9 +22,7 @@ export const validateAiConfidenceOnChange = ClientScript({
         var value = Number(newValue);
         if (!isFinite(value) || value < 0 || value > 1) {
             g_form.setValue('x_2215032_ai_inc_0_ai_confidence', oldValue || '');
-            setTimeout(function () {
-                g_form.showErrorBox('x_2215032_ai_inc_0_ai_confidence', 'AI Confidence must be between 0.00 and 1.00.', true);
-            }, 0);
+            g_form.showErrorBox('x_2215032_ai_inc_0_ai_confidence', 'AI Confidence must be between 0.00 and 1.00.', true);
         } else {
             g_form.hideFieldMsg('x_2215032_ai_inc_0_ai_confidence', true);
         }
