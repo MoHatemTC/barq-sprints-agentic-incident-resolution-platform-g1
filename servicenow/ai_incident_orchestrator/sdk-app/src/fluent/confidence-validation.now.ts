@@ -22,7 +22,9 @@ export const validateAiConfidenceOnChange = ClientScript({
         var value = Number(newValue);
         if (!isFinite(value) || value < 0 || value > 1) {
             g_form.setValue('x_2215032_ai_inc_0_ai_confidence', oldValue || '');
-            g_form.showErrorBox('x_2215032_ai_inc_0_ai_confidence', 'AI Confidence must be between 0.00 and 1.00.', true);
+            setTimeout(function () {
+                g_form.showErrorBox('x_2215032_ai_inc_0_ai_confidence', 'AI Confidence must be between 0.00 and 1.00.', true);
+            }, 0);
         } else {
             g_form.hideFieldMsg('x_2215032_ai_inc_0_ai_confidence', true);
         }
