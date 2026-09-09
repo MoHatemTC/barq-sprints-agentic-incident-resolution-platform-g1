@@ -1,0 +1,51 @@
+# Path-based PR labelling. Matches actions/labeler v5 syntax.
+S1.1:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "servicenow/ai_incident_orchestrator/sdk-app/**"
+          - "docs/sprint1_field_model.md"
+          - "docs/sprint1_acceptance_matrix.md"
+          - "docs/sprint1_*verification.md"
+          - "docs/sprint1_implementation_runbook.md"
+          - "docs/sprint1_submission_checklist.md"
+
+S1.2:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "scripts/verify_permissions.py"
+          - "docs/sprint1_audit_and_identity.md"
+          - "servicenow/ai_incident_orchestrator/sys_remote_update_set_*.xml"
+
+S1.3:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "servicenow/ai_incident_orchestrator/business_rules/**"
+          - "docs/sprint1_event_contract_draft.md"
+
+S1.4:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "docker-compose.yml"
+          - "data/**"
+
+S1.5:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/app/clients/**"
+          - "src/app/auth/**"
+          - "src/app/models/**"
+          - "src/app/exceptions/**"
+          - "scripts/test_client.py"
+
+ci:
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/workflows/**"
+          - "justfile"
+          - "pyproject.toml"
+
+documentation:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/*.md"
+          - "docs/**"
