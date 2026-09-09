@@ -53,9 +53,7 @@ class ServiceNowTokenManager:
             return self._token
 
     async def _fetch_access_token(self) -> None:
-        """
-        Fetches a new access token from ServiceNow using the client credentials.
-        """
+        """Fetches a new access token using the configured password grant."""
         form = {
             "grant_type": "password",
             "client_id": self._settings.servicenow_client_id,
