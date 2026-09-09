@@ -1,8 +1,12 @@
 from fastapi import FastAPI
 
+from app.core.config import get_settings
+
+settings = get_settings()
+
 app = FastAPI(
     title="BARQ Agentic Incident Resolution Platform",
-    version="0.1.0",
+    version=settings.app_version,
 )
 
 

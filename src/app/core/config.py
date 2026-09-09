@@ -1,7 +1,15 @@
 from functools import lru_cache
+from importlib.metadata import PackageNotFoundError, version
 
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _get_version() -> str:
+    try:
+        return version("barq-sprints-agentic-incident-resolution-platform-g1")
+    except PackageNotFoundError:
+        return "0.1.0"
 
 
 class Settings(BaseSettings):
@@ -12,7 +20,7 @@ class Settings(BaseSettings):
     )
 
     app_name: str = "incident-resolution-platform"
-    app_version: str = "1.0.0"
+    app_version: str = Field(default_factory=_get_version)
     log_level: str = "INFO"
     environment: str = "development"
 
