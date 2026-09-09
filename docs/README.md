@@ -2,9 +2,13 @@
 
 ## Sprint 1 — Platform Build
 
-Covers FR-01, FR-02 and FR-06. Definition of done: the application exports cleanly as an
-update set; an execution log record can be written through the API by the integration
-user; no admin credential exists anywhere in the repository or configuration.
+Covers FR-01, FR-02 and FR-06.
+
+**Definition of done — the target state, not a description of today.** The application
+exports cleanly as an update set; an execution log record can be written through the API
+by the integration user; and no admin credential exists anywhere in the repository or
+configuration. The third clause is tracked in issue #7 and the second in #8; neither is
+met yet.
 
 ### S1.1 — Scoped application and Incident field model
 

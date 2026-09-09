@@ -77,7 +77,7 @@ just lint        # ruff check
 just format      # ruff format
 just typecheck   # mypy src
 just test        # pytest
-just check       # all of the above
+just check       # everything CI runs, in the same order
 ```
 
 CI runs the same commands on every pull request. The tests pass on a clean clone with no `.env` present.
@@ -108,7 +108,7 @@ Goal: the platform side exists as a real ServiceNow application, with an audit t
 | S1.4 | Knowledge corpus, ServiceNow KB, Qdrant hybrid collection |
 | S1.5 | ServiceNow Table API client and incident write-back |
 
-**Definition of done:** the application exports cleanly as an update set; an execution log record can be written through the API by the integration user; no admin credential exists anywhere in the repository or configuration.
+**Definition of done — the target state, not a claim about today.** The application exports cleanly as an update set; an execution log record can be written through the API by the integration user; and no admin credential exists anywhere in the repository or configuration. Progress against each clause is tracked in the Sprint 1 issues.
 
 ### S1.1 documentation
 
