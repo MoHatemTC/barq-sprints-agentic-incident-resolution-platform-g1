@@ -135,7 +135,11 @@ class ServiceNowClient:
                 status_code=response.status_code,
                 details={"body": response.text[:500]},
             )
-        if 500 <= response.status_code < status.HTTP_600_INTERNAL_SERVER_ERROR:
+        if (
+            status.HTTP_500_INTERNAL_SERVER_ERROR
+            <= response.status_code
+            < status.HTTP_600_INTERNAL_SERVER_ERROR
+        ):
             raise ServiceNowServerError(
                 f"ServiceNow server error on {method} {path}",
                 status_code=response.status_code,
