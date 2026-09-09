@@ -15,7 +15,6 @@ class Settings(BaseSettings):
     app_version: str = "1.0.0"
     log_level: str = "INFO"
     environment: str = "development"
-    app_log_level: str = "INFO"
 
     # Host & Network Binding (Security)
     bind_ip: str = "127.0.0.1"
