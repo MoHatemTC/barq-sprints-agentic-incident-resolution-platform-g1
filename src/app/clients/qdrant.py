@@ -67,18 +67,13 @@ def ensure_collection(
             },
         )
 
-    # Ensure payload keyword indexes (idempotent across runs)
+    # Ensure payload keyword indexes. create_payload_index is idempotent —
+    # re-creating an existing index is a safe schema update — so failures here
+    # are real (auth, network, permission) and must propagate, not be swallowed:
+    # a collection silently missing its indexes breaks Sprint 2 filtered search.
     for field_name in PAYLOAD_KEYWORD_INDEXES:
-        try:
-            client.create_payload_index(
-                collection_name=name,
-                field_name=field_name,
-                field_schema=models.PayloadSchemaType.KEYWORD,
-            )
-        except Exception as exc:
-            logger.debug(
-                "Payload index for '%s' on collection '%s' skipped or already exists: %s",
-                field_name,
-                name,
-                exc,
-            )
+        client.create_payload_index(
+            collection_name=name,
+            field_name=field_name,
+            field_schema=models.PayloadSchemaType.KEYWORD,
+        )
