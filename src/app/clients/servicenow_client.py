@@ -53,12 +53,18 @@ class ServiceNowClient:
         result = await self._request(
             "GET",
             "/api/now/table/incident",
-            params={"sysparm_query": f"number={number}", "sysparm_limit": 1},
+            params={"sysparm_query": f"number={number}", "sysparm_limit": 2},
         )
         incidents = result if isinstance(result, list) else []
-        if incidents:
-            return Incident.model_validate(incidents[0])
-        return None
+        if not incidents:
+            return None
+        if len(incidents) > 1:
+            raise ServiceNowError(
+                f"Expected at most one incident for number={number},"
+                + "ServiceNow returned {len(incidents)}",
+                details={"number": number, "count": len(incidents)},
+            )
+        return Incident.model_validate(incidents[0])
 
     ###################################################
 
