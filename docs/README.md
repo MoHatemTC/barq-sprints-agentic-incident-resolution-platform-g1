@@ -1,7 +1,7 @@
 # Documentation index
 
 Documentation lives in one folder per task, inside one folder per sprint —
-`docs/sprint-N/sX.Y-short-name/`. Each task folder has its own `README.md`
+`docs/sprint-N/sN.M-short-name/`. Each task folder has its own `README.md`
 naming the owner, the tracking issues, and what belongs there. See
 [ROADMAP.md](ROADMAP.md) for the full four-sprint PRD scope, and
 [../TEAM.md](../TEAM.md) for who owns what.

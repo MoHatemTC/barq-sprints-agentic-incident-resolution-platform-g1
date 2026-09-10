@@ -3,8 +3,10 @@
 
 # S1.1 — scoped application and Incident field model. The field model is the
 # contract every other workstream writes against, so schema changes need its owner.
-/servicenow/ai_incident_orchestrator/sdk-app/            @ali-ezz
-/docs/sprint-1/s1.1-scoped-app-and-field-model/           @ali-ezz
+/servicenow/ai_incident_orchestrator/sdk-app/                @ali-ezz
+/servicenow/ai_incident_orchestrator/ai_incident_orchestrator_s1_1.xml @ali-ezz
+/servicenow/ai_incident_orchestrator/README.md                @ali-ezz
+/docs/sprint-1/s1.1-scoped-app-and-field-model/               @ali-ezz
 
 # S1.2 — audit trail, OAuth identity, ACLs
 /scripts/verify_permissions.py                            @MohamedAbdelaiem
