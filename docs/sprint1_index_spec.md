@@ -28,22 +28,21 @@ The index contains **45 vector points** derived from the 11 real operational run
   "vectors": {
     "dense": {
       "size": 384,
-      "distance": "Cosine",
-      "hnsw_config": {
-        "m": 16,
-        "ef_construct": 100
-      }
+      "distance": "Cosine"
     }
   },
   "sparse_vectors": {
     "sparse": {
       "index": {
         "on_disk": false
-      }
+      },
+      "modifier": null
     }
   }
 }
 ```
+
+HNSW parameters are left at Qdrant defaults (m=16, ef_construct=100) — the collection code does not override them. `modifier: null` means no server-side IDF (see §3).
 
 | Vector Name | Type | Model / Algorithm | Dimensions | Distance | Purpose |
 |---|---|---|---|---|---|
@@ -61,12 +60,22 @@ $$IDF(t) = \ln\left(1 + \frac{N - n(t) + 0.5}{n(t) + 0.5}\right)$$
 > [!IMPORTANT]
 > **Corpus Batch Fitting Rule**: In [src/app/retrieval/ingest.py](../src/app/retrieval/ingest.py), all article chunk texts are accumulated into a single sequence and passed to `embedding_engine.embed_documents(all_chunk_texts)` in one batch call. This fits document frequency $n(t)$ across the entire corpus rather than per-article or per-chunk. Server-side `Modifier.IDF` is left disabled in Qdrant to prevent double-scaling of IDF weights.
 
+### 3.1 Chunking Parameters
+
+Chunking happens in [src/app/retrieval/chunking.py](../src/app/retrieval/chunking.py) (module defaults 1500/150 are for generic markdown); the ingest layer overrides them to honor the manual's own pilot configuration (manual §11.7):
+
+| Parameter | Value | Source |
+|---|---|---|
+| `chunk_size` | 700 chars | Pilot indexing config, manual §11.7 |
+| `chunk_overlap` | 120 chars | Pilot indexing config, manual §11.7 |
+| split_on | heading | Pilot indexing config; implemented via header-aware markdown splitting |
+
 ---
 
 ## 4. Query vs. Document Embedding Protocol
 
 - **Document Embedding**: Chunks are embedded during ingestion using `engine.embed_documents(texts)` without query instruction prefixes.
-- **Query Embedding**: At search time, user queries are embedded using `engine.query_embed(query_text)`. For the `BAAI/bge-small-en-v1.5` model, `query_embed()` prepends the mandatory model prompt prefix (`"Represent this sentence for searching relevant passages: "`) to optimize dense cosine retrieval alignment.
+- **Query Embedding**: At search time, user queries are embedded using `engine.query_embed(query_text)`. `BAAI/bge-small-en-v1.5` does **not** require a query-side prompt prefix (its model card marks prefixes "not so necessary"), and FastEmbed's `query_embed()` adds none for it. The query/document paths are nevertheless kept separate at the engine boundary (`EmbeddingEngine` protocol) so that swapping in a prefix-dependent embedding model later is a one-line change (NFR-09), with no change to the retrieval graph.
 
 ---
 
@@ -82,7 +91,7 @@ The following 7 fields are indexed as `PayloadSchemaType.KEYWORD` during collect
 |---|---|---|---|---|
 | `article_number` | String | `KB0001` through `KB0010` | `keyword` | Base article lookup across versions |
 | `article_id` | String | `KB0001-v2.0`, `KB0010-v2.0` | `keyword` | Exact versioned point resolution |
-| `category` | String | `network`, `software`, `hardware`, `inquiry`, `database` | `keyword` | ServiceNow incident taxonomy filtering |
+| `category` | String | `network`, `software`, `hardware`, `inquiry` | `keyword` | ServiceNow incident taxonomy filtering |
 | `service` | String | `corporate-vpn`, `sap-erp`, `order-processing` | `keyword` | Configuration item / service filtering |
 | `workflow_state` | String | `published`, `draft`, `retired` | `keyword` | Excludes draft and decommissioned runbooks |
 | `version` | String | `1.0`, `2.0`, `3.0`, `4.0` | `keyword` | Version disambiguation |
@@ -98,6 +107,7 @@ The following 7 fields are indexed as `PayloadSchemaType.KEYWORD` during collect
 | `total_chunks` | Integer | Total count of chunks belonging to the parent article |
 | `chunk_text` | String | Canonical markdown body of the chunk |
 | `owner` | String \| null | Operational owner team |
+| `author` | String \| null | Article author (split from the Owner cell in the KB0010-v2 grid) |
 | `related_records` | List[String] | Associated problem and incident IDs |
 | `sys_id` | String \| null | ServiceNow `kb_knowledge` sys_id (populated once published) |
 
@@ -105,11 +115,14 @@ The following 7 fields are indexed as `PayloadSchemaType.KEYWORD` during collect
 
 ## 6. Point ID Generation Scheme & Idempotency
 
-Point IDs are deterministic UUIDv5 strings generated via standard DNS namespace:
+Point IDs are deterministic UUIDv5 strings derived from a dedicated knowledge-base namespace (master plan §4.2), not the raw DNS namespace:
 
 ```python
-point_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{article_id}#{chunk_index}"))
+KB_NAMESPACE = uuid.uuid5(uuid.NAMESPACE_DNS, "barq-g1-kb")
+point_id = str(uuid.uuid5(KB_NAMESPACE, f"{article_id}::chunk::{chunk_index}"))
 ```
+
+where `article_id` is the composed per-record key (`{article_number}-v{version}`, e.g. `KB0010-v2.0`). Chunk identities follow the same convention everywhere (`KB0010-v2.0::chunk::0`).
 
 ### Idempotency Guarantee
 Because UUIDv5 is pure and deterministic, re-running `seed_qdrant.py` or re-ingesting updated articles performs an **in-place upsert** rather than creating duplicate points in the vector store. The 11 articles chunk into exactly 45 chunks, resulting in exactly 45 points before and after re-seeding (verified by [tests/test_ingest.py](../tests/test_ingest.py)).
@@ -168,11 +181,11 @@ results = client.query_points(
 
 ## 9. Operational CLI Commands & Verification
 
-- **Initialize Collection & Indexes**:
+- **Initialize Collection & Indexes** (idempotent — re-running never deletes points; destructive rebuild only via `--force-recreate`):
   ```bash
   uv run python scripts/setup_qdrant.py
   ```
-- **Seed Knowledge Articles (45 Chunks)**:
+- **Seed Knowledge Articles (45 Chunks)** — single idempotent command: ensures the collection, embeds in one corpus pass, upserts deterministically, and verifies stored == upserted (exit 1 on mismatch):
   ```bash
   uv run python scripts/seed_qdrant.py
   ```
