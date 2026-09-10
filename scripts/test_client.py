@@ -44,21 +44,21 @@ async def test_servicenow_client() -> None:
             logger.info("Testing find_incident_by_number()", number=number)
             incident_by_number = await client.find_incident_by_number(number)
             if incident_by_number:
-                logger.info("Successfully found incident", sys_id=incident_by_number.sys_id)
+                logger.info(
+                    "Successfully found incident",
+                    sys_id=incident_by_number.sys_id,
+                )
             else:
                 logger.warning("Incident not found by number", number=number)
 
-            # 3. Test Updating the Incident
+            # 3. Test Updating the Incident fields
             logger.info("Testing update_incident()")
-
             payload = IncidentUpdatePayload(
-                work_notes="Testing ServiceNowClient integration via test script.",
                 ai_processing_state=AIProcessingState.IN_PROGRESS,
                 ai_classification="software_issue",
                 ai_confidence=0.88,
                 ai_processing_start=datetime.now(UTC),
             )
-
             updated_incident = await client.update_incident(sys_id, payload)
             logger.info(
                 "Successfully updated incident",
@@ -66,14 +66,24 @@ async def test_servicenow_client() -> None:
                 ai_confidence=updated_incident.ai_confidence,
             )
 
-            # 4. Test Completion Validation Rule
-            logger.info("Testing update_incident() validation rule (Marking Complete)")
+            # 4. Test Adding Work Notes via dedicated method
+            logger.info("Testing add_work_note()")
+            work_note_text = f"Automated test note added at {
+                datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S UTC')
+            }"
+            incident_with_note = await client.add_work_note(sys_id, work_note_text)
+            logger.info(
+                "Successfully added work note",
+                sys_id=incident_with_note.sys_id,
+            )
+
+            # 5. Test Completion Validation Rule
+            logger.info("Testing update_incident() (Marking Complete)")
             complete_payload = IncidentUpdatePayload(
                 ai_processing_state=AIProcessingState.COMPLETE,
                 ai_processing_end=datetime.now(UTC),
                 ai_resolution="Restarted the application server to clear the cache loop.",
             )
-
             final_incident = await client.update_incident(sys_id, complete_payload)
             logger.info(
                 "Successfully marked incident as complete",

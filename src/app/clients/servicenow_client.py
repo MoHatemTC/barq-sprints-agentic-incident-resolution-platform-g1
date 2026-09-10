@@ -18,6 +18,7 @@ from app.exceptions.servicenow import (
     ServiceNowValidationError,
 )
 from app.models.incident import Incident, IncidentUpdatePayload
+from app.models.work_note import WorkNoteUpdate
 
 logger = structlog.getLogger(__name__)
 
@@ -71,7 +72,12 @@ class ServiceNowClient:
         result = await self._request("PATCH", f"/api/now/table/incident/{sys_id}", json=body)
         return Incident.model_validate(result)
 
-    ###################################################
+    async def add_work_note(self, sys_id: str, note: str) -> Incident:
+        body = WorkNoteUpdate(note=note).to_table_api_body()
+        result = await self._request("PATCH", f"/api/now/table/incident/{sys_id}", json=body)
+        return Incident.model_validate(result)
+
+    ################################################
 
     async def _request(
         self,
