@@ -29,6 +29,14 @@ def test_article_number_must_match_pattern(article_dicts: list[dict]) -> None:
         Article.model_validate(data)
 
 
+@pytest.mark.parametrize("bad_version", ["2", "v1.0", "1.0.0", "1", ""])
+def test_version_requires_major_minor(article_dicts: list[dict], bad_version: str) -> None:
+    """The version is half of the unique key; bare PDF integers must be rejected."""
+    data = {**article_dicts[0], "version": bad_version}
+    with pytest.raises(ValidationError, match="version"):
+        Article.model_validate(data)
+
+
 def test_category_and_service_accept_new_slugs(article_dicts: list[dict]) -> None:
     data = {**article_dicts[0], "service": "pgbouncer"}
     assert Article.model_validate(data).service == "pgbouncer"
@@ -103,6 +111,33 @@ def test_payload_omits_unset_servicenow_fields(sample_articles: list[Article]) -
     payload = KnowledgePayload.from_chunk(article, chunk).to_qdrant_payload()
     assert "sys_id" not in payload
     assert "article_url" not in payload
+
+
+def test_payload_round_trips_servicenow_fields_and_provenance(
+    sample_articles: list[Article],
+) -> None:
+    """Once published, sys_id/owner/author/related_records must reach Qdrant."""
+    article = sample_articles[0].model_copy(
+        update={
+            "sys_id": "0a1b2c3d4e5f67890a1b2c3d4e5f6789",
+            "owner": "Network Operations",
+            "author": "L. Haddad",
+            "related_records": ["PRB0040012", "INC0010023"],
+        }
+    )
+    chunk = ArticleChunk(
+        article_id=article.article_id,
+        chunk_index=0,
+        total_chunks=1,
+        section="Resolution",
+        text="Clear the cached credential for the VPN profile.",
+    )
+    payload = KnowledgePayload.from_chunk(article, chunk).to_qdrant_payload()
+    assert payload["sys_id"] == "0a1b2c3d4e5f67890a1b2c3d4e5f6789"
+    assert payload["owner"] == "Network Operations"
+    assert payload["author"] == "L. Haddad"
+    assert payload["related_records"] == ["PRB0040012", "INC0010023"]
+    assert payload["article_id"] == "KB0001-v2.0"
 
 
 def test_local_json_source_loads_valid_corpus(corpus_file: Path) -> None:

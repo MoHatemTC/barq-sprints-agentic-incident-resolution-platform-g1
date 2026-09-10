@@ -83,7 +83,7 @@ def chunk_markdown(
     content:
         The markdown body to chunk.
     article_id:
-        Identifier of the parent article (e.g. ``KB-DB-001-v2.0``).
+        Unique per-record key of the parent article (e.g. ``KB0010-v2.0``).
     chunk_size:
         Target maximum character length for each chunk.
     chunk_overlap:
