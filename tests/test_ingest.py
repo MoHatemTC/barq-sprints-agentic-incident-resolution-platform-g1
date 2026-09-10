@@ -1,12 +1,14 @@
 """Tests for Qdrant knowledge base ingestion pipeline."""
 
+import json
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 from qdrant_client import QdrantClient
-from qdrant_client.models import SparseVector
 
 from app.models.knowledge import Article, SecurityLevel, WorkflowState
+from app.retrieval.embedding import EmbeddedText
 from app.retrieval.ingest import (
     build_point_id,
     ingest_articles,
@@ -24,16 +26,15 @@ def memory_qdrant() -> QdrantClient:
 def sample_articles() -> list[Article]:
     return [
         Article(
-            base_id="KB0001",
+            article_number="KB0001",
             version="2.0",
-            article_id="KB0001-v2.0",
             title="VPN authentication fails after a password change",
             short_description="Clear cached VPN credentials after password reset.",
             category="network",
             service="corporate-vpn",
             workflow_state=WorkflowState.PUBLISHED,
             security_level=SecurityLevel.INTERNAL,
-            content=(
+            body=(
                 "# VPN authentication fails\n\n"
                 "## Symptom\nAuthentication fails after password change.\n\n"
                 "## Cause\nCached credentials in credential store.\n\n"
@@ -42,16 +43,15 @@ def sample_articles() -> list[Article]:
             ),
         ),
         Article(
-            base_id="KB0007",
+            article_number="KB0007",
             version="2.0",
-            article_id="KB0007-v2.0",
             title="Laptop performance degrades after a system update",
             short_description="Driver mismatch or background indexing following update.",
             category="hardware",
             service="endpoint",
             workflow_state=WorkflowState.PUBLISHED,
             security_level=SecurityLevel.RESTRICTED,
-            content=(
+            body=(
                 "# Laptop performance degrades\n\n"
                 "## Symptom\nLaptop is noticeably slow after update.\n\n"
                 "## Cause\nBackground indexing or graphics driver mismatch.\n\n"
@@ -102,10 +102,15 @@ def test_ingest_articles_with_mock_embedding(
     mock_engine = MagicMock()
 
     # Mock embed_documents to return vectors sized to match total chunks
-    def fake_embed(docs: list[str]) -> tuple[list[list[float]], list[SparseVector]]:
-        dense = [[0.1] * 384 for _ in docs]
-        sparse = [SparseVector(indices=[1, 2], values=[0.5, 0.8]) for _ in docs]
-        return dense, sparse
+    def fake_embed(docs: list[str]) -> list[EmbeddedText]:
+        return [
+            EmbeddedText(
+                dense=[0.1] * 384,
+                sparse_indices=[1, 2],
+                sparse_values=[0.5, 0.8],
+            )
+            for _ in docs
+        ]
 
     mock_engine.embed_documents.side_effect = fake_embed
 
@@ -146,10 +151,14 @@ def test_ingest_idempotency(memory_qdrant: QdrantClient, sample_articles: list[A
     setup_qdrant_collection(memory_qdrant, collection_name=col_name)
 
     mock_engine = MagicMock()
-    mock_engine.embed_documents.side_effect = lambda docs: (
-        [[0.1] * 384 for _ in docs],
-        [SparseVector(indices=[1], values=[1.0]) for _ in docs],
-    )
+    mock_engine.embed_documents.side_effect = lambda docs: [
+        EmbeddedText(
+            dense=[0.1] * 384,
+            sparse_indices=[1],
+            sparse_values=[1.0],
+        )
+        for _ in docs
+    ]
 
     count1 = ingest_articles(sample_articles, memory_qdrant, col_name, mock_engine)
     info1 = memory_qdrant.get_collection(col_name)
@@ -160,6 +169,94 @@ def test_ingest_idempotency(memory_qdrant: QdrantClient, sample_articles: list[A
 
     assert count1 == count2
     assert info1.points_count == info2.points_count, "Re-ingesting must not duplicate points"
+
+
+def test_ingest_empty_articles(memory_qdrant: QdrantClient) -> None:
+    col_name = "empty_test"
+    setup_qdrant_collection(memory_qdrant, collection_name=col_name)
+    mock_engine = MagicMock()
+    count = ingest_articles([], memory_qdrant, col_name, mock_engine)
+    assert count == 0
+    assert mock_engine.embed_documents.call_count == 0
+
+
+def test_ingest_real_barq_corpus(memory_qdrant: QdrantClient) -> None:
+    corpus_file = Path("data/corpus/barq_articles.json")
+    if not corpus_file.exists():
+        pytest.skip("Real barq_articles.json not found")
+
+    with open(corpus_file, encoding="utf-8") as f:
+        data = json.load(f)
+
+    articles = [Article.model_validate(item) for item in data]
+    assert len(articles) == 11
+
+    col_name = "barq_real_kb"
+    setup_qdrant_collection(memory_qdrant, collection_name=col_name)
+
+    mock_engine = MagicMock()
+    mock_engine.embed_documents.side_effect = lambda docs: [
+        EmbeddedText(
+            dense=[0.01] * 384,
+            sparse_indices=[1, 2],
+            sparse_values=[0.5, 0.8],
+        )
+        for _ in docs
+    ]
+
+    # 1. Ingest all 11 articles -> exactly 45 points
+    total_upserted = ingest_articles(
+        articles=articles,
+        client=memory_qdrant,
+        collection_name=col_name,
+        embedding_engine=mock_engine,
+        chunk_size=700,
+        chunk_overlap=120,
+    )
+    assert total_upserted == 45
+    info = memory_qdrant.get_collection(col_name)
+    assert info.points_count == 45
+
+    # 2. Re-ingest the same articles -> count stays exactly 45 (idempotency)
+    reingested = ingest_articles(
+        articles=articles,
+        client=memory_qdrant,
+        collection_name=col_name,
+        embedding_engine=mock_engine,
+        chunk_size=700,
+        chunk_overlap=120,
+    )
+    assert reingested == 45
+    info_after = memory_qdrant.get_collection(col_name)
+    assert info_after.points_count == 45, "Re-ingesting must not duplicate points"
+
+    # 3. Add a 12th article (single chunk) -> point count increments from 45 to 46
+    new_article = Article(
+        article_number="KB0099",
+        version="1.0",
+        title="Payment gateway connection timeout",
+        short_description="Troubleshoot payment gateway timeout incidents.",
+        category="software",
+        service="order-processing",
+        workflow_state=WorkflowState.PUBLISHED,
+        security_level=SecurityLevel.RESTRICTED,
+        body=(
+            "# Payment gateway connection timeout\n\n"
+            "Payment API requests fail with 504 Gateway Timeout due to downstream latency. "
+            "Verify health dashboard and toggle failover circuit if needed."
+        ),
+    )
+    added_count = ingest_articles(
+        articles=[new_article],
+        client=memory_qdrant,
+        collection_name=col_name,
+        embedding_engine=mock_engine,
+        chunk_size=700,
+        chunk_overlap=120,
+    )
+    assert added_count == 1
+    info_new = memory_qdrant.get_collection(col_name)
+    assert info_new.points_count == 46
 
 
 def test_shim_matches() -> None:

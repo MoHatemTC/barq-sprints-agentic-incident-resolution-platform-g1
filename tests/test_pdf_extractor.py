@@ -43,7 +43,7 @@ def test_article_ids_and_versions(extractor: PDFKnowledgeExtractor) -> None:
 
 
 def test_security_level_mapping_rules(extractor: PDFKnowledgeExtractor) -> None:
-    articles = {a.base_id: a for a in extractor.extract_articles()}
+    articles = {a.article_number: a for a in extractor.extract_articles()}
 
     # End-user desk cards -> internal
     assert articles["KB0001"].security_level == SecurityLevel.INTERNAL
@@ -61,7 +61,7 @@ def test_security_level_mapping_rules(extractor: PDFKnowledgeExtractor) -> None:
 
 
 def test_kb0010_lifecycle_states(extractor: PDFKnowledgeExtractor) -> None:
-    articles = [a for a in extractor.extract_articles() if a.base_id == "KB0010"]
+    articles = [a for a in extractor.extract_articles() if a.article_number == "KB0010"]
     assert len(articles) == 2
 
     by_ver = {a.version: a for a in articles}
@@ -74,10 +74,10 @@ def test_markdown_structure_contains_standard_sections(
 ) -> None:
     articles = extractor.extract_articles()
     for art in articles:
-        assert "## Symptom" in art.content, f"{art.article_id} missing ## Symptom"
-        assert "## Cause" in art.content, f"{art.article_id} missing ## Cause"
-        assert "## Resolution" in art.content, f"{art.article_id} missing ## Resolution"
-        assert "## Escalation" in art.content, f"{art.article_id} missing ## Escalation"
+        assert "## Symptom" in art.body, f"{art.article_id} missing ## Symptom"
+        assert "## Cause" in art.body, f"{art.article_id} missing ## Cause"
+        assert "## Resolution" in art.body, f"{art.article_id} missing ## Resolution"
+        assert "## Escalation" in art.body, f"{art.article_id} missing ## Escalation"
         assert len(art.short_description) <= 255
 
 

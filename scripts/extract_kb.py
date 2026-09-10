@@ -7,7 +7,7 @@ from app.retrieval.pdf_extractor import PDFKnowledgeExtractor
 
 def main() -> None:
     extractor = PDFKnowledgeExtractor(Path("data/barq-system-kb.pdf"))
-    out_path = Path("data/corpus/barq_kb_articles.json")
+    out_path = Path("data/corpus/barq_articles.json")
     saved = extractor.save_corpus(out_path)
     articles = extractor.extract_articles()
     print(f"Extracted {len(articles)} articles from {extractor.pdf_path} into {saved}")

@@ -1,7 +1,7 @@
 """Qdrant ingestion pipeline for incident knowledge articles.
 
 Sets up hybrid dense+sparse collections, creates payload indexes for fast filtering,
-and batch-embeds article chunks using DualEmbeddingEngine.
+and batch-embeds article chunks using FastEmbedEngine.
 """
 
 from __future__ import annotations
@@ -16,18 +16,22 @@ from qdrant_client.models import (
     PayloadSchemaType,
     PointStruct,
     SparseIndexParams,
+    SparseVector,
     SparseVectorParams,
     VectorParams,
 )
 
 from app.models.knowledge import Article, KnowledgePayload
 from app.retrieval.chunking import chunk_article
-from app.retrieval.embedding import DENSE_VECTOR_SIZE, DualEmbeddingEngine
+from app.retrieval.embedding import (
+    DENSE_VECTOR_SIZE,
+    EmbeddedText,
+    FastEmbedEngine,
+)
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_COLLECTION_NAME = "incident_knowledge_base"
-NAMESPACE_BARQ = uuid.UUID("6ba7b810-9dad-11d1-80b4-00c04fd430c8")  # DNS namespace
 
 PAYLOAD_INDEX_FIELDS: list[str] = [
     "article_number",
@@ -42,16 +46,16 @@ PAYLOAD_INDEX_FIELDS: list[str] = [
 
 def _get_default_collection_name() -> str:
     try:
-        from app.core.config import get_settings
+        from app.core.config import get_retrieval_settings
 
-        return get_settings().qdrant_collection_name
+        return get_retrieval_settings().qdrant_collection_name
     except Exception:
         return DEFAULT_COLLECTION_NAME
 
 
 def build_point_id(article_id: str, chunk_index: int) -> str:
-    """Produce a deterministic UUID for an article chunk point."""
-    return str(uuid.uuid5(NAMESPACE_BARQ, f"{article_id}#{chunk_index}"))
+    """Produce a deterministic UUID for an article chunk point using standard DNS namespace."""
+    return str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{article_id}#{chunk_index}"))
 
 
 def setup_qdrant_collection(
@@ -99,8 +103,10 @@ def ingest_articles(
     articles: Sequence[Article],
     client: QdrantClient,
     collection_name: str | None = None,
-    embedding_engine: DualEmbeddingEngine | None = None,
+    embedding_engine: FastEmbedEngine | None = None,
     batch_size: int = 64,
+    chunk_size: int = 700,
+    chunk_overlap: int = 120,
 ) -> int:
     """Chunk, embed, and upsert articles into the Qdrant collection.
 
@@ -111,11 +117,11 @@ def ingest_articles(
         The total count of chunk points upserted into Qdrant.
     """
     name = collection_name or _get_default_collection_name()
-    engine = embedding_engine or DualEmbeddingEngine()
+    engine = embedding_engine or FastEmbedEngine()
 
     chunk_records = []
     for article in articles:
-        chunks = chunk_article(article)
+        chunks = chunk_article(article, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
         for chk in chunks:
             chunk_records.append((article, chk, chk.text))
 
@@ -127,10 +133,10 @@ def ingest_articles(
 
     # Single batch embedding across all chunk texts (fits corpus BM25 IDF)
     all_texts = [record[2] for record in chunk_records]
-    dense_vecs, sparse_vecs = engine.embed_documents(all_texts)
+    embeddings: list[EmbeddedText] = engine.embed_documents(all_texts)
 
     points: list[PointStruct] = []
-    for idx, (article, chk, _) in enumerate(chunk_records):
+    for (article, chk, _), emb in zip(chunk_records, embeddings, strict=True):
         point_id = build_point_id(article.article_id, chk.chunk_index)
         payload = KnowledgePayload.from_chunk(article, chk).to_qdrant_payload()
 
@@ -138,8 +144,11 @@ def ingest_articles(
             PointStruct(
                 id=point_id,
                 vector={
-                    "dense": dense_vecs[idx],
-                    "sparse": sparse_vecs[idx],
+                    "dense": emb.dense,
+                    "sparse": SparseVector(
+                        indices=emb.sparse_indices,
+                        values=emb.sparse_values,
+                    ),
                 },
                 payload=payload,
             )

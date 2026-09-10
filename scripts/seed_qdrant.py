@@ -5,7 +5,7 @@ from pathlib import Path
 
 from qdrant_client import QdrantClient
 
-from app.core.config import get_settings
+from app.core.config import get_retrieval_settings
 from app.retrieval.ingest import ingest_articles, setup_qdrant_collection
 from app.retrieval.sources import LocalJSONSource
 
@@ -14,13 +14,11 @@ logger = logging.getLogger("seed_qdrant")
 
 
 def main() -> None:
-    settings = get_settings()
+    settings = get_retrieval_settings()
     client = QdrantClient(url=settings.qdrant_url)
     collection_name = settings.qdrant_collection_name
 
-    corpus_path = Path("data/corpus/barq_kb_articles.json")
-    if not corpus_path.exists():
-        corpus_path = Path("data/corpus/articles.json")
+    corpus_path = Path("data/corpus/barq_articles.json")
 
     logger.info("Loading articles from %s...", corpus_path)
     source = LocalJSONSource(corpus_path)

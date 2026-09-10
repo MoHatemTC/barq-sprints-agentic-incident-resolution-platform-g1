@@ -4,7 +4,7 @@ import logging
 
 from qdrant_client import QdrantClient
 
-from app.core.config import get_settings
+from app.core.config import get_retrieval_settings
 from app.retrieval.ingest import setup_qdrant_collection
 
 logging.basicConfig(level=logging.INFO)
@@ -12,7 +12,7 @@ logger = logging.getLogger("setup_qdrant")
 
 
 def main() -> None:
-    settings = get_settings()
+    settings = get_retrieval_settings()
     client = QdrantClient(url=settings.qdrant_url)
     collection_name = settings.qdrant_collection_name
     logger.info("Connecting to Qdrant at %s...", settings.qdrant_url)

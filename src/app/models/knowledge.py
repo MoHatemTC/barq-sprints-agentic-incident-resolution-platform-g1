@@ -121,11 +121,6 @@ class Article(BaseModel):
         """Alias for unique_key for backwards compatibility with chunking & retrieval."""
         return self.unique_key
 
-    @property
-    def base_id(self) -> str:
-        """Alias for article_number for backwards compatibility."""
-        return self.article_number
-
 
 class ArticleChunk(BaseModel):
     """One retrievable piece of an article, produced by the chunker."""

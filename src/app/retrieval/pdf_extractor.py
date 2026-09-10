@@ -203,16 +203,15 @@ class PDFKnowledgeExtractor:
         )
 
         return Article(
-            base_id=kb_id,
+            article_number=kb_id,
             version=ver,
-            article_id=f"{kb_id}-v{ver}",
             title=title,
             short_description=short_desc,
             category=category,
             service=service,
             workflow_state=WorkflowState.PUBLISHED,
             security_level=security,
-            content=content,
+            body=content,
         )
 
     def _parse_kb0010_versions(self, text: str) -> list[Article]:
@@ -252,9 +251,8 @@ class PDFKnowledgeExtractor:
 
             results.append(
                 Article(
-                    base_id="KB0010",
+                    article_number="KB0010",
                     version="1.0",
-                    article_id="KB0010-v1.0",
                     title="Order service connection pool exhaustion (Retired)",
                     short_description=(
                         "Historical retired runbook for order service pool exhaustion. "
@@ -264,7 +262,7 @@ class PDFKnowledgeExtractor:
                     service="order-processing",
                     workflow_state=WorkflowState.RETIRED,
                     security_level=SecurityLevel.RESTRICTED,
-                    content=content_v1,
+                    body=content_v1,
                 )
             )
 
@@ -289,9 +287,8 @@ class PDFKnowledgeExtractor:
 
             results.append(
                 Article(
-                    base_id="KB0010",
+                    article_number="KB0010",
                     version="2.0",
-                    article_id="KB0010-v2.0",
                     title="Order service connection pool exhaustion",
                     short_description=(
                         "Resolution procedure for order service database connection "
@@ -301,17 +298,17 @@ class PDFKnowledgeExtractor:
                     service="order-processing",
                     workflow_state=WorkflowState.PUBLISHED,
                     security_level=SecurityLevel.RESTRICTED,
-                    content=content_v2,
+                    body=content_v2,
                 )
             )
 
         return results
 
-    def save_corpus(self, output_path: str | Path = "data/corpus/barq_kb_articles.json") -> Path:
+    def save_corpus(self, output_path: str | Path = "data/corpus/barq_articles.json") -> Path:
         """Extract articles and write to a JSON file."""
         articles = self.extract_articles()
         out = Path(output_path)
         out.parent.mkdir(parents=True, exist_ok=True)
-        data = [art.model_dump(mode="json") for art in articles]
+        data = [{**art.model_dump(mode="json"), "article_id": art.article_id} for art in articles]
         out.write_text(json.dumps(data, indent=2), encoding="utf-8")
         return out
