@@ -118,9 +118,6 @@ data/*
 !data/coverage_matrix.csv
 # Re-include the corpus directory itself so the file-level rules below apply.
 !data/corpus/
-# The cleaned corpus JSON is tracked (decision: private team repo; CI runs the
-# corpus invariant tests against it). Only the source PDF stays local — it is
-# the full INTERNAL-marked manual, more content than the project uses.
 data/corpus/*
 !data/corpus/README.md
 !data/corpus/barq_ingestion_report.md
