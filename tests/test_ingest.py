@@ -7,12 +7,13 @@ from unittest.mock import MagicMock
 import pytest
 from qdrant_client import QdrantClient
 
+from app.clients.qdrant import ensure_collection
 from app.models.knowledge import Article, SecurityLevel, WorkflowState
 from app.retrieval.embedding import EmbeddedText
 from app.retrieval.ingest import (
+    KB_NAMESPACE,
     build_point_id,
     ingest_articles,
-    setup_qdrant_collection,
 )
 from retrieval.ingest import ingest_articles as shim_ingest
 
@@ -73,9 +74,19 @@ def test_build_point_id_is_deterministic() -> None:
     assert id1 != id4, "Different article ID must produce different UUID"
 
 
+def test_build_point_id_uses_dedicated_namespace() -> None:
+    """Point IDs must derive from the KB namespace, not raw NAMESPACE_DNS."""
+    import uuid
+
+    point_id = build_point_id("KB0001-v2.0", 0)
+    assert point_id == str(uuid.uuid5(KB_NAMESPACE, "KB0001-v2.0::chunk::0"))
+    raw_dns = str(uuid.uuid5(uuid.NAMESPACE_DNS, "KB0001-v2.0::chunk::0"))
+    assert point_id != raw_dns, "KB namespace must differ from the raw DNS namespace"
+
+
 def test_setup_qdrant_collection(memory_qdrant: QdrantClient) -> None:
     col_name = "test_kb"
-    setup_qdrant_collection(memory_qdrant, collection_name=col_name)
+    ensure_collection(memory_qdrant, col_name)
 
     assert memory_qdrant.collection_exists(col_name)
     info = memory_qdrant.get_collection(col_name)
@@ -85,11 +96,11 @@ def test_setup_qdrant_collection(memory_qdrant: QdrantClient) -> None:
 
 def test_setup_qdrant_collection_recreate(memory_qdrant: QdrantClient) -> None:
     col_name = "recreate_kb"
-    setup_qdrant_collection(memory_qdrant, collection_name=col_name)
+    ensure_collection(memory_qdrant, col_name)
     assert memory_qdrant.collection_exists(col_name)
 
     # Recreate without error
-    setup_qdrant_collection(memory_qdrant, collection_name=col_name, recreate=True)
+    ensure_collection(memory_qdrant, col_name, force_recreate=True)
     assert memory_qdrant.collection_exists(col_name)
 
 
@@ -97,7 +108,7 @@ def test_ingest_articles_with_mock_embedding(
     memory_qdrant: QdrantClient, sample_articles: list[Article]
 ) -> None:
     col_name = "ingest_test"
-    setup_qdrant_collection(memory_qdrant, collection_name=col_name)
+    ensure_collection(memory_qdrant, col_name)
 
     mock_engine = MagicMock()
 
@@ -148,7 +159,7 @@ def test_ingest_articles_with_mock_embedding(
 
 def test_ingest_idempotency(memory_qdrant: QdrantClient, sample_articles: list[Article]) -> None:
     col_name = "idempotent_test"
-    setup_qdrant_collection(memory_qdrant, collection_name=col_name)
+    ensure_collection(memory_qdrant, col_name)
 
     mock_engine = MagicMock()
     mock_engine.embed_documents.side_effect = lambda docs: [
@@ -161,22 +172,24 @@ def test_ingest_idempotency(memory_qdrant: QdrantClient, sample_articles: list[A
     ]
 
     count1 = ingest_articles(sample_articles, memory_qdrant, col_name, mock_engine)
-    info1 = memory_qdrant.get_collection(col_name)
+    points1, _ = memory_qdrant.scroll(collection_name=col_name, limit=256, with_payload=False)
+    ids1 = {str(p.id) for p in points1}
 
     # Ingest same articles second time
     count2 = ingest_articles(sample_articles, memory_qdrant, col_name, mock_engine)
-    info2 = memory_qdrant.get_collection(col_name)
+    points2, _ = memory_qdrant.scroll(collection_name=col_name, limit=256, with_payload=False)
+    ids2 = {str(p.id) for p in points2}
 
     assert count1 == count2
-    assert info1.points_count == info2.points_count, "Re-ingesting must not duplicate points"
+    assert len(ids1) == len(ids2), "Re-ingesting must not duplicate points"
+    assert ids1 == ids2, "Re-ingesting must produce identical point IDs (in-place upsert)"
 
 
-def test_ingest_empty_articles(memory_qdrant: QdrantClient) -> None:
-    col_name = "empty_test"
-    setup_qdrant_collection(memory_qdrant, collection_name=col_name)
+def test_ingest_empty_articles_raises(memory_qdrant: QdrantClient) -> None:
+    """Seeding nothing is a configuration error, not a quiet no-op."""
     mock_engine = MagicMock()
-    count = ingest_articles([], memory_qdrant, col_name, mock_engine)
-    assert count == 0
+    with pytest.raises(ValueError, match="no articles"):
+        ingest_articles([], memory_qdrant, "empty_test", mock_engine)
     assert mock_engine.embed_documents.call_count == 0
 
 
@@ -192,7 +205,7 @@ def test_ingest_real_barq_corpus(memory_qdrant: QdrantClient) -> None:
     assert len(articles) == 11
 
     col_name = "barq_real_kb"
-    setup_qdrant_collection(memory_qdrant, collection_name=col_name)
+    ensure_collection(memory_qdrant, col_name)
 
     mock_engine = MagicMock()
     mock_engine.embed_documents.side_effect = lambda docs: [
