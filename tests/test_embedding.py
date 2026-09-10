@@ -1,63 +1,131 @@
-"""Tests for DualEmbeddingEngine."""
+"""Tests for the dual dense/sparse FastEmbed engine and Qdrant collection setup."""
 
 import pytest
-from qdrant_client.models import SparseVector
+from pydantic import ValidationError
+from qdrant_client import QdrantClient
 
-from app.retrieval.embedding import (
-    DEFAULT_DENSE_MODEL,
-    DEFAULT_SPARSE_MODEL,
+from app.clients.qdrant import (
+    DENSE_VECTOR_NAME,
     DENSE_VECTOR_SIZE,
-    DualEmbeddingEngine,
+    SPARSE_VECTOR_NAME,
+    ensure_collection,
+    get_qdrant_client,
 )
-from retrieval.embedding import DualEmbeddingEngine as ShimEngine
+from app.core.config import get_retrieval_settings
+from app.retrieval.embedding import EmbeddedText, EmbeddingEngine, FastEmbedEngine
 
 
-@pytest.fixture
-def engine() -> DualEmbeddingEngine:
-    return DualEmbeddingEngine()
+def test_embedded_text_is_frozen_and_valid() -> None:
+    embed = EmbeddedText(
+        dense=[0.1, 0.2, 0.3],
+        sparse_indices=[10, 20],
+        sparse_values=[1.5, 2.5],
+    )
+    assert embed.dense == [0.1, 0.2, 0.3]
+    assert embed.sparse_indices == [10, 20]
+    assert embed.sparse_values == [1.5, 2.5]
+
+    with pytest.raises(ValidationError):
+        # Must be immutable / frozen
+        embed.dense = [0.4, 0.5]  # type: ignore[misc]
 
 
-def test_engine_initialization(engine: DualEmbeddingEngine) -> None:
-    assert engine.dense_model_name == DEFAULT_DENSE_MODEL
-    assert engine.sparse_model_name == DEFAULT_SPARSE_MODEL
-    assert engine.dimension == DENSE_VECTOR_SIZE
+def test_fastembed_engine_implements_protocol() -> None:
+    engine = FastEmbedEngine()
+    assert isinstance(engine, EmbeddingEngine)
 
 
-def test_embed_documents(engine: DualEmbeddingEngine) -> None:
-    docs = [
-        "Clear cached VPN credentials after a password change to fix authentication failures.",
-        "Restarting the print spooler service removes stalled orphaned print jobs.",
+def test_fastembed_dense_vector_shape_and_sparse_properties() -> None:
+    engine = FastEmbedEngine()
+    texts = ["PostgreSQL 16 connection limit exceeded under connection pooling."]
+    results = engine.embed_documents(texts)
+
+    assert len(results) == 1
+    embedded = results[0]
+
+    # Dense vector shape: 384 dimensions (bge-small-en-v1.5)
+    assert len(embedded.dense) == DENSE_VECTOR_SIZE
+
+    # Sparse vector properties (BM25)
+    assert len(embedded.sparse_indices) == len(embedded.sparse_values)
+    assert len(embedded.sparse_indices) > 0
+    assert all(isinstance(idx, int) for idx in embedded.sparse_indices)
+    assert all(val >= 0.0 for val in embedded.sparse_values)
+
+
+def test_fastembed_embed_query_path() -> None:
+    engine = FastEmbedEngine()
+    query = "VPN authentication failure after a password reset"
+    result = engine.embed_query(query)
+
+    assert len(result.dense) == DENSE_VECTOR_SIZE
+    assert len(result.sparse_indices) == len(result.sparse_values)
+    assert len(result.sparse_indices) > 0
+
+
+def test_fastembed_batch_order_preservation() -> None:
+    engine = FastEmbedEngine()
+    texts = [
+        "First document about VPN network authentication failure.",
+        "Second document about printer queue hardware jam.",
+        "Third document about SAP ERP RFC timeout.",
     ]
-    dense_vecs, sparse_vecs = engine.embed_documents(docs)
+    results = engine.embed_documents(texts)
 
-    assert len(dense_vecs) == len(docs)
-    assert len(sparse_vecs) == len(docs)
-
-    for d in dense_vecs:
-        assert len(d) == DENSE_VECTOR_SIZE
-        assert all(isinstance(x, float) for x in d)
-
-    for s in sparse_vecs:
-        assert isinstance(s, SparseVector)
-        assert len(s.indices) > 0
-        assert len(s.indices) == len(s.values)
+    assert len(results) == 3
+    # Different documents should have distinct embeddings
+    assert results[0].dense != results[1].dense
+    assert results[1].dense != results[2].dense
+    assert results[0].sparse_indices != results[1].sparse_indices
 
 
-def test_embed_empty_documents(engine: DualEmbeddingEngine) -> None:
-    dense_vecs, sparse_vecs = engine.embed_documents([])
-    assert dense_vecs == []
-    assert sparse_vecs == []
+def test_fastembed_determinism() -> None:
+    engine = FastEmbedEngine()
+    text = "Order service database connection pool exhausted returning HTTP 500."
+
+    run1 = engine.embed_documents([text])[0]
+    run2 = engine.embed_documents([text])[0]
+
+    assert run1.dense == pytest.approx(run2.dense, abs=1e-5)
+    assert run1.sparse_indices == run2.sparse_indices
+    assert run1.sparse_values == pytest.approx(run2.sparse_values, abs=1e-5)
 
 
-def test_embed_query(engine: DualEmbeddingEngine) -> None:
-    query = "VPN client invalid credentials after password reset"
-    dense_vec, sparse_vec = engine.embed_query(query)
-
-    assert len(dense_vec) == DENSE_VECTOR_SIZE
-    assert isinstance(sparse_vec, SparseVector)
-    assert len(sparse_vec.indices) > 0
-    assert len(sparse_vec.indices) == len(sparse_vec.values)
+def test_retrieval_settings_independent_of_servicenow() -> None:
+    settings = get_retrieval_settings()
+    assert settings.qdrant_url
+    assert settings.dense_embedding_model == "BAAI/bge-small-en-v1.5"
+    assert settings.sparse_embedding_model == "Qdrant/bm25"
+    assert settings.qdrant_collection_name == "incident_knowledge_base"
 
 
-def test_shim_matches_engine() -> None:
-    assert ShimEngine is DualEmbeddingEngine
+def test_qdrant_client_factory() -> None:
+    client = get_qdrant_client("http://localhost:6333")
+    assert isinstance(client, QdrantClient)
+
+
+def test_qdrant_ensure_collection_in_memory() -> None:
+    client = QdrantClient(":memory:")
+    collection_name = "test_incident_kb"
+
+    ensure_collection(client, collection_name)
+    assert client.collection_exists(collection_name)
+
+    info = client.get_collection(collection_name)
+    vectors_config = info.config.params.vectors
+    assert isinstance(vectors_config, dict)
+    assert DENSE_VECTOR_NAME in vectors_config
+    assert vectors_config[DENSE_VECTOR_NAME].size == DENSE_VECTOR_SIZE
+
+    sparse_config = info.config.params.sparse_vectors
+    assert isinstance(sparse_config, dict)
+    assert SPARSE_VECTOR_NAME in sparse_config
+    assert sparse_config[SPARSE_VECTOR_NAME].modifier is None
+
+    # Idempotent call
+    ensure_collection(client, collection_name, force_recreate=False)
+    assert client.collection_exists(collection_name)
+
+    # Force recreate call
+    ensure_collection(client, collection_name, force_recreate=True)
+    assert client.collection_exists(collection_name)

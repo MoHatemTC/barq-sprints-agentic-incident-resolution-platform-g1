@@ -1,101 +1,115 @@
-"""Dual embedding engine combining dense (bge-small-en-v1.5) and sparse (bm25) vectors."""
+"""Embedding engine protocol and FastEmbed implementation for dual dense/sparse vectors."""
 
-from __future__ import annotations
+from typing import Protocol, runtime_checkable
 
-from collections.abc import Sequence
+from fastembed import SparseTextEmbedding, TextEmbedding  # type: ignore[import-untyped]
+from pydantic import BaseModel, ConfigDict
 
-from fastembed import SparseTextEmbedding, TextEmbedding
-from qdrant_client.models import SparseVector
+from app.core.config import get_retrieval_settings
 
-DEFAULT_DENSE_MODEL = "BAAI/bge-small-en-v1.5"
-DEFAULT_SPARSE_MODEL = "Qdrant/bm25"
+
+class EmbeddedText(BaseModel):
+    """Frozen value object holding paired dense and sparse vectors for a single text chunk."""
+
+    model_config = ConfigDict(frozen=True)
+
+    dense: list[float]
+    sparse_indices: list[int]
+    sparse_values: list[float]
+
+
+@runtime_checkable
+class EmbeddingEngine(Protocol):
+    """Protocol defining the embedding boundary (NFR-09 swap boundary)."""
+
+    def embed_documents(self, texts: list[str]) -> list[EmbeddedText]:
+        """Embed a batch of document texts in a single pass over the corpus."""
+        ...
+
+    def embed_query(self, text: str) -> EmbeddedText:
+        """Embed a single search query text."""
+        ...
+
+
 DENSE_VECTOR_SIZE = 384
 
+DEFAULT_DENSE_MODEL = get_retrieval_settings().dense_embedding_model
+DEFAULT_SPARSE_MODEL = get_retrieval_settings().sparse_embedding_model
 
-class DualEmbeddingEngine:
-    """Computes dense and sparse embeddings for hybrid retrieval in Qdrant.
 
-    Important: FastEmbed's BM25 computes inverse document frequencies (IDF) across
-    the batch passed to embed(). To avoid distorted IDF weights, embed_documents()
-    should be called once on the complete set of corpus chunks, rather than
-    per-article or per-chunk.
-    """
+class FastEmbedEngine:
+    """FastEmbed-backed dual embedding engine using bge-small-en-v1.5 and Qdrant/bm25."""
 
     def __init__(
         self,
-        dense_model_name: str = DEFAULT_DENSE_MODEL,
-        sparse_model_name: str = DEFAULT_SPARSE_MODEL,
+        dense_model: str | None = None,
+        sparse_model: str | None = None,
     ) -> None:
-        self.dense_model_name = dense_model_name
-        self.sparse_model_name = sparse_model_name
-        self._dense_model: TextEmbedding | None = None
-        self._sparse_model: SparseTextEmbedding | None = None
+        settings = get_retrieval_settings()
+        self.dense_model_name = dense_model or settings.dense_embedding_model
+        self.sparse_model_name = sparse_model or settings.sparse_embedding_model
+        self._dense_model = TextEmbedding(model_name=self.dense_model_name)
+        self._sparse_model = SparseTextEmbedding(model_name=self.sparse_model_name)
 
-    @property
-    def dense_model(self) -> TextEmbedding:
-        if self._dense_model is None:
-            self._dense_model = TextEmbedding(model_name=self.dense_model_name)
-        return self._dense_model
+    def embed_documents(self, texts: list[str]) -> list[EmbeddedText]:
+        """Embed document texts with exactly ONE .embed() call per model over the full batch.
 
-    @property
-    def sparse_model(self) -> SparseTextEmbedding:
-        if self._sparse_model is None:
-            self._sparse_model = SparseTextEmbedding(model_name=self.sparse_model_name)
-        return self._sparse_model
-
-    @property
-    def dimension(self) -> int:
-        return DENSE_VECTOR_SIZE
-
-    def embed_documents(
-        self, documents: Sequence[str]
-    ) -> tuple[list[list[float]], list[SparseVector]]:
-        """Embed a batch of document chunks with both dense and sparse representations.
-
-        Args:
-            documents: List of chunk text strings.
-
-        Returns:
-            Tuple of (dense_vectors, sparse_vectors).
+        This guarantees that BM25 IDF weights are properly fitted across the corpus,
+        and zip(..., strict=True) guards chunk-to-vector alignment.
         """
-        if not documents:
-            return [], []
+        if not texts:
+            return []
 
-        # Dense embeddings
-        dense_gen = self.dense_model.embed(documents)
-        dense_vectors = [v.tolist() for v in dense_gen]
+        dense_vectors = self._dense_model.embed(texts)
+        sparse_vectors = self._sparse_model.embed(texts)
 
-        # Sparse BM25 embeddings (batch-fitted IDF across all documents in call)
-        sparse_gen = self.sparse_model.embed(documents)
-        sparse_vectors = [
-            SparseVector(
-                indices=s.indices.tolist(),
-                values=s.values.tolist(),
+        results: list[EmbeddedText] = []
+        for dense_vec, sparse_vec in zip(dense_vectors, sparse_vectors, strict=True):
+            dense_list = dense_vec.tolist() if hasattr(dense_vec, "tolist") else list(dense_vec)
+            sparse_indices = (
+                sparse_vec.indices.tolist()
+                if hasattr(sparse_vec.indices, "tolist")
+                else list(sparse_vec.indices)
             )
-            for s in sparse_gen
-        ]
+            sparse_values = (
+                sparse_vec.values.tolist()
+                if hasattr(sparse_vec.values, "tolist")
+                else [float(v) for v in sparse_vec.values]
+            )
 
-        return dense_vectors, sparse_vectors
+            results.append(
+                EmbeddedText(
+                    dense=dense_list,
+                    sparse_indices=sparse_indices,
+                    sparse_values=[float(v) for v in sparse_values],
+                )
+            )
 
-    def embed_query(self, query: str) -> tuple[list[float], SparseVector]:
-        """Embed a single search query.
+        return results
 
-        Args:
-            query: The user query or incident symptom text.
+    def embed_query(self, text: str) -> EmbeddedText:
+        """Embed a query text using .query_embed() for asymmetric retrieval compatibility."""
+        dense_vec = next(iter(self._dense_model.query_embed(text)))
+        sparse_vec = next(iter(self._sparse_model.query_embed(text)))
 
-        Returns:
-            Tuple of (dense_vector, sparse_vector).
-        """
-        # Dense query embedding
-        dense_gen = iter(self.dense_model.query_embed(query))
-        dense_vector = next(dense_gen).tolist()
-
-        # Sparse BM25 query embedding
-        sparse_gen = iter(self.sparse_model.query_embed(query))
-        sparse_out = next(sparse_gen)
-        sparse_vector = SparseVector(
-            indices=sparse_out.indices.tolist(),
-            values=sparse_out.values.tolist(),
+        dense_list = dense_vec.tolist() if hasattr(dense_vec, "tolist") else list(dense_vec)
+        sparse_indices = (
+            sparse_vec.indices.tolist()
+            if hasattr(sparse_vec.indices, "tolist")
+            else list(sparse_vec.indices)
+        )
+        sparse_values = (
+            sparse_vec.values.tolist()
+            if hasattr(sparse_vec.values, "tolist")
+            else [float(v) for v in sparse_vec.values]
         )
 
-        return dense_vector, sparse_vector
+        return EmbeddedText(
+            dense=dense_list,
+            sparse_indices=sparse_indices,
+            sparse_values=[float(v) for v in sparse_values],
+        )
+
+
+# Backward compatibility alias
+DualEmbeddingEngine = FastEmbedEngine
