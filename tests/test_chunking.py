@@ -168,7 +168,8 @@ def test_chunk_articles_batch(sample_articles: list[Article]) -> None:
         assert a.article_id in article_ids
 
 
-def test_chunk_all_corpus_articles() -> None:
+def test_chunk_all_real_barq_articles() -> None:
+    """Verify chunking all 11 real BARQ articles with Section 11.7 parameters (700/120)."""
     corpus_file = Path("data/corpus/barq_articles.json")
     if not corpus_file.exists():
         pytest.skip("Real barq_articles.json not yet extracted")
@@ -177,12 +178,39 @@ def test_chunk_all_corpus_articles() -> None:
         data = json.load(f)
 
     articles = [Article.model_validate(item) for item in data]
-    chunks = chunk_articles(articles)
+    chunks = chunk_articles(articles, chunk_size=700, chunk_overlap=120)
 
     assert len(articles) == 11
-    assert len(chunks) > 0
+    assert len(chunks) == 45, f"Expected exactly 45 chunks from 11 articles, got {len(chunks)}"
+
+    # Group by article and verify sections
+    by_article: dict[str, list[ArticleChunk]] = {}
     for c in chunks:
         assert c.chunk_index < c.total_chunks
+        by_article.setdefault(c.article_id, []).append(c)
+        # Ensure code fences are balanced
+        fences = [ln for ln in c.text.splitlines() if ln.strip().startswith("```")]
+        err = f"Unbalanced code fence in {c.article_id} chunk {c.chunk_index}"
+        assert len(fences) % 2 == 0, err
+
+    # Every article must contain Symptom, Cause, Resolution, Escalation
+    for art in articles:
+        art_chunks = by_article[art.unique_key]
+        sections = {c.section for c in art_chunks}
+        for req in ["Symptom", "Cause", "Resolution", "Escalation"]:
+            assert req in sections, f"{art.unique_key} missing section {req} in chunks"
+
+    # Verify KnowledgePayload conversion for all 45 chunks
+    for art in articles:
+        for c in by_article[art.unique_key]:
+            payload = KnowledgePayload.from_chunk(art, c)
+            assert payload.article_number == art.article_number
+            assert payload.service == art.service
+            assert payload.category == art.category
+            assert payload.workflow_state == art.workflow_state
+            assert payload.security_level == art.security_level
+            assert payload.version == art.version
+            assert payload.chunk_text == c.text
 
 
 def test_chunk_large_complex_article_with_subsections_and_code_blocks() -> None:
