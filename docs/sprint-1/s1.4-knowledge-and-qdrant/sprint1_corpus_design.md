@@ -50,7 +50,7 @@ Every record in `data/corpus/barq_articles.json` and every point payload in Qdra
 | `security_level` | Keyword | Closed enum: `public`, `internal`, `restricted` | `KEYWORD` | Tiered role-based access control (RBAC) filtering |
 
 ### 3.2 Core Article Identity Fields
-- `article_number`: Unique KB identifier matching the ServiceNow pattern `^KB\d+$` (`KB0001` through `KB0010`).
+- `article_number`: Unique KB identifier in the manual's four-digit format `^KB\d{4}$` (`KB0001` through `KB0010`).
 - `version`: Two-part version string (`1.0` through `4.0`).
 - `unique_key` / `article_id`: Composed canonical key `f"{article_number}-v{version}"` (e.g. `KB0001-v2.0`).
 - `title`: Complete title of the standard operating procedure.

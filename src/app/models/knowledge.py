@@ -23,7 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 SLUG_PATTERN = re.compile(r"^[a-z0-9]+(?:[-_][a-z0-9]+)*$")
 VERSION_PATTERN = re.compile(r"^\d+\.\d+$")
-ARTICLE_NUMBER_PATTERN = re.compile(r"^KB\d+$")
+ARTICLE_NUMBER_PATTERN = re.compile(r"^KB\d{4}$")
 
 
 class WorkflowState(StrEnum):

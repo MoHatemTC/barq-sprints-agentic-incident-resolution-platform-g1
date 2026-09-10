@@ -23,8 +23,10 @@ def test_valid_article_round_trips(sample_articles: list[Article]) -> None:
     ]
 
 
-def test_article_number_must_match_pattern(article_dicts: list[dict]) -> None:
-    data = {**article_dicts[0], "article_number": "INVALID-001"}
+@pytest.mark.parametrize("bad_number", ["INVALID-001", "KB1", "KB00001", "kb0001"])
+def test_article_number_must_match_pattern(article_dicts: list[dict], bad_number: str) -> None:
+    """Exactly four digits after KB, uppercase — the documented manual format."""
+    data = {**article_dicts[0], "article_number": bad_number}
     with pytest.raises(ValidationError, match="article_number"):
         Article.model_validate(data)
 
