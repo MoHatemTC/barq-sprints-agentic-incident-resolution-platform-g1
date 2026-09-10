@@ -116,4 +116,9 @@ site/
 # =========================
 data/*
 !data/coverage_matrix.csv
-!data/corpus/
+# The extracted corpus JSON carries full article bodies from an
+# INTERNAL-marked BARQ manual — it stays local. Only the schema README and
+# the sanitized extraction report (counts/warnings, no bodies) are tracked.
+data/corpus/*
+!data/corpus/README.md
+!data/corpus/barq_ingestion_report.md
