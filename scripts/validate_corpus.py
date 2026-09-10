@@ -5,7 +5,7 @@ from pathlib import Path
 
 from app.retrieval.sources import LocalJSONSource
 
-CORPUS_PATH = Path("data/corpus/articles.json")
+CORPUS_PATH = Path("data/corpus/barq_articles.json")
 COVERAGE_PATH = Path("data/coverage_matrix.csv")
 
 
@@ -18,9 +18,10 @@ def main() -> None:
     print(f"✅ Successfully validated {len(articles)} articles against Article model")
 
     if COVERAGE_PATH.exists():
-        corpus_ids = {a.article_id for a in articles}
+        corpus_ids = {a.article_number for a in articles} | {a.unique_key for a in articles}
         with COVERAGE_PATH.open(encoding="utf-8") as f:
-            rows = list(csv.DictReader(f))
+            lines = [line for line in f if not line.strip().startswith("#")]
+            rows = list(csv.DictReader(lines))
         for row in rows:
             if row["is_answerable"] == "true":
                 for aid in row["primary_article_ids"].split(";"):

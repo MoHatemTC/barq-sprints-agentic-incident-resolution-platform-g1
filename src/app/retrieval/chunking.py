@@ -158,7 +158,6 @@ def chunk_article(
     )
 
 
-
 def chunk_articles(
     articles: list[Article],
     chunk_size: int = DEFAULT_CHUNK_SIZE,

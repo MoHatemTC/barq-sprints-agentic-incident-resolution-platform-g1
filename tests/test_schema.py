@@ -128,4 +128,3 @@ def test_local_json_source_rejects_non_array(tmp_path: Path) -> None:
     path.write_text(json.dumps({"articles": []}), encoding="utf-8")
     with pytest.raises(ValueError, match="JSON array"):
         LocalJSONSource(path).load_articles()
-

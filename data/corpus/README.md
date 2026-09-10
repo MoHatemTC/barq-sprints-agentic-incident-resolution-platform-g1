@@ -1,94 +1,73 @@
-# Knowledge Base Corpus (`data/corpus/articles.json`)
+# BARQ Operations Knowledge Base Corpus (`data/corpus/barq_articles.json`)
 
 ## Overview
-This directory contains the foundational technical knowledge base corpus for Sprint 1 (S1.4: Knowledge Retrieval Foundation). It contains **27 authored technical articles** covering realistic enterprise production incidents, error signatures, root causes, and verified resolution procedures.
+This directory contains the canonical technical knowledge base corpus extracted directly from Section 6 (pp. 17–24) of the **BARQ Systems IT Service Operations Manual (Edition 4.0)**. It contains **10 article numbers and 11 distinct records** (`KB0001` through `KB0010`), including versioned lifecycle entries.
 
-All articles strictly adhere to the `app.models.knowledge.Article` Pydantic domain model and are validated before ingestion.
+All articles strictly adhere to the `app.models.knowledge.Article` Pydantic domain model and are validated before vector ingestion into Qdrant.
 
 ---
 
 ## Article Schema Specification
 
-Each article in `articles.json` is a JSON object with the following fields:
+Each article in `barq_articles.json` is a JSON object with the following fields:
 
 | Field | Type | Description | Example |
 |---|---|---|---|
-| `base_id` | `str` | Version-less article identifier family | `KB-DB-001` |
+| `article_number` | `str` | Article identifier (`^KB\d{4}$`) | `KB0001` |
 | `version` | `str` | Semantic major.minor version (`^\d+\.\d+$`) | `2.0` |
-| `article_id` | `str` | Unique compound ID (`{base_id}-v{version}`) | `KB-DB-001-v2.0` |
-| `title` | `str` | Descriptive technical title (5-200 chars) | `PostgreSQL 16 max_connections Exhausted Under Pooling` |
-| `short_description` | `str` | One-line summary (max 255 chars, ServiceNow limit) | `Resolve FATAL 53300 too many connections on PostgreSQL 16 pools.` |
-| `category` | `str` (slug) | Controlled vocabulary category | `database` |
-| `service` | `str` (slug) | Controlled vocabulary service | `postgresql` |
+| `title` | `str` | Descriptive technical title (5-200 chars) | `VPN AUTHENTICATION FAILS AFTER A PASSWORD CHANGE` |
+| `short_description` | `str` | One-line summary (max 255 chars, ServiceNow limit) | `Resolve VPN authentication failure following domain password update.` |
+| `category` | `str` (slug) | Controlled vocabulary category (`network`, `software`, `hardware`, `inquiry`) | `network` |
+| `service` | `str` (slug) | Controlled vocabulary service | `corporate-vpn` |
 | `workflow_state` | `str` | Lifecycle state (`published`, `draft`, `retired`) | `published` |
 | `security_level` | `str` | Audience visibility (`public`, `internal`, `restricted`) | `internal` |
-| `content` | `str` | Canonical Markdown body with fenced code blocks | `## Symptom\n\nApplication logs show...` |
+| `body` | `str` | Canonical Markdown body (`## Symptom`, `## Cause`, `## Resolution`, `## Escalation`) | `## Symptom\n\nUser cannot authenticate...` |
+| `owner` | `str \| null` | Team or department owning the article | `Collaboration Services` |
+| `author` | `str \| null` | Author name | `O. Sabry` |
+| `reviewed_on` | `str \| null` | Date of last operational review | `02 Feb 2026` |
+| `related_records` | `list[str]` | Associated incidents, changes, problems, or known errors | `["INC0010023"]` |
+| `sys_id` | `str \| null` | ServiceNow sys_id populated post-publish seam | `null` |
 
 ---
 
-## Controlled Vocabulary & Distribution
+## Knowledge Base Inventory & Distribution
 
-The 27 articles span 7 core infrastructure categories:
+The 11 extracted records span 4 core ITIL categories across 8 enterprise services:
 
-1. **`database`** (5 articles):
-   - `KB-DB-001-v1.0`: PostgreSQL 14 Connection Limit Exhaustion
-   - `KB-DB-001-v2.0`: PostgreSQL 16 max_connections Under Pooling
-   - `KB-DB-002-v1.0`: PostgreSQL Transaction ID Wraparound & Autovacuum Starvation
-   - `KB-DB-003-v1.0`: PostgreSQL Deadlock Detected (40P01) on Batch Inserts
-   - `KB-DB-004-v1.0`: PostgreSQL WAL Disk Space Starvation (PANIC checkpoint)
-2. **`caching`** (5 articles):
-   - `KB-CACHE-001-v1.0`: Redis OOM Command Not Allowed (Missing TTL)
-   - `KB-CACHE-001-v1.1`: Redis Memory Fragmentation Evicting Celery Keys (`draft`)
-   - `KB-CACHE-002-v1.0`: Redis Sentinel Split-Brain Following Network Partition
-   - `KB-CACHE-003-v1.0`: Redis Replication Client Output Buffer Overflow
-   - `KB-CACHE-004-v1.0`: Redis Cluster Slot Migration Hang on Large Hash Keys (`draft`)
-3. **`queue`** (3 articles):
-   - `KB-QUEUE-001-v1.0`: Celery Worker Task Starvation from Unbounded Prefetch
-   - `KB-QUEUE-002-v1.0`: Celery Worker Lost (Exit code 137 / SIGKILL) Under Memory Pressure
-   - `KB-QUEUE-003-v1.0`: RabbitMQ High Memory Watermark Alarm Blocking Publishers
-4. **`networking`** (4 articles):
-   - `KB-NET-001-v1.0`: NGINX 502 Bad Gateway (Socket Backlog Overflow)
-   - `KB-NET-001-v2.0`: NGINX 504 Gateway Timeout on Slow Upstream Reporting
-   - `KB-NET-002-v1.0`: NGINX SSL Handshake Failure (Expired Certificate Chain)
-   - `KB-NET-003-v1.0`: Legacy Apache KeepAlive Worker Exhaustion (`retired`)
-5. **`compute`** (6 articles):
-   - `KB-API-001-v1.0`: FastAPI Async Event Loop Blocked by Synchronous I/O
-   - `KB-API-002-v1.0`: Uvicorn Worker Process Killed on Gunicorn 30s Timeout
-   - `KB-COMP-001-v1.0`: Docker Container Terminated with Exit Code 137 (OOMKilled)
-   - `KB-COMP-002-v1.0`: Docker Daemon Inotify Watch Limit Exhausted on Linux Host
-   - `KB-K8S-001-v1.0`: Kubernetes Pod CrashLoopBackOff Due to Failed Readiness Probe
-   - `KB-K8S-002-v1.0`: Kubernetes Node DiskPressure Evicting Application Pods
-6. **`storage`** (2 articles):
-   - `KB-STOR-001-v1.0`: Linux Filesystem Inode Exhaustion with Free Disk Space (`df -i`)
-   - `KB-STOR-002-v1.0`: NFS Mount Stale File Handle Error (ESTALE)
-7. **`security`** (2 articles):
-   - `KB-SEC-001-v1.0`: ServiceNow OAuth2 Token Expiry Buffer Failure (401 Unauthorized)
-   - `KB-SEC-002-v1.0`: Internal TLS CA Certificate Verification Failure Across Microservices
+| Number | Version | State | Security | Service | Category | Title |
+|---|---|---|---|---|---|---|
+| `KB0001` | `2.0` | `published` | `internal` | `corporate-vpn` | `network` | VPN AUTHENTICATION FAILS AFTER A PASSWORD CHANGE |
+| `KB0002` | `3.0` | `published` | `internal` | `corporate-email` | `software` | OUTLOOK SHOWS DISCONNECTED AND NO MAIL IS DELIVERED |
+| `KB0003` | `2.0` | `published` | `internal` | `file-services` | `network` | MAPPED SHARED DRIVE IS MISSING AFTER SIGN-IN |
+| `KB0004` | `1.0` | `published` | `restricted` | `print-services` | `hardware` | PRINT JOBS QUEUE BUT NOTHING PRINTS |
+| `KB0005` | `4.0` | `published` | `internal` | `identity` | `inquiry` | ACCOUNT IS LOCKED AFTER REPEATED FAILED SIGN-INS |
+| `KB0006` | `3.0` | `published` | `internal` | `identity` | `inquiry` | MULTI-FACTOR AUTHENTICATION AFTER A LOST OR REPLACED DEVICE |
+| `KB0007` | `2.0` | `published` | `restricted` | `endpoint` | `hardware` | LAPTOP PERFORMANCE DEGRADES AFTER A SYSTEM UPDATE |
+| `KB0008` | `1.0` | `published` | `restricted` | `sap-erp` | `software` | SAP GUI CONNECTION TIMES OUT WITH RFC_ERROR_COMMUNICATION |
+| `KB0009` | `2.0` | `published` | `internal` | `corporate-wifi` | `network` | WI-FI DROPS REPEATEDLY ON THE 5 GHZ CORPORATE NETWORK |
+| `KB0010` | `1.0` | `retired` | `restricted` | `order-processing` | `software` | ORDER SERVICE CONNECTION POOL EXHAUSTION (Historical outage) |
+| `KB0010` | `2.0` | `published` | `restricted` | `order-processing` | `software` | ORDER SERVICE CONNECTION POOL EXHAUSTION (Emergency change procedure) |
 
 ---
 
-## Disambiguation & Lifecycle Pairs
+## Lifecycle Disambiguation (`KB0010`)
 
-To test Sprint 2's hybrid retrieval and metadata filtering capabilities:
-- **Version Disambiguation Pairs**:
-  - `KB-DB-001-v1.0` (Postgres 14) vs `KB-DB-001-v2.0` (Postgres 16)
-  - `KB-NET-001-v1.0` (NGINX 502) vs `KB-NET-001-v2.0` (NGINX 504)
-  - `KB-CACHE-001-v1.0` (Redis OOM) vs `KB-CACHE-001-v1.1` (Redis Fragmentation)
-- **Workflow State Testing**:
-  - 24 `published` articles (live production answers)
-  - 2 `draft` articles (`KB-CACHE-001-v1.1`, `KB-CACHE-004-v1.0`)
-  - 1 `retired` article (`KB-NET-003-v1.0`)
+`KB0010` tests version filtering and disambiguation:
+- **`KB0010-v1.0` (Retired)**: Recommended restarting the application server upon connection pool exhaustion. On 14 March 2026, applying this advice dropped in-flight orders and triggered Major Incident `INC0009884` (a 40-minute Tier 1 outage).
+- **`KB0010-v2.0` (Published)**: The active operational standard. Strictly warns *"Do not restart the application server"* and mandates emergency change `CHG0030455` for connection pool draining.
+
+Vector retrieval applies a mandatory published-only filter during incident response:
+```python
+Filter(must=[FieldCondition(key="workflow_state", match=MatchValue(value="published"))])
+```
 
 ---
 
 ## Validation & Verification
 
-To validate that every article in `articles.json` conforms to the Pydantic schema:
+To validate that every article in `barq_articles.json` conforms to the Pydantic schema and ground-truth coverage matrix:
 
 ```bash
-uv run pytest tests/test_corpus.py -v
-```
-Or rebuild programmatically via:
-```bash
-PYTHONPATH=src uv run python scripts/build_corpus.py
+pytest tests/test_corpus.py -v
+PYTHONPATH=src python scripts/validate_corpus.py
 ```

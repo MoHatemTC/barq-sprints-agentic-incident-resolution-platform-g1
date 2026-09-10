@@ -185,7 +185,6 @@ def test_chunk_all_corpus_articles() -> None:
         assert c.chunk_index < c.total_chunks
 
 
-
 def test_chunk_large_complex_article_with_subsections_and_code_blocks() -> None:
     content = (
         "# PostgreSQL Connection Pool & Memory Saturation Recovery\n\n"

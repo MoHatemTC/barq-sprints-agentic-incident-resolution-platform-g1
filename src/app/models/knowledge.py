@@ -127,7 +127,6 @@ class Article(BaseModel):
         return self.article_number
 
 
-
 class ArticleChunk(BaseModel):
     """One retrievable piece of an article, produced by the chunker."""
 
