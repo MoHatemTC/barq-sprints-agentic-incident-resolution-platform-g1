@@ -4,17 +4,23 @@
 
 ## Status
 
-Not started by the owner. A draft scaffold exists in
+Not started by the owner. [`eligibility-and-event-contract.md`](eligibility-and-event-contract.md)
+and the Business Rule script are a **draft scaffold** from
 [PR #18](../../../../pull/18) — six eligibility conditions and the
-identifier-only payload — but it is unverified on a PDI and explicitly a
-starting point, not a deliverable.
+identifier-only payload — unverified on a PDI and explicitly a starting
+point, not a deliverable. @ahmedtamer101 owns changing, replacing, or
+verifying it.
 
-## What lands in this folder once merged
+## What's here
 
-- `eligibility-and-event-contract.md` — the six conditions mapped to field
-  names, the payload shape, and the rationale for sending identifiers only
-- The Business Rule script, verified against a request-inspection endpoint
-  since the receiving webhook is Sprint 2
+- [`eligibility-and-event-contract.md`](eligibility-and-event-contract.md) —
+  the six conditions mapped to field names, the payload shape, and the
+  rationale for sending identifiers only
+- `../../../servicenow/ai_incident_orchestrator/business_rules/s1_3_eligibility_event.js` —
+  the draft Business Rule script
+
+Still needed: verification against a request-inspection endpoint, since the
+receiving webhook is Sprint 2.
 
 ## Requirements
 

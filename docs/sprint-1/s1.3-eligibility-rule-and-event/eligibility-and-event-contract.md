@@ -73,6 +73,6 @@ Two system properties keep the endpoint and category list out of the exported sc
 
 ## Related
 
-- Field model: [`docs/sprint1_field_model.md`](sprint1_field_model.md)
-- Draft script: [`servicenow/ai_incident_orchestrator/business_rules/s1_3_eligibility_event.js`](../servicenow/ai_incident_orchestrator/business_rules/s1_3_eligibility_event.js)
+- Field model: [`docs/sprint-1/s1.1-scoped-app-and-field-model/field-model.md`](../s1.1-scoped-app-and-field-model/field-model.md)
+- Draft script: [`servicenow/ai_incident_orchestrator/business_rules/s1_3_eligibility_event.js`](../../../servicenow/ai_incident_orchestrator/business_rules/s1_3_eligibility_event.js)
 - Issues: #10 (S1.3), #8 (S1.2 — supplies the OAuth identity this depends on)
