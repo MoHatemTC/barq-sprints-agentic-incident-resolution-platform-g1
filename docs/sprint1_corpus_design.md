@@ -13,10 +13,10 @@ This document specifies the architecture, metadata schema, controlled vocabulary
 
 Rather than relying on synthetic placeholders or generic IT templates, the knowledge corpus is extracted directly from **Section 6 (Service Desk Standard Operating Procedures & Engineering Runbooks)** of the official **BARQ Systems IT Service Operations Manual (`data/barq-system-kb.pdf`)**.
 
-The canonical corpus is stored at [data/corpus/barq_articles.json](../data/corpus/barq_articles.json) and comprises **11 verified records** with realistic technical syntax:
-- **Verbatim Error Signatures**: Exact platform error strings (e.g. `RFC_ERROR_COMMUNICATION`, `invalid credentials`, `connection pool exhausted`).
-- **Standard Operating Procedures**: Four canonical sections (`## Symptom`, `## Cause`, `## Resolution`, `## Escalation`) formatted in clean Markdown.
-- **Executable Technical Snippets**: Fenced code blocks with explicit language tags (`bash`, `sql`, `powershell`) preserving command integrity across chunk boundaries.
+The canonical corpus is stored at [data/corpus/barq_articles.json](../data/corpus/barq_articles.json) (git-ignored — the source manual is marked INTERNAL) and comprises **11 verified records** with realistic technical syntax:
+- **Verbatim Error Signatures**: Exact platform error strings carried through unmodified (`RFC_ERROR_COMMUNICATION`, `HTTP 500`, `connection acquisition timed out`, `invalid credentials`).
+- **Standard Operating Procedures**: Four canonical sections (`## Symptom`, `## Cause`, `## Resolution`, `## Escalation`) formatted in clean Markdown; resolutions are numbered plain-prose steps. The retired `KB0010-v1.0` additionally carries a `## Warning` section quoting the manual's "Why this revision is dangerous" callout.
+- **No Fenced Code Blocks**: The source manual contains no fenced code — its procedures are prose steps, and the extraction preserves them as prose (the chunker's fence-balancing machinery exists for future code-bearing sources).
 
 ---
 
@@ -27,11 +27,11 @@ Initial project scoping (and baseline partner requirements) proposed authoring a
 
 We selected **Path B (Production Extraction of Real Operational Data)** for the following engineering reasons:
 
-1. **Authenticity & Lexical Precision**: The 11 real records contain genuine error strings (`RFC_ERROR_COMMUNICATION`, `ora-01555`, Kerberos ticket expiry, DFS namespace misconfigurations), authentic operational commands (SAP Basis transactions `SM59`, `RZ11`, PowerShell spooler resets, PostgreSQL pool drains), and real architecture details from BARQ Systems.
-2. **Evaluation Ground Truth Alignment**: The historical incident benchmarks in Section 7 (`INC0010023`, `INC0010064`, `INC0010052`) and Section 9.1 (`INC0009884`) directly correspond to these 11 runbooks in [data/coverage_matrix.csv](../data/coverage_matrix.csv).
-3. **Negative Control Verification**: The corpus includes an authentic out-of-scope incident (`INC0010047`, Billing reconciliation `ORA-01555`) to evaluate unanswerable queries without fabricating synthetic topics.
+1. **Authenticity & Lexical Precision**: The 11 real records contain genuine error strings (`RFC_ERROR_COMMUNICATION`, `HTTP 500`, `connection acquisition timed out`) and authentic operational context from BARQ Systems (message-server reachability for SAP, spooler behavior, DFS drive mapping, 802.11 roaming), preserved verbatim by a deterministic, zero-loss extraction pipeline.
+2. **Evaluation Ground Truth Alignment**: The worked incidents in Section 7 of the manual (`INC0010023`, `INC0010047`, `INC0010064`, `INC0010052`) and the related-record citations inside the articles themselves map directly to these 11 runbooks in [data/coverage_matrix.csv](../data/coverage_matrix.csv).
+3. **Negative Control Verification**: The corpus includes an authentic out-of-scope incident (`INC0010047`, printer mechanical fault — the manual's own pilot declined it at score 0.31 vs threshold 0.55) to evaluate unanswerable queries without fabricating synthetic topics.
 4. **Lifecycle & Version Disambiguation**: The `KB0010-v1.0` (Retired) vs. `KB0010-v2.0` (Published) pair provides the exact near-duplicate version disambiguation required for Sprint 2 evaluation.
-5. **No Dilution**: Fabricating 14 additional synthetic articles would dilute the genuine technical vocabulary extracted directly from the BARQ manual and break alignment with the real incident data.
+5. **No Dilution**: Fabricating additional synthetic articles would dilute the genuine technical vocabulary extracted directly from the BARQ manual and break alignment with the real incident data.
 
 ---
 
@@ -43,7 +43,7 @@ Every record in `data/corpus/barq_articles.json` and every point payload in Qdra
 
 | Field Name | Storage Type | Allowed Values | Qdrant Index | Purpose |
 |---|---|---|---|---|
-| `category` | Keyword | Open controlled vocabulary slug (`network`, `software`, `hardware`, `database`, `inquiry`) | `KEYWORD` | High-level ServiceNow incident taxonomy partition |
+| `category` | Keyword | Open controlled vocabulary slug (`network`, `software`, `hardware`, `inquiry`) | `KEYWORD` | High-level ServiceNow incident taxonomy partition |
 | `service` | Keyword | Open controlled vocabulary slug (`corporate-vpn`, `corporate-email`, `file-services`, `print-services`, `identity`, `endpoint`, `sap-erp`, `corporate-wifi`, `order-processing`) | `KEYWORD` | Configuration item (CI) and service routing |
 | `workflow_state` | Keyword | Closed enum: `published`, `draft`, `retired` | `KEYWORD` | Lifecycle governance; excludes decommissioned runbooks from standard resolution |
 | `version` | Keyword | Semver string (`1.0`, `2.0`, `3.0`, `4.0`) | `KEYWORD` | Version-specific resolution targeting |
@@ -56,40 +56,47 @@ Every record in `data/corpus/barq_articles.json` and every point payload in Qdra
 - `title`: Complete title of the standard operating procedure.
 - `body`: Canonical Markdown body containing standard sections and fenced code blocks.
 - `short_description`: One-line summary (maximum 255 characters, matching the ServiceNow `kb_knowledge.short_description` column limit).
-- `owner`: Operational team responsible for the runbook (e.g. `Network Operations`, `Identity Administration`, `Platform Engineering`).
+- `owner`: Operational team responsible for the runbook (e.g. `Network Operations`, `Identity & Access`, `Platform Engineering`).
+- `author`: Individual author, split from the manual's metadata grid (e.g. `L. Haddad`, `K. Selim`).
 - `reviewed_on`: Review date mirrored from the manual (e.g. `11 Apr 2026`).
-- `related_records`: Associated problem and incident IDs (e.g. `PRB0040012`, `INC0010023`).
+- `related_records`: Associated problem, incident, change, and major-incident IDs (e.g. `PRB0040012`, `INC0010023`, `CHG0030455`, `MIR-2026-03`).
 - `sys_id`: 32-character ServiceNow sys_id seam (`None` prior to publishing; populated upon publishing to ServiceNow).
+
+### 3.2.1 The Two Numbering Worlds
+
+The corpus keys on the manual's article numbers (`KB0001`…). When articles are published to ServiceNow, the platform assigns its **own** KB numbers and `sys_id`s — they will not match. Therefore: the coverage matrix and all internal references key on `article_number` (stable across republishing); the publish script (next round) records the `article_number → sys_id` mapping at first publish and matches by `sys_id` for updates; ServiceNow's assigned number is display-only (citations/permalinks).
 
 ### 3.3 Security Level Classification Rules
 Because raw PDF tables in the Operations Manual do not feature a native security classification column, security tiers are established systematically during extraction:
 
 1. **`internal` (Standard Service Desk & General Employee Access)**:
-   - Covers desktop cards, identity self-service, and workstation connectivity.
-   - Applied to: `KB0001` (VPN), `KB0002` (Outlook), `KB0003` (File Shares), `KB0004` (Print Queue), `KB0005` (Account Lockout), `KB0006` (MFA Reset), `KB0009` (Wi-Fi).
+   - Covers end-user self-service: desktop connectivity, identity self-service, and collaboration tools.
+   - Applied to: `KB0001` (VPN), `KB0002` (Outlook), `KB0003` (File Shares), `KB0005` (Account Lockout), `KB0006` (MFA Device), `KB0009` (Wi-Fi).
 2. **`restricted` (Elevated Engineering & Production Infrastructure Access)**:
-   - Covers core ERP transactions, production database connection pooling, and driver-level diagnostic procedures.
-   - Applied to: `KB0007` (Endpoint Performance), `KB0008` (SAP Basis RFC), `KB0010` (Order Service Pool Exhaustion).
+   - Covers shared print infrastructure, endpoint driver-level diagnostics, core ERP reachability, and production service remediation procedures.
+   - Applied to: `KB0004` (Print Services), `KB0007` (Endpoint Performance), `KB0008` (SAP Basis RFC), `KB0010` both versions (Order Service Pool Exhaustion).
+
+The mapping is implemented as the `SECURITY_TIERS` table in [src/app/retrieval/barq_manual.py](../src/app/retrieval/barq_manual.py) and asserted per-article by [tests/test_corpus.py](../tests/test_corpus.py).
 
 ---
 
 ## 4. Real Knowledge Base Corpus Inventory (11 Records)
 
-The 11 canonical records in [data/corpus/barq_articles.json](../data/corpus/barq_articles.json) extracted from Section 6 of `data/barq-system-kb.pdf`:
+The 11 canonical records in [data/corpus/barq_articles.json](../data/corpus/barq_articles.json) extracted from Section 6 of `data/barq-system-kb.pdf`. Titles below are shown in the manual's title case; they are stored as the manual's uppercase banner (e.g. `VPN AUTHENTICATION FAILS AFTER A PASSWORD CHANGE`):
 
-| Article ID | Title | Service | Category | State | Security | Version Disambiguation / Notes |
+| Article ID | Title | Service | Category | State | Security | Notes |
 |---|---|---|---|---|---|---|
-| `KB0001-v2.0` | VPN authentication fails after a password change | `corporate-vpn` | `network` | `published` | `internal` | Resolves credential store caching after password reset |
-| `KB0002-v3.0` | Outlook shows disconnected and no mail is delivered | `corporate-email` | `software` | `published` | `internal` | Distinguishes client corruption vs platform mail outage |
-| `KB0003-v2.0` | Network share drive does not appear in file explorer | `file-services` | `network` | `published` | `internal` | Kerberos ticket renewal and DFS namespace mapping |
-| `KB0004-v1.0` | Print queue stuck on document submission | `print-services` | `hardware` | `published` | `internal` | Spooler service restart and driver queue purge |
-| `KB0005-v4.0` | Self-service account lockout reset procedure | `identity` | `inquiry` | `published` | `internal` | Directory lockout verification and unlock path |
-| `KB0006-v3.0` | Multi-factor authentication token out of sync | `identity` | `inquiry` | `published` | `internal` | TOTP clock skew re-synchronization |
-| `KB0007-v2.0` | Laptop performance degrades after a system update | `endpoint` | `hardware` | `published` | `restricted` | Driver rollback and indexing throttle |
-| `KB0008-v1.0` | SAP Basis RFC communication timeout | `sap-erp` | `software` | `published` | `restricted` | RFC gateway health and buffer recycling |
-| `KB0009-v2.0` | Corporate Wi-Fi connection drops intermittently | `corporate-wifi` | `network` | `published` | `internal` | 802.1X certificate trust and roaming aggressiveness |
-| `KB0010-v1.0` | Order service connection pool exhaustion (Retired) | `order-processing` | `database` | `retired` | `restricted` | **RETIRED VARIANT**: Destructive restart procedure that drops in-flight orders. Carries `[!CAUTION]` warning. |
-| `KB0010-v2.0` | Order service connection pool exhaustion | `order-processing` | `database` | `published` | `restricted` | **ACTIVE CANONICAL**: Safe change-controlled drain via emergency change `CHG0030455`. |
+| `KB0001-v2.0` | VPN authentication fails after a password change | `corporate-vpn` | `network` | `published` | `internal` | Related: `PRB0040012`, `INC0010023` |
+| `KB0002-v3.0` | Outlook shows Disconnected and no mail is delivered | `corporate-email` | `software` | `published` | `internal` | |
+| `KB0003-v2.0` | Mapped shared drive is missing after sign-in | `file-services` | `network` | `published` | `internal` | |
+| `KB0004-v1.0` | Print jobs queue but nothing prints | `print-services` | `hardware` | `published` | `restricted` | Shared print-infrastructure procedure |
+| `KB0005-v4.0` | Account is locked after repeated failed sign-ins | `identity` | `inquiry` | `published` | `internal` | |
+| `KB0006-v3.0` | Multi-factor authentication after a lost or replaced device | `identity` | `inquiry` | `published` | `internal` | |
+| `KB0007-v2.0` | Laptop performance degrades after a system update | `endpoint` | `hardware` | `published` | `restricted` | Driver-level diagnostics |
+| `KB0008-v1.0` | SAP GUI connection times out with RFC_ERROR_COMMUNICATION | `sap-erp` | `software` | `published` | `restricted` | Related: `KE0000034`, `INC0010031` |
+| `KB0009-v2.0` | Wi-Fi drops repeatedly on the 5 GHz corporate network | `corporate-wifi` | `network` | `published` | `internal` | |
+| `KB0010-v1.0` | Order service connection pool exhaustion | `order-processing` | `software` | `retired` | `restricted` | **RETIRED VARIANT**: restart procedure caused outage `MIR-2026-03`; carries the manual's `## Warning` section. Grid has no Service/Category/Owner cells — service/category defaulted (declared in the extraction report). |
+| `KB0010-v2.0` | Order service connection pool exhaustion | `order-processing` | `software` | `published` | `restricted` | **ACTIVE CANONICAL**: change-controlled pool drain via emergency change `CHG0030455`. Related: `MIR-2026-03`, `PRB0040018`, `CHG0030455`, `INC0010052`. |
 
 ### Why Exactly 11 Records?
 Section 6 of the BARQ Operations Manual contains 10 operational topics (`KB0001` through `KB0010`). For `KB0010`, the manual explicitly documents two distinct revisions:
@@ -111,28 +118,29 @@ Chunking is performed by [src/app/retrieval/chunking.py](../src/app/retrieval/ch
   - `###` ➔ `Subsection`
 - **Code Block Integrity (`balance_code_fences`)**: Unclosed code fences split across chunk boundaries are automatically detected and closed in the opening chunk and reopened in the continuation chunk.
 - **Total Chunks Produced**: The 11 articles produce **exactly 45 retrievable chunks**:
-  - 10 articles × 4 sections = 40 chunks.
-  - `KB0010-v1.0` carries a 5th `Warning` section (`Why this revision is dangerous`) = 41 chunks.
-  - Complex resolution steps split into subsections = **45 bound-validated chunks**.
+  - 11 records × 4 body sections (`Symptom`, `Cause`, `Resolution`, `Escalation`) = 44 chunks. At the 700-char limit no section exceeds one chunk, so no recursive sub-splitting occurs.
+  - `KB0010-v1.0` carries a 5th `Warning` section (the manual's "Why this revision is dangerous" callout) = 1 extra chunk.
+  - Total: **45 bound-validated chunks**.
 - **Regression Guard**: Verified continuously by [tests/test_chunking.py](../tests/test_chunking.py).
 
 ---
 
 ## 6. Ground Truth & Coverage Matrix Specification
 
-The ground truth file [data/coverage_matrix.csv](../data/coverage_matrix.csv) maps real incidents from Section 7 and Section 9.1 of the manual to their corresponding runbooks.
+The ground truth file [data/coverage_matrix.csv](../data/coverage_matrix.csv) maps real incidents from the manual (Section 7 worked tickets, Section 6 related-record citations, and the Section 9 major incident report) to their corresponding runbooks. It contains **13 active scenarios**: 12 answerable (2 of them multi-candidate with `acceptable_article_ids`) and 1 unanswerable:
 
-### Benchmark Incident Mapping
-
-| Incident ID | Incident Short Description | Target Article | Target Service | Is Answerable | Evaluation Rationale |
+| Incident ID | Incident Description | Primary Article | Acceptable | Answerable | Rationale |
 |---|---|---|---|---|---|
-| `INC0010023` | User unable to authenticate to VPN after resetting domain password | `KB0001-v2.0` | `corporate-vpn` | `true` | Matches cached credential store signature |
-| `INC0010064` | SAP batch job fails with RFC_ERROR_COMMUNICATION | `KB0008-v1.0` | `sap-erp` | `true` | Verbatim error code match |
-| `INC0010052` | Order processing service returns HTTP 500 database pool exhausted | `KB0010-v2.0` | `order-processing` | `true` | Must resolve to Published v2.0, never Retired v1.0 |
-| `INC0010047` | Billing reconciliation fails with ORA-01555 snapshot too old | — | `billing` | `false` | **Unanswerable Test Case**: Oracle DB runbook not in Section 6. Tests that retrieval returns low confidence / rejection. |
-| `INC0009884` | Global mail delivery delay across all departments | `KB0002-v3.0` | `corporate-email` | `true` | Section 9.1 major incident scenario |
+| `INC0010023` | VPN authentication failure after a password reset | `KB0001-v2.0` | — | `true` | Worked ticket resolved via KB0001 |
+| `INC0010047` | Printer hardware mechanical squeaking and grinding noise | — | — | **`false`** | **Unanswerable**: hardware fault outside the KB; the manual's own pilot declined it (score 0.31 vs threshold 0.55) |
+| `INC0010064` | Account locked after repeated failed sign-ins and MFA reset attempts | `KB0005-v4.0` | `KB0006-v3.0` | `true` | Worked ticket; MFA article is an acceptable neighbor |
+| `INC0010052` | Order service pool exhausted, HTTP 500 under load | `KB0010-v2.0` | `KB0010-v1.0` | `true` | **Version disambiguation**: must resolve to published v2.0; v1.0 is retired (and dangerous) |
+| `INC0009884` | Order service pool exhaustion causing in-flight order loss | `KB0010-v2.0` | `KB0010-v1.0` | `true` | The 14 Mar 2026 major incident (`MIR-2026-03`) |
+| `INC0010024`–`INC0010033` | One per article: Outlook, drive mapping, printing, lockout, MFA device, laptop, SAP RFC, Wi-Fi | respective article | — | `true` | Related-record citations inside each article's metadata grid |
 
-All mappings are validated against `data/corpus/barq_articles.json` by running:
+Five additional synthetic scenarios (three multi-article, two unanswerable) are retained in the file as commented rows marked `# NOT IN PDF`, for reference and future multi-article testing; they are excluded from validation and evaluation.
+
+All mappings — **both `primary_article_ids` and `acceptable_article_ids`** — are validated against the corpus by:
 ```bash
 uv run python scripts/validate_corpus.py
 ```
@@ -152,28 +160,36 @@ barq-sprints-agentic-incident-resolution-platform-g1/
 │   │   ├── barq_manual.py       # PDF Section 6 extraction and text cleaning logic
 │   │   ├── chunking.py          # Markdown header splitter + code fence balancer
 │   │   ├── embedding.py         # FastEmbedEngine (bge-small-en-v1.5 + Qdrant/bm25)
+│   │   ├── extraction.py        # ServiceNow HTML -> Markdown (publish round-trip, next sprint step)
 │   │   ├── ingest.py            # Batch chunking, single-batch BM25 fitting, UUIDv5 upsert
 │   │   └── sources.py           # LocalJSONSource loader
 │   └── clients/
 │       └── qdrant.py            # QdrantClient factory and ensure_collection()
-├── src/retrieval/               # Root Re-Export Shims
+├── src/retrieval/               # Root Re-Export Shims (packaged in the wheel)
 │   ├── __init__.py              # Package marker
-│   ├── embedding.py             # Re-exports DualEmbeddingEngine, models, vector sizes
-│   └── ingest.py                # Re-exports ingest_articles, setup_qdrant_collection, point ID builder
+│   ├── embedding.py             # Re-exports FastEmbedEngine, EmbeddingEngine, EmbeddedText, DENSE_VECTOR_SIZE
+│   └── ingest.py                # Re-exports ingest_articles, build_point_id, KB_NAMESPACE
 ├── data/
-│   ├── barq-system-kb.pdf       # Source BARQ Operations Manual (Edition 4.0)
-│   ├── coverage_matrix.csv      # Real incident-to-runbook ground truth mapping
+│   ├── barq-system-kb.pdf       # Source BARQ Operations Manual (Edition 4.0, git-ignored, INTERNAL)
+│   ├── coverage_matrix.csv      # Real incident-to-runbook ground truth mapping (13 scenarios)
 │   └── corpus/
-│       └── barq_articles.json   # 11 canonical extracted knowledge runbooks
+│       ├── barq_articles.json   # 11 canonical extracted runbooks (git-ignored, INTERNAL)
+│       ├── README.md            # Corpus schema documentation (tracked)
+│       └── barq_ingestion_report.md  # Sanitized extraction report: counts + warnings only (tracked)
 ├── docker-compose.yml           # Persistent Qdrant 1.14.0 (volume: barq_qdrant_data)
 ├── scripts/
 │   ├── extract_barq_kb.py       # CLI: re-extract PDF into data/corpus/barq_articles.json
-│   ├── setup_qdrant.py          # CLI: initialize Qdrant collection and payload indexes
-│   ├── seed_qdrant.py           # CLI: chunk, embed, and seed Qdrant (45 points)
-│   └── validate_corpus.py       # CLI: validate coverage matrix and security tiers
+│   ├── setup_qdrant.py          # CLI: idempotent collection + payload indexes (--force-recreate to rebuild)
+│   ├── seed_qdrant.py           # CLI: chunk, embed, seed Qdrant (45 points), verify stored == upserted
+│   └── validate_corpus.py       # CLI: validate corpus schema and coverage matrix (primary + acceptable IDs)
 └── tests/
+    ├── test_barq_manual.py      # Extractor unit tests (synthetic fixtures) + real-PDF regression (skipped if absent)
     ├── test_chunking.py         # Regression test for 45 chunks & code fence balancing
-    └── test_ingest.py           # 8 automated ingestion tests (idempotency, point IDs, seeding)
+    ├── test_corpus.py           # Corpus invariants: 11 records, tiers, lifecycle, matrix consistency
+    ├── test_embedding.py        # FastEmbed engine: dimensions, sparsity, query path, determinism
+    ├── test_schema.py           # Article/ArticleChunk/KnowledgePayload validation
+    ├── test_extraction.py       # ServiceNow HTML -> Markdown round-trip (for the publish step)
+    └── test_ingest.py           # Ingestion tests (idempotency, point IDs, single-batch embedding)
 ```
 
 ---
@@ -181,17 +197,20 @@ barq-sprints-agentic-incident-resolution-platform-g1/
 ## 8. Technical Approach & Implementation Details
 
 ### 8.1 Extraction Approach (`src/app/retrieval/barq_manual.py`)
-- Uses PyMuPDF (`fitz`) to extract text and tables from Section 6 of `data/barq-system-kb.pdf`.
-- Normalizes section headers into clean Markdown: `# <Title>`, `## Symptom`, `## Cause`, `## Resolution`, `## Escalation`.
-- Identifies commands and terminal outputs, wrapping them into syntax-highlighted code fences (`bash` or `sql`).
-- Generates `KB0010-v1.0` (Retired) and `KB0010-v2.0` (Published) from historical text in the manual, appending explicit warning blocks to `v1.0`.
+- Uses `pdftotext -layout` (poppler-utils) via subprocess — no PyMuPDF — to extract Section 6 (pages 17–24) with layout preserved.
+- Deterministically strips the repeating page header/footer and TOC dot-leaders before parsing.
+- Parses each article's header banner and metadata grid, including the KB0010-v1 Retired variant (`Retired on` / `Reason` rows) and the KB0010-v2 grid whose Owner cell carries `Team · Author` with no separate Author label.
+- Converts the four fixed body sections into canonical Markdown (`## Symptom`, `## Cause`, `## Resolution`, `## Escalation`); the `## Warning` section of KB0010-v1.0 comes from the manual's own "Why this revision is dangerous" callout.
+- Resolution steps are split **sequence-aware**: a line-start number is only accepted as a step marker when it continues 1, 2, 3…, so wrapped numbers (dates, versions) never become fake steps; a zero-loss guard reassembles and compares the text, raising rather than emitting corrupted Markdown (`assert_zero_loss`).
+- Normalizes in the adapter only: version `"2"` → `"2.0"`, `Published` → `published`, `security_level` from the `SECURITY_TIERS` table, `short_description` from the Symptom's first sentence. KB0010's absent Service/Category cells are defaulted and declared in the extraction report.
 
 ### 8.2 Chunking & Balancing Approach (`src/app/retrieval/chunking.py`)
-- Breaks articles into chunks honoring Section 11.7 parameters (max 700 chars, 120 char overlap).
-- `balance_code_fences` scans each chunk: if an unclosed code block fence is found, it appends a closing fence to the current chunk and prepends an opening fence with the detected language tag to the subsequent chunk.
-- Guarantees zero code syntax corruption during retrieval.
+- Breaks articles into chunks honoring Section 11.7 parameters (max 700 chars, 120 char overlap). The real corpus needs no recursive sub-splitting at this size — every section fits one chunk.
+- `balance_code_fences` scans each chunk: if an unclosed code block fence is found, it appends a closing fence to the current chunk and prepends an opening fence with the detected language tag to the subsequent chunk. (The real corpus contains no fenced code; the mechanism exists for future code-bearing sources.)
+- Guarantees zero structural corruption during retrieval.
 
 ### 8.3 Ingestion & Embedding Approach (`src/app/retrieval/ingest.py`)
 - **Single-Batch BM25 Fitting**: In `ingest_articles()`, all 45 chunk texts across all 11 articles are flattened into a single list and passed to `embedding_engine.embed_documents(all_chunk_texts)` in one batch call. This fits the corpus-wide document frequency $n(t)$ accurately without multi-pass skew.
-- **Deterministic UUIDv5**: Point IDs are computed as `uuid.uuid5(uuid.NAMESPACE_DNS, f"{article_id}#{chunk_index}")`. This guarantees single-command idempotent loading (running `seed_qdrant.py` multiple times leaves exactly 45 points in Qdrant).
+- **Deterministic UUIDv5 (dedicated namespace)**: `KB_NAMESPACE = uuid.uuid5(uuid.NAMESPACE_DNS, "barq-g1-kb")`; point IDs are `uuid.uuid5(KB_NAMESPACE, f"{article_id}::chunk::{chunk_index}")`. Running `seed_qdrant.py` multiple times leaves exactly 45 points with byte-identical IDs (verified against the live Qdrant).
+- **Verification & failure behavior**: upserts run with `wait=True`; the seed script compares stored vs upserted counts and exits non-zero on mismatch; an empty corpus raises instead of silently seeding nothing.
 - **Persistent Storage**: Docker volume `barq_qdrant_data` persists the collection on disk, surviving container restarts without re-indexing.
