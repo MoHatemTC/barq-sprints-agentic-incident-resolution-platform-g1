@@ -107,10 +107,18 @@ class ArticleChunk(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     article_id: str
-    chunk_index: int = Field(..., ge=0)
-    total_chunks: int = Field(..., ge=1)
-    section: str = Field(..., description="Header path the chunk belongs to, e.g. Resolution")
+    chunk_index: int = Field(default=0, ge=0)
+    total_chunks: int = Field(default=1, ge=1)
+    section: str = Field(
+        default="General",
+        description="Header path the chunk belongs to, e.g. Resolution",
+    )
     text: str = Field(..., min_length=1)
+
+    @property
+    def chunk_id(self) -> str:
+        """Deterministic chunk identifier, e.g. KB-DB-001-v2.0#c0."""
+        return f"{self.article_id}#c{self.chunk_index}"
 
     @model_validator(mode="after")
     def validate_bounds(self) -> "ArticleChunk":
