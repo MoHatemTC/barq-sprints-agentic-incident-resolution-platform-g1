@@ -1,23 +1,95 @@
 import asyncio
 import os
+import sys
+from datetime import UTC, datetime
+
+import structlog
 
 from app.clients.servicenow_client import ServiceNowClient
-from app.core.config import get_settings
+from app.core.config import Settings
+from app.exceptions.servicenow import ServiceNowError
+from app.models.incident import AIProcessingState, IncidentUpdatePayload
+
+logger = structlog.get_logger(__name__)
 
 
-async def main() -> None:
-    settings = get_settings()
-    sys_id = os.environ["SERVICENOW_TEST_INCIDENT_SYS_ID"]
-    number = os.environ["SERVICENOW_TEST_INCIDENT_NUMBER"]
+async def test_servicenow_client() -> None:
+    settings = Settings()
+
+    sys_id = os.environ.get("SERVICENOW_TEST_INCIDENT_SYS_ID")
+    number = os.environ.get("SERVICENOW_TEST_INCIDENT_NUMBER")
+
+    if not sys_id or not number:
+        logger.error(
+            "Missing environment variables",
+            required=[
+                "SERVICENOW_TEST_INCIDENT_SYS_ID",
+                "SERVICENOW_TEST_INCIDENT_NUMBER",
+            ],
+        )
+        sys.exit(1)
+
     async with ServiceNowClient(settings) as client:
-        print(f"Fetching incident with sys_id: {sys_id}")
-        incident = await client.get_incident(sys_id)
-        print(incident)
+        try:
+            # 1. Test Fetching by SYS_ID
+            logger.info("Testing get_incident()", sys_id=sys_id)
+            incident = await client.get_incident(sys_id)
+            logger.info(
+                "Successfully retrieved incident",
+                number=incident.number,
+                state=incident.state,
+            )
 
-        print(f"Fetching incident with number: {number}")
-        incident_by_number = await client.find_incident_by_number(number)
-        print(incident_by_number)
+            # 2. Test Fetching by Number
+            logger.info("Testing find_incident_by_number()", number=number)
+            incident_by_number = await client.find_incident_by_number(number)
+            if incident_by_number:
+                logger.info("Successfully found incident", sys_id=incident_by_number.sys_id)
+            else:
+                logger.warning("Incident not found by number", number=number)
+
+            # 3. Test Updating the Incident
+            logger.info("Testing update_incident()")
+
+            payload = IncidentUpdatePayload(
+                work_notes="Testing ServiceNowClient integration via test script.",
+                ai_processing_state=AIProcessingState.IN_PROGRESS,
+                ai_classification="software_issue",
+                ai_confidence=0.88,
+                ai_processing_start=datetime.now(UTC),
+            )
+
+            updated_incident = await client.update_incident(sys_id, payload)
+            logger.info(
+                "Successfully updated incident",
+                ai_processing_state=updated_incident.ai_processing_state,
+                ai_confidence=updated_incident.ai_confidence,
+            )
+
+            # 4. Test Completion Validation Rule
+            logger.info("Testing update_incident() validation rule (Marking Complete)")
+            complete_payload = IncidentUpdatePayload(
+                ai_processing_state=AIProcessingState.COMPLETE,
+                ai_processing_end=datetime.now(UTC),
+                ai_resolution="Restarted the application server to clear the cache loop.",
+            )
+
+            final_incident = await client.update_incident(sys_id, complete_payload)
+            logger.info(
+                "Successfully marked incident as complete",
+                resolution=final_incident.ai_resolution,
+            )
+
+        except ServiceNowError as exc:
+            logger.error(
+                "ServiceNow API Error",
+                error=str(exc),
+                status_code=getattr(exc, "status_code", None),
+                details=getattr(exc, "details", None),
+            )
+        except Exception:
+            logger.exception("Unexpected error occurred during client test")
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(test_servicenow_client())

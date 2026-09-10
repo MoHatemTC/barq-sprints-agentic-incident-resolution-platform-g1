@@ -17,7 +17,7 @@ from app.exceptions.servicenow import (
     ServiceNowTimeoutError,
     ServiceNowValidationError,
 )
-from app.models.incident import Incident
+from app.models.incident import Incident, IncidentUpdatePayload
 
 logger = structlog.getLogger(__name__)
 
@@ -65,6 +65,11 @@ class ServiceNowClient:
                 details={"number": number, "count": len(incidents)},
             )
         return Incident.model_validate(incidents[0])
+
+    async def update_incident(self, sys_id: str, payload: IncidentUpdatePayload) -> Incident:
+        body = payload.to_table_api_body()
+        result = await self._request("PATCH", f"/api/now/table/incident/{sys_id}", json=body)
+        return Incident.model_validate(result)
 
     ###################################################
 
