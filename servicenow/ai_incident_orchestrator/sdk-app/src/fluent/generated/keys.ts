@@ -9,9 +9,17 @@ declare global {
                         table: 'sys_module'
                         id: 'f63a6ab3e92d4288af78261e9cf42d50'
                     }
+                    incident_eligibility_business_rule: {
+                        table: 'sys_script'
+                        id: '2ec47c661eac49c3b91ce9e4793c2cbd'
+                    }
                     package_json: {
                         table: 'sys_module'
                         id: '05f9724cc56043af8f1cd2b6a4d6e0e2'
+                    }
+                    'src_server_business-rules_incident-eligibility_ts': {
+                        table: 'sys_module'
+                        id: 'a5815c8f3d0b4f93ab425f3e4498f103'
                     }
                     validate_ai_confidence_on_change: {
                         table: 'sys_script_client'
