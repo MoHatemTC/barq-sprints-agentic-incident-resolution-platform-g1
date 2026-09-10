@@ -11,16 +11,21 @@ from app.retrieval.sources import LocalJSONSource, summarize_validation_error
 
 
 def test_valid_article_round_trips(sample_articles: list[Article]) -> None:
-    assert [a.article_id for a in sample_articles] == [
-        "KB-DB-001-v2.0",
-        "KB-DB-001-v1.0",
-        "KB-CACHE-001-v1.1",
+    assert [a.unique_key for a in sample_articles] == [
+        "KB0001-v2.0",
+        "KB0001-v1.0",
+        "KB0002-v1.1",
+    ]
+    assert [a.article_number for a in sample_articles] == [
+        "KB0001",
+        "KB0001",
+        "KB0002",
     ]
 
 
-def test_article_id_must_match_base_id_and_version(article_dicts: list[dict]) -> None:
-    data = {**article_dicts[0], "article_id": "KB-DB-999-v2.0"}
-    with pytest.raises(ValidationError, match="article_id must be"):
+def test_article_number_must_match_pattern(article_dicts: list[dict]) -> None:
+    data = {**article_dicts[0], "article_number": "INVALID-001"}
+    with pytest.raises(ValidationError, match="article_number"):
         Article.model_validate(data)
 
 
@@ -55,7 +60,7 @@ def test_short_description_respects_servicenow_limit(article_dicts: list[dict]) 
 
 def test_chunk_rejects_index_outside_bounds(sample_articles: list[Article]) -> None:
     article = sample_articles[0]
-    with pytest.raises(ValidationError, match="chunk_index"):
+    with pytest.raises(ValueError, match="chunk_index"):
         ArticleChunk(
             article_id=article.article_id,
             chunk_index=2,
@@ -80,7 +85,8 @@ def test_payload_from_chunk_carries_all_mandatory_fields(
 
     for field in ("category", "service", "workflow_state", "version", "security_level"):
         assert field in payload
-    assert payload["article_id"] == "KB-DB-001-v2.0"
+    assert payload["article_number"] == "KB0001"
+    assert payload["article_id"] == "KB0001-v2.0"
     assert payload["workflow_state"] == "published"
     assert payload["chunk_text"].startswith("ALTER ROLE")
 
@@ -114,7 +120,7 @@ def test_local_json_source_fails_fast_on_invalid_article(tmp_path: Path) -> None
     report_line = summarize_validation_error(exc_info.value, path.name)
     assert path.name in report_line
     assert "title" in report_line
-    assert "content" in report_line
+    assert "body" in report_line
 
 
 def test_local_json_source_rejects_non_array(tmp_path: Path) -> None:
@@ -122,3 +128,4 @@ def test_local_json_source_rejects_non_array(tmp_path: Path) -> None:
     path.write_text(json.dumps({"articles": []}), encoding="utf-8")
     with pytest.raises(ValueError, match="JSON array"):
         LocalJSONSource(path).load_articles()
+

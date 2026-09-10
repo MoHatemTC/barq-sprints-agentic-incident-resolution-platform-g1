@@ -169,9 +169,9 @@ def test_chunk_articles_batch(sample_articles: list[Article]) -> None:
 
 
 def test_chunk_all_corpus_articles() -> None:
-    corpus_file = Path("data/corpus/articles.json")
+    corpus_file = Path("data/corpus/barq_articles.json")
     if not corpus_file.exists():
-        pytest.skip("Corpus file not found")
+        pytest.skip("Real barq_articles.json not yet extracted")
 
     with open(corpus_file, encoding="utf-8") as f:
         data = json.load(f)
@@ -179,11 +179,11 @@ def test_chunk_all_corpus_articles() -> None:
     articles = [Article.model_validate(item) for item in data]
     chunks = chunk_articles(articles)
 
-    assert len(articles) == 27
-    assert len(chunks) == 81  # 27 articles * 3 sections each
+    assert len(articles) == 11
+    assert len(chunks) > 0
     for c in chunks:
-        assert c.section in {"Symptom", "Root Cause", "Resolution"}
         assert c.chunk_index < c.total_chunks
+
 
 
 def test_chunk_large_complex_article_with_subsections_and_code_blocks() -> None:

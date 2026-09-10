@@ -151,11 +151,12 @@ def chunk_article(
 ) -> list[ArticleChunk]:
     """Chunk a validated Article model instance."""
     return chunk_markdown(
-        content=article.content,
-        article_id=article.article_id,
+        content=article.body,
+        article_id=article.unique_key,
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,
     )
+
 
 
 def chunk_articles(

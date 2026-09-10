@@ -7,16 +7,15 @@ in the knowledge corpus for schema validation, chunking, and embedding tests.
 from textwrap import dedent
 
 POSTGRES_V2 = {
-    "base_id": "KB-DB-001",
+    "article_number": "KB0001",
     "version": "2.0",
-    "article_id": "KB-DB-001-v2.0",
     "title": "PostgreSQL 16 max_connections Exhausted Under Pooling",
     "short_description": "Resolve FATAL 53300 too many connections on PostgreSQL 16 pools.",
     "category": "database",
     "service": "postgresql",
     "workflow_state": "published",
     "security_level": "internal",
-    "content": dedent(
+    "body": dedent(
         """\
         ## Symptom
 
@@ -47,16 +46,15 @@ POSTGRES_V2 = {
 }
 
 POSTGRES_V1 = {
-    "base_id": "KB-DB-001",
+    "article_number": "KB0001",
     "version": "1.0",
-    "article_id": "KB-DB-001-v1.0",
     "title": "PostgreSQL 14 max_connections Exhausted",
     "short_description": "Resolve FATAL 53300 too many connections on PostgreSQL 14 instances.",
     "category": "database",
     "service": "postgresql",
     "workflow_state": "published",
     "security_level": "internal",
-    "content": dedent(
+    "body": dedent(
         """\
         ## Symptom
 
@@ -76,16 +74,15 @@ POSTGRES_V1 = {
 }
 
 REDIS_DRAFT = {
-    "base_id": "KB-CACHE-001",
+    "article_number": "KB0002",
     "version": "1.1",
-    "article_id": "KB-CACHE-001-v1.1",
     "title": "Redis Memory Fragmentation Evicts Celery Workers",
     "short_description": "Diagnose Redis fragmentation above 1.5 evicting Celery broker keys.",
     "category": "caching",
     "service": "redis",
     "workflow_state": "draft",
     "security_level": "public",
-    "content": dedent(
+    "body": dedent(
         """\
         ## Symptom
 
@@ -103,3 +100,4 @@ REDIS_DRAFT = {
         """
     ),
 }
+
