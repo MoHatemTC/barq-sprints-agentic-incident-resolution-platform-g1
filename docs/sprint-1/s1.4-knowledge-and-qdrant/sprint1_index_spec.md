@@ -11,7 +11,7 @@
 
 This document specifies the technical architecture, vector configurations, payload schemas, query patterns, and persistence guarantees of the Qdrant vector database (`incident_knowledge_base`). The vector store is configured for **hybrid search**, combining dense semantic vectors (`BAAI/bge-small-en-v1.5`) with sparse keyword vectors (`Qdrant/bm25`), augmented by pre-filtered metadata payload indexes to support role-based access control and lifecycle filtering in Sprint 2.
 
-The index contains **45 vector points** derived from the 11 real operational runbooks in [data/corpus/barq_articles.json](../data/corpus/barq_articles.json).
+The index contains **45 vector points** derived from the 11 real operational runbooks in [data/corpus/barq_articles.json](../../../data/corpus/barq_articles.json).
 
 ---
 
@@ -19,7 +19,7 @@ The index contains **45 vector points** derived from the 11 real operational run
 
 - **Collection Name**: `incident_knowledge_base` (configurable via `QDRANT_COLLECTION_NAME` in `.env`)
 - **Docker Persistent Storage**: Persistent volume `barq_qdrant_data:/qdrant/storage` mapped to container `barq-qdrant` on port `6333` (HTTP) and `6334` (gRPC).
-- **Client Configuration**: Initialized via [src/app/clients/qdrant.py](../src/app/clients/qdrant.py) using `RetrievalSettings`.
+- **Client Configuration**: Initialized via [src/app/clients/qdrant.py](../../../src/app/clients/qdrant.py) using `RetrievalSettings`.
 
 ### 2.1 Named Vectors Configuration
 
@@ -58,11 +58,11 @@ FastEmbed computes term weights using standard BM25:
 $$IDF(t) = \ln\left(1 + \frac{N - n(t) + 0.5}{n(t) + 0.5}\right)$$
 
 > [!IMPORTANT]
-> **Corpus Batch Fitting Rule**: In [src/app/retrieval/ingest.py](../src/app/retrieval/ingest.py), all article chunk texts are accumulated into a single sequence and passed to `embedding_engine.embed_documents(all_chunk_texts)` in one batch call. This fits document frequency $n(t)$ across the entire corpus rather than per-article or per-chunk. Server-side `Modifier.IDF` is left disabled in Qdrant to prevent double-scaling of IDF weights.
+> **Corpus Batch Fitting Rule**: In [src/app/retrieval/ingest.py](../../../src/app/retrieval/ingest.py), all article chunk texts are accumulated into a single sequence and passed to `embedding_engine.embed_documents(all_chunk_texts)` in one batch call. This fits document frequency $n(t)$ across the entire corpus rather than per-article or per-chunk. Server-side `Modifier.IDF` is left disabled in Qdrant to prevent double-scaling of IDF weights.
 
 ### 3.1 Chunking Parameters
 
-Chunking happens in [src/app/retrieval/chunking.py](../src/app/retrieval/chunking.py) (module defaults 1500/150 are for generic markdown); the ingest layer overrides them to honor the manual's own pilot configuration (manual §11.7):
+Chunking happens in [src/app/retrieval/chunking.py](../../../src/app/retrieval/chunking.py) (module defaults 1500/150 are for generic markdown); the ingest layer overrides them to honor the manual's own pilot configuration (manual §11.7):
 
 | Parameter | Value | Source |
 |---|---|---|
@@ -125,7 +125,7 @@ point_id = str(uuid.uuid5(KB_NAMESPACE, f"{article_id}::chunk::{chunk_index}"))
 where `article_id` is the composed per-record key (`{article_number}-v{version}`, e.g. `KB0010-v2.0`). Chunk identities follow the same convention everywhere (`KB0010-v2.0::chunk::0`).
 
 ### Idempotency Guarantee
-Because UUIDv5 is pure and deterministic, re-running `seed_qdrant.py` or re-ingesting updated articles performs an **in-place upsert** rather than creating duplicate points in the vector store. The 11 articles chunk into exactly 45 chunks, resulting in exactly 45 points before and after re-seeding (verified by [tests/test_ingest.py](../tests/test_ingest.py)).
+Because UUIDv5 is pure and deterministic, re-running `seed_qdrant.py` or re-ingesting updated articles performs an **in-place upsert** rather than creating duplicate points in the vector store. The 11 articles chunk into exactly 45 chunks, resulting in exactly 45 points before and after re-seeding (verified by [tests/test_ingest.py](../../../tests/test_ingest.py)).
 
 ---
 

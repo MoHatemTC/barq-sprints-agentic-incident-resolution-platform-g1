@@ -13,7 +13,7 @@ This document specifies the architecture, metadata schema, controlled vocabulary
 
 Rather than relying on synthetic placeholders or generic IT templates, the knowledge corpus is extracted directly from **Section 6 (Service Desk Standard Operating Procedures & Engineering Runbooks)** of the official **BARQ Systems IT Service Operations Manual (`data/barq-system-kb.pdf`)**.
 
-The canonical corpus is stored at [data/corpus/barq_articles.json](../data/corpus/barq_articles.json) (git-ignored — the source manual is marked INTERNAL) and comprises **11 verified records** with realistic technical syntax:
+The canonical corpus is stored at [data/corpus/barq_articles.json](../../../data/corpus/barq_articles.json) (git-ignored — the source manual is marked INTERNAL) and comprises **11 verified records** with realistic technical syntax:
 - **Verbatim Error Signatures**: Exact platform error strings carried through unmodified (`RFC_ERROR_COMMUNICATION`, `HTTP 500`, `connection acquisition timed out`, `invalid credentials`).
 - **Standard Operating Procedures**: Four canonical sections (`## Symptom`, `## Cause`, `## Resolution`, `## Escalation`) formatted in clean Markdown; resolutions are numbered plain-prose steps. The retired `KB0010-v1.0` additionally carries a `## Warning` section quoting the manual's "Why this revision is dangerous" callout.
 - **No Fenced Code Blocks**: The source manual contains no fenced code — its procedures are prose steps, and the extraction preserves them as prose (the chunker's fence-balancing machinery exists for future code-bearing sources).
@@ -28,7 +28,7 @@ Initial project scoping (and baseline partner requirements) proposed authoring a
 We selected **Path B (Production Extraction of Real Operational Data)** for the following engineering reasons:
 
 1. **Authenticity & Lexical Precision**: The 11 real records contain genuine error strings (`RFC_ERROR_COMMUNICATION`, `HTTP 500`, `connection acquisition timed out`) and authentic operational context from BARQ Systems (message-server reachability for SAP, spooler behavior, DFS drive mapping, 802.11 roaming), preserved verbatim by a deterministic, zero-loss extraction pipeline.
-2. **Evaluation Ground Truth Alignment**: The worked incidents in Section 7 of the manual (`INC0010023`, `INC0010047`, `INC0010064`, `INC0010052`) and the related-record citations inside the articles themselves map directly to these 11 runbooks in [data/coverage_matrix.csv](../data/coverage_matrix.csv).
+2. **Evaluation Ground Truth Alignment**: The worked incidents in Section 7 of the manual (`INC0010023`, `INC0010047`, `INC0010064`, `INC0010052`) and the related-record citations inside the articles themselves map directly to these 11 runbooks in [data/coverage_matrix.csv](../../../data/coverage_matrix.csv).
 3. **Negative Control Verification**: The corpus includes an authentic out-of-scope incident (`INC0010047`, printer mechanical fault — the manual's own pilot declined it at score 0.31 vs threshold 0.55) to evaluate unanswerable queries without fabricating synthetic topics.
 4. **Lifecycle & Version Disambiguation**: The `KB0010-v1.0` (Retired) vs. `KB0010-v2.0` (Published) pair provides the exact near-duplicate version disambiguation required for Sprint 2 evaluation.
 5. **No Dilution**: Fabricating additional synthetic articles would dilute the genuine technical vocabulary extracted directly from the BARQ manual and break alignment with the real incident data.
@@ -37,7 +37,7 @@ We selected **Path B (Production Extraction of Real Operational Data)** for the 
 
 ## 3. Canonical Article Model & Mandatory Metadata Fields
 
-Every record in `data/corpus/barq_articles.json` and every point payload in Qdrant implements the `Article` and `KnowledgePayload` schemas defined in [src/app/models/knowledge.py](../src/app/models/knowledge.py).
+Every record in `data/corpus/barq_articles.json` and every point payload in Qdrant implements the `Article` and `KnowledgePayload` schemas defined in [src/app/models/knowledge.py](../../../src/app/models/knowledge.py).
 
 ### 3.1 The 5 Mandatory Metadata Fields
 
@@ -76,13 +76,13 @@ Because raw PDF tables in the Operations Manual do not feature a native security
    - Covers shared print infrastructure, endpoint driver-level diagnostics, core ERP reachability, and production service remediation procedures.
    - Applied to: `KB0004` (Print Services), `KB0007` (Endpoint Performance), `KB0008` (SAP Basis RFC), `KB0010` both versions (Order Service Pool Exhaustion).
 
-The mapping is implemented as the `SECURITY_TIERS` table in [src/app/retrieval/barq_manual.py](../src/app/retrieval/barq_manual.py) and asserted per-article by [tests/test_corpus.py](../tests/test_corpus.py).
+The mapping is implemented as the `SECURITY_TIERS` table in [src/app/retrieval/barq_manual.py](../../../src/app/retrieval/barq_manual.py) and asserted per-article by [tests/test_corpus.py](../../../tests/test_corpus.py).
 
 ---
 
 ## 4. Real Knowledge Base Corpus Inventory (11 Records)
 
-The 11 canonical records in [data/corpus/barq_articles.json](../data/corpus/barq_articles.json) extracted from Section 6 of `data/barq-system-kb.pdf`. Titles below are shown in the manual's title case; they are stored as the manual's uppercase banner (e.g. `VPN AUTHENTICATION FAILS AFTER A PASSWORD CHANGE`):
+The 11 canonical records in [data/corpus/barq_articles.json](../../../data/corpus/barq_articles.json) extracted from Section 6 of `data/barq-system-kb.pdf`. Titles below are shown in the manual's title case; they are stored as the manual's uppercase banner (e.g. `VPN AUTHENTICATION FAILS AFTER A PASSWORD CHANGE`):
 
 | Article ID | Title | Service | Category | State | Security | Notes |
 |---|---|---|---|---|---|---|
@@ -109,7 +109,7 @@ Extracting both versions provides the exact real-world version disambiguation an
 
 ## 5. Markdown Chunking Engine Specification (Section 11.7)
 
-Chunking is performed by [src/app/retrieval/chunking.py](../src/app/retrieval/chunking.py) following Section 11.7 specifications:
+Chunking is performed by [src/app/retrieval/chunking.py](../../../src/app/retrieval/chunking.py) following Section 11.7 specifications:
 
 - **Parameters**: `chunk_size = 700`, `chunk_overlap = 120`.
 - **Structural Boundary Splitting**: Split along Markdown headers:
@@ -121,13 +121,13 @@ Chunking is performed by [src/app/retrieval/chunking.py](../src/app/retrieval/ch
   - 11 records × 4 body sections (`Symptom`, `Cause`, `Resolution`, `Escalation`) = 44 chunks. At the 700-char limit no section exceeds one chunk, so no recursive sub-splitting occurs.
   - `KB0010-v1.0` carries a 5th `Warning` section (the manual's "Why this revision is dangerous" callout) = 1 extra chunk.
   - Total: **45 bound-validated chunks**.
-- **Regression Guard**: Verified continuously by [tests/test_chunking.py](../tests/test_chunking.py).
+- **Regression Guard**: Verified continuously by [tests/test_chunking.py](../../../tests/test_chunking.py).
 
 ---
 
 ## 6. Ground Truth & Coverage Matrix Specification
 
-The ground truth file [data/coverage_matrix.csv](../data/coverage_matrix.csv) maps real incidents from the manual (Section 7 worked tickets, Section 6 related-record citations, and the Section 9 major incident report) to their corresponding runbooks. It contains **13 active scenarios**: 12 answerable (2 of them multi-candidate with `acceptable_article_ids`) and 1 unanswerable:
+The ground truth file [data/coverage_matrix.csv](../../../data/coverage_matrix.csv) maps real incidents from the manual (Section 7 worked tickets, Section 6 related-record citations, and the Section 9 major incident report) to their corresponding runbooks. It contains **13 active scenarios**: 12 answerable (2 of them multi-candidate with `acceptable_article_ids`) and 1 unanswerable:
 
 | Incident ID | Incident Description | Primary Article | Acceptable | Answerable | Rationale |
 |---|---|---|---|---|---|
