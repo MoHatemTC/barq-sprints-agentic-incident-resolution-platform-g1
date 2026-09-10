@@ -101,7 +101,6 @@ class Article(BaseModel):
             )
         return value
 
-
     @field_validator("category", "service")
     @classmethod
     def validate_slug(cls, value: str) -> str:
@@ -121,6 +120,12 @@ class Article(BaseModel):
     def article_id(self) -> str:
         """Alias for unique_key for backwards compatibility with chunking & retrieval."""
         return self.unique_key
+
+    @property
+    def base_id(self) -> str:
+        """Alias for article_number for backwards compatibility."""
+        return self.article_number
+
 
 
 class ArticleChunk(BaseModel):
@@ -148,9 +153,7 @@ class ArticleChunk(BaseModel):
     @classmethod
     def validate_bounds_model(cls, chunk_index: int, total_chunks: int) -> None:
         if chunk_index >= total_chunks:
-            raise ValueError(
-                f"chunk_index {chunk_index} must be < total_chunks {total_chunks}"
-            )
+            raise ValueError(f"chunk_index {chunk_index} must be < total_chunks {total_chunks}")
 
     def model_post_init(self, __context: Any) -> None:
         self.validate_bounds_model(self.chunk_index, self.total_chunks)
@@ -215,4 +218,3 @@ class KnowledgePayload(BaseModel):
         # Include composed article_id for delete-by-article and grouping
         data["article_id"] = self.article_id
         return data
-
