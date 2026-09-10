@@ -1,0 +1,34 @@
+incident_id,incident_description,primary_article_ids,acceptable_article_ids,is_answerable
+INC-001,PostgreSQL 16 connection limit exceeded under connection pooling,KB-DB-001-v2.0,KB-DB-001-v1.0,true
+INC-002,PostgreSQL 14 server max_connections exhausted without pooling,KB-DB-001-v1.0,,true
+INC-003,PostgreSQL transaction ID wraparound warning and autovacuum freeze failure,KB-DB-002-v1.0,,true
+INC-004,PostgreSQL 40P01 deadlock detected during batch record processing,KB-DB-003-v1.0,,true
+INC-005,PostgreSQL crash PANIC could not locate checkpoint record pg_wal full,KB-DB-004-v1.0,,true
+INC-006,Redis OOM command not allowed when used memory exceeds maxmemory,KB-CACHE-001-v1.0,,true
+INC-007,Redis memory fragmentation above 1.5 evicting background task keys,KB-CACHE-001-v1.1,,true
+INC-008,Redis Sentinel dual master split-brain following network partition,KB-CACHE-002-v1.0,,true
+INC-009,Redis replication client output buffer limits exceeded full resync loop,KB-CACHE-003-v1.0,,true
+INC-010,Celery workers idle while queue tasks starve under default prefetch,KB-QUEUE-001-v1.0,,true
+INC-011,Celery worker process killed exit code 137 WorkerLostError under memory pressure,KB-QUEUE-002-v1.0,KB-COMP-001-v1.0,true
+INC-012,RabbitMQ memory resource limit alarm blocking Celery task publishers,KB-QUEUE-003-v1.0,,true
+INC-013,NGINX 502 Bad Gateway connect refused socket backlog overflow,KB-NET-001-v1.0,,true
+INC-014,NGINX 504 Gateway Timeout on slow upstream reporting queries,KB-NET-001-v2.0,,true
+INC-015,NGINX SSL handshake failed expired SSL certificate on public HTTPS endpoint,KB-NET-002-v1.0,,true
+INC-016,FastAPI async event loop blocked causing 10s latency spike across endpoints,KB-API-001-v1.0,,true
+INC-017,Gunicorn worker timeout 30s killing Uvicorn workers on long database query,KB-API-002-v1.0,,true
+INC-018,Docker container exited 137 OOMKilled during heavy data import batch,KB-COMP-001-v1.0,KB-QUEUE-002-v1.0,true
+INC-019,Docker ENOSPC system limit for number of file watchers reached on Linux host,KB-COMP-002-v1.0,,true
+INC-020,Kubernetes pod CrashLoopBackOff readiness probe failed 503 during startup,KB-K8S-001-v1.0,,true
+INC-021,Kubernetes node DiskPressure condition evicting pods from worker node,KB-K8S-002-v1.0,,true
+INC-022,Linux filesystem No space left on device with 0% inode free space (df -i 100%),KB-STOR-001-v1.0,,true
+INC-023,NFS mount Stale file handle ESTALE on unmounted shared storage,KB-STOR-002-v1.0,,true
+INC-024,ServiceNow Table API 401 Unauthorized token expired during REST request execution,KB-SEC-001-v1.0,,true
+INC-025,Internal microservice SSL CERTIFICATE_VERIFY_FAILED self-signed CA chain,KB-SEC-002-v1.0,,true
+INC-026,Celery worker starvation combined with Redis memory fragmentation evicting broker keys,KB-QUEUE-001-v1.0;KB-CACHE-001-v1.1,,true
+INC-027,NGINX 502 Bad Gateway caused by upstream FastAPI event loop blocked by sync I/O,KB-NET-001-v1.0;KB-API-001-v1.0,,true
+INC-028,Container exit 137 OOMKilled triggering Celery WorkerLostError on worker host,KB-COMP-001-v1.0;KB-QUEUE-002-v1.0,,true
+INC-029,PostgreSQL connection exhaustion leading to NGINX 504 gateway timeout,KB-DB-001-v2.0;KB-NET-001-v2.0,,true
+INC-030,RabbitMQ memory alarm blocking task publishing with Celery worker starvation,KB-QUEUE-003-v1.0;KB-QUEUE-001-v1.0,,true
+INC-031,Physical server rack 4 power supply unit explosion and thermal shutdown,,,false
+INC-032,Alien proprietary mainframe binary protocol handshake checksum mismatch on port 49152,,,false
+INC-033,Third-party payment vendor Stripe global API outage HTTP 503 Service Unavailable,,,false
