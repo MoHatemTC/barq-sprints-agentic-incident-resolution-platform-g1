@@ -16,6 +16,6 @@ Before committing the XML:
 2. Confirm no S1.1 record was captured under Global scope.
 3. Preview and commit the XML on a clean secondary PDI using the same ServiceNow family release.
 4. Verify the Incident field model, form section, and confidence validation after import.
-5. Record the result in `docs/sprint1_field_model.md` and capture screenshots under `docs/screenshots/s1-1/`.
+5. Record the result in `docs/sprint-1/s1.1-scoped-app-and-field-model/field-model.md` and capture screenshots under `docs/sprint-1/s1.1-scoped-app-and-field-model/screenshots/`.
 
 The official SDK source under `sdk-app/` is the reproducible implementation source. It is not a substitute for the mentor-required exported update-set XML.
