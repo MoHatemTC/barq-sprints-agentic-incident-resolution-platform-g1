@@ -24,16 +24,16 @@ The final `ai_incident_orchestrator_s1_1.xml` package was imported into authoriz
 
 The preview shows state **Previewed**, 39 inserted records, zero updates, zero deletions, and zero collisions.
 
-![Clean update-set preview showing 39 inserts and zero collisions](screenshots/s1-1/07-secondary-import-preview.png)
+![Clean update-set preview showing 39 inserts and zero collisions](screenshots/07-secondary-import-preview.png)
 
 ### Successful commit
 
 The committed record shows state **Committed**, the commit timestamp, 39 inserted records, and zero updates, deletions, or collisions.
 
-![Committed update set on the secondary PDI](screenshots/s1-1/08-secondary-import-committed.png)
+![Committed update set on the secondary PDI](screenshots/08-secondary-import-committed.png)
 
 ### Post-import functional verification
 
 An existing Incident on `dev204871` displayed the imported AI Incident Orchestrator section and fields. The imported Client Script displayed the expected range error and automatically removed the invalid confidence value.
 
-![Imported Incident form and confidence validation](screenshots/s1-1/09-secondary-import-verification.png)
+![Imported Incident form and confidence validation](screenshots/09-secondary-import-verification.png)

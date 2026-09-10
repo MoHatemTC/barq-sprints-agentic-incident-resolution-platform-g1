@@ -103,7 +103,7 @@ The exported update set is at [`servicenow/ai_incident_orchestrator/ai_incident_
 
 The reproducible source is the official ServiceNow SDK project under [`servicenow/ai_incident_orchestrator/sdk-app/`](servicenow/ai_incident_orchestrator/sdk-app/). It is not a substitute for the exported update set.
 
-All thirteen Incident columns carry the `x_2215032_ai_inc_0_ai_` prefix. **Scripts must use internal choice values (`in_progress`), never display labels.** Field types, permitted values, writing component and intended write permissions are in the [field dictionary](docs/sprint1_field_model.md).
+All thirteen Incident columns carry the `x_2215032_ai_inc_0_ai_` prefix. **Scripts must use internal choice values (`in_progress`), never display labels.** Field types, permitted values, writing component and intended write permissions are in the [field dictionary](docs/sprint-1/s1.1-scoped-app-and-field-model/field-model.md).
 
 ---
 
@@ -123,13 +123,13 @@ Goal: the platform side exists as a real ServiceNow application, with an audit t
 
 ### S1.1 documentation
 
-- [Field dictionary](docs/sprint1_field_model.md) — types, values, writers, permissions, and why suggestion and resolution are separate fields
-- [Implementation runbook](docs/sprint1_implementation_runbook.md)
-- [Acceptance evidence matrix](docs/sprint1_acceptance_matrix.md)
-- [Source-PDI verification](docs/sprint1_source_pdi_verification.md)
-- [Secondary-PDI clean-import verification](docs/sprint1_secondary_import_verification.md)
-- [Submission checklist](docs/sprint1_submission_checklist.md)
-- [Screenshot evidence](docs/screenshots/s1-1/)
+- [Field dictionary](docs/sprint-1/s1.1-scoped-app-and-field-model/field-model.md) — types, values, writers, permissions, and why suggestion and resolution are separate fields
+- [Implementation runbook](docs/sprint-1/s1.1-scoped-app-and-field-model/implementation-runbook.md)
+- [Acceptance evidence matrix](docs/sprint-1/s1.1-scoped-app-and-field-model/acceptance-matrix.md)
+- [Source-PDI verification](docs/sprint-1/s1.1-scoped-app-and-field-model/source-pdi-verification.md)
+- [Secondary-PDI clean-import verification](docs/sprint-1/s1.1-scoped-app-and-field-model/secondary-import-verification.md)
+- [Submission checklist](docs/sprint-1/s1.1-scoped-app-and-field-model/submission-checklist.md)
+- [Screenshot evidence](docs/sprint-1/s1.1-scoped-app-and-field-model/screenshots/)
 
 ---
 

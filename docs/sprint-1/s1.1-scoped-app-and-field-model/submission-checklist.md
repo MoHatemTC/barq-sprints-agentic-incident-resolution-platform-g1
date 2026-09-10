@@ -5,7 +5,7 @@ Do not request a formal review until every required item is checked.
 ## Scope and schema
 
 - [x] AI Incident Orchestrator exists as a dedicated scoped application.
-- [x] Exact scope name is recorded in `docs/sprint1_field_model.md`.
+- [x] Exact scope name is recorded in `docs/sprint-1/s1.1-scoped-app-and-field-model/field-model.md`.
 - [x] No final S1.1 artifact resides in Global scope.
 - [x] Processing State includes all five required internal values.
 - [x] Classification is String (100) and the initial expected labels are documented without constraining S1.4.
@@ -74,7 +74,7 @@ The submission includes:
 - Scoped AI Incident Orchestrator application and complete Incident AI field model
 - Scoped confidence form validation and organized Incident form section
 - Exported update-set XML
-- docs/sprint1_field_model.md
+- docs/sprint-1/s1.1-scoped-app-and-field-model/field-model.md
 - Incident form and import-verification screenshots
 
 Pull request: [LINK]

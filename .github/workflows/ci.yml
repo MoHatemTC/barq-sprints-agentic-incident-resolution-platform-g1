@@ -12,6 +12,11 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Least privilege: this job only checks out and runs the quality gate, so it
+# needs nothing beyond a read of the repository contents.
+permissions:
+  contents: read
+
 jobs:
   quality:
     name: Lint, type-check and test
