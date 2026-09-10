@@ -24,10 +24,13 @@ def main() -> None:
             rows = list(csv.DictReader(lines))
         for row in rows:
             if row["is_answerable"] == "true":
+                inc = row["incident_id"]
                 for aid in row["primary_article_ids"].split(";"):
                     if aid and aid not in corpus_ids:
-                        inc = row["incident_id"]
                         raise ValueError(f"Unknown primary_article_id {aid} in {inc}")
+                for aid in row["acceptable_article_ids"].split(";"):
+                    if aid and aid not in corpus_ids:
+                        raise ValueError(f"Unknown acceptable_article_id {aid} in {inc}")
         print(f"✅ Successfully validated {len(rows)} coverage matrix scenarios")
 
 
