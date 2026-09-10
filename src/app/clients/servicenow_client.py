@@ -8,6 +8,7 @@ from app.auth.token_manager import ServiceNowTokenManager
 from app.core.config import Settings
 from app.exceptions.servicenow import (
     ServiceNowAuthenticationError,
+    ServiceNowAuthorizationError,
     ServiceNowConnectionError,
     ServiceNowError,
     ServiceNowNotFoundError,
@@ -94,31 +95,16 @@ class ServiceNowClient:
             raise ServiceNowConnectionError(f"Failed to connect to {url}: {exc}") from exc
 
         if response.status_code == status.HTTP_401_UNAUTHORIZED and _retry_on_auth_failure:
-            # Token might be expired or invalid, try refreshing once
-            logger.info("Received 401 Unauthorized, attempting to refresh token and retry")
-            self._tokens.invalidate()
-            token = await self._tokens.get_token()
-            headers["Authorization"] = f"Bearer {token}"
-            response = await self._http.request(
-                method,
-                url,
-                headers=headers,
-                params=params,
-                json=json,
-                timeout=self._settings.servicenow_timeout_seconds,
+            logger.warning(
+                "servicenow_401_received",
+                method=method,
+                path=path,
+                action="refresh_and_retry_once",
             )
-
-            if response.status_code == status.HTTP_401_UNAUTHORIZED:
-                logger.warning(
-                    "Got 401 on %s %s - refreshing token and retrying once",
-                    method,
-                    path,
-                )
-                self._tokens.invalidate()
-                await self._tokens.get_token(force_refresh=True)
-                return await self._request(
-                    method, path, params=params, json=json, _retry_on_auth_failure=False
-                )
+            await self._tokens.get_token(force_refresh=True, failed_token=token)
+            return await self._request(
+                method, path, params=params, json=json, _retry_on_auth_failure=False
+            )
 
         return self._parse_response(response, method=method, path=path)
 
@@ -128,6 +114,13 @@ class ServiceNowClient:
             raise ServiceNowAuthenticationError(
                 f"Still unauthorized after token refresh for {method} {path}",
                 status_code=status.HTTP_401_UNAUTHORIZED,
+                details={"body": response.text[:500]},
+            )
+        if response.status_code == status.HTTP_403_FORBIDDEN:
+            raise ServiceNowAuthorizationError(
+                f"ServiceNow denied access (403) for {method} {path} - "
+                "the integration identity likely lacks the required role/ACL",
+                status_code=status.HTTP_403_FORBIDDEN,
                 details={"body": response.text[:500]},
             )
         if response.status_code == status.HTTP_404_NOT_FOUND:

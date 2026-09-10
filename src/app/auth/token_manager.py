@@ -66,7 +66,6 @@ class ServiceNowTokenManager:
     async def _refresh_access_token(self) -> None:
         """
         Refreshes the access token using the refresh token.
-        If the refresh fails, it will fall back to fetching a new access token.
         """
         form = {
             "grant_type": "refresh_token",
@@ -106,7 +105,6 @@ class ServiceNowTokenManager:
             logger.error(
                 "ServiceNow OAuth token request failed",
                 status_code=response.status_code,
-                response_text=response.text,
             )
             # Secrets and response text excluded from exception to prevent log leaks
             raise ServiceNowAuthenticationError(

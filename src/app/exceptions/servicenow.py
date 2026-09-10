@@ -22,6 +22,10 @@ class ServiceNowAuthenticationError(ServiceNowError):
     """Bad credentials at the token endpoint, OR still 401 after one refresh+retry."""
 
 
+class ServiceNowAuthorizationError(ServiceNowError):
+    """403 - ServiceNow rejected the request due to insufficient permissions."""
+
+
 class ServiceNowNotFoundError(ServiceNowError):
     """404 - sys_id does not exist."""
 
