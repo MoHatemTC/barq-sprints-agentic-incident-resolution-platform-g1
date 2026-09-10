@@ -142,6 +142,61 @@ def test_short_description_derived_from_first_sentence() -> None:
     assert len(art.short_description) <= 255
 
 
+def test_wrapped_number_never_becomes_fake_step() -> None:
+    """A year wrapping to a line start must stay inside its step (KB0010-v2 bug)."""
+    block = SYNTHETIC_PUBLISHED_BLOCK.replace(
+        "3. Clear the cached credential.",
+        "3. Do not restart the server. A restart caused a 40-minute outage on 14 March\n"
+        "    2026.\n"
+        " 4. Clear the cached credential.",
+    )
+    art = parse_article_block(block)
+    resolution = art.body.split("## Resolution")[1].split("##")[0]
+    assert "14 March 2026." in resolution, "year must stay glued to its step"
+    assert "2026. 2." not in art.body and "2026. 4." not in art.body
+    assert "\n4. Clear the cached credential." in resolution, "step 4 must be its own line"
+    # Zero text loss: every source word survives
+    for token in ("outage", "credential", "2026.", "cached"):
+        assert token in resolution
+
+
+def test_zero_loss_guard_rejects_lossy_rebuild() -> None:
+    """If a future splitter drops text, the guard must raise, not emit corruption."""
+    from app.retrieval.barq_manual import assert_zero_loss
+
+    source = "1. Restart the server. 2. Confirm recovery."
+    with pytest.raises(ValueError, match="lost or duplicated"):
+        assert_zero_loss(source, "1. Restart the server.")  # step 2 dropped
+    # Whitespace-only differences are fine
+    assert_zero_loss(source, "1. Restart the server.\n  2. Confirm recovery.")
+
+
+def test_kb0010_v2_grid_separates_owner_and_author() -> None:
+    """The KB0010-v2 grid has no Author label: 'Owner  Team · Name'."""
+    block = dedent(
+        """\
+                 KB0010         ORDER SERVICE CONNECTION POOL EXHAUSTION
+
+         State                  Published                    Version            2
+
+         Service              order-processing         Owner              Platform Eng · K. Selim
+
+         Reviewed               02 Apr 2026                  Related            MIR-2026-03
+
+        Symptom. The order service returns HTTP 500 under load.
+
+        Cause. Connections are held beyond their intended lifetime.
+
+        Resolution.
+         1. Confirm pool saturation.
+        Escalation. Escalate to Platform Engineering.
+        """
+    )
+    art = parse_article_block(block)
+    assert art.owner == "Platform Eng"
+    assert art.author == "K. Selim"
+
+
 @pytest.mark.skipif(not PDF_PATH.exists(), reason="Real PDF not present on disk")
 def test_extract_barq_manual_from_real_pdf() -> None:
     articles, report = extract_barq_manual_articles(PDF_PATH)

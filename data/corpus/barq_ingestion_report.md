@@ -20,3 +20,6 @@
 
 ## Ingestion Warnings
 - KB0005 pre-2025 version exists as an archived scan (retained for audit only; published version in 6.8 parsed successfully).
+- KB0010: no Service cell in grid; defaulted to 'order-processing'.
+- KB0010: no Category cell in grid; defaulted to 'software'.
+- KB0010: no Category cell in grid; defaulted to 'software'.

@@ -28,6 +28,8 @@ SECURITY_TIERS: dict[str, SecurityLevel] = {
     "KB0010": SecurityLevel.RESTRICTED,
 }
 
+STEP_MARKER_RE = re.compile(r"(?m)^\s*(\d{1,3})\.\s+")
+
 
 @dataclass
 class ExtractionReport:
@@ -83,7 +85,56 @@ def strip_page_headers_and_footers(text: str) -> str:
     return "\n".join(cleaned_lines)
 
 
-def parse_article_block(block: str) -> Article:
+def assert_zero_loss(source: str, rebuilt: str) -> None:
+    """Reassembled steps must equal the source once whitespace is normalized.
+
+    Any other difference means the splitter dropped or duplicated text, so a
+    corrupted runbook must never be emitted silently.
+    """
+    normalized_source = re.sub(r"\s+", " ", source).strip()
+    normalized_rebuilt = re.sub(r"\s+", " ", rebuilt).strip()
+    if normalized_rebuilt != normalized_source:
+        raise ValueError(
+            "Resolution step splitting lost or duplicated text; "
+            "refusing to emit corrupted Markdown."
+        )
+
+
+def split_resolution_steps(clean_res: str) -> str:
+    """Split a Resolution section into one Markdown line per numbered step.
+
+    A candidate marker is only accepted when it continues the 1, 2, 3... step
+    sequence, so numbers that merely wrap to a line start (dates, versions,
+    error codes — e.g. "…outage on 14 March\\n2026.") stay inside the step they
+    belong to. A zero-loss check reassembles the text and raises if anything
+    was dropped or duplicated, so a corrupted runbook can never be emitted.
+    """
+    expected = 1
+    accepted: list[tuple[int, int, int]] = []  # (step number, marker start, body start)
+    for match in STEP_MARKER_RE.finditer(clean_res):
+        if int(match.group(1)) == expected:
+            accepted.append((expected, match.start(1), match.end()))
+            expected += 1
+
+    if not accepted:
+        return clean_res
+
+    parts: list[str] = []
+    preamble = clean_res[: accepted[0][1]].strip()
+    if preamble:
+        parts.append(re.sub(r"\s+", " ", preamble))
+
+    for i, (number, _, body_start) in enumerate(accepted):
+        body_end = accepted[i + 1][1] if i + 1 < len(accepted) else len(clean_res)
+        step_body = re.sub(r"\s+", " ", clean_res[body_start:body_end]).strip()
+        parts.append(f"{number}. {step_body}")
+
+    rebuilt = "\n".join(parts)
+    assert_zero_loss(clean_res, rebuilt)
+    return rebuilt
+
+
+def parse_article_block(block: str, report: ExtractionReport | None = None) -> Article:
     """Parse a single raw text article block into a validated Article model."""
     # 1. Identify article number & title banner
     banner_m = re.search(r"^\s*(KB\d{4})\s{2,}([A-Z0-9\s—·*\-_]+)$", block, re.MULTILINE)
@@ -106,13 +157,24 @@ def parse_article_block(block: str) -> Article:
 
     service_m = re.search(r"Service\s+([a-z-]+)", block)
     service = service_m.group(1) if service_m else ""
-    if not service and article_number == "KB0010":
-        service = "order-processing"
-
     category_m = re.search(r"Category\s+([a-z-]+)", block)
     category = category_m.group(1) if category_m else ""
-    if not category and article_number == "KB0010":
-        category = "software"
+
+    # The KB0010 grids carry no Service/Category cells; default rather than
+    # emit empty values, but say so in the report instead of doing it silently.
+    if article_number == "KB0010":
+        if not service:
+            service = "order-processing"
+            if report is not None:
+                report.warnings.append(
+                    "KB0010: no Service cell in grid; defaulted to 'order-processing'."
+                )
+        if not category:
+            category = "software"
+            if report is not None:
+                report.warnings.append(
+                    "KB0010: no Category cell in grid; defaulted to 'software'."
+                )
 
     owner_m = re.search(r"Owner\s+([^\n]+)", block)
     owner = owner_m.group(1).strip() if owner_m else None
@@ -123,6 +185,12 @@ def parse_article_block(block: str) -> Article:
     author = author_m.group(1).strip() if author_m else None
     if author:
         author = re.split(r"\s{4,}", author)[0].strip()
+
+    # KB0010-v2 style grid has no Author label; the author rides in the Owner
+    # cell separated by a middle dot: "Owner  Platform Engineering · K. Selim".
+    if owner and "·" in owner and not author:
+        owner, _, dot_author = owner.partition("·")
+        owner, author = owner.strip(), dot_author.strip() or None
 
     reviewed_m = re.search(r"Reviewed\s+(\d{1,2}\s+[A-Za-z]{3}\s+\d{4})", block)
     reviewed_on = reviewed_m.group(1) if reviewed_m else None
@@ -169,16 +237,7 @@ def parse_article_block(block: str) -> Article:
     if res_m:
         raw_res = res_m.group(1).strip()
         clean_res = re.sub(r"-\n\s*", "-", raw_res)
-        steps = re.split(r"\n\s*(\d+\.)\s+", "\n" + clean_res)
-        if len(steps) > 1:
-            res_formatted: list[str] = []
-            for idx in range(1, len(steps), 2):
-                num = steps[idx]
-                step_body = re.sub(r"\n\s*", " ", steps[idx + 1]).strip()
-                res_formatted.append(f"{num} {step_body}")
-            body_parts.append("## Resolution\n\n" + "\n".join(res_formatted))
-        else:
-            body_parts.append(f"## Resolution\n\n{clean_res}")
+        body_parts.append("## Resolution\n\n" + split_resolution_steps(clean_res))
 
     # Escalation
     esc_m = re.search(
@@ -225,6 +284,7 @@ def parse_article_block(block: str) -> Article:
         workflow_state=workflow_state,
         security_level=security_level,
         owner=owner,
+        author=author,
         reviewed_on=reviewed_on,
         related_records=related_records,
     )
@@ -248,7 +308,7 @@ def extract_articles_from_cleaned_text(text: str) -> tuple[list[Article], Extrac
         if "6.13 KB0010 — Order service connection pool exhaustion" in s and "Version 1" not in s:
             continue
         if "KB000" in s or "KB0010" in s:
-            art = parse_article_block(s)
+            art = parse_article_block(s, report)
             articles.append(art)
             report.parsed_articles.append(art.unique_key)
             if art.workflow_state == WorkflowState.RETIRED:
