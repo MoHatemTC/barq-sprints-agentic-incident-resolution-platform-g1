@@ -214,4 +214,6 @@ class KnowledgePayload(BaseModel):
 
     def to_qdrant_payload(self) -> dict[str, str | int]:
         """Serialize for Qdrant: enums as values, unset optionals omitted."""
-        return self.model_dump(mode="json", exclude_none=True)
+        payload: dict[str, str | int] = self.model_dump(mode="json", exclude_none=True)
+        payload["article_number"] = self.article_number
+        return payload

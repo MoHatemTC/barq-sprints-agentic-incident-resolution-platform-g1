@@ -1,0 +1,166 @@
+"""Tests for Qdrant knowledge base ingestion pipeline."""
+
+from unittest.mock import MagicMock
+
+import pytest
+from qdrant_client import QdrantClient
+from qdrant_client.models import SparseVector
+
+from app.models.knowledge import Article, SecurityLevel, WorkflowState
+from app.retrieval.ingest import (
+    build_point_id,
+    ingest_articles,
+    setup_qdrant_collection,
+)
+from retrieval.ingest import ingest_articles as shim_ingest
+
+
+@pytest.fixture
+def memory_qdrant() -> QdrantClient:
+    return QdrantClient(":memory:")
+
+
+@pytest.fixture
+def sample_articles() -> list[Article]:
+    return [
+        Article(
+            base_id="KB0001",
+            version="2.0",
+            article_id="KB0001-v2.0",
+            title="VPN authentication fails after a password change",
+            short_description="Clear cached VPN credentials after password reset.",
+            category="network",
+            service="corporate-vpn",
+            workflow_state=WorkflowState.PUBLISHED,
+            security_level=SecurityLevel.INTERNAL,
+            content=(
+                "# VPN authentication fails\n\n"
+                "## Symptom\nAuthentication fails after password change.\n\n"
+                "## Cause\nCached credentials in credential store.\n\n"
+                "## Resolution\nClear cached credential and reconnect.\n\n"
+                "## Escalation\nEscalate to Network Operations.\n"
+            ),
+        ),
+        Article(
+            base_id="KB0007",
+            version="2.0",
+            article_id="KB0007-v2.0",
+            title="Laptop performance degrades after a system update",
+            short_description="Driver mismatch or background indexing following update.",
+            category="hardware",
+            service="endpoint",
+            workflow_state=WorkflowState.PUBLISHED,
+            security_level=SecurityLevel.RESTRICTED,
+            content=(
+                "# Laptop performance degrades\n\n"
+                "## Symptom\nLaptop is noticeably slow after update.\n\n"
+                "## Cause\nBackground indexing or graphics driver mismatch.\n\n"
+                "## Resolution\nWait 24h or reinstall vendor driver.\n\n"
+                "## Escalation\nEscalate to Endpoint Engineering.\n"
+            ),
+        ),
+    ]
+
+
+def test_build_point_id_is_deterministic() -> None:
+    id1 = build_point_id("KB0001-v2.0", 0)
+    id2 = build_point_id("KB0001-v2.0", 0)
+    id3 = build_point_id("KB0001-v2.0", 1)
+    id4 = build_point_id("KB0002-v1.0", 0)
+
+    assert id1 == id2, "Same input must produce identical UUID"
+    assert id1 != id3, "Different chunk index must produce different UUID"
+    assert id1 != id4, "Different article ID must produce different UUID"
+
+
+def test_setup_qdrant_collection(memory_qdrant: QdrantClient) -> None:
+    col_name = "test_kb"
+    setup_qdrant_collection(memory_qdrant, collection_name=col_name)
+
+    assert memory_qdrant.collection_exists(col_name)
+    info = memory_qdrant.get_collection(col_name)
+    assert "dense" in info.config.params.vectors  # type: ignore[operator]
+    assert "sparse" in info.config.params.sparse_vectors  # type: ignore[operator]
+
+
+def test_setup_qdrant_collection_recreate(memory_qdrant: QdrantClient) -> None:
+    col_name = "recreate_kb"
+    setup_qdrant_collection(memory_qdrant, collection_name=col_name)
+    assert memory_qdrant.collection_exists(col_name)
+
+    # Recreate without error
+    setup_qdrant_collection(memory_qdrant, collection_name=col_name, recreate=True)
+    assert memory_qdrant.collection_exists(col_name)
+
+
+def test_ingest_articles_with_mock_embedding(
+    memory_qdrant: QdrantClient, sample_articles: list[Article]
+) -> None:
+    col_name = "ingest_test"
+    setup_qdrant_collection(memory_qdrant, collection_name=col_name)
+
+    mock_engine = MagicMock()
+
+    # Mock embed_documents to return vectors sized to match total chunks
+    def fake_embed(docs: list[str]) -> tuple[list[list[float]], list[SparseVector]]:
+        dense = [[0.1] * 384 for _ in docs]
+        sparse = [SparseVector(indices=[1, 2], values=[0.5, 0.8]) for _ in docs]
+        return dense, sparse
+
+    mock_engine.embed_documents.side_effect = fake_embed
+
+    count = ingest_articles(
+        articles=sample_articles,
+        client=memory_qdrant,
+        collection_name=col_name,
+        embedding_engine=mock_engine,
+    )
+
+    assert count > 0
+    # Verify mock was called once with all chunks combined (IDF fitting rule)
+    assert mock_engine.embed_documents.call_count == 1
+    call_docs = mock_engine.embed_documents.call_args[0][0]
+    assert len(call_docs) == count
+
+    info = memory_qdrant.get_collection(col_name)
+    assert info.points_count == count
+
+    # Verify a retrieved point has all required payload fields
+    points, _ = memory_qdrant.scroll(collection_name=col_name, limit=1, with_payload=True)
+    assert len(points) == 1
+    p = points[0].payload
+    assert p is not None
+    assert "article_number" in p
+    assert "article_id" in p
+    assert "category" in p
+    assert "service" in p
+    assert "workflow_state" in p
+    assert "version" in p
+    assert "security_level" in p
+    assert "section" in p
+    assert "chunk_text" in p
+
+
+def test_ingest_idempotency(memory_qdrant: QdrantClient, sample_articles: list[Article]) -> None:
+    col_name = "idempotent_test"
+    setup_qdrant_collection(memory_qdrant, collection_name=col_name)
+
+    mock_engine = MagicMock()
+    mock_engine.embed_documents.side_effect = lambda docs: (
+        [[0.1] * 384 for _ in docs],
+        [SparseVector(indices=[1], values=[1.0]) for _ in docs],
+    )
+
+    count1 = ingest_articles(sample_articles, memory_qdrant, col_name, mock_engine)
+    info1 = memory_qdrant.get_collection(col_name)
+
+    # Ingest same articles second time
+    count2 = ingest_articles(sample_articles, memory_qdrant, col_name, mock_engine)
+    info2 = memory_qdrant.get_collection(col_name)
+
+    assert count1 == count2
+    assert info1.points_count == info2.points_count, "Re-ingesting must not duplicate points"
+
+
+def test_shim_matches() -> None:
+    assert shim_ingest is ingest_articles
