@@ -118,6 +118,15 @@ def test_parse_retired_variant_block() -> None:
     assert "MIR-2026-03" in art.related_records
 
 
+def test_incomplete_block_is_rejected() -> None:
+    """A truncated block missing a required section must fail loudly, not emit a 'valid' article."""
+    incomplete = SYNTHETIC_PUBLISHED_BLOCK.replace(
+        "Escalation. If the account is not locked, escalate to Network Ops.\n", ""
+    )
+    with pytest.raises(ValueError, match="missing sections: Escalation"):
+        parse_article_block(incomplete)
+
+
 def test_hyphen_join_preservation() -> None:
     block_with_hyphen = SYNTHETIC_PUBLISHED_BLOCK.replace(
         "credential store.", "credential\nstore with re-\nchecked token."

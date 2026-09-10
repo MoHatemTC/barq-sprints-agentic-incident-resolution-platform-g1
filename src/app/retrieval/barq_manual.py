@@ -30,6 +30,8 @@ SECURITY_TIERS: dict[str, SecurityLevel] = {
 
 STEP_MARKER_RE = re.compile(r"(?m)^\s*(\d{1,3})\.\s+")
 
+REQUIRED_SECTIONS = ("Symptom", "Cause", "Resolution", "Escalation")
+
 
 @dataclass
 class ExtractionReport:
@@ -262,6 +264,15 @@ def parse_article_block(block: str, report: ExtractionReport | None = None) -> A
         body_parts.append(f"## Warning\n\nWhy this revision is dangerous: {clean_warn}")
 
     body = "\n\n".join(body_parts)
+
+    # Every article must carry all four operational sections; a truncated or
+    # malformed PDF block must fail loudly instead of becoming a "valid" article.
+    missing = [s for s in REQUIRED_SECTIONS if f"## {s}" not in body]
+    if missing:
+        raise ValueError(
+            f"{article_number}: incomplete article block, missing sections: "
+            f"{', '.join(missing)}"
+        )
 
     # 4. Short description: first sentence of symptom (capped at 255)
     sentences = re.split(r"(?<=[.!?])\s+", symptom_text)
