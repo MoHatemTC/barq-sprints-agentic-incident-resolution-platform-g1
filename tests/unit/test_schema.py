@@ -124,6 +124,7 @@ def test_payload_round_trips_servicenow_fields_and_provenance(
             "sys_id": "0a1b2c3d4e5f67890a1b2c3d4e5f6789",
             "owner": "Network Operations",
             "author": "L. Haddad",
+            "reviewed_on": "11 Apr 2026",
             "related_records": ["PRB0040012", "INC0010023"],
         }
     )
@@ -138,6 +139,7 @@ def test_payload_round_trips_servicenow_fields_and_provenance(
     assert payload["sys_id"] == "0a1b2c3d4e5f67890a1b2c3d4e5f6789"
     assert payload["owner"] == "Network Operations"
     assert payload["author"] == "L. Haddad"
+    assert payload["reviewed_on"] == "11 Apr 2026"
     assert payload["related_records"] == ["PRB0040012", "INC0010023"]
     assert payload["article_id"] == "KB0001-v2.0"
 

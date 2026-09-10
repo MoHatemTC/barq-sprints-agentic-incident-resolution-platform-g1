@@ -183,6 +183,7 @@ class KnowledgePayload(BaseModel):
     # Optional metadata & links
     owner: str | None = None
     author: str | None = None
+    reviewed_on: str | None = None
     related_records: list[str] = Field(default_factory=list)
     article_url: str | None = None
 
@@ -209,6 +210,7 @@ class KnowledgePayload(BaseModel):
             chunk_text=chunk.text,
             owner=article.owner,
             author=article.author,
+            reviewed_on=article.reviewed_on,
             related_records=list(article.related_records),
         )
 
