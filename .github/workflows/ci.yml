@@ -1,0 +1,52 @@
+name: CI
+
+# Sprint 1 scope: "a GitHub Actions skeleton running lint and tests on every PR".
+# The evaluation gate and image build belong to Sprint 4 (D-09) and are not here yet.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Least privilege: this job only checks out and runs the quality gate, so it
+# needs nothing beyond a read of the repository contents.
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Lint, type-check and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      # No .env exists on a runner. tests/conftest.py injects the required
+      # ServiceNow settings so collection cannot depend on local developer state.
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Format check
+        run: uv run ruff format --check .
+
+      - name: Type-check
+        run: uv run mypy src
+
+      - name: Test
+        run: uv run pytest -q

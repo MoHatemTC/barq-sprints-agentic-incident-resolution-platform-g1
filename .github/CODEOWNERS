@@ -1,0 +1,28 @@
+# Review routing by workstream. Owners are advisory here — the repository has no
+# branch protection, so these are a signal about who knows the area, not a gate.
+
+# S1.1 — scoped application and Incident field model. The field model is the
+# contract every other workstream writes against, so schema changes need its owner.
+/servicenow/ai_incident_orchestrator/sdk-app/                @ali-ezz
+/servicenow/ai_incident_orchestrator/ai_incident_orchestrator_s1_1.xml @ali-ezz
+/servicenow/ai_incident_orchestrator/README.md                @ali-ezz
+/docs/sprint-1/s1.1-scoped-app-and-field-model/               @ali-ezz
+
+# S1.2 — audit trail, OAuth identity, ACLs
+/scripts/verify_permissions.py                            @MohamedAbdelaiem
+/docs/sprint-1/s1.2-execution-log-and-oauth-identity/     @MohamedAbdelaiem
+
+# S1.3 — eligibility Business Rule, outbound event
+/servicenow/ai_incident_orchestrator/business_rules/      @ahmedtamer101
+/docs/sprint-1/s1.3-eligibility-rule-and-event/           @ahmedtamer101
+
+# S1.4 — knowledge corpus, Qdrant
+/docs/sprint-1/s1.4-knowledge-and-qdrant/                 @kerolos-mohsen
+
+# S1.5 — ServiceNow Table API client
+/src/app/clients/                                          @Tasneemmohammed0
+/src/app/auth/                                              @Tasneemmohammed0
+/docs/sprint-1/s1.5-servicenow-client/                    @Tasneemmohammed0
+
+# Build, CI and repository configuration
+/.github/           @ali-ezz

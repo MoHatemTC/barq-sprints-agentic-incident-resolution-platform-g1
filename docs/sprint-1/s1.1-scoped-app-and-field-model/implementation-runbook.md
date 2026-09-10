@@ -101,7 +101,7 @@ Use a dedicated test Incident and record its number.
 
 ## 7. Capture evidence
 
-Store screenshots under `docs/screenshots/s1-1/` using the names listed in its README. Screenshots must show the browser address/instance context where practical, readable labels and values, and no passwords, tokens, client secrets, or other sensitive data.
+Store screenshots under `docs/sprint-1/s1.1-scoped-app-and-field-model/screenshots/` using the names listed in its README. Screenshots must show the browser address/instance context where practical, readable labels and values, and no passwords, tokens, client secrets, or other sensitive data.
 
 ## 8. Package the scoped application
 

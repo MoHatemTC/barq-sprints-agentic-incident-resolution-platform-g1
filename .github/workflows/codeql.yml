@@ -1,0 +1,48 @@
+name: CodeQL
+
+# Advanced setup (a workflow file) rather than default setup, because default
+# setup requires repository admin access, which this token does not have.
+# Scoped to Python: that is where OAuth tokens, credentials and ServiceNow API
+# calls live. The servicenow/ directory is generated SDK/Fluent config, not
+# application logic, so scanning it would be noise without signal.
+
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "scripts/**"
+      - "tests/**"
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "scripts/**"
+      - "tests/**"
+  schedule:
+    - cron: "0 3 * * 1" # weekly, Monday 03:00 UTC
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # GITHUB_TOKEN cannot be granted security-events: write on a pull_request
+    # run from a fork, so the upload step in analyze fails there even when
+    # the code is fine. Skip that case; push and the weekly schedule still
+    # cover forked contributions once merged.
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: python
+
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:python"
