@@ -76,7 +76,7 @@ Because raw PDF tables in the Operations Manual do not feature a native security
    - Covers shared print infrastructure, endpoint driver-level diagnostics, core ERP reachability, and production service remediation procedures.
    - Applied to: `KB0004` (Print Services), `KB0007` (Endpoint Performance), `KB0008` (SAP Basis RFC), `KB0010` both versions (Order Service Pool Exhaustion).
 
-The mapping is implemented as the `SECURITY_TIERS` table in [src/app/retrieval/barq_manual.py](../../../src/app/retrieval/barq_manual.py) and asserted per-article by [tests/test_corpus.py](../../../tests/test_corpus.py).
+The mapping is implemented as the `SECURITY_TIERS` table in [src/app/retrieval/barq_manual.py](../../../src/app/retrieval/barq_manual.py) and asserted per-article by [tests/unit/test_corpus.py](../../../tests/unit/test_corpus.py).
 
 ---
 
@@ -121,7 +121,7 @@ Chunking is performed by [src/app/retrieval/chunking.py](../../../src/app/retrie
   - 11 records × 4 body sections (`Symptom`, `Cause`, `Resolution`, `Escalation`) = 44 chunks. At the 700-char limit no section exceeds one chunk, so no recursive sub-splitting occurs.
   - `KB0010-v1.0` carries a 5th `Warning` section (the manual's "Why this revision is dangerous" callout) = 1 extra chunk.
   - Total: **45 bound-validated chunks**.
-- **Regression Guard**: Verified continuously by [tests/test_chunking.py](../../../tests/test_chunking.py).
+- **Regression Guard**: Verified continuously by [tests/unit/test_chunking.py](../../../tests/unit/test_chunking.py).
 
 ---
 
@@ -183,13 +183,16 @@ barq-sprints-agentic-incident-resolution-platform-g1/
 │   ├── seed_qdrant.py           # CLI: chunk, embed, seed Qdrant (45 points), verify stored == upserted
 │   └── validate_corpus.py       # CLI: validate corpus schema and coverage matrix (primary + acceptable IDs)
 └── tests/
-    ├── test_barq_manual.py      # Extractor unit tests (synthetic fixtures) + real-PDF regression (skipped if absent)
-    ├── test_chunking.py         # Regression test for 45 chunks & code fence balancing
-    ├── test_corpus.py           # Corpus invariants: 11 records, tiers, lifecycle, matrix consistency
-    ├── test_embedding.py        # FastEmbed engine: dimensions, sparsity, query path, determinism
-    ├── test_schema.py           # Article/ArticleChunk/KnowledgePayload validation
-    ├── test_extraction.py       # ServiceNow HTML -> Markdown round-trip (for the publish step)
-    └── test_ingest.py           # Ingestion tests (idempotency, point IDs, single-batch embedding)
+    ├── integration/             # Integration tests against live external services
+    └── unit/                    # In-memory and mocked unit tests
+        ├── test_barq_manual.py  # Extractor unit tests & real-PDF regression
+        ├── test_chunking.py     # 45 chunks & code fence balancing
+        ├── test_corpus.py       # Corpus schema, tiers, lifecycle, matrix
+        ├── test_embedding.py    # FastEmbed engine & Qdrant in-memory client
+        ├── test_extraction.py   # ServiceNow HTML -> Markdown round-trip
+        ├── test_ingest.py       # Ingestion orchestration (mocked embed, in-memory Qdrant)
+        ├── test_schema.py       # Pydantic schemas (Article, KnowledgePayload)
+        └── test_smoke.py        # Basic smoke test
 ```
 
 ---

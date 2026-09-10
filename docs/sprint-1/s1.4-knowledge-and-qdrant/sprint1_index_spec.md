@@ -125,7 +125,7 @@ point_id = str(uuid.uuid5(KB_NAMESPACE, f"{article_id}::chunk::{chunk_index}"))
 where `article_id` is the composed per-record key (`{article_number}-v{version}`, e.g. `KB0010-v2.0`). Chunk identities follow the same convention everywhere (`KB0010-v2.0::chunk::0`).
 
 ### Idempotency Guarantee
-Because UUIDv5 is pure and deterministic, re-running `seed_qdrant.py` or re-ingesting updated articles performs an **in-place upsert** rather than creating duplicate points in the vector store. The 11 articles chunk into exactly 45 chunks, resulting in exactly 45 points before and after re-seeding (verified by [tests/test_ingest.py](../../../tests/test_ingest.py)).
+Because UUIDv5 is pure and deterministic, re-running `seed_qdrant.py` or re-ingesting updated articles performs an **in-place upsert** rather than creating duplicate points in the vector store. The 11 articles chunk into exactly 45 chunks, resulting in exactly 45 points before and after re-seeding (verified by [tests/unit/test_ingest.py](../../../tests/unit/test_ingest.py)).
 
 ---
 
@@ -191,11 +191,11 @@ results = client.query_points(
   ```
 - **Automated Ingestion Test Suite (8 Tests)**:
   ```bash
-  uv run pytest tests/test_ingest.py -v
+  uv run pytest tests/unit/test_ingest.py -v
   ```
 - **Chunking Regression Test Suite**:
   ```bash
-  uv run pytest tests/test_chunking.py -v
+  uv run pytest tests/unit/test_chunking.py -v
   ```
 - **Validate Real Incident Coverage Matrix**:
   ```bash
