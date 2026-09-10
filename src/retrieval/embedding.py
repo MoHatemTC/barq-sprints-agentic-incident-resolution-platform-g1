@@ -1,15 +1,15 @@
-"""Re-export shim for the retrieval package."""
+"""Re-export shim for the embedding engine."""
 
 from app.retrieval.embedding import (
-    DEFAULT_DENSE_MODEL,
-    DEFAULT_SPARSE_MODEL,
     DENSE_VECTOR_SIZE,
-    DualEmbeddingEngine,
+    EmbeddedText,
+    EmbeddingEngine,
+    FastEmbedEngine,
 )
 
 __all__ = [
-    "DEFAULT_DENSE_MODEL",
-    "DEFAULT_SPARSE_MODEL",
     "DENSE_VECTOR_SIZE",
-    "DualEmbeddingEngine",
+    "EmbeddedText",
+    "EmbeddingEngine",
+    "FastEmbedEngine",
 ]

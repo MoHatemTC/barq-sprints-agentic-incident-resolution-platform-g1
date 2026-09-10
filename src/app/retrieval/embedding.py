@@ -33,9 +33,6 @@ class EmbeddingEngine(Protocol):
 
 DENSE_VECTOR_SIZE = 384
 
-DEFAULT_DENSE_MODEL = get_retrieval_settings().dense_embedding_model
-DEFAULT_SPARSE_MODEL = get_retrieval_settings().sparse_embedding_model
-
 
 class FastEmbedEngine:
     """FastEmbed-backed dual embedding engine using bge-small-en-v1.5 and Qdrant/bm25."""
@@ -109,7 +106,3 @@ class FastEmbedEngine:
             sparse_indices=sparse_indices,
             sparse_values=[float(v) for v in sparse_values],
         )
-
-
-# Backward compatibility alias
-DualEmbeddingEngine = FastEmbedEngine
