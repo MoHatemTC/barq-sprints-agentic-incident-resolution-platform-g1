@@ -7,7 +7,7 @@ community for anything that shouldn't be public.
 ## Workstream owners — Sprint 1
 
 Each owner is accountable for their task end to end: implementation, verification, and
-keeping their issue updated. The [Sprint 1 field model](docs/sprint1_field_model.md) is
+keeping their issue updated. The [Sprint 1 field model](docs/sprint-1/s1.1-scoped-app-and-field-model/field-model.md) is
 the contract every workstream writes against — anyone changing it should expect it to
 ripple into the other four.
 

@@ -3,30 +3,27 @@ S1.1:
   - changed-files:
       - any-glob-to-any-file:
           - "servicenow/ai_incident_orchestrator/sdk-app/**"
-          - "docs/sprint1_field_model.md"
-          - "docs/sprint1_acceptance_matrix.md"
-          - "docs/sprint1_*verification.md"
-          - "docs/sprint1_implementation_runbook.md"
-          - "docs/sprint1_submission_checklist.md"
+          - "docs/sprint-1/s1.1-scoped-app-and-field-model/**"
 
 S1.2:
   - changed-files:
       - any-glob-to-any-file:
           - "scripts/verify_permissions.py"
-          - "docs/sprint1_audit_and_identity.md"
+          - "docs/sprint-1/s1.2-execution-log-and-oauth-identity/**"
           - "servicenow/ai_incident_orchestrator/sys_remote_update_set_*.xml"
 
 S1.3:
   - changed-files:
       - any-glob-to-any-file:
           - "servicenow/ai_incident_orchestrator/business_rules/**"
-          - "docs/sprint1_event_contract_draft.md"
+          - "docs/sprint-1/s1.3-eligibility-rule-and-event/**"
 
 S1.4:
   - changed-files:
       - any-glob-to-any-file:
           - "docker-compose.yml"
           - "data/**"
+          - "docs/sprint-1/s1.4-knowledge-and-qdrant/**"
 
 S1.5:
   - changed-files:
@@ -36,6 +33,7 @@ S1.5:
           - "src/app/models/**"
           - "src/app/exceptions/**"
           - "scripts/test_client.py"
+          - "docs/sprint-1/s1.5-servicenow-client/**"
 
 ci:
   - changed-files:

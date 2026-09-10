@@ -31,7 +31,7 @@ footers, no co-author lines that were not real human co-authors.
 - Every artifact belongs in scope `x_2215032_ai_inc_0`. **Nothing in Global.**
 - Scripts compare **internal** choice values (`in_progress`), never display labels.
 - Incident columns carry the `x_2215032_ai_inc_0_ai_` prefix. Field types and intended
-  write permissions are in [`docs/sprint1_field_model.md`](docs/sprint1_field_model.md)
+  write permissions are in [`docs/sprint-1/s1.1-scoped-app-and-field-model/field-model.md`](docs/sprint-1/s1.1-scoped-app-and-field-model/field-model.md)
   — that file is the contract every workstream writes against, so changing it affects
   the backend, the graph and the audit trail.
 - Export update sets through the official SDK and do not hand-edit the XML. Verify a
