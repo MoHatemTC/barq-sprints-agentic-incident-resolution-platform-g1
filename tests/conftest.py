@@ -1,19 +1,14 @@
-"""Shared pytest configuration.
+"""Shared pytest configuration and fixtures."""
 
-`app.core.config.Settings` declares the ServiceNow connection fields as
-required on purpose: the service must fail fast at startup rather than boot
-with a half-configured integration. That means importing anything under
-`app` needs those variables present.
-
-Tests must not depend on a developer's local `.env`, and CI runners have none,
-so the required variables are injected here with values that are obviously not
-real credentials. `get_settings` is cached, so this runs before the first
-import that would build a Settings instance.
-"""
-
+import json
 import os
+from copy import deepcopy
+from pathlib import Path
 
 import pytest
+from fixtures.articles import POSTGRES_V1, POSTGRES_V2, REDIS_DRAFT
+
+from app.models.knowledge import Article
 
 _REQUIRED_TEST_ENV = {
     "SERVICENOW_INSTANCE_URL": "https://dev00000.service-now.com",
@@ -33,19 +28,6 @@ def settings():
     from app.core.config import get_settings
 
     return get_settings()
-"""Shared pytest fixtures for the test suite.
-
-Provides sample articles and temporary corpus files used across tests.
-"""
-
-import json
-from copy import deepcopy
-from pathlib import Path
-
-import pytest
-from fixtures.articles import POSTGRES_V1, POSTGRES_V2, REDIS_DRAFT
-
-from app.models.knowledge import Article
 
 
 def make_article(data: dict) -> Article:

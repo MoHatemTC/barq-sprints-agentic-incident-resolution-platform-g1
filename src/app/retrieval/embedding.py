@@ -2,7 +2,7 @@
 
 from typing import Protocol, runtime_checkable
 
-from fastembed import SparseTextEmbedding, TextEmbedding  # type: ignore[import-untyped]
+from fastembed import SparseTextEmbedding, TextEmbedding
 from pydantic import BaseModel, ConfigDict
 
 from app.core.config import get_retrieval_settings

@@ -84,8 +84,7 @@ def ingest_articles(
 
     if not chunk_records:
         raise ValueError(
-            f"chunking produced no chunks from {len(articles)} articles; "
-            "check the corpus bodies"
+            f"chunking produced no chunks from {len(articles)} articles; check the corpus bodies"
         )
 
     logger.info("Generated %d total chunks from %d articles", len(chunk_records), len(articles))

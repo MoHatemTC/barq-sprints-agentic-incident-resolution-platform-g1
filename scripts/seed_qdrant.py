@@ -43,8 +43,7 @@ def main() -> int:
 
     if not args.corpus.exists():
         print(
-            f"Error: corpus file not found at {args.corpus}. "
-            "Run scripts/extract_barq_kb.py first.",
+            f"Error: corpus file not found at {args.corpus}. Run scripts/extract_barq_kb.py first.",
             file=sys.stderr,
         )
         return 1

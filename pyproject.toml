@@ -59,6 +59,7 @@ indent-style = "space"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+pythonpath = ["src"]
 
 [tool.mypy]
 python_version = "3.12"
@@ -71,7 +72,4 @@ source = ["src/app", "src/retrieval"]
 
 [tool.coverage.report]
 show_missing = true
-
-[tool.pytest.ini_options]
-pythonpath = ["src"]
 

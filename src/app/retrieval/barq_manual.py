@@ -172,9 +172,7 @@ def parse_article_block(block: str, report: ExtractionReport | None = None) -> A
         if not category:
             category = "software"
             if report is not None:
-                report.warnings.append(
-                    "KB0010: no Category cell in grid; defaulted to 'software'."
-                )
+                report.warnings.append("KB0010: no Category cell in grid; defaulted to 'software'.")
 
     owner_m = re.search(r"Owner\s+([^\n]+)", block)
     owner = owner_m.group(1).strip() if owner_m else None
