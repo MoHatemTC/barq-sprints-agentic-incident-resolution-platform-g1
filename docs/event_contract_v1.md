@@ -1,36 +1,33 @@
-# Outbound Event Contract v1 - DRAFT
-
-Status: DRAFT
+# Outbound Event Contract v1
 
 - Contract version: `v1`
 - Producer: ServiceNow AI Incident Orchestrator
-- Future consumer: downstream orchestration webhook
+- Consumer: downstream incident-resolution backend/webhook
+- Trigger: an eligible Incident insert or eligibility-relevant update
 
-## Allowed Payload Fields
+## Payload
 
-The payload is restricted to exactly these fields:
+The v1 payload contains exactly four top-level fields:
 
-- `event_id`
-- `sys_id`
-- `number`
-- `event_type`
+| Field | Meaning |
+|---|---|
+| `event_id` | A unique identifier generated for each logical emission and intended as the downstream idempotency key. |
+| `sys_id` | The ServiceNow Incident `sys_id`. |
+| `number` | The ServiceNow Incident number. |
+| `event_type` | Either `incident.created` for an eligible insert or `incident.updated` for an eligible relevant update. |
 
-No other incident fields are allowed in the outbound payload.
+```json
+{
+  "event_id": "0123456789abcdef0123456789abcdef",
+  "sys_id": "abcdef0123456789abcdef0123456789",
+  "number": "INC0010001",
+  "event_type": "incident.created"
+}
+```
 
-`event_id` is unique per emission and is intended to be used by the downstream
-consumer as its idempotency key.
+No additional Incident fields are allowed in v1. Full Incident records must
+never be transmitted.
 
-## TODO
-
-- TODO: Define the allowed `event_type` values after eligibility and update
-  semantics are finalized.
-- TODO: Define the OAuth configuration after S1.2 is available.
-
-## Open Decisions / Dependencies
-
-- S1.1 merge into `main`
-- Supported incident categories
-- Unprocessed/retry semantics
-- Relevant-update field set
-- Confirmation of native `incident.active`
-- S1.2 OAuth configuration
+Transport authentication is OAuth. Outbound transport wiring and OAuth
+execution are handled separately and are not implemented or verified by this
+event-preparation phase.
