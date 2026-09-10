@@ -1,13 +1,26 @@
-"""Automated validation tests for the real BARQ knowledge corpus and ground truth matrix."""
+"""Automated validation tests for the real BARQ knowledge corpus and ground truth matrix.
+
+These tests assert invariants of the REAL corpus (data/corpus/barq_articles.json),
+which is git-ignored because the source manual is INTERNAL-marked. On machines
+without the file (fresh clones, CI), the module skips as a whole — run
+`uv run python scripts/extract_barq_kb.py` locally against the PDF to enable it.
+"""
 
 import csv
 from pathlib import Path
+
+import pytest
 
 from app.models.knowledge import Article, SecurityLevel, WorkflowState
 from app.retrieval.sources import LocalJSONSource
 
 CORPUS_PATH = Path("data/corpus/barq_articles.json")
 COVERAGE_PATH = Path("data/coverage_matrix.csv")
+
+pytestmark = pytest.mark.skipif(
+    not CORPUS_PATH.exists(),
+    reason="real corpus not available (git-ignored INTERNAL data; extract locally from the PDF)",
+)
 
 
 def test_corpus_file_exists_and_loads_all_articles() -> None:
