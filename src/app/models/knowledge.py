@@ -18,11 +18,18 @@ Vocabulary policy (decided for Path B readiness):
 import re
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 SLUG_PATTERN = re.compile(r"^[a-z0-9]+(?:[-_][a-z0-9]+)*$")
 VERSION_PATTERN = re.compile(r"^\d+\.\d+$")
-BASE_ID_PATTERN = re.compile(r"^KB-[A-Z0-9]+(?:-[A-Z0-9]+)*$")
+BASE_ID_PATTERN = re.compile(r"^KB-?[A-Z0-9]+(?:-[A-Z0-9]+)*$")
 
 
 class WorkflowState(StrEnum):
@@ -49,9 +56,17 @@ class Article(BaseModel):
     the article across versions.
     """
 
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+        populate_by_name=True,
+    )
 
-    base_id: str = Field(..., description="Version-less identifier, e.g. KB-DB-001")
+    base_id: str = Field(
+        ...,
+        validation_alias=AliasChoices("base_id", "article_number"),
+        description="Version-less identifier, e.g. KB-DB-001 or KB0001",
+    )
     version: str = Field(..., pattern=VERSION_PATTERN, description="Article version, e.g. 1.0")
     article_id: str = Field(
         ...,
@@ -70,16 +85,30 @@ class Article(BaseModel):
     security_level: SecurityLevel
     content: str = Field(
         ...,
+        validation_alias=AliasChoices("content", "body"),
         min_length=50,
         description="Article body in canonical Markdown with fenced code blocks",
     )
+    sys_id: str | None = Field(
+        default=None,
+        description="ServiceNow sys_id once published; None for local-only articles",
+    )
+
+    @property
+    def article_number(self) -> str:
+        return self.base_id
+
+    @property
+    def body(self) -> str:
+        return self.content
 
     @field_validator("base_id")
     @classmethod
     def validate_base_id(cls, value: str) -> str:
         if not BASE_ID_PATTERN.match(value):
             raise ValueError(
-                f"base_id must match {BASE_ID_PATTERN.pattern} (e.g. KB-DB-001), got {value!r}"
+                f"base_id must match {BASE_ID_PATTERN.pattern} "
+                f"(e.g. KB-DB-001 or KB0001), got {value!r}"
             )
         return value
 
@@ -160,6 +189,11 @@ class KnowledgePayload(BaseModel):
     # Filled by the ServiceNow read-back source, None for local-only articles
     sys_id: str | None = None
     article_url: str | None = None
+
+    @property
+    def article_number(self) -> str:
+        """Base article number (e.g. KB0001 or KB-DB-001)."""
+        return self.article_id.rsplit("-v", 1)[0]
 
     @classmethod
     def from_chunk(cls, article: Article, chunk: ArticleChunk) -> "KnowledgePayload":
