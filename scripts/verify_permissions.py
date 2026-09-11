@@ -66,6 +66,7 @@ REPO_ROOT: Path = Path(__file__).resolve().parent.parent
 # Data model
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class TestResult:
     """Machine-readable test record.  Never contains credentials or tokens."""
@@ -86,6 +87,7 @@ class TestResult:
 # ---------------------------------------------------------------------------
 # Environment validation
 # ---------------------------------------------------------------------------
+
 
 def validate_environment() -> None:
     missing: list[str] = []
@@ -108,6 +110,7 @@ def validate_environment() -> None:
 # ---------------------------------------------------------------------------
 # Auth helpers  (tokens are NEVER printed)
 # ---------------------------------------------------------------------------
+
 
 def _auth_headers(token: str) -> dict[str, str]:
     return {
@@ -152,6 +155,7 @@ def _print_test(r: TestResult) -> None:
 # Test-incident resolver
 # ---------------------------------------------------------------------------
 
+
 def _resolve_incident(client: httpx.Client, hdrs: dict[str, str]) -> dict[str, Any]:
     """Return an incident NOT opened by the service account.
 
@@ -195,6 +199,7 @@ def _resolve_incident(client: httpx.Client, hdrs: dict[str, str]) -> dict[str, A
 # SS1  Authentication & Identity (AUTH-01 .. AUTH-04, TOKEN-01)
 # ---------------------------------------------------------------------------
 
+
 def _test_auth_success(client: httpx.Client) -> tuple[TestResult, str]:
     """AUTH-01: OAuth token acquisition succeeds and returns a valid token."""
     try:
@@ -232,9 +237,16 @@ def _test_auth_success(client: httpx.Client) -> tuple[TestResult, str]:
     except Exception as exc:
         return (
             TestResult(
-                "AUTH-01", "Authentication", "OAuth token acquisition",
-                "POST", "/oauth_token.do", "200 OK + access_token",
-                0, f"Exception: {exc}", False, "FAIL",
+                "AUTH-01",
+                "Authentication",
+                "OAuth token acquisition",
+                "POST",
+                "/oauth_token.do",
+                "200 OK + access_token",
+                0,
+                f"Exception: {exc}",
+                False,
+                "FAIL",
             ),
             "",
         )
@@ -287,8 +299,9 @@ def _test_non_admin(client: httpx.Client, hdrs: dict[str, str]) -> TestResult:
         observed=f"HTTP {resp.status_code}",
         persisted_change=False,
         verdict="PASS" if is_denied else "FAIL",
-        notes="403 confirms account lacks admin/security_admin." if is_denied
-              else "FAIL: account can read role assignments (elevated privilege detected).",
+        notes="403 confirms account lacks admin/security_admin."
+        if is_denied
+        else "FAIL: account can read role assignments (elevated privilege detected).",
     )
 
 
@@ -298,9 +311,7 @@ def _test_invalid_token(client: httpx.Client) -> TestResult:
         "Authorization": "Bearer INVALID_TOKEN_SECURITY_TEST_0000000000",
         "Accept": "application/json",
     }
-    resp = client.get(
-        f"{TABLE_API_BASE}/incident?sysparm_limit=1", headers=bad, timeout=10.0
-    )
+    resp = client.get(f"{TABLE_API_BASE}/incident?sysparm_limit=1", headers=bad, timeout=10.0)
     rejected = resp.status_code in (401, 403)
     return TestResult(
         test_id="AUTH-04",
@@ -353,6 +364,7 @@ def _test_mid_run_expiry(client: httpx.Client) -> TestResult:
 # SS2  Permitted incident operations (PERM-01 .. PERM-03)
 # ---------------------------------------------------------------------------
 
+
 def _test_read_incident(
     client: httpx.Client, hdrs: dict[str, str], inc_sys_id: str, inc_number: str
 ) -> TestResult:
@@ -363,7 +375,10 @@ def _test_read_incident(
         headers=hdrs,
         timeout=10.0,
     )
-    ok = resp.status_code == 200 and resp.json().get("result", {}).get("number") == inc_number
+    res_num = (
+        resp.json().get("result", {}).get("number", "N/A") if resp.status_code == 200 else "N/A"
+    )
+    ok = resp.status_code == 200 and res_num == inc_number
     return TestResult(
         test_id="PERM-01",
         category="Permitted",
@@ -372,7 +387,7 @@ def _test_read_incident(
         target=f"/api/now/table/incident/{inc_sys_id}",
         expected=f"200 OK + number={inc_number}",
         http_status=resp.status_code,
-        observed=f"HTTP {resp.status_code} (number={resp.json().get('result', {}).get('number', 'N/A')})",
+        observed=f"HTTP {resp.status_code} (number={res_num})",
         persisted_change=False,
         verdict="PASS" if ok else "FAIL",
     )
@@ -412,14 +427,11 @@ def _test_write_work_notes(
     )
 
 
-def _test_write_ai_field(
-    client: httpx.Client, hdrs: dict[str, str], inc_sys_id: str
-) -> TestResult:
+def _test_write_ai_field(client: httpx.Client, hdrs: dict[str, str], inc_sys_id: str) -> TestResult:
     """PERM-03: Write scoped AI classification field; prove persisted via read-back."""
     before = (
         client.get(
-            f"{TABLE_API_BASE}/incident/{inc_sys_id}"
-            f"?sysparm_fields={AI_CLASSIFICATION_FIELD}",
+            f"{TABLE_API_BASE}/incident/{inc_sys_id}?sysparm_fields={AI_CLASSIFICATION_FIELD}",
             headers=hdrs,
             timeout=10.0,
         )
@@ -436,8 +448,7 @@ def _test_write_ai_field(
     )
     after = (
         client.get(
-            f"{TABLE_API_BASE}/incident/{inc_sys_id}"
-            f"?sysparm_fields={AI_CLASSIFICATION_FIELD}",
+            f"{TABLE_API_BASE}/incident/{inc_sys_id}?sysparm_fields={AI_CLASSIFICATION_FIELD}",
             headers=hdrs,
             timeout=10.0,
         )
@@ -464,14 +475,16 @@ def _test_write_ai_field(
         observed=f"HTTP {patch.status_code} (value='{after}')",
         persisted_change=(after == target_value),
         verdict="PASS" if ok else "FAIL",
-        notes=f"'{before}' -> '{after}' (restored after test)." if ok
-              else f"Expected '{target_value}', got '{after}'.",
+        notes=f"'{before}' -> '{after}' (restored after test)."
+        if ok
+        else f"Expected '{target_value}', got '{after}'.",
     )
 
 
 # ---------------------------------------------------------------------------
 # SS5 / SS6 / SS7  Execution Log (FR-02)  (LOG-01 .. LOG-05)
 # ---------------------------------------------------------------------------
+
 
 def _post_log(
     client: httpx.Client,
@@ -518,9 +531,7 @@ def _test_log_status(
 
     fields_ok = False
     if http_status == 201 and sys_id:
-        rb = client.get(
-            f"{TABLE_API_BASE}/{SCOPED_LOG_TABLE}/{sys_id}", headers=hdrs, timeout=10.0
-        )
+        rb = client.get(f"{TABLE_API_BASE}/{SCOPED_LOG_TABLE}/{sys_id}", headers=hdrs, timeout=10.0)
         rec = rb.json().get("result", {})
         # Fields may be prefixed with u_ depending on scope config
         fields_ok = bool(sys_id) and any(
@@ -543,7 +554,9 @@ def _test_log_status(
         observed=f"HTTP {http_status} (sys_id={sys_id or 'N/A'})",
         persisted_change=ok,
         verdict="PASS" if ok else "FAIL",
-        notes=f"exec_id={exec_id} | sys_id={sys_id}" if ok else "Record not created or fields missing.",
+        notes=f"exec_id={exec_id} | sys_id={sys_id}"
+        if ok
+        else "Record not created or fields missing.",
     )
 
 
@@ -590,7 +603,9 @@ def _test_execution_id_lookup(
         observed=f"HTTP {qr.status_code} ({len(found)} record(s) found)",
         persisted_change=False,
         verdict="PASS" if ok else "FAIL",
-        notes=f"exec_id='{unique_exec_id}' -> sys_id={cr_sys_id}" if ok else "Lookup failed or wrong count.",
+        notes=f"exec_id='{unique_exec_id}' -> sys_id={cr_sys_id}"
+        if ok
+        else "Lookup failed or wrong count.",
     )
 
 
@@ -646,6 +661,7 @@ def _test_log_delete_forbidden(
 # SS3  Forbidden incident fields (DENY-01 .. DENY-05)
 # ---------------------------------------------------------------------------
 
+
 def _forbidden_scalar(
     client: httpx.Client,
     hdrs: dict[str, str],
@@ -700,8 +716,9 @@ def _forbidden_scalar(
         observed=f"HTTP {patch_r.status_code} | before='{before}' after='{after}'",
         persisted_change=changed,
         verdict="PASS" if blocked else "FAIL",
-        notes="ACL blocked: field unchanged." if blocked
-              else f"SECURITY FAILURE: {field} changed from '{before}' to '{after}'!",
+        notes="ACL blocked: field unchanged."
+        if blocked
+        else f"SECURITY FAILURE: {field} changed from '{before}' to '{after}'!",
     )
 
 
@@ -744,8 +761,9 @@ def _forbidden_journal(
         observed=f"HTTP {patch_r.status_code} | journal_count={journal_count}",
         persisted_change=(journal_count > 0),
         verdict="PASS" if blocked else "FAIL",
-        notes="0 journal entries - ACL blocked." if blocked
-              else f"SECURITY FAILURE: {journal_count} '{field}' entries posted!",
+        notes="0 journal entries - ACL blocked."
+        if blocked
+        else f"SECURITY FAILURE: {journal_count} '{field}' entries posted!",
     )
 
 
@@ -753,9 +771,8 @@ def _forbidden_journal(
 # SS4  Human-lock circuit breaker (LOCK-01)
 # ---------------------------------------------------------------------------
 
-def _test_human_lock(
-    client: httpx.Client, hdrs: dict[str, str], inc_sys_id: str
-) -> TestResult:
+
+def _test_human_lock(client: httpx.Client, hdrs: dict[str, str], inc_sys_id: str) -> TestResult:
     """LOCK-01: Integration account cannot modify the human-lock flag."""
     before = str(
         client.get(
@@ -797,8 +814,9 @@ def _test_human_lock(
         observed=f"HTTP {patch_r.status_code} | before='{before}' after='{after}'",
         persisted_change=(after != before),
         verdict="PASS" if blocked else "FAIL",
-        notes="Circuit breaker tamper-proof." if blocked
-              else f"SECURITY FAILURE: human-lock changed '{before}' -> '{after}'!",
+        notes="Circuit breaker tamper-proof."
+        if blocked
+        else f"SECURITY FAILURE: human-lock changed '{before}' -> '{after}'!",
     )
 
 
@@ -806,9 +824,8 @@ def _test_human_lock(
 # SS8  Bulk / multi-field bypass (BULK-01)
 # ---------------------------------------------------------------------------
 
-def _test_bulk_bypass(
-    client: httpx.Client, hdrs: dict[str, str], inc_sys_id: str
-) -> TestResult:
+
+def _test_bulk_bypass(client: httpx.Client, hdrs: dict[str, str], inc_sys_id: str) -> TestResult:
     """BULK-01: One permitted field + three forbidden in a single PATCH.
 
     Permitted field (work_notes) must persist.
@@ -827,10 +844,10 @@ def _test_bulk_bypass(
     orig_priority = str(orig.get("priority", ""))
 
     payload = {
-        "work_notes": wn_marker,   # PERMITTED
-        "comments": cmt_marker,    # FORBIDDEN
-        "priority": "1",           # FORBIDDEN
-        "state": "6",              # FORBIDDEN
+        "work_notes": wn_marker,  # PERMITTED
+        "comments": cmt_marker,  # FORBIDDEN
+        "priority": "1",  # FORBIDDEN
+        "state": "6",  # FORBIDDEN
     }
     patch_r = client.patch(
         f"{TABLE_API_BASE}/incident/{inc_sys_id}", headers=hdrs, json=payload, timeout=10.0
@@ -842,7 +859,9 @@ def _test_bulk_bypass(
             f"?sysparm_query=element_id={inc_sys_id}^element=work_notes^valueLIKE{wn_marker}",
             headers=hdrs,
             timeout=10.0,
-        ).json().get("result", [])
+        )
+        .json()
+        .get("result", [])
     )
     cmt_count = len(
         client.get(
@@ -850,7 +869,9 @@ def _test_bulk_bypass(
             f"?sysparm_query=element_id={inc_sys_id}^element=comments^valueLIKE{cmt_marker}",
             headers=hdrs,
             timeout=10.0,
-        ).json().get("result", [])
+        )
+        .json()
+        .get("result", [])
     )
     after_r = client.get(
         f"{TABLE_API_BASE}/incident/{inc_sys_id}?sysparm_fields=state,priority",
@@ -955,6 +976,7 @@ def _test_credential_cleanliness() -> TestResult:
 # SS12  Output & machine-readable JSON report
 # ---------------------------------------------------------------------------
 
+
 def _print_matrix(results: list[TestResult]) -> None:
     print(f"\n{'=' * 72}")
     print(f"  {_BLD}Sprint 1 (S1.2) Security Verification - Final Report{_RST}")
@@ -1000,6 +1022,7 @@ def _write_json_report(results: list[TestResult]) -> None:
 # Main runner
 # ---------------------------------------------------------------------------
 
+
 def run_verification() -> None:
     """Execute all verification phases in order and emit a final report."""
     validate_environment()
@@ -1007,7 +1030,6 @@ def run_verification() -> None:
     created_log_ids: list[str] = []
 
     with httpx.Client() as client:
-
         # Phase 1: Authentication & Identity
         _banner("PHASE 1 - Authentication & Identity")
         auth_result, token = _test_auth_success(client)
