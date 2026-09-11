@@ -24,42 +24,6 @@ Task S1.2 delivers the foundational security, identity, and audit infrastructure
 2. **Append-Only AI Execution Log Table (FR-02)**: A scoped audit repository (`x_2215032_ai_inc_0_ai_execution_log`) that records every processing attempt (success, failure, or blocked state) with indexed execution IDs for tamper-proof trace correlation. Deletion is cryptographically/operationally prohibited.
 3. **Least-Privilege Field-Level ACL Boundaries**: Explicit Access Control Lists that grant the integration account write access strictly to internal diagnostic work notes and agent-authored scoped AI fields (`AI Classification`), while enforcing hard, unbypassable denials on incident lifecycle state, assignments, customer comments, priority, and human-lock safety controls.
 
-```mermaid
-flowchart TD
-    subgraph External["External AI Orchestrator (Python Runtime)"]
-        Harness["verify_permissions.py / Orchestrator Worker"]
-        TokenClient["OAuth Token Client"]
-    end
-
-    subgraph ServiceNow["ServiceNow PDI (Instance Scope: x_2215032_ai_inc_0)"]
-        OAuthEP["OAuth Endpoint (/oauth_token.do)"]
-        TableAPI["ServiceNow Table API"]
-        
-        subgraph Security["Access Control Layer (ACLs)"]
-            TableACL["Incident Table Write ACL"]
-            FieldACLs["Field-Level Write ACLs"]
-            LogDeleteACL["Execution Log Delete ACL (Deny)"]
-        end
-
-        subgraph Storage["Persisted Records"]
-            IncTable["incident Table"]
-            WorkNotes["sys_journal_field (work_notes)"]
-            AIFields["x_2215032_ai_inc_0_* (AI Fields)"]
-            AuditLog["x_2215032_ai_inc_0_ai_execution_log (Append-Only)"]
-        end
-    end
-
-    TokenClient -->|OAuth Password Grant| OAuthEP
-    OAuthEP -->|JWT Bearer Token| TokenClient
-    Harness -->|Bearer Token HTTP Calls| TableAPI
-    TableAPI --> Security
-    Security -->|PERMITTED: Internal Diagnostic| WorkNotes
-    Security -->|PERMITTED: Classification Write| AIFields
-    Security -->|PERMITTED: Audit Insert| AuditLog
-    Security -->|BLOCKED: state, assigned_to, priority, comments, human_lock| IncTable
-    Security -->|BLOCKED: DELETE attempt (HTTP 403)| LogDeleteACL
-```
-
 ---
 
 ### 2. Service Identity & OAuth 2.0 Architecture
