@@ -68,6 +68,14 @@ def test_short_description_respects_servicenow_limit(article_dicts: list[dict]) 
         Article.model_validate(data)
 
 
+@pytest.mark.parametrize("blank", ["", "   ", "\t\n"])
+def test_short_description_rejects_blank(article_dicts: list[dict], blank: str) -> None:
+    """Whitespace is stripped before validation, so blank means missing — reject."""
+    data = {**article_dicts[0], "short_description": blank}
+    with pytest.raises(ValidationError):
+        Article.model_validate(data)
+
+
 def test_chunk_rejects_index_outside_bounds(sample_articles: list[Article]) -> None:
     article = sample_articles[0]
     with pytest.raises(ValueError, match="chunk_index"):

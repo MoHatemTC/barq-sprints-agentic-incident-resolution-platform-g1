@@ -69,8 +69,13 @@ class Article(BaseModel):
     )
     short_description: str = Field(
         ...,
+        min_length=1,
         max_length=255,
-        description="One-line summary; 255 chars matches the ServiceNow kb_knowledge limit",
+        description=(
+            "One-line summary; 255 chars matches the ServiceNow kb_knowledge limit. "
+            "Empty/whitespace-only is rejected: with str_strip_whitespace a blank "
+            "summary is a missing summary."
+        ),
     )
 
     # 5 Mandatory metadata fields (payload-indexed in Qdrant)
