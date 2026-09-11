@@ -191,11 +191,7 @@ def test_retired_runbook_is_forbidden_not_acceptable() -> None:
             f"{row['incident_id']} rewards the retired revision KB0010-v1.0"
         )
 
-    forbidding = {
-        r["incident_id"]
-        for r in rows
-        if "KB0010-v1.0" in r["forbidden_article_ids"]
-    }
+    forbidding = {r["incident_id"] for r in rows if "KB0010-v1.0" in r["forbidden_article_ids"]}
     assert forbidding == {"INC0010052", "INC0009884"}, (
         f"Retired v1.0 must be forbidden exactly on the pool-exhaustion incidents, got {forbidding}"
     )

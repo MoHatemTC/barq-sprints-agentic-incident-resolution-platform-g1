@@ -32,7 +32,7 @@ Each article in `barq_articles.json` is a JSON object with the following fields:
 
 ## Knowledge Base Inventory & Distribution
 
-The 11 extracted records span 4 core ITIL categories across 8 enterprise services:
+The 11 extracted records span 4 core ITIL categories across 9 enterprise services:
 
 | Number | Version | State | Security | Service | Category | Title |
 |---|---|---|---|---|---|---|
@@ -81,6 +81,6 @@ Columns beyond the basics:
 To validate that every article in `barq_articles.json` conforms to the Pydantic schema and ground-truth coverage matrix:
 
 ```bash
-pytest tests/test_corpus.py -v
-PYTHONPATH=src python scripts/validate_corpus.py
+pytest tests/unit/test_corpus.py -v
+uv run python scripts/validate_corpus.py
 ```
