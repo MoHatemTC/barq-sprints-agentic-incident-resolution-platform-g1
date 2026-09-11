@@ -22,6 +22,11 @@ class EmbeddedText(BaseModel):
 class EmbeddingEngine(Protocol):
     """Protocol defining the embedding boundary (NFR-09 swap boundary)."""
 
+    @property
+    def dense_vector_size(self) -> int:
+        """Output dimension of the dense vectors this engine produces."""
+        ...
+
     def embed_documents(self, texts: list[str]) -> list[EmbeddedText]:
         """Embed a batch of document texts in a single pass over the corpus."""
         ...
@@ -47,6 +52,11 @@ class FastEmbedEngine:
         self.sparse_model_name = sparse_model or settings.sparse_embedding_model
         self._dense_model = TextEmbedding(model_name=self.dense_model_name)
         self._sparse_model = SparseTextEmbedding(model_name=self.sparse_model_name)
+
+    @property
+    def dense_vector_size(self) -> int:
+        """Output dimension of the configured dense model (e.g. 384 for bge-small)."""
+        return int(self._dense_model.embedding_size)
 
     def embed_documents(self, texts: list[str]) -> list[EmbeddedText]:
         """Embed document texts with exactly ONE .embed() call per model over the full batch.

@@ -112,6 +112,7 @@ def test_ingest_articles_with_mock_embedding(
     ensure_collection(memory_qdrant, col_name)
 
     mock_engine = MagicMock()
+    mock_engine.dense_vector_size = 384
 
     # Mock embed_documents to return vectors sized to match total chunks
     def fake_embed(docs: list[str]) -> list[EmbeddedText]:
@@ -163,6 +164,7 @@ def test_ingest_idempotency(memory_qdrant: QdrantClient, sample_articles: list[A
     ensure_collection(memory_qdrant, col_name)
 
     mock_engine = MagicMock()
+    mock_engine.dense_vector_size = 384
     mock_engine.embed_documents.side_effect = lambda docs: [
         EmbeddedText(
             dense=[0.1] * 384,
@@ -189,6 +191,7 @@ def test_ingest_idempotency(memory_qdrant: QdrantClient, sample_articles: list[A
 def test_ingest_empty_articles_raises(memory_qdrant: QdrantClient) -> None:
     """Seeding nothing is a configuration error, not a quiet no-op."""
     mock_engine = MagicMock()
+    mock_engine.dense_vector_size = 384
     with pytest.raises(ValueError, match="no articles"):
         ingest_articles([], memory_qdrant, "empty_test", mock_engine)
     assert mock_engine.embed_documents.call_count == 0
@@ -196,6 +199,7 @@ def test_ingest_empty_articles_raises(memory_qdrant: QdrantClient) -> None:
 
 def _mock_engine() -> MagicMock:
     engine = MagicMock()
+    engine.dense_vector_size = 384
     engine.embed_documents.side_effect = lambda docs: [
         EmbeddedText(
             dense=[0.1] * 384,
@@ -294,6 +298,7 @@ def test_ingest_real_barq_corpus(memory_qdrant: QdrantClient) -> None:
     ensure_collection(memory_qdrant, col_name)
 
     mock_engine = MagicMock()
+    mock_engine.dense_vector_size = 384
     mock_engine.embed_documents.side_effect = lambda docs: [
         EmbeddedText(
             dense=[0.01] * 384,

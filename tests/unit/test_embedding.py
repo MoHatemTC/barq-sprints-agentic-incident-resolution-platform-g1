@@ -129,3 +129,46 @@ def test_qdrant_ensure_collection_in_memory() -> None:
     # Force recreate call
     ensure_collection(client, collection_name, force_recreate=True)
     assert client.collection_exists(collection_name)
+
+
+def test_engine_reports_real_dense_vector_size() -> None:
+    """bge-small-en-v1.5 produces 384d — the engine must surface its model's true dimension."""
+    engine = FastEmbedEngine()
+    assert engine.dense_vector_size == 384
+
+
+def test_ensure_collection_derives_size_from_engine() -> None:
+    """A swapped embedding model re-configures fresh collections at its own dimension."""
+    from unittest.mock import MagicMock
+
+    client = QdrantClient(":memory:")
+    engine = MagicMock()
+    engine.dense_vector_size = 768
+    ensure_collection(client, "derived_kb", dense_vector_size=engine.dense_vector_size)
+
+    info = client.get_collection("derived_kb")
+    vectors_config = info.config.params.vectors
+    assert isinstance(vectors_config, dict)
+    assert vectors_config[DENSE_VECTOR_NAME].size == 768
+
+
+def test_dimension_mismatch_raises_with_remedy() -> None:
+    """A 384d collection attached to a 768d model must fail at setup, not at upsert."""
+    from unittest.mock import MagicMock
+
+    client = QdrantClient(":memory:")
+    ensure_collection(client, "mismatch_kb")  # default 384d
+
+    engine = MagicMock()
+    engine.dense_vector_size = 768
+    with pytest.raises(ValueError, match="768d vectors"):
+        ensure_collection(client, "mismatch_kb", dense_vector_size=engine.dense_vector_size)
+
+    # The remedy path works: force-recreate rebuilds at the engine's dimension.
+    ensure_collection(
+        client, "mismatch_kb", dense_vector_size=engine.dense_vector_size, force_recreate=True
+    )
+    info = client.get_collection("mismatch_kb")
+    vectors_config = info.config.params.vectors
+    assert isinstance(vectors_config, dict)
+    assert vectors_config[DENSE_VECTOR_NAME].size == 768

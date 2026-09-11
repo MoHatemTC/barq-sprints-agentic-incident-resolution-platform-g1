@@ -35,14 +35,20 @@ def ensure_collection(
     client: QdrantClient,
     name: str,
     *,
+    dense_vector_size: int = DENSE_VECTOR_SIZE,
     force_recreate: bool = False,
 ) -> None:
     """Ensure the target collection exists with named dense and sparse vectors and payload indexes.
 
     Configuration follows Qdrant Advisor recommendations:
-    - Named dense vector: 384d (Cosine distance, bge-small-en-v1.5)
+    - Named dense vector: sized to the configured dense embedding model (default 384d,
+      bge-small-en-v1.5), Cosine distance
     - Named sparse vector: BM25 in-memory inverted index (on_disk=False, NO Modifier.IDF)
     - KEYWORD payload indexes on all 5 metadata fields + unique article identifiers.
+
+    The dense dimension is derived from the embedding engine by the caller: a
+    mismatch between an existing collection and the configured model raises
+    instead of failing later with a cryptic upsert error.
     """
     exists = client.collection_exists(collection_name=name)
 
@@ -50,12 +56,28 @@ def ensure_collection(
         client.delete_collection(collection_name=name)
         exists = False
 
-    if not exists:
+    if exists:
+        info = client.get_collection(collection_name=name)
+        vectors = info.config.params.vectors
+        existing = (
+            vectors[DENSE_VECTOR_NAME]
+            if isinstance(vectors, dict)
+            else getattr(vectors, DENSE_VECTOR_NAME)
+        )
+        existing_size = existing.size
+        if existing_size != dense_vector_size:
+            raise ValueError(
+                f"Collection '{name}' was created with dense dimension {existing_size}, "
+                f"but the configured dense model produces {dense_vector_size}d vectors. "
+                "Rebuild with `uv run python scripts/setup_qdrant.py --force-recreate` "
+                "or configure a model matching the collection dimension."
+            )
+    else:
         client.create_collection(
             collection_name=name,
             vectors_config={
                 DENSE_VECTOR_NAME: models.VectorParams(
-                    size=DENSE_VECTOR_SIZE,
+                    size=dense_vector_size,
                     distance=models.Distance.COSINE,
                 ),
             },

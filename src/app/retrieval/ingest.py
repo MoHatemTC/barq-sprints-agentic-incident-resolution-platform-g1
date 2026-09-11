@@ -167,9 +167,13 @@ def ingest_articles(
         raise ValueError("ingest_articles received no articles; refusing to seed nothing")
 
     name = collection_name or _get_default_collection_name()
-    ensure_collection(client, name, force_recreate=force_recreate)
-
     engine = embedding_engine or FastEmbedEngine()
+    # Derive the collection dimension from the engine (NFR-09): a swapped model
+    # re-configures fresh collections, and a mismatched existing collection
+    # fails here with the remedy instead of at upsert time after full embedding.
+    ensure_collection(
+        client, name, dense_vector_size=engine.dense_vector_size, force_recreate=force_recreate
+    )
 
     chunk_records = []
     for article in articles:
