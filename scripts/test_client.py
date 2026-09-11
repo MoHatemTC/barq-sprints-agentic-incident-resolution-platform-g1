@@ -8,6 +8,7 @@ import structlog
 from app.clients.servicenow_client import ServiceNowClient
 from app.core.config import Settings
 from app.exceptions.servicenow import ServiceNowError
+from app.models.execution_log import ExecutionLogCreatePayload, ExecutionStatus
 from app.models.incident import AIProcessingState, IncidentUpdatePayload
 
 logger = structlog.get_logger(__name__)
@@ -89,6 +90,30 @@ async def test_servicenow_client() -> None:
                 "Successfully marked incident as complete",
                 resolution=final_incident.ai_resolution,
             )
+
+            # 6. Test Creating AI Execution Log
+            logger.info("Testing create_execution_log()")
+            log_payload = ExecutionLogCreatePayload(
+                incident_sys_id=sys_id,
+                execution_id=f"exec_test_{int(datetime.now(UTC).timestamp())}",
+                agent="test_client_script",
+                action="verify_execution_log",
+                status=ExecutionStatus.SUCCEEDED,
+                timestamp=datetime.now(UTC),
+                result="Execution log entry successfully validated from test_client.py",
+            )
+            log_entry = await client.create_execution_log(log_payload)
+            if log_entry:
+                logger.info(
+                    "Successfully created execution log entry",
+                    sys_id=log_entry.sys_id,
+                    execution_id=log_entry.execution_id,
+                )
+            else:
+                logger.error(
+                    "Failed to create execution log entry. "
+                    "Verify that table x_2215032_ai_inc_0_ai_execution_log exists in ServiceNow."
+                )
 
         except ServiceNowError as exc:
             logger.error(
