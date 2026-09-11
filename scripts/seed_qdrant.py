@@ -62,12 +62,16 @@ def main() -> int:
         client=client,
         collection_name=collection_name,
         embedding_engine=engine,
+        purge_unknown_articles=True,
     )
 
     stored = client.get_collection(collection_name=collection_name).points_count
     if stored != total_points:
         logger.error(
-            "Seeding verification FAILED for '%s': stored %d points but upserted %d",
+            "Seeding verification FAILED for '%s': stored %d points but upserted %d. "
+            "If the collection holds points that cannot be reconciled "
+            "(e.g. from a different corpus or schema), rebuild it with "
+            "`uv run python scripts/setup_qdrant.py --force-recreate` and re-seed.",
             collection_name,
             stored,
             total_points,

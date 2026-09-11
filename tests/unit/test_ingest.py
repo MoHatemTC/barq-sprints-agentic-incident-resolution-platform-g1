@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from qdrant_client import QdrantClient
+from qdrant_client.models import FieldCondition, Filter, MatchValue
 
 from app.clients.qdrant import ensure_collection
 from app.models.knowledge import Article, SecurityLevel, WorkflowState
@@ -191,6 +192,91 @@ def test_ingest_empty_articles_raises(memory_qdrant: QdrantClient) -> None:
     with pytest.raises(ValueError, match="no articles"):
         ingest_articles([], memory_qdrant, "empty_test", mock_engine)
     assert mock_engine.embed_documents.call_count == 0
+
+
+def _mock_engine() -> MagicMock:
+    engine = MagicMock()
+    engine.embed_documents.side_effect = lambda docs: [
+        EmbeddedText(
+            dense=[0.1] * 384,
+            sparse_indices=[1, 2],
+            sparse_values=[0.5, 0.8],
+        )
+        for _ in docs
+    ]
+    return engine
+
+
+def _multi_section_article(article_number: str, sections: int) -> Article:
+    """An article whose body chunks into exactly `sections` pieces at 700/120."""
+    filler = "Follow the operational procedure step as documented. " * 12  # > 700 chars
+    body = "\n\n".join(f"## Section {i}\n\n{filler}" for i in range(sections))
+    return Article(
+        article_number=article_number,
+        version="1.0",
+        title=f"Procedure article {article_number}",
+        short_description=f"Multi-section procedure article for {article_number}.",
+        category="software",
+        service="order-processing",
+        workflow_state=WorkflowState.PUBLISHED,
+        security_level=SecurityLevel.INTERNAL,
+        body=body,
+    )
+
+
+def _points_for_article(client: QdrantClient, col_name: str, article_id: str) -> list:
+    points, _ = client.scroll(
+        collection_name=col_name,
+        limit=100,
+        scroll_filter=Filter(
+            must=[FieldCondition(key="article_id", match=MatchValue(value=article_id))]
+        ),
+        with_payload=True,
+    )
+    return points
+
+
+def test_reingest_of_shrunken_article_removes_stale_chunks(
+    memory_qdrant: QdrantClient,
+) -> None:
+    """Editing an article down to fewer chunks must not leave stale points (mentor P1)."""
+    col_name = "shrink_test"
+    article = _multi_section_article("KB0100", sections=5)
+    ingest_articles([article], memory_qdrant, col_name, _mock_engine())
+    assert len(_points_for_article(memory_qdrant, col_name, article.article_id)) == 5
+
+    # The article is edited: same identity, far fewer chunks.
+    edited = _multi_section_article("KB0100", sections=1)
+    ingest_articles([edited], memory_qdrant, col_name, _mock_engine())
+
+    after = _points_for_article(memory_qdrant, col_name, article.article_id)
+    assert len(after) == 1, f"stale chunks survived re-ingestion: {len(after)} points"
+    indices = {p.payload["chunk_index"] for p in after}
+    assert indices == {0}, f"stale chunk indices remain: {sorted(indices)}"
+    info = memory_qdrant.get_collection(col_name)
+    assert info.points_count == 1
+
+
+def test_purge_unknown_removes_deleted_articles(memory_qdrant: QdrantClient) -> None:
+    """Corpus-level seeding purges points of articles no longer in the corpus."""
+    col_name = "purge_test"
+    kept = _multi_section_article("KB0101", sections=2)
+    removed = _multi_section_article("KB0102", sections=2)
+    ingest_articles([kept, removed], memory_qdrant, col_name, _mock_engine())
+    assert memory_qdrant.get_collection(col_name).points_count == 4
+
+    # The corpus no longer contains `removed`.
+    ingest_articles(
+        [kept],
+        memory_qdrant,
+        col_name,
+        _mock_engine(),
+        purge_unknown_articles=True,
+    )
+    assert memory_qdrant.get_collection(col_name).points_count == 2
+
+    surviving, _ = memory_qdrant.scroll(collection_name=col_name, limit=100, with_payload=True)
+    assert {p.payload["article_id"] for p in surviving} == {kept.article_id}
 
 
 def test_ingest_real_barq_corpus(memory_qdrant: QdrantClient) -> None:

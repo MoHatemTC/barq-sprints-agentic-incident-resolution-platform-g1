@@ -125,7 +125,9 @@ point_id = str(uuid.uuid5(KB_NAMESPACE, f"{article_id}::chunk::{chunk_index}"))
 where `article_id` is the composed per-record key (`{article_number}-v{version}`, e.g. `KB0010-v2.0`). Chunk identities follow the same convention everywhere (`KB0010-v2.0::chunk::0`).
 
 ### Idempotency Guarantee
-Because UUIDv5 is pure and deterministic, re-running `seed_qdrant.py` or re-ingesting updated articles performs an **in-place upsert** rather than creating duplicate points in the vector store. The 11 articles chunk into exactly 45 chunks, resulting in exactly 45 points before and after re-seeding (verified by [tests/unit/test_ingest.py](../../../tests/unit/test_ingest.py)).
+Ingestion is **replace-per-article**: before writing, `ingest_articles()` deletes every point belonging to the articles in the call (filtered on the `article_id` payload index — keyed per version, so `KB0010-v1.0` and `KB0010-v2.0` coexist), then upserts the fresh points. This guarantees that re-ingesting an **edited** article never leaves stale trailing chunks searchable in the index — the stale-procedure failure mode the manual's MIR-2026-03 narrative warns about. Incremental library calls that omit an article leave its points untouched; the seed-script path additionally passes `purge_unknown_articles=True`, which removes points whose `article_id` is no longer part of the corpus (deleted articles).
+
+Because UUIDv5 is pure and deterministic, re-running `seed_qdrant.py` results in exactly 45 points with byte-identical point IDs (verified on the live server and by [tests/unit/test_ingest.py](../../../tests/unit/test_ingest.py)). If a collection ever holds points that cannot be reconciled with the corpus, `setup_qdrant.py --force-recreate` rebuilds it from scratch.
 
 ---
 

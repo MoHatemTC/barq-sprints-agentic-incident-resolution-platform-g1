@@ -1,10 +1,14 @@
 """Qdrant ingestion pipeline for incident knowledge articles.
 
 Chunks articles, embeds them with one corpus-wide dual (dense+sparse) pass,
-and upserts them with deterministic UUIDv5 point IDs so re-running the
-pipeline overwrites points in place instead of duplicating them. Collection
-setup is owned by :mod:`app.clients.qdrant` (``ensure_collection``) — the
-single implementation of the collection/index contract.
+and writes them with deterministic UUIDv5 point IDs. Ingestion is
+**replace-per-article**: before upserting, every point belonging to the
+articles in the call is deleted, so an article edited down to fewer chunks
+leaves no stale trailing chunks behind (a stale procedure in the index is
+the exact failure mode the manual's MIR-2026-03 narrative warns about).
+Collection setup is owned by :mod:`app.clients.qdrant`
+(``ensure_collection``) — the single implementation of the collection/index
+contract.
 """
 
 from __future__ import annotations
@@ -14,7 +18,14 @@ import uuid
 from collections.abc import Sequence
 
 from qdrant_client import QdrantClient
-from qdrant_client.models import PointStruct, SparseVector
+from qdrant_client.models import (
+    FieldCondition,
+    Filter,
+    FilterSelector,
+    MatchAny,
+    PointStruct,
+    SparseVector,
+)
 
 from app.clients.qdrant import ensure_collection
 from app.models.knowledge import Article, KnowledgePayload
@@ -45,6 +56,82 @@ def build_point_id(article_id: str, chunk_index: int) -> str:
     return str(uuid.uuid5(KB_NAMESPACE, f"{article_id}::chunk::{chunk_index}"))
 
 
+def _delete_article_points(client: QdrantClient, name: str, article_ids: list[str]) -> None:
+    """Delete every point of the given versioned article_ids.
+
+    Keyed on ``article_id`` (unique per version), never ``article_number``, so
+    version pairs like KB0010-v1.0 / KB0010-v2.0 coexist. Deleting before the
+    upsert (rather than after) means an interrupted run leaves an article
+    briefly absent — re-running the ingestion repairs it — instead of leaving
+    stale procedure steps searchable.
+    """
+    client.delete(
+        collection_name=name,
+        points_selector=FilterSelector(
+            filter=Filter(
+                must=[
+                    FieldCondition(
+                        key="article_id",
+                        match=MatchAny(any=article_ids),
+                    )
+                ]
+            )
+        ),
+        wait=True,
+    )
+
+
+def _purge_unknown_article_points(client: QdrantClient, name: str, known_ids: set[str]) -> int:
+    """Delete points whose article_id is no longer part of the corpus.
+
+    Scrolls the collection's stored ``article_id`` payload values and removes
+    every point belonging to an article that is not in ``known_ids`` — the
+    reconciliation step for corpora that shrank (a deleted article's points
+    would otherwise stay searchable forever).
+
+    Returns:
+        The number of points purged.
+    """
+    stored_ids: set[str] = set()
+    offset = None
+    while True:
+        points, offset = client.scroll(
+            collection_name=name,
+            limit=256,
+            offset=offset,
+            with_payload=["article_id"],
+            with_vectors=False,
+        )
+        for point in points:
+            payload = point.payload or {}
+            article_id = payload.get("article_id")
+            if article_id:
+                stored_ids.add(str(article_id))
+        if offset is None:
+            break
+
+    removed_ids = sorted(stored_ids - known_ids)
+    if not removed_ids:
+        return 0
+
+    client.delete(
+        collection_name=name,
+        points_selector=FilterSelector(
+            filter=Filter(
+                must=[
+                    FieldCondition(
+                        key="article_id",
+                        match=MatchAny(any=removed_ids),
+                    )
+                ]
+            )
+        ),
+        wait=True,
+    )
+    logger.info("Purged %d points from removed articles: %s", len(removed_ids), removed_ids)
+    return len(removed_ids)
+
+
 def ingest_articles(
     articles: Sequence[Article],
     client: QdrantClient,
@@ -54,8 +141,16 @@ def ingest_articles(
     chunk_size: int = 700,
     chunk_overlap: int = 120,
     force_recreate: bool = False,
+    purge_unknown_articles: bool = False,
 ) -> int:
     """Chunk, embed, and upsert articles into the Qdrant collection.
+
+    Ingestion is replace-per-article: points of the articles in this call are
+    deleted before the fresh ones are written, so re-ingesting an edited
+    article never leaves stale chunks behind. Incremental calls that do not
+    include an article leave that article's points untouched; pass
+    ``purge_unknown_articles=True`` (the seed-script path) to additionally
+    remove points of articles no longer in the corpus.
 
     Crucial: BM25 IDF fitting requires that all chunk texts are embedded
     together in a single batch call to embed_documents, preserving true
@@ -111,6 +206,13 @@ def ingest_articles(
                 payload=payload,
             )
         )
+
+    # Deletes happen only after chunking/embedding succeeded — a pipeline
+    # failure must never remove the existing (correct) points.
+    article_ids = sorted({article.article_id for article in articles})
+    _delete_article_points(client, name, article_ids)
+    if purge_unknown_articles:
+        _purge_unknown_article_points(client, name, set(article_ids))
 
     total_upserted = 0
     for i in range(0, len(points), batch_size):
