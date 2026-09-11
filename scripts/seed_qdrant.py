@@ -11,6 +11,7 @@ import logging
 import sys
 from pathlib import Path
 
+import structlog
 from qdrant_client import QdrantClient
 
 from app.core.config import get_retrieval_settings
@@ -18,8 +19,10 @@ from app.retrieval.embedding import FastEmbedEngine
 from app.retrieval.ingest import ingest_articles
 from app.retrieval.sources import LocalJSONSource
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("seed_qdrant")
+# stdlib logging still governs third-party library output (qdrant-client, httpx);
+# our own messages go through structlog.
+logging.basicConfig(level=logging.WARNING)
+logger = structlog.get_logger("seed_qdrant")
 
 DEFAULT_CORPUS = Path("data/corpus/barq_articles.json")
 
@@ -51,10 +54,10 @@ def main() -> int:
     client = QdrantClient(url=args.url)
     collection_name = args.collection
 
-    logger.info("Loading articles from %s...", args.corpus)
+    logger.info("loading_articles", corpus=str(args.corpus))
     source = LocalJSONSource(args.corpus)
     articles = source.load_articles()
-    logger.info("Loaded %d articles", len(articles))
+    logger.info("articles_loaded", count=len(articles))
 
     engine = FastEmbedEngine()
     total_points = ingest_articles(
@@ -68,21 +71,19 @@ def main() -> int:
     stored = client.get_collection(collection_name=collection_name).points_count
     if stored != total_points:
         logger.error(
-            "Seeding verification FAILED for '%s': stored %d points but upserted %d. "
-            "If the collection holds points that cannot be reconciled "
-            "(e.g. from a different corpus or schema), rebuild it with "
-            "`uv run python scripts/setup_qdrant.py --force-recreate` and re-seed.",
-            collection_name,
-            stored,
-            total_points,
+            "seeding_verification_failed",
+            collection=collection_name,
+            stored=stored,
+            upserted=total_points,
+            remedy="rebuild with: uv run python scripts/setup_qdrant.py --force-recreate",
         )
         return 1
 
     logger.info(
-        "Seeding complete for '%s': %d points stored and verified (upserted: %d)",
-        collection_name,
-        stored,
-        total_points,
+        "seeding_complete",
+        collection=collection_name,
+        points=stored,
+        upserted=total_points,
     )
     return 0
 

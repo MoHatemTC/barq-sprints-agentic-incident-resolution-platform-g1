@@ -1,10 +1,6 @@
-import logging
-
 from qdrant_client import QdrantClient, models
 
 from app.core.config import get_retrieval_settings
-
-logger = logging.getLogger(__name__)
 
 DENSE_VECTOR_SIZE = 384
 DENSE_VECTOR_NAME = "dense"

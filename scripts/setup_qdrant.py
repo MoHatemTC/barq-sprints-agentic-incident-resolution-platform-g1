@@ -9,13 +9,16 @@ import argparse
 import logging
 import sys
 
+import structlog
 from qdrant_client import QdrantClient
 
 from app.clients.qdrant import ensure_collection
 from app.core.config import get_retrieval_settings
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("setup_qdrant")
+# stdlib logging still governs third-party library output (qdrant-client, httpx);
+# our own messages go through structlog.
+logging.basicConfig(level=logging.WARNING)
+logger = structlog.get_logger("setup_qdrant")
 
 
 def main() -> int:
@@ -35,17 +38,17 @@ def main() -> int:
     args = parser.parse_args()
 
     client = QdrantClient(url=args.url)
-    logger.info("Connecting to Qdrant at %s...", args.url)
+    logger.info("connecting", url=args.url)
     if args.force_recreate:
-        logger.warning("force-recreate requested: collection %s will be deleted", args.collection)
+        logger.warning("force_recreate_requested", collection=args.collection)
 
     ensure_collection(client, args.collection, force_recreate=args.force_recreate)
     info = client.get_collection(collection_name=args.collection)
     logger.info(
-        "Collection '%s' ready. Status: %s, points: %d",
-        args.collection,
-        info.status,
-        info.points_count,
+        "collection_ready",
+        collection=args.collection,
+        status=str(info.status),
+        points=info.points_count,
     )
     return 0
 

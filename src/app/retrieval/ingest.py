@@ -13,10 +13,10 @@ contract.
 
 from __future__ import annotations
 
-import logging
 import uuid
 from collections.abc import Sequence
 
+import structlog
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
     FieldCondition,
@@ -32,7 +32,7 @@ from app.models.knowledge import Article, KnowledgePayload
 from app.retrieval.chunking import chunk_article
 from app.retrieval.embedding import EmbeddedText, EmbeddingEngine, FastEmbedEngine
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 DEFAULT_COLLECTION_NAME = "incident_knowledge_base"
 DEFAULT_BATCH_SIZE = 64
@@ -128,7 +128,11 @@ def _purge_unknown_article_points(client: QdrantClient, name: str, known_ids: se
         ),
         wait=True,
     )
-    logger.info("Purged %d points from removed articles: %s", len(removed_ids), removed_ids)
+    logger.info(
+        "purged_points_from_removed_articles",
+        count=len(removed_ids),
+        articles=removed_ids,
+    )
     return len(removed_ids)
 
 
@@ -186,7 +190,7 @@ def ingest_articles(
             f"chunking produced no chunks from {len(articles)} articles; check the corpus bodies"
         )
 
-    logger.info("Generated %d total chunks from %d articles", len(chunk_records), len(articles))
+    logger.info("chunks_generated", articles=len(articles), chunks=len(chunk_records))
 
     # Single batch embedding across all chunk texts (fits corpus BM25 IDF)
     all_texts = [chk.text for _, chk in chunk_records]
@@ -226,5 +230,5 @@ def ingest_articles(
         client.upsert(collection_name=name, points=batch, wait=True)
         total_upserted += len(batch)
 
-    logger.info("Successfully upserted %d points to %s", total_upserted, name)
+    logger.info("points_upserted", count=total_upserted, collection=name)
     return total_upserted
