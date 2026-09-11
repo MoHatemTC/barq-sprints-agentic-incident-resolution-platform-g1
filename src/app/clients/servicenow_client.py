@@ -61,8 +61,8 @@ class ServiceNowClient:
             return None
         if len(incidents) > 1:
             raise ServiceNowError(
-                f"Expected at most one incident for number={number},"
-                + "ServiceNow returned {len(incidents)}",
+                f"Expected at most one incident for number={number}, "
+                f"ServiceNow returned {len(incidents)}",
                 details={"number": number, "count": len(incidents)},
             )
         return Incident.model_validate(incidents[0])
@@ -163,11 +163,7 @@ class ServiceNowClient:
                 status_code=response.status_code,
                 details={"body": response.text[:500]},
             )
-        if (
-            status.HTTP_500_INTERNAL_SERVER_ERROR
-            <= response.status_code
-            < status.HTTP_600_INTERNAL_SERVER_ERROR
-        ):
+        if status.HTTP_500_INTERNAL_SERVER_ERROR <= response.status_code < 600:
             raise ServiceNowServerError(
                 f"ServiceNow server error on {method} {path}",
                 status_code=response.status_code,
