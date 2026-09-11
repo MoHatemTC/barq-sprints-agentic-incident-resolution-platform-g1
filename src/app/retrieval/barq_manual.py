@@ -149,13 +149,19 @@ def parse_article_block(block: str, report: ExtractionReport | None = None) -> A
     title = " ".join(title.split())
 
     # 2. Metadata Grid parsing
+    # Lifecycle and identity metadata must never be defaulted: a silently
+    # assumed "published" can make a retired runbook retrievable (the
+    # MIR-2026-03 failure mode), and a silently assumed version corrupts the
+    # unique key that idempotent replacement depends on.
     state_m = re.search(r"State\s+([A-Za-z]+)", block)
-    raw_state = state_m.group(1).lower() if state_m else "published"
-    workflow_state = WorkflowState(raw_state)
+    if state_m is None:
+        raise ValueError(f"{article_number}: missing State metadata")
+    workflow_state = WorkflowState(state_m.group(1).lower())
 
     version_m = re.search(r"Version\s+(\d+)", block)
-    raw_ver = version_m.group(1) if version_m else "1"
-    version = f"{raw_ver}.0"
+    if version_m is None:
+        raise ValueError(f"{article_number}: missing Version metadata")
+    version = f"{version_m.group(1)}.0"
 
     service_m = re.search(r"Service\s+([a-z-]+)", block)
     service = service_m.group(1) if service_m else ""
@@ -270,8 +276,7 @@ def parse_article_block(block: str, report: ExtractionReport | None = None) -> A
     missing = [s for s in REQUIRED_SECTIONS if f"## {s}" not in body]
     if missing:
         raise ValueError(
-            f"{article_number}: incomplete article block, missing sections: "
-            f"{', '.join(missing)}"
+            f"{article_number}: incomplete article block, missing sections: {', '.join(missing)}"
         )
 
     # 4. Short description: first sentence of symptom (capped at 255)
@@ -280,7 +285,17 @@ def parse_article_block(block: str, report: ExtractionReport | None = None) -> A
     if len(short_desc) > 255:
         short_desc = short_desc[:252] + "..."
 
-    security_level = SECURITY_TIERS.get(article_number, SecurityLevel.INTERNAL)
+    # Security classification is a deliberate human decision (the manual
+    # carries no security markings — the tier table IS the classification).
+    # An unmapped article must halt extraction until a human assigns a tier;
+    # defaulting to internal would make that decision by accident, in the
+    # most exposed direction.
+    if article_number not in SECURITY_TIERS:
+        raise ValueError(
+            f"No security tier configured for {article_number} — add it to "
+            "SECURITY_TIERS with a documented rationale before extracting"
+        )
+    security_level = SECURITY_TIERS[article_number]
 
     return Article(
         article_number=article_number,

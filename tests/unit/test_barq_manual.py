@@ -118,6 +118,32 @@ def test_parse_retired_variant_block() -> None:
     assert "MIR-2026-03" in art.related_records
 
 
+def test_missing_state_metadata_raises() -> None:
+    """A silently-assumed 'published' state could make a retired runbook retrievable."""
+    no_state = "\n".join(
+        line for line in SYNTHETIC_PUBLISHED_BLOCK.splitlines() if "State" not in line
+    )
+    with pytest.raises(ValueError, match="missing State metadata"):
+        parse_article_block(no_state)
+
+
+def test_missing_version_metadata_raises() -> None:
+    """A silently-assumed version corrupts the unique key behind idempotent replacement."""
+    no_version = "\n".join(
+        line.replace("Version", "").rstrip() if "Version" in line else line
+        for line in SYNTHETIC_PUBLISHED_BLOCK.splitlines()
+    )
+    with pytest.raises(ValueError, match="missing Version metadata"):
+        parse_article_block(no_version)
+
+
+def test_unmapped_article_number_has_no_security_tier() -> None:
+    """Security classification is a human decision — an unmapped article must halt extraction."""
+    unmapped = SYNTHETIC_PUBLISHED_BLOCK.replace("KB0001", "KB0042")
+    with pytest.raises(ValueError, match="No security tier configured for KB0042"):
+        parse_article_block(unmapped)
+
+
 def test_incomplete_block_is_rejected() -> None:
     """A truncated block missing a required section must fail loudly, not emit a 'valid' article."""
     incomplete = SYNTHETIC_PUBLISHED_BLOCK.replace(
