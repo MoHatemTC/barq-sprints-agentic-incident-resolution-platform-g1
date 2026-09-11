@@ -1,0 +1,93 @@
+"""Tests for the FastEmbed dual dense/sparse embedding engine."""
+
+import pytest
+from pydantic import ValidationError
+
+from app.retrieval.embedding import (
+    DENSE_VECTOR_SIZE,
+    EmbeddedText,
+    EmbeddingEngine,
+    FastEmbedEngine,
+)
+
+
+def test_embedded_text_is_frozen_and_valid() -> None:
+    embed = EmbeddedText(
+        dense=[0.1, 0.2, 0.3],
+        sparse_indices=[10, 20],
+        sparse_values=[1.5, 2.5],
+    )
+    assert embed.dense == [0.1, 0.2, 0.3]
+    assert embed.sparse_indices == [10, 20]
+    assert embed.sparse_values == [1.5, 2.5]
+
+    with pytest.raises(ValidationError):
+        # Must be immutable / frozen
+        embed.dense = [0.4, 0.5]  # type: ignore[misc]
+
+
+def test_fastembed_engine_implements_protocol() -> None:
+    engine = FastEmbedEngine()
+    assert isinstance(engine, EmbeddingEngine)
+
+
+def test_fastembed_dense_vector_shape_and_sparse_properties() -> None:
+    engine = FastEmbedEngine()
+    texts = ["PostgreSQL 16 connection limit exceeded under connection pooling."]
+    results = engine.embed_documents(texts)
+
+    assert len(results) == 1
+    embedded = results[0]
+
+    # Dense vector shape: 384 dimensions (bge-small-en-v1.5)
+    assert len(embedded.dense) == DENSE_VECTOR_SIZE
+
+    # Sparse vector properties (BM25)
+    assert len(embedded.sparse_indices) == len(embedded.sparse_values)
+    assert len(embedded.sparse_indices) > 0
+    assert all(isinstance(idx, int) for idx in embedded.sparse_indices)
+    assert all(val >= 0.0 for val in embedded.sparse_values)
+
+
+def test_fastembed_embed_query_path() -> None:
+    engine = FastEmbedEngine()
+    query = "VPN authentication failure after a password reset"
+    result = engine.embed_query(query)
+
+    assert len(result.dense) == DENSE_VECTOR_SIZE
+    assert len(result.sparse_indices) == len(result.sparse_values)
+    assert len(result.sparse_indices) > 0
+
+
+def test_fastembed_batch_order_preservation() -> None:
+    engine = FastEmbedEngine()
+    texts = [
+        "First document about VPN network authentication failure.",
+        "Second document about printer queue hardware jam.",
+        "Third document about SAP ERP RFC timeout.",
+    ]
+    results = engine.embed_documents(texts)
+
+    assert len(results) == 3
+    # Different documents should have distinct embeddings
+    assert results[0].dense != results[1].dense
+    assert results[1].dense != results[2].dense
+    assert results[0].sparse_indices != results[1].sparse_indices
+
+
+def test_fastembed_determinism() -> None:
+    engine = FastEmbedEngine()
+    text = "Order service database connection pool exhausted returning HTTP 500."
+
+    run1 = engine.embed_documents([text])[0]
+    run2 = engine.embed_documents([text])[0]
+
+    assert run1.dense == pytest.approx(run2.dense, abs=1e-5)
+    assert run1.sparse_indices == run2.sparse_indices
+    assert run1.sparse_values == pytest.approx(run2.sparse_values, abs=1e-5)
+
+
+def test_engine_reports_real_dense_vector_size() -> None:
+    """bge-small-en-v1.5 produces 384d — the engine must surface its model's true dimension."""
+    engine = FastEmbedEngine()
+    assert engine.dense_vector_size == 384

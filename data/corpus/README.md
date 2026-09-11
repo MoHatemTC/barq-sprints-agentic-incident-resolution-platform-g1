@@ -81,6 +81,6 @@ Columns beyond the basics:
 To validate that every article in `barq_articles.json` conforms to the Pydantic schema and ground-truth coverage matrix:
 
 ```bash
-pytest tests/unit/test_corpus.py -v
+pytest tests/retrieval/test_corpus.py -v
 uv run python scripts/validate_corpus.py
 ```

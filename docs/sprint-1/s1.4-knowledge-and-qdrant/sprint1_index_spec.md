@@ -127,7 +127,7 @@ where `article_id` is the composed per-record key (`{article_number}-v{version}`
 ### Idempotency Guarantee
 Ingestion is **replace-per-article**: before writing, `ingest_articles()` deletes every point belonging to the articles in the call (filtered on the `article_id` payload index — keyed per version, so `KB0010-v1.0` and `KB0010-v2.0` coexist), then upserts the fresh points. This guarantees that re-ingesting an **edited** article never leaves stale trailing chunks searchable in the index — the stale-procedure failure mode the manual's MIR-2026-03 narrative warns about. Incremental library calls that omit an article leave its points untouched; the seed-script path additionally passes `purge_unknown_articles=True`, which removes points whose `article_id` is no longer part of the corpus (deleted articles).
 
-Because UUIDv5 is pure and deterministic, re-running `seed_qdrant.py` results in exactly 45 points with byte-identical point IDs (verified on the live server and by [tests/unit/test_ingest.py](../../../tests/unit/test_ingest.py)). If a collection ever holds points that cannot be reconciled with the corpus, `setup_qdrant.py --force-recreate` rebuilds it from scratch.
+Because UUIDv5 is pure and deterministic, re-running `seed_qdrant.py` results in exactly 45 points with byte-identical point IDs (verified on the live server and by [tests/retrieval/test_ingest.py](../../../tests/retrieval/test_ingest.py)). If a collection ever holds points that cannot be reconciled with the corpus, `setup_qdrant.py --force-recreate` rebuilds it from scratch.
 
 ---
 
@@ -153,7 +153,7 @@ Because `/qdrant/storage` is mounted to the named Docker volume `barq_qdrant_dat
 ## 8. Hybrid Search Querying Pattern (Sprint 2 Preview)
 
 > [!IMPORTANT]
-> **Binding Sprint 2 requirement (P3 review finding, reproduced on real data):** unfiltered, the retired `KB0010-v1.0` ranks FIRST for the pool-exhaustion query — the MIR-2026-03 failure mode inside our own index. When the retrieval entry point is built, the `workflow_state == "published"` filter must be **constructed inside the entry point and always applied** — not a parameter callers can omit. Callers may only narrow further (service, category, security level). Required acceptance test: ingesting the real corpus and querying with the INC0010052 phrasing must never return `KB0010-v1.0`. "Published and current version" holds by the corpus invariant of at most one published version per article (enforced by `tests/unit/test_corpus.py`).
+> **Binding Sprint 2 requirement (P3 review finding, reproduced on real data):** unfiltered, the retired `KB0010-v1.0` ranks FIRST for the pool-exhaustion query — the MIR-2026-03 failure mode inside our own index. When the retrieval entry point is built, the `workflow_state == "published"` filter must be **constructed inside the entry point and always applied** — not a parameter callers can omit. Callers may only narrow further (service, category, security level). Required acceptance test: ingesting the real corpus and querying with the INC0010052 phrasing must never return `KB0010-v1.0`. "Published and current version" holds by the corpus invariant of at most one published version per article (enforced by `tests/retrieval/test_corpus.py`).
 
 In Sprint 2, retrieval combines dense and sparse scores using Reciprocal Rank Fusion (RRF):
 
@@ -196,11 +196,11 @@ results = client.query_points(
   ```
 - **Automated Ingestion Test Suite (8 Tests)**:
   ```bash
-  uv run pytest tests/unit/test_ingest.py -v
+  uv run pytest tests/retrieval/test_ingest.py -v
   ```
 - **Chunking Regression Test Suite**:
   ```bash
-  uv run pytest tests/unit/test_chunking.py -v
+  uv run pytest tests/retrieval/test_chunking.py -v
   ```
 - **Validate Real Incident Coverage Matrix**:
   ```bash
