@@ -7,26 +7,12 @@ import httpx
 import pytest
 
 from app.auth.token_manager import ServiceNowTokenManager
-from app.core.config import Settings
 from app.exceptions.servicenow import (
     ServiceNowAuthenticationError,
     ServiceNowConnectionError,
     ServiceNowTimeoutError,
 )
-
-
-def _make_settings(**overrides: object) -> Settings:
-    defaults = {
-        "servicenow_instance_url": "https://dev00000.service-now.com",
-        "servicenow_client_id": "test-cid",
-        "servicenow_client_secret": "test-secret",
-        "servicenow_username": "svc_user",
-        "servicenow_password": "svc_pass",
-        "servicenow_timeout_seconds": 5,
-        "servicenow_token_expiry_buffer_seconds": 30,
-    }
-    defaults.update(overrides)
-    return Settings(**defaults)
+from tests.helpers import mock_settings
 
 
 def _token_json(
@@ -55,7 +41,7 @@ class TestTokenAcquisition:
     async def test_fetches_token_on_first_call(self) -> None:
         http = AsyncMock(spec=httpx.AsyncClient)
         http.post.return_value = _mock_response(json_body=_token_json())
-        settings = _make_settings()
+        settings = mock_settings()
         mgr = ServiceNowTokenManager(settings, http)
 
         token = await mgr.get_token()
@@ -70,7 +56,7 @@ class TestTokenAcquisition:
     async def test_returns_cached_token_while_valid(self) -> None:
         http = AsyncMock(spec=httpx.AsyncClient)
         http.post.return_value = _mock_response()
-        mgr = ServiceNowTokenManager(_make_settings(), http)
+        mgr = ServiceNowTokenManager(mock_settings(), http)
 
         t1 = await mgr.get_token()
         t2 = await mgr.get_token()
@@ -81,7 +67,7 @@ class TestTokenAcquisition:
     async def test_sends_correct_form_data(self) -> None:
         http = AsyncMock(spec=httpx.AsyncClient)
         http.post.return_value = _mock_response()
-        settings = _make_settings()
+        settings = mock_settings()
         mgr = ServiceNowTokenManager(settings, http)
 
         await mgr.get_token()
@@ -98,7 +84,7 @@ class TestTokenAcquisition:
         """FR-06: secrets must not leak through error messages."""
         http = AsyncMock(spec=httpx.AsyncClient)
         http.post.return_value = _mock_response(status_code=401, json_body={})
-        mgr = ServiceNowTokenManager(_make_settings(), http)
+        mgr = ServiceNowTokenManager(mock_settings(), http)
 
         with pytest.raises(ServiceNowAuthenticationError) as exc_info:
             await mgr.get_token()
@@ -114,7 +100,7 @@ class TestTokenRefresh:
         http = AsyncMock(spec=httpx.AsyncClient)
         # First call: password grant → stores refresh_token
         http.post.return_value = _mock_response(json_body=_token_json(refresh_token="rt_first"))
-        mgr = ServiceNowTokenManager(_make_settings(), http)
+        mgr = ServiceNowTokenManager(mock_settings(), http)
         await mgr.get_token()
 
         # Simulate expiry
@@ -134,7 +120,7 @@ class TestTokenRefresh:
     async def test_force_refresh_triggers_new_fetch(self) -> None:
         http = AsyncMock(spec=httpx.AsyncClient)
         http.post.return_value = _mock_response(json_body=_token_json(refresh_token="rt_x"))
-        mgr = ServiceNowTokenManager(_make_settings(), http)
+        mgr = ServiceNowTokenManager(mock_settings(), http)
         await mgr.get_token()
 
         http.post.return_value = _mock_response(json_body=_token_json(access_token="tok_forced"))
@@ -146,7 +132,7 @@ class TestTokenRefresh:
     async def test_refresh_failure_clears_state_and_raises(self) -> None:
         http = AsyncMock(spec=httpx.AsyncClient)
         http.post.return_value = _mock_response(json_body=_token_json(refresh_token="rt_x"))
-        mgr = ServiceNowTokenManager(_make_settings(), http)
+        mgr = ServiceNowTokenManager(mock_settings(), http)
         await mgr.get_token()
 
         # Expire the token
@@ -168,7 +154,7 @@ class TestTokenRefresh:
         http.post.return_value = _mock_response(
             json_body=_token_json(access_token="tok_initial", refresh_token="rt_init")
         )
-        mgr = ServiceNowTokenManager(_make_settings(), http)
+        mgr = ServiceNowTokenManager(mock_settings(), http)
         old_token = await mgr.get_token()
 
         # Simulate: another coroutine already refreshed
@@ -186,7 +172,7 @@ class TestTokenExpiryBuffer:
     async def test_token_within_buffer_triggers_refresh(self) -> None:
         http = AsyncMock(spec=httpx.AsyncClient)
         http.post.return_value = _mock_response(json_body=_token_json(refresh_token="rt_buf"))
-        settings = _make_settings(servicenow_token_expiry_buffer_seconds=60)
+        settings = mock_settings(servicenow_token_expiry_buffer_seconds=60)
         mgr = ServiceNowTokenManager(settings, http)
         await mgr.get_token()
 
@@ -201,7 +187,7 @@ class TestTokenExpiryBuffer:
     async def test_token_outside_buffer_is_still_valid(self) -> None:
         http = AsyncMock(spec=httpx.AsyncClient)
         http.post.return_value = _mock_response(json_body=_token_json())
-        settings = _make_settings(servicenow_token_expiry_buffer_seconds=30)
+        settings = mock_settings(servicenow_token_expiry_buffer_seconds=30)
         mgr = ServiceNowTokenManager(settings, http)
         await mgr.get_token()
 
@@ -216,7 +202,7 @@ class TestInvalidate:
     async def test_invalidate_clears_token_and_expiry(self) -> None:
         http = AsyncMock(spec=httpx.AsyncClient)
         http.post.return_value = _mock_response(json_body=_token_json(refresh_token="rt_inv"))
-        mgr = ServiceNowTokenManager(_make_settings(), http)
+        mgr = ServiceNowTokenManager(mock_settings(), http)
         await mgr.get_token()
 
         mgr.invalidate()
@@ -231,7 +217,7 @@ class TestTokenNetworkErrors:
     async def test_timeout_raises_servicenow_timeout_error(self) -> None:
         http = AsyncMock(spec=httpx.AsyncClient)
         http.post.side_effect = httpx.TimeoutException("timed out")
-        mgr = ServiceNowTokenManager(_make_settings(), http)
+        mgr = ServiceNowTokenManager(mock_settings(), http)
 
         with pytest.raises(ServiceNowTimeoutError, match="Timed out"):
             await mgr.get_token()
@@ -239,7 +225,7 @@ class TestTokenNetworkErrors:
     async def test_connection_error_raises_servicenow_connection_error(self) -> None:
         http = AsyncMock(spec=httpx.AsyncClient)
         http.post.side_effect = httpx.ConnectError("DNS failure")
-        mgr = ServiceNowTokenManager(_make_settings(), http)
+        mgr = ServiceNowTokenManager(mock_settings(), http)
 
         with pytest.raises(ServiceNowConnectionError, match="connect"):
             await mgr.get_token()
@@ -247,7 +233,7 @@ class TestTokenNetworkErrors:
     async def test_non_200_raises_auth_error_with_status(self) -> None:
         http = AsyncMock(spec=httpx.AsyncClient)
         http.post.return_value = _mock_response(status_code=400, json_body={})
-        mgr = ServiceNowTokenManager(_make_settings(), http)
+        mgr = ServiceNowTokenManager(mock_settings(), http)
 
         with pytest.raises(ServiceNowAuthenticationError) as exc_info:
             await mgr.get_token()
@@ -259,7 +245,7 @@ class TestCredentialSafety:
         """Verify that log calls don't contain secrets."""
         http = AsyncMock(spec=httpx.AsyncClient)
         http.post.return_value = _mock_response()
-        mgr = ServiceNowTokenManager(_make_settings(), http)
+        mgr = ServiceNowTokenManager(mock_settings(), http)
 
         with patch("app.auth.token_manager.logger") as mock_logger:
             await mgr.get_token()
@@ -277,7 +263,7 @@ class TestCredentialSafety:
             request=httpx.Request("POST", "https://dev00000.service-now.com/oauth_token.do"),
         )
         http.post.return_value = resp
-        mgr = ServiceNowTokenManager(_make_settings(), http)
+        mgr = ServiceNowTokenManager(mock_settings(), http)
 
         with patch("app.auth.token_manager.logger") as mock_logger:
             with pytest.raises(ServiceNowAuthenticationError):

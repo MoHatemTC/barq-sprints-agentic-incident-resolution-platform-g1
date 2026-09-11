@@ -7,7 +7,6 @@ import pytest
 
 from app.auth.token_manager import ServiceNowTokenManager
 from app.clients.servicenow_client import ServiceNowClient
-from app.core.config import Settings
 from app.exceptions.servicenow import (
     ServiceNowAuthenticationError,
     ServiceNowAuthorizationError,
@@ -20,18 +19,7 @@ from app.exceptions.servicenow import (
     ServiceNowValidationError,
 )
 from app.models.incident import _SCOPE, AIProcessingState, IncidentUpdatePayload
-
-
-def _settings() -> Settings:
-    return Settings(
-        servicenow_instance_url="https://dev00000.service-now.com",
-        servicenow_client_id="test-cid",
-        servicenow_client_secret="test-secret",
-        servicenow_username="svc_user",
-        servicenow_password="svc_pass",
-        servicenow_timeout_seconds=5,
-        servicenow_token_expiry_buffer_seconds=30,
-    )
+from tests.helpers import mock_settings
 
 
 def _incident_result(**overrides: object) -> dict:
@@ -87,7 +75,7 @@ def _build_client(
     token_mgr.get_token.return_value = token
 
     client = ServiceNowClient(
-        _settings(),
+        mock_settings(),
         http_client=http,
         token_manager=token_mgr,
     )
@@ -361,7 +349,7 @@ class TestAddWorkNote:
 
 class TestResourceManagement:
     async def test_aclose_closes_owned_client(self) -> None:
-        settings = _settings()
+        settings = mock_settings()
         http = AsyncMock(spec=httpx.AsyncClient)
         client = ServiceNowClient(settings, http_client=None)
         # Patch out the internally created client
@@ -373,7 +361,7 @@ class TestResourceManagement:
 
     async def test_aclose_does_not_close_injected_client(self) -> None:
         http = AsyncMock(spec=httpx.AsyncClient)
-        client = ServiceNowClient(_settings(), http_client=http)
+        client = ServiceNowClient(mock_settings(), http_client=http)
 
         await client.aclose()
         http.aclose.assert_not_called()
@@ -383,7 +371,7 @@ class TestResourceManagement:
         token_mgr = AsyncMock(spec=ServiceNowTokenManager)
 
         async with ServiceNowClient(
-            _settings(), http_client=http, token_manager=token_mgr
+            mock_settings(), http_client=http, token_manager=token_mgr
         ) as client:
             assert client is not None
         # Injected client should not be closed
