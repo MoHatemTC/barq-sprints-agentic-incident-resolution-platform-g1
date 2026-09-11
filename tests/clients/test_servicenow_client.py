@@ -10,6 +10,7 @@ from app.clients.servicenow_client import ServiceNowClient
 from app.exceptions.servicenow import (
     ServiceNowAuthenticationError,
     ServiceNowAuthorizationError,
+    ServiceNowConflictError,
     ServiceNowConnectionError,
     ServiceNowError,
     ServiceNowNotFoundError,
@@ -177,6 +178,13 @@ class TestHTTPStatusMapping:
         )
         with pytest.raises(ServiceNowNotFoundError):
             await client.get_incident("no-such-id")
+
+    async def test_409_raises_conflict_error(self) -> None:
+        client, http, _ = _build_client(
+            responses=[_api_response(status_code=409, result=None, text="Conflict")]
+        )
+        with pytest.raises(ServiceNowConflictError):
+            await client.get_incident("abc")
 
     async def test_429_raises_rate_limit_with_retry_after(self) -> None:
         resp = _api_response(
@@ -377,22 +385,22 @@ class TestAddWorkNote:
         assert incident.sys_id == "abc123"
 
 
-class TestCreateExecutionLog:
-    async def test_create_log_sends_post_to_correct_table(self) -> None:
+class TestWriteExecutionLog:
+    async def test_write_log_sends_post_to_correct_table(self) -> None:
         resp = _api_response(result=_execution_log_result())
         client, http, _ = _build_client(responses=[resp])
 
-        await client.create_execution_log(_log_payload())
+        await client.write_execution_log(_log_payload())
 
         call = http.request.call_args
         assert call.args[0] == "POST"
         assert "x_2215032_ai_inc_0_ai_execution_log" in call.args[1]
 
-    async def test_create_log_sends_correct_body(self) -> None:
+    async def test_write_log_sends_correct_body(self) -> None:
         resp = _api_response(result=_execution_log_result())
         client, http, _ = _build_client(responses=[resp])
 
-        await client.create_execution_log(_log_payload())
+        await client.write_execution_log(_log_payload())
 
         body = http.request.call_args.kwargs["json"]
         assert body["execution_id"] == "exec_test_001"
@@ -401,17 +409,17 @@ class TestCreateExecutionLog:
         assert body["status"] == "succeeded"
         assert body["incident_reference"] == "inc_abc123"
 
-    async def test_create_log_returns_entry(self) -> None:
+    async def test_write_log_returns_entry(self) -> None:
         resp = _api_response(result=_execution_log_result())
         client, http, _ = _build_client(responses=[resp])
 
-        entry = await client.create_execution_log(_log_payload())
+        entry = await client.write_execution_log(_log_payload())
 
         assert entry.sys_id == "log_abc123"
         assert entry.execution_id == "exec_test_001"
         assert entry.status == ExecutionStatus.SUCCEEDED
 
-    async def test_create_log_for_failed_attempt(self) -> None:
+    async def test_write_log_for_failed_attempt(self) -> None:
         """FR-02: failed attempts must leave a record."""
         result = _execution_log_result(status="failed", error="LLM timeout")
         resp = _api_response(result=result)
@@ -422,11 +430,11 @@ class TestCreateExecutionLog:
             result=None,
             error="LLM timeout",
         )
-        entry = await client.create_execution_log(payload)
+        entry = await client.write_execution_log(payload)
 
         assert entry.status == ExecutionStatus.FAILED
 
-    async def test_create_log_for_blocked_attempt(self) -> None:
+    async def test_write_log_for_blocked_attempt(self) -> None:
         """FR-02: blocked attempts must leave a record."""
         result = _execution_log_result(status="blocked", error="Human lock active")
         resp = _api_response(result=result)
@@ -436,7 +444,7 @@ class TestCreateExecutionLog:
             status=ExecutionStatus.BLOCKED,
             error="Human lock active",
         )
-        entry = await client.create_execution_log(payload)
+        entry = await client.write_execution_log(payload)
 
         assert entry.status == ExecutionStatus.BLOCKED
 
@@ -445,13 +453,13 @@ class TestCreateExecutionLog:
         client, http, _ = _build_client()
         http.request.side_effect = httpx.ConnectError("network down")
         payload = _log_payload(status=ExecutionStatus.FAILED, error="original error")
-        entry = await client.create_execution_log(payload)
+        entry = await client.write_execution_log(payload)
         assert entry is None
 
     async def test_logging_failure_does_not_hide_processing_failure(self) -> None:
         """Critical: if the caller had a processing failure AND logging fails,
         the caller must still be able to surface its original error.
-        This test proves create_execution_log() returns None (not raises),
+        This test proves write_execution_log() returns None (not raises),
         so the caller's own error handling continues uninterrupted.
         """
         client, http, _ = _build_client()
@@ -462,14 +470,14 @@ class TestCreateExecutionLog:
             status=ExecutionStatus.FAILED,
             error="Original processing error: model inference timeout",
         )
-        entry = await client.create_execution_log(payload)
+        entry = await client.write_execution_log(payload)
         assert entry is None
 
     async def test_logging_5xx_returns_none(self) -> None:
         """A 500 from ServiceNow on the log POST must not crash the caller."""
         resp = _api_response(status_code=500, result=None, text="Internal error")
         client, http, _ = _build_client(responses=[resp])
-        entry = await client.create_execution_log(_log_payload())
+        entry = await client.write_execution_log(_log_payload())
         assert entry is None
 
     async def test_401_on_log_post_triggers_refresh_and_retry(self) -> None:
@@ -478,7 +486,7 @@ class TestCreateExecutionLog:
         second_resp = _api_response(result=_execution_log_result())
         client, http, token_mgr = _build_client(responses=[first_resp, second_resp])
         token_mgr.get_token.side_effect = ["tok_old", "tok_new", "tok_new"]
-        entry = await client.create_execution_log(_log_payload())
+        entry = await client.write_execution_log(_log_payload())
         assert entry is not None
         assert entry.sys_id == "log_abc123"
         assert token_mgr.get_token.call_count == 3
@@ -488,8 +496,8 @@ class TestCreateExecutionLog:
         resp = _api_response(status_code=403, result=None, text="Forbidden")
         client, http, token_mgr = _build_client(responses=[resp])
         # 403 raises ServiceNowAuthorizationError, which the broad except
-        # in create_execution_log() catches → returns None
-        entry = await client.create_execution_log(_log_payload())
+        # in write_execution_log() catches → returns None
+        entry = await client.write_execution_log(_log_payload())
         assert entry is None
         assert token_mgr.get_token.call_count == 1
 
@@ -500,7 +508,7 @@ class TestCreateExecutionLog:
             status=ExecutionStatus.FAILED,
             error="ACL denied field write",
         )
-        await client.create_execution_log(payload)
+        await client.write_execution_log(payload)
         body = http.request.call_args.kwargs["json"]
         assert body["error"] == "ACL denied field write"
         assert body["status"] == "failed"
@@ -511,7 +519,7 @@ class TestCreateExecutionLog:
         resp = _api_response(result=_execution_log_result(execution_id=eid))
         client, http, _ = _build_client(responses=[resp])
         payload = _log_payload(execution_id=eid)
-        entry = await client.create_execution_log(payload)
+        entry = await client.write_execution_log(payload)
         body = http.request.call_args.kwargs["json"]
         assert body["execution_id"] == eid
         assert entry is not None
@@ -521,8 +529,8 @@ class TestCreateExecutionLog:
         """Bearer token must not appear in error details on log POST failure."""
         resp = _api_response(status_code=404, result=None, text="Not found")
         client, http, token_mgr = _build_client(token="super_secret_token", responses=[resp])
-        # The 404 raises inside _request, caught by create_execution_log
-        entry = await client.create_execution_log(_log_payload())
+        # The 404 raises inside _request, caught by write_execution_log
+        entry = await client.write_execution_log(_log_payload())
         assert entry is None
 
 

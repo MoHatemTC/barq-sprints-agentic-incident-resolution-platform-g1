@@ -1,3 +1,4 @@
+import time
 from typing import Any
 
 import httpx
@@ -9,6 +10,7 @@ from app.core.config import Settings
 from app.exceptions.servicenow import (
     ServiceNowAuthenticationError,
     ServiceNowAuthorizationError,
+    ServiceNowConflictError,
     ServiceNowConnectionError,
     ServiceNowError,
     ServiceNowNotFoundError,
@@ -82,20 +84,30 @@ class ServiceNowClient:
         result = await self._request("PATCH", f"/api/now/table/incident/{sys_id}", json=body)
         return Incident.model_validate(result)
 
-    async def create_execution_log(
+    async def write_execution_log(
         self, payload: ExecutionLogCreatePayload
     ) -> ExecutionLogEntry | None:
         body = payload.to_table_api_body()
+        start_time = time.perf_counter()
         try:
             result = await self._request("POST", f"/api/now/table/{EXECUTION_LOG_TABLE}", json=body)
+            latency_ms = (time.perf_counter() - start_time) * 1000
+            logger.info(
+                "execution_log_written",
+                execution_id=payload.execution_id,
+                incident_sys_id=payload.incident_sys_id,
+                latency_ms=latency_ms,
+            )
             return ExecutionLogEntry.model_validate(result)
         except Exception:
+            latency_ms = (time.perf_counter() - start_time) * 1000
             logger.exception(
                 "execution_log_write_failed",
                 execution_id=payload.execution_id,
                 incident_sys_id=payload.incident_sys_id,
                 agent=payload.agent,
                 action=payload.action,
+                latency_ms=latency_ms,
             )
             return None
 
@@ -166,6 +178,12 @@ class ServiceNowClient:
             raise ServiceNowNotFoundError(
                 f"Resource not found for {method} {path}",
                 status_code=status.HTTP_404_NOT_FOUND,
+                details={"body": response.text[:500]},
+            )
+        if response.status_code == status.HTTP_409_CONFLICT:
+            raise ServiceNowConflictError(
+                f"ServiceNow reported a conflict for {method} {path}",
+                status_code=status.HTTP_409_CONFLICT,
                 details={"body": response.text[:500]},
             )
         if response.status_code == status.HTTP_429_TOO_MANY_REQUESTS:

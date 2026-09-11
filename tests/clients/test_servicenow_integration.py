@@ -70,6 +70,7 @@ async def test_live_acl_refusal(client: ServiceNowClient) -> None:
 @pytest.mark.parametrize(
     "status",
     [
+        ExecutionStatus.STARTED,
         ExecutionStatus.BLOCKED,
         ExecutionStatus.FAILED,
         ExecutionStatus.ABANDONED,
@@ -93,7 +94,7 @@ async def test_live_verify_log_entries_across_outcomes(
         else None,
     )
 
-    log_entry = await client.create_execution_log(payload)
+    log_entry = await client.write_execution_log(payload)
     assert log_entry is not None
     assert log_entry.execution_id == exec_id
     assert log_entry.status == status
@@ -117,5 +118,5 @@ async def test_live_execution_log_write_failure_safely_handled(
     # We force an exception in the HTTP client just for the log write
     with patch.object(client._http, "request", side_effect=Exception("Simulated Network Error")):
         # This should return None and not raise an exception
-        log_entry = await client.create_execution_log(payload)
+        log_entry = await client.write_execution_log(payload)
         assert log_entry is None

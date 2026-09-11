@@ -10,6 +10,7 @@ EXECUTION_LOG_TABLE = f"{_SCOPE}_ai_execution_log"
 
 
 class ExecutionStatus(StrEnum):
+    STARTED = "started"
     SUCCEEDED = "succeeded"
     FAILED = "failed"
     BLOCKED = "blocked"

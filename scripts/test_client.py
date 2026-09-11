@@ -92,7 +92,7 @@ async def test_servicenow_client() -> None:
             )
 
             # 6. Test Creating AI Execution Log
-            logger.info("Testing create_execution_log()")
+            logger.info("Testing write_execution_log()")
             log_payload = ExecutionLogCreatePayload(
                 incident_sys_id=sys_id,
                 execution_id=f"exec_test_{int(datetime.now(UTC).timestamp())}",
@@ -102,7 +102,7 @@ async def test_servicenow_client() -> None:
                 timestamp=datetime.now(UTC),
                 result="Execution log entry successfully validated from test_client.py",
             )
-            log_entry = await client.create_execution_log(log_payload)
+            log_entry = await client.write_execution_log(log_payload)
             if log_entry:
                 logger.info(
                     "Successfully created execution log entry",

@@ -30,6 +30,10 @@ class ServiceNowNotFoundError(ServiceNowError):
     """404 - sys_id does not exist."""
 
 
+class ServiceNowConflictError(ServiceNowError):
+    """409 - Conflict (e.g. idempotency or duplicate)."""
+
+
 class ServiceNowValidationError(ServiceNowError):
     """400/422 - ServiceNow rejected the payload itself. Retrying the same
     payload will never succeed."""
