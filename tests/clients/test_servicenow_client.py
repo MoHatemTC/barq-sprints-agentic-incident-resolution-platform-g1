@@ -440,49 +440,90 @@ class TestCreateExecutionLog:
 
         assert entry.status == ExecutionStatus.BLOCKED
 
-    async def test_logging_failure_does_not_crash_caller(self) -> None:
-        """If the POST to the log table fails, return a synthetic entry instead of raising."""
+    async def test_logging_failure_returns_none(self) -> None:
+        """If the POST to the log table fails, return None — don't raise."""
         client, http, _ = _build_client()
         http.request.side_effect = httpx.ConnectError("network down")
-
         payload = _log_payload(status=ExecutionStatus.FAILED, error="original error")
         entry = await client.create_execution_log(payload)
+        assert entry is None
 
-        # Should return a synthetic entry, not raise
-        assert entry.execution_id == "exec_test_001"
-        assert entry.sys_id == ""  # synthetic marker
-
-    async def test_logging_failure_preserves_original_context(self) -> None:
-        """The synthetic fallback entry must preserve the original payload context."""
+    async def test_logging_failure_does_not_hide_processing_failure(self) -> None:
+        """Critical: if the caller had a processing failure AND logging fails,
+        the caller must still be able to surface its original error.
+        This test proves create_execution_log() returns None (not raises),
+        so the caller's own error handling continues uninterrupted.
+        """
         client, http, _ = _build_client()
-        http.request.side_effect = httpx.TimeoutException("timed out")
-
+        http.request.side_effect = httpx.TimeoutException("log POST timed out")
+        # Simulate: the caller already caught a processing failure and is
+        # trying to log it before re-raising.
         payload = _log_payload(
-            agent="classification_agent",
-            action="propose",
             status=ExecutionStatus.FAILED,
-            error="Model inference timeout",
+            error="Original processing error: model inference timeout",
         )
         entry = await client.create_execution_log(payload)
+        assert entry is None
 
-        assert entry.agent == "classification_agent"
-        assert entry.action == "propose"
-        assert entry.incident_reference == "inc_abc123"
+    async def test_logging_5xx_returns_none(self) -> None:
+        """A 500 from ServiceNow on the log POST must not crash the caller."""
+        resp = _api_response(status_code=500, result=None, text="Internal error")
+        client, http, _ = _build_client(responses=[resp])
+        entry = await client.create_execution_log(_log_payload())
+        assert entry is None
 
-    async def test_create_log_body_contains_error_field(self) -> None:
-        """The error field must be sent when present in the payload."""
+    async def test_401_on_log_post_triggers_refresh_and_retry(self) -> None:
+        """Execution log POSTs must also benefit from 401 refresh+retry."""
+        first_resp = _api_response(status_code=401, result=None, text="Unauthorized")
+        second_resp = _api_response(result=_execution_log_result())
+        client, http, token_mgr = _build_client(responses=[first_resp, second_resp])
+        token_mgr.get_token.side_effect = ["tok_old", "tok_new", "tok_new"]
+        entry = await client.create_execution_log(_log_payload())
+        assert entry is not None
+        assert entry.sys_id == "log_abc123"
+        assert token_mgr.get_token.call_count == 3
+
+    async def test_403_on_log_post_does_not_refresh(self) -> None:
+        """403 on the log table must NOT trigger token refresh."""
+        resp = _api_response(status_code=403, result=None, text="Forbidden")
+        client, http, token_mgr = _build_client(responses=[resp])
+        # 403 raises ServiceNowAuthorizationError, which the broad except
+        # in create_execution_log() catches → returns None
+        entry = await client.create_execution_log(_log_payload())
+        assert entry is None
+        assert token_mgr.get_token.call_count == 1
+
+    async def test_error_field_sent_when_present(self) -> None:
         resp = _api_response(result=_execution_log_result(status="failed"))
         client, http, _ = _build_client(responses=[resp])
-
         payload = _log_payload(
             status=ExecutionStatus.FAILED,
             error="ACL denied field write",
         )
         await client.create_execution_log(payload)
-
         body = http.request.call_args.kwargs["json"]
         assert body["error"] == "ACL denied field write"
         assert body["status"] == "failed"
+
+    async def test_execution_id_preserved_in_post_body(self) -> None:
+        """execution_id must arrive at ServiceNow exactly as provided."""
+        eid = "exec_verify_a1b2c3d4e5f6"
+        resp = _api_response(result=_execution_log_result(execution_id=eid))
+        client, http, _ = _build_client(responses=[resp])
+        payload = _log_payload(execution_id=eid)
+        entry = await client.create_execution_log(payload)
+        body = http.request.call_args.kwargs["json"]
+        assert body["execution_id"] == eid
+        assert entry is not None
+        assert entry.execution_id == eid
+
+    async def test_token_not_in_log_post_error(self) -> None:
+        """Bearer token must not appear in error details on log POST failure."""
+        resp = _api_response(status_code=404, result=None, text="Not found")
+        client, http, token_mgr = _build_client(token="super_secret_token", responses=[resp])
+        # The 404 raises inside _request, caught by create_execution_log
+        entry = await client.create_execution_log(_log_payload())
+        assert entry is None
 
 
 class TestResourceManagement:

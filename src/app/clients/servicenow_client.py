@@ -82,7 +82,9 @@ class ServiceNowClient:
         result = await self._request("PATCH", f"/api/now/table/incident/{sys_id}", json=body)
         return Incident.model_validate(result)
 
-    async def create_execution_log(self, payload: ExecutionLogCreatePayload) -> ExecutionLogEntry:
+    async def create_execution_log(
+        self, payload: ExecutionLogCreatePayload
+    ) -> ExecutionLogEntry | None:
         body = payload.to_table_api_body()
         try:
             result = await self._request("POST", f"/api/now/table/{EXECUTION_LOG_TABLE}", json=body)
@@ -95,18 +97,7 @@ class ServiceNowClient:
                 agent=payload.agent,
                 action=payload.action,
             )
-            # Return a synthetic entry so the caller is never impacted
-            return ExecutionLogEntry(
-                sys_id="",
-                execution_id=payload.execution_id,
-                incident_reference=payload.incident_sys_id,
-                agent=payload.agent,
-                action=payload.action,
-                status=payload.status,
-                timestamp=payload.timestamp,
-                result=payload.result,
-                error=f"Logging failed: {payload.error or 'unknown'}",
-            )
+            return None
 
     ################################################
 
