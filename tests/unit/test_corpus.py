@@ -106,17 +106,33 @@ def test_lifecycle_states_include_published_and_retired() -> None:
     assert WorkflowState.RETIRED in states
 
 
+def test_coverage_matrix_is_machine_readable() -> None:
+    """S4.4's harness reads this file with plain csv.DictReader — no comment stripping.
+
+    Regression guard for the P2 review finding: any `#` line (section header or
+    commented scenario) comes back as a junk incident row in pandas/Excel.
+    """
+    with COVERAGE_PATH.open(encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+    assert len(rows) == 25, f"Expected exactly 25 scenarios, got {len(rows)}"
+    bad = [r["incident_id"] for r in rows if not r["incident_id"].startswith("INC00")]
+    assert not bad, f"Non-incident rows visible to a standard CSV reader: {bad}"
+
+
 def test_coverage_matrix_integrity() -> None:
     assert COVERAGE_PATH.exists(), f"{COVERAGE_PATH} must exist"
     articles = LocalJSONSource(CORPUS_PATH).load_articles()
     valid_ids = {a.article_number for a in articles} | {a.unique_key for a in articles}
 
+    # Plain DictReader — the file itself must be clean, no comment filtering.
     with COVERAGE_PATH.open(encoding="utf-8") as f:
-        lines = [line for line in f if not line.strip().startswith("#")]
-        rows = list(csv.DictReader(lines))
+        rows = list(csv.DictReader(f))
 
-    # 13 real incidents from the manual (4 Section 7 + 8 Section 6 + 1 Section 9.1)
-    assert len(rows) == 13, f"Expected exactly 13 active incidents from manual, got {len(rows)}"
+    assert len(rows) == 25, f"Expected exactly 25 scenarios, got {len(rows)}"
+    sources = {r["source"] for r in rows}
+    assert sources == {"manual", "synthetic"}, f"Unexpected sources: {sources}"
+    assert sum(r["source"] == "manual" for r in rows) == 13
+    assert sum(r["source"] == "synthetic" for r in rows) == 12
 
     incident_map = {row["incident_id"]: row for row in rows}
 
@@ -128,23 +144,58 @@ def test_coverage_matrix_integrity() -> None:
     assert "INC0009884" in incident_map  # Major incident pool restart outage (9.1)
 
     unanswerable_count = 0
+    multi_article_count = 0
 
     for row in rows:
         inc_id = row["incident_id"]
-        if row["is_answerable"] == "true":
-            p_ids = [x for x in row["primary_article_ids"].split(";") if x]
-            assert p_ids, f"{inc_id} is answerable but has no primary_article_ids"
-            for aid in p_ids:
-                assert aid in valid_ids, f"Unknown primary_article_id {aid!r} in {inc_id}"
+        assert row["source"] in ("manual", "synthetic"), f"Bad source in {inc_id}"
 
-            if row["acceptable_article_ids"]:
-                for aid in row["acceptable_article_ids"].split(";"):
-                    if aid:
-                        err = f"Unknown acceptable_article_id {aid!r} in {inc_id}"
-                        assert aid in valid_ids, err
+        primary = [x for x in row["primary_article_ids"].split(";") if x]
+        acceptable = [x for x in row["acceptable_article_ids"].split(";") if x]
+        forbidden = [x for x in row["forbidden_article_ids"].split(";") if x]
+
+        if row["is_answerable"] == "true":
+            assert primary, f"{inc_id} is answerable but has no primary_article_ids"
+            if len(primary) > 1:
+                multi_article_count += 1
+            for aid in primary:
+                assert aid in valid_ids, f"Unknown primary_article_id {aid!r} in {inc_id}"
+            for aid in acceptable:
+                assert aid in valid_ids, f"Unknown acceptable_article_id {aid!r} in {inc_id}"
         else:
             unanswerable_count += 1
-            assert not row["primary_article_ids"], f"Unanswerable {inc_id} has primary IDs"
+            assert not primary, f"Unanswerable {inc_id} has primary IDs"
+
+        for aid in forbidden:
+            assert aid in valid_ids, f"Unknown forbidden_article_id {aid!r} in {inc_id}"
+        overlap = (set(primary) | set(acceptable)) & set(forbidden)
+        assert not overlap, f"{inc_id}: {sorted(overlap)} are both acceptable/primary and forbidden"
 
     msg = f"Expected at least 1 unanswerable case, got {unanswerable_count}"
     assert unanswerable_count >= 1, msg
+    msg = f"Expected at least 5 multi-article incidents, got {multi_article_count}"
+    assert multi_article_count >= 5, msg
+
+
+def test_retired_runbook_is_forbidden_not_acceptable() -> None:
+    """The MIR-2026-03 lesson: surfacing the retired v1.0 must FAIL the eval, not pass it.
+
+    Manual §11.5: retired revisions are 'removed before ranking, not ranked low'.
+    """
+    with COVERAGE_PATH.open(encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+
+    for row in rows:
+        all_rewarded = row["primary_article_ids"] + ";" + row["acceptable_article_ids"]
+        assert "KB0010-v1.0" not in all_rewarded, (
+            f"{row['incident_id']} rewards the retired revision KB0010-v1.0"
+        )
+
+    forbidding = {
+        r["incident_id"]
+        for r in rows
+        if "KB0010-v1.0" in r["forbidden_article_ids"]
+    }
+    assert forbidding == {"INC0010052", "INC0009884"}, (
+        f"Retired v1.0 must be forbidden exactly on the pool-exhaustion incidents, got {forbidding}"
+    )

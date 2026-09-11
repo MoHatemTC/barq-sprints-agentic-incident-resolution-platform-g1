@@ -8,6 +8,8 @@ from app.retrieval.sources import LocalJSONSource
 CORPUS_PATH = Path("data/corpus/barq_articles.json")
 COVERAGE_PATH = Path("data/coverage_matrix.csv")
 
+VALID_SOURCES = {"manual", "synthetic"}
+
 
 def main() -> None:
     if not CORPUS_PATH.exists():
@@ -17,21 +19,49 @@ def main() -> None:
     articles = source.load_articles()
     print(f"✅ Successfully validated {len(articles)} articles against Article model")
 
-    if COVERAGE_PATH.exists():
-        corpus_ids = {a.article_number for a in articles} | {a.unique_key for a in articles}
-        with COVERAGE_PATH.open(encoding="utf-8") as f:
-            lines = [line for line in f if not line.strip().startswith("#")]
-            rows = list(csv.DictReader(lines))
-        for row in rows:
-            if row["is_answerable"] == "true":
-                inc = row["incident_id"]
-                for aid in row["primary_article_ids"].split(";"):
-                    if aid and aid not in corpus_ids:
-                        raise ValueError(f"Unknown primary_article_id {aid} in {inc}")
-                for aid in row["acceptable_article_ids"].split(";"):
-                    if aid and aid not in corpus_ids:
-                        raise ValueError(f"Unknown acceptable_article_id {aid} in {inc}")
-        print(f"✅ Successfully validated {len(rows)} coverage matrix scenarios")
+    if not COVERAGE_PATH.exists():
+        return
+
+    corpus_ids = {a.article_number for a in articles} | {a.unique_key for a in articles}
+    # The matrix must be standard-CSV machine-readable: no comment stripping here.
+    with COVERAGE_PATH.open(encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+
+    for row in rows:
+        inc = row["incident_id"]
+        if not inc or inc.startswith("#"):
+            raise ValueError(f"Non-incident row in coverage matrix: {inc!r}")
+
+        row_source = (row.get("source") or "").strip()
+        if row_source not in VALID_SOURCES:
+            raise ValueError(f"Unknown source {row_source!r} in {inc}")
+
+        if row["is_answerable"] != "true":
+            continue
+
+        primary = [x for x in row["primary_article_ids"].split(";") if x]
+        acceptable = [x for x in row["acceptable_article_ids"].split(";") if x]
+        forbidden = [x for x in (row.get("forbidden_article_ids") or "").split(";") if x]
+        if not primary:
+            raise ValueError(f"{inc} is answerable but has no primary_article_ids")
+
+        for kind, ids in (
+            ("primary_article_id", primary),
+            ("acceptable_article_id", acceptable),
+            ("forbidden_article_id", forbidden),
+        ):
+            for aid in ids:
+                if aid not in corpus_ids:
+                    raise ValueError(f"Unknown {kind} {aid} in {inc}")
+
+        overlap = (set(primary) | set(acceptable)) & set(forbidden)
+        if overlap:
+            raise ValueError(
+                f"{inc}: articles {sorted(overlap)} are both acceptable/primary "
+                "and forbidden — a run surfacing them would be scored as a pass"
+            )
+
+    print(f"✅ Successfully validated {len(rows)} coverage matrix scenarios")
 
 
 if __name__ == "__main__":

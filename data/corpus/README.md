@@ -63,6 +63,19 @@ Filter(must=[FieldCondition(key="workflow_state", match=MatchValue(value="publis
 
 ---
 
+## Ground Truth Coverage Matrix
+
+`data/coverage_matrix.csv` maps incidents to articles for retrieval evaluation. It is a **standard machine-readable CSV** — no comment lines; any plain `csv.DictReader`/pandas reader sees exactly the incident rows (25 scenarios: 13 from the manual, 12 synthetic).
+
+Columns beyond the basics:
+
+| Column | Meaning |
+|---|---|
+| `source` | `manual` (real BARQ incidents) or `synthetic` (authored scenarios grounded in the real corpus) |
+| `forbidden_article_ids` | Articles that must **not** appear in a correct retrieval for this incident. Surfacing one fails the eval — e.g. the retired `KB0010-v1.0` is forbidden on the pool-exhaustion incidents (manual §11.5: retired revisions are *removed before ranking, not ranked low*) |
+
+---
+
 ## Validation & Verification
 
 To validate that every article in `barq_articles.json` conforms to the Pydantic schema and ground-truth coverage matrix:

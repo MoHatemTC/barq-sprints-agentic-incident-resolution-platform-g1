@@ -152,6 +152,9 @@ Because `/qdrant/storage` is mounted to the named Docker volume `barq_qdrant_dat
 
 ## 8. Hybrid Search Querying Pattern (Sprint 2 Preview)
 
+> [!IMPORTANT]
+> **Binding Sprint 2 requirement (P3 review finding, reproduced on real data):** unfiltered, the retired `KB0010-v1.0` ranks FIRST for the pool-exhaustion query — the MIR-2026-03 failure mode inside our own index. When the retrieval entry point is built, the `workflow_state == "published"` filter must be **constructed inside the entry point and always applied** — not a parameter callers can omit. Callers may only narrow further (service, category, security level). Required acceptance test: ingesting the real corpus and querying with the INC0010052 phrasing must never return `KB0010-v1.0`. "Published and current version" holds by the corpus invariant of at most one published version per article (enforced by `tests/unit/test_corpus.py`).
+
 In Sprint 2, retrieval combines dense and sparse scores using Reciprocal Rank Fusion (RRF):
 
 ```python

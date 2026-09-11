@@ -127,20 +127,20 @@ Chunking is performed by [src/app/retrieval/chunking.py](../../../src/app/retrie
 
 ## 6. Ground Truth & Coverage Matrix Specification
 
-The ground truth file [data/coverage_matrix.csv](../../../data/coverage_matrix.csv) maps real incidents from the manual (Section 7 worked tickets, Section 6 related-record citations, and the Section 9 major incident report) to their corresponding runbooks. It contains **13 active scenarios**: 12 answerable (2 of them multi-candidate with `acceptable_article_ids`) and 1 unanswerable:
+The ground truth file [data/coverage_matrix.csv](../../../data/coverage_matrix.csv) maps incidents to runbooks for retrieval evaluation. It is a **standard machine-readable CSV** (no comment lines — a plain `csv.DictReader`/pandas reader sees exactly the incident rows) with **25 scenarios**: 13 from the manual (`source=manual`), 12 synthetic (`source=synthetic`, grounded in the real corpus).
 
-| Incident ID | Incident Description | Primary Article | Acceptable | Answerable | Rationale |
-|---|---|---|---|---|---|
-| `INC0010023` | VPN authentication failure after a password reset | `KB0001-v2.0` | — | `true` | Worked ticket resolved via KB0001 |
-| `INC0010047` | Printer hardware mechanical squeaking and grinding noise | — | — | **`false`** | **Unanswerable**: hardware fault outside the KB; the manual's own pilot declined it (score 0.31 vs threshold 0.55) |
-| `INC0010064` | Account locked after repeated failed sign-ins and MFA reset attempts | `KB0005-v4.0` | `KB0006-v3.0` | `true` | Worked ticket; MFA article is an acceptable neighbor |
-| `INC0010052` | Order service pool exhausted, HTTP 500 under load | `KB0010-v2.0` | `KB0010-v1.0` | `true` | **Version disambiguation**: must resolve to published v2.0; v1.0 is retired (and dangerous) |
-| `INC0009884` | Order service pool exhaustion causing in-flight order loss | `KB0010-v2.0` | `KB0010-v1.0` | `true` | The 14 Mar 2026 major incident (`MIR-2026-03`) |
-| `INC0010024`–`INC0010033` | One per article: Outlook, drive mapping, printing, lockout, MFA device, laptop, SAP RFC, Wi-Fi | respective article | — | `true` | Related-record citations inside each article's metadata grid |
+| Incident ID | Incident Description | Primary Article | Acceptable | Forbidden | Answerable | Rationale |
+|---|---|---|---|---|---|---|
+| `INC0010023` | VPN authentication failure after a password reset | `KB0001-v2.0` | — | — | `true` | Worked ticket resolved via KB0001 |
+| `INC0010047` | Printer hardware mechanical squeaking and grinding noise | — | — | — | **`false`** | **Unanswerable**: hardware fault outside the KB; the manual's own pilot declined it (score 0.31 vs threshold 0.55) |
+| `INC0010064` | Account locked after repeated failed sign-ins and MFA reset attempts | `KB0005-v4.0` | `KB0006-v3.0` | — | `true` | Worked ticket; MFA article is an acceptable neighbor |
+| `INC0010052` | Order service pool exhausted, HTTP 500 under load | `KB0010-v2.0` | — | **`KB0010-v1.0`** | `true` | **Forbidden disambiguation**: must resolve to published v2.0; surfacing the retired v1.0 *fails* the eval (manual §11.5: retired revisions are "removed before ranking, not ranked low") |
+| `INC0009884` | Order service pool exhaustion causing in-flight order loss | `KB0010-v2.0` | — | **`KB0010-v1.0`** | `true` | The 14 Mar 2026 major incident (`MIR-2026-03`); same forbidden rule |
+| `INC0010024`–`INC0010033` | One per article: Outlook, drive mapping, printing, lockout, MFA device, laptop, SAP RFC, Wi-Fi | respective article | — | — | `true` | Related-record citations inside each article's metadata grid |
 
-Five additional synthetic scenarios (three multi-article, two unanswerable) are retained in the file as commented rows marked `# NOT IN PDF`, for reference and future multi-article testing; they are excluded from validation and evaluation.
+The 12 synthetic scenarios add: **7 multi-article incidents** (`primary_article_ids` with two articles — INC0010091/092/096/097/098/099/0100, meeting the ≥5 multi-article evaluation requirement) and **5 out-of-KB unanswerable cases** (INC0010093/094/095/0101/0102 — facilities and business-system faults with no runbook, testing correct refusal/low-confidence behavior).
 
-All mappings — **both `primary_article_ids` and `acceptable_article_ids`** — are validated against the corpus by:
+Column semantics: `source` distinguishes real manual incidents from authored ones; `forbidden_article_ids` lists articles that must never appear in a correct retrieval — the harness treats surfacing one as a failure, never a pass. `acceptable_article_ids` is **sparse by design**: an entry requires a direct signal in the incident description itself (symptom or explicit cause chain) — currently only INC0010064 → `KB0006-v3.0` ("MFA reset attempts"). Scoring contract for the S4.4 harness: primary hit = 1.0, acceptable hit = 0.5, forbidden hit = failure, unanswerable + refusal = correct. All `primary`, `acceptable`, and `forbidden` references are validated against the corpus, plus the row invariant `forbidden ∩ (primary ∪ acceptable) = ∅`, by:
 ```bash
 uv run python scripts/validate_corpus.py
 ```
