@@ -17,6 +17,11 @@ from app.exceptions.servicenow import (
     ServiceNowTimeoutError,
     ServiceNowValidationError,
 )
+from app.models.execution_log import (
+    EXECUTION_LOG_TABLE,
+    ExecutionLogCreatePayload,
+    ExecutionLogEntry,
+)
 from app.models.incident import Incident, IncidentUpdatePayload
 from app.models.work_note import WorkNoteUpdate
 
@@ -76,6 +81,32 @@ class ServiceNowClient:
         body = WorkNoteUpdate(note=note).to_table_api_body()
         result = await self._request("PATCH", f"/api/now/table/incident/{sys_id}", json=body)
         return Incident.model_validate(result)
+
+    async def create_execution_log(self, payload: ExecutionLogCreatePayload) -> ExecutionLogEntry:
+        body = payload.to_table_api_body()
+        try:
+            result = await self._request("POST", f"/api/now/table/{EXECUTION_LOG_TABLE}", json=body)
+            return ExecutionLogEntry.model_validate(result)
+        except Exception:
+            logger.exception(
+                "execution_log_write_failed",
+                execution_id=payload.execution_id,
+                incident_sys_id=payload.incident_sys_id,
+                agent=payload.agent,
+                action=payload.action,
+            )
+            # Return a synthetic entry so the caller is never impacted
+            return ExecutionLogEntry(
+                sys_id="",
+                execution_id=payload.execution_id,
+                incident_reference=payload.incident_sys_id,
+                agent=payload.agent,
+                action=payload.action,
+                status=payload.status,
+                timestamp=payload.timestamp,
+                result=payload.result,
+                error=f"Logging failed: {payload.error or 'unknown'}",
+            )
 
     ################################################
 

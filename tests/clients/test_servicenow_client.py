@@ -18,6 +18,7 @@ from app.exceptions.servicenow import (
     ServiceNowTimeoutError,
     ServiceNowValidationError,
 )
+from app.models.execution_log import ExecutionLogCreatePayload, ExecutionStatus
 from app.models.incident import _SCOPE, AIProcessingState, IncidentUpdatePayload
 from tests.helpers import mock_settings
 
@@ -57,6 +58,35 @@ def _api_response(
 
     resp = httpx.Response(**kwargs)
     return resp
+
+
+def _execution_log_result(**overrides: object) -> dict:
+    base = {
+        "sys_id": "log_abc123",
+        "execution_id": "exec_test_001",
+        "incident_reference": "inc_abc123",
+        "agent": "triage_agent",
+        "action": "execute",
+        "status": "succeeded",
+        "timestamp": "2026-09-11 12:00:00",
+        "result": "Classified as software",
+        "error": "",
+    }
+    base.update(overrides)
+    return base
+
+
+def _log_payload(**overrides: object) -> ExecutionLogCreatePayload:
+    defaults = {
+        "incident_sys_id": "inc_abc123",
+        "execution_id": "exec_test_001",
+        "agent": "triage_agent",
+        "action": "execute",
+        "status": ExecutionStatus.SUCCEEDED,
+        "result": "Classified as software",
+    }
+    defaults.update(overrides)
+    return ExecutionLogCreatePayload(**defaults)
 
 
 def _build_client(
@@ -345,6 +375,114 @@ class TestAddWorkNote:
 
         incident = await client.add_work_note("abc123", "Note text")
         assert incident.sys_id == "abc123"
+
+
+class TestCreateExecutionLog:
+    async def test_create_log_sends_post_to_correct_table(self) -> None:
+        resp = _api_response(result=_execution_log_result())
+        client, http, _ = _build_client(responses=[resp])
+
+        await client.create_execution_log(_log_payload())
+
+        call = http.request.call_args
+        assert call.args[0] == "POST"
+        assert "x_2215032_ai_inc_0_ai_execution_log" in call.args[1]
+
+    async def test_create_log_sends_correct_body(self) -> None:
+        resp = _api_response(result=_execution_log_result())
+        client, http, _ = _build_client(responses=[resp])
+
+        await client.create_execution_log(_log_payload())
+
+        body = http.request.call_args.kwargs["json"]
+        assert body["execution_id"] == "exec_test_001"
+        assert body["agent"] == "triage_agent"
+        assert body["action"] == "execute"
+        assert body["status"] == "succeeded"
+        assert body["incident_reference"] == "inc_abc123"
+
+    async def test_create_log_returns_entry(self) -> None:
+        resp = _api_response(result=_execution_log_result())
+        client, http, _ = _build_client(responses=[resp])
+
+        entry = await client.create_execution_log(_log_payload())
+
+        assert entry.sys_id == "log_abc123"
+        assert entry.execution_id == "exec_test_001"
+        assert entry.status == ExecutionStatus.SUCCEEDED
+
+    async def test_create_log_for_failed_attempt(self) -> None:
+        """FR-02: failed attempts must leave a record."""
+        result = _execution_log_result(status="failed", error="LLM timeout")
+        resp = _api_response(result=result)
+        client, http, _ = _build_client(responses=[resp])
+
+        payload = _log_payload(
+            status=ExecutionStatus.FAILED,
+            result=None,
+            error="LLM timeout",
+        )
+        entry = await client.create_execution_log(payload)
+
+        assert entry.status == ExecutionStatus.FAILED
+
+    async def test_create_log_for_blocked_attempt(self) -> None:
+        """FR-02: blocked attempts must leave a record."""
+        result = _execution_log_result(status="blocked", error="Human lock active")
+        resp = _api_response(result=result)
+        client, http, _ = _build_client(responses=[resp])
+
+        payload = _log_payload(
+            status=ExecutionStatus.BLOCKED,
+            error="Human lock active",
+        )
+        entry = await client.create_execution_log(payload)
+
+        assert entry.status == ExecutionStatus.BLOCKED
+
+    async def test_logging_failure_does_not_crash_caller(self) -> None:
+        """If the POST to the log table fails, return a synthetic entry instead of raising."""
+        client, http, _ = _build_client()
+        http.request.side_effect = httpx.ConnectError("network down")
+
+        payload = _log_payload(status=ExecutionStatus.FAILED, error="original error")
+        entry = await client.create_execution_log(payload)
+
+        # Should return a synthetic entry, not raise
+        assert entry.execution_id == "exec_test_001"
+        assert entry.sys_id == ""  # synthetic marker
+
+    async def test_logging_failure_preserves_original_context(self) -> None:
+        """The synthetic fallback entry must preserve the original payload context."""
+        client, http, _ = _build_client()
+        http.request.side_effect = httpx.TimeoutException("timed out")
+
+        payload = _log_payload(
+            agent="classification_agent",
+            action="propose",
+            status=ExecutionStatus.FAILED,
+            error="Model inference timeout",
+        )
+        entry = await client.create_execution_log(payload)
+
+        assert entry.agent == "classification_agent"
+        assert entry.action == "propose"
+        assert entry.incident_reference == "inc_abc123"
+
+    async def test_create_log_body_contains_error_field(self) -> None:
+        """The error field must be sent when present in the payload."""
+        resp = _api_response(result=_execution_log_result(status="failed"))
+        client, http, _ = _build_client(responses=[resp])
+
+        payload = _log_payload(
+            status=ExecutionStatus.FAILED,
+            error="ACL denied field write",
+        )
+        await client.create_execution_log(payload)
+
+        body = http.request.call_args.kwargs["json"]
+        assert body["error"] == "ACL denied field write"
+        assert body["status"] == "failed"
 
 
 class TestResourceManagement:
