@@ -29,28 +29,28 @@ class ServiceNowTokenManager:
 
     async def get_token(
         self, *, force_refresh: bool = False, failed_token: str | None = None
-    ) -> str:
+    ) -> str | None:
         """
         Retrieves a valid access token, refreshing it if necessary.
         If force_refresh is True or token is expired, it will always refresh the token.
         """
         if not force_refresh and self._is_valid():
-            return self._token  # type: ignore[return-value]
+            return self._token
 
         async with self._lock:
             # If another coroutine refreshed the token while we were waiting for the lock, return it
             if failed_token and self._token != failed_token and self._is_valid():
-                return self._token  # type: ignore[return-value]
+                return self._token
 
             if not force_refresh and self._is_valid():
-                return self._token  # type: ignore[return-value]
+                return self._token
 
             if self._refresh_token:
                 await self._refresh_access_token()
             else:
                 await self._fetch_access_token()
 
-            return self._token  # type: ignore[return-value]
+            return self._token
 
     async def _fetch_access_token(self) -> None:
         """Fetches a new access token using the configured password grant."""
