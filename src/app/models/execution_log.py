@@ -14,6 +14,7 @@ class ExecutionStatus(StrEnum):
     FAILED = "failed"
     BLOCKED = "blocked"
     AWAITING_APPROVAL = "awaiting_approval"
+    ABANDONED = "abandoned"
 
 
 class ExecutionLogEntry(BaseModel):
