@@ -20,7 +20,7 @@ def main() -> None:
     print(f"✅ Successfully validated {len(articles)} articles against Article model")
 
     if not COVERAGE_PATH.exists():
-        return
+        raise FileNotFoundError(f"Coverage matrix not found: {COVERAGE_PATH}")
 
     corpus_ids = {a.article_number for a in articles} | {a.unique_key for a in articles}
     # The matrix must be standard-CSV machine-readable: no comment stripping here.
