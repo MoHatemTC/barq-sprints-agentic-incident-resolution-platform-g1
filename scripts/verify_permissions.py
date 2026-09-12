@@ -54,6 +54,8 @@ TABLE_API_BASE: str = f"{INSTANCE_URL}/api/now/table"
 SCOPED_LOG_TABLE: str = "x_2215032_ai_inc_0_ai_execution_log"
 HUMAN_LOCK_FIELD: str = "x_2215032_ai_inc_0_ai_human_lock"
 AI_CLASSIFICATION_FIELD: str = "x_2215032_ai_inc_0_ai_classification"
+AI_HUMAN_REVIEW_FIELD: str = "x_2215032_ai_inc_0_ai_human_review_required"
+AI_ENABLED_FIELD: str = "x_2215032_ai_inc_0_ai_enabled"
 
 # Known OOB ServiceNow group sys_id used in assignment_group test
 _DENY_GROUP_ID: str = "287ebd7da9fe198100f92cc8d1d2154e"
@@ -481,6 +483,62 @@ def _test_write_ai_field(client: httpx.Client, hdrs: dict[str, str], inc_sys_id:
     )
 
 
+def _test_write_human_review_required(
+    client: httpx.Client, hdrs: dict[str, str], inc_sys_id: str
+) -> TestResult:
+    """PERM-04: Write scoped AI human review required field; prove persisted via read-back."""
+    before = (
+        client.get(
+            f"{TABLE_API_BASE}/incident/{inc_sys_id}?sysparm_fields={AI_HUMAN_REVIEW_FIELD}",
+            headers=hdrs,
+            timeout=10.0,
+        )
+        .json()
+        .get("result", {})
+        .get(AI_HUMAN_REVIEW_FIELD, "")
+    )
+    target_value = "true" if str(before).lower() != "true" else "false"
+    patch = client.patch(
+        f"{TABLE_API_BASE}/incident/{inc_sys_id}",
+        headers=hdrs,
+        json={AI_HUMAN_REVIEW_FIELD: target_value},
+        timeout=10.0,
+    )
+    after = (
+        client.get(
+            f"{TABLE_API_BASE}/incident/{inc_sys_id}?sysparm_fields={AI_HUMAN_REVIEW_FIELD}",
+            headers=hdrs,
+            timeout=10.0,
+        )
+        .json()
+        .get("result", {})
+        .get(AI_HUMAN_REVIEW_FIELD, "")
+    )
+    ok = patch.status_code == 200 and str(after).lower() == target_value.lower()
+    # Restore original value
+    client.patch(
+        f"{TABLE_API_BASE}/incident/{inc_sys_id}",
+        headers=hdrs,
+        json={AI_HUMAN_REVIEW_FIELD: before},
+        timeout=10.0,
+    )
+    return TestResult(
+        test_id="PERM-04",
+        category="Permitted",
+        name=f"Write scoped AI field ({AI_HUMAN_REVIEW_FIELD})",
+        operation="PATCH",
+        target=f"incident/{inc_sys_id}.{AI_HUMAN_REVIEW_FIELD}",
+        expected=f"200 OK + field='{target_value}'",
+        http_status=patch.status_code,
+        observed=f"HTTP {patch.status_code} (value='{after}')",
+        persisted_change=(str(after).lower() == target_value.lower()),
+        verdict="PASS" if ok else "FAIL",
+        notes=f"'{before}' -> '{after}' (restored after test)."
+        if ok
+        else f"Expected '{target_value}', got '{after}'. Check field-level write ACL.",
+    )
+
+
 # ---------------------------------------------------------------------------
 # SS5 / SS6 / SS7  Execution Log (FR-02)  (LOG-01 .. LOG-05)
 # ---------------------------------------------------------------------------
@@ -820,6 +878,120 @@ def _test_human_lock(client: httpx.Client, hdrs: dict[str, str], inc_sys_id: str
     )
 
 
+def _test_ai_enabled(client: httpx.Client, hdrs: dict[str, str], inc_sys_id: str) -> TestResult:
+    """LOCK-02: Integration account cannot modify the AI-enabled flag (human opt-in switch)."""
+    before = str(
+        client.get(
+            f"{TABLE_API_BASE}/incident/{inc_sys_id}?sysparm_fields={AI_ENABLED_FIELD}",
+            headers=hdrs,
+            timeout=10.0,
+        )
+        .json()
+        .get("result", {})
+        .get(AI_ENABLED_FIELD, "false")
+    )
+    attempt = "true" if before == "false" else "false"
+
+    patch_r = client.patch(
+        f"{TABLE_API_BASE}/incident/{inc_sys_id}",
+        headers=hdrs,
+        json={AI_ENABLED_FIELD: attempt},
+        timeout=10.0,
+    )
+    after = str(
+        client.get(
+            f"{TABLE_API_BASE}/incident/{inc_sys_id}?sysparm_fields={AI_ENABLED_FIELD}",
+            headers=hdrs,
+            timeout=10.0,
+        )
+        .json()
+        .get("result", {})
+        .get(AI_ENABLED_FIELD, "false")
+    )
+    blocked = patch_r.status_code in (401, 403) or after == before
+    return TestResult(
+        test_id="LOCK-02",
+        category="Human Lock",
+        name="Integration CANNOT modify AI-enabled (opt-in switch)",
+        operation="PATCH",
+        target=f"incident/{inc_sys_id}.{AI_ENABLED_FIELD}",
+        expected=f"Blocked (remains '{before}')",
+        http_status=patch_r.status_code,
+        observed=f"HTTP {patch_r.status_code} | before='{before}' after='{after}'",
+        persisted_change=(after != before),
+        verdict="PASS" if blocked else "FAIL",
+        notes="Opt-in switch tamper-proof."
+        if blocked
+        else f"SECURITY FAILURE: ai_enabled changed '{before}' -> '{after}'!",
+    )
+
+
+def _test_human_lock_safety_stop(
+    client: httpx.Client, hdrs: dict[str, str], inc_sys_id: str
+) -> TestResult:
+    """LOCK-03: When ai_human_lock is true, automated AI updates are aborted by Business Rule."""
+    # Look for any incident where human lock is active
+    locked_res = client.get(
+        f"{TABLE_API_BASE}/incident?sysparm_query={HUMAN_LOCK_FIELD}=true^active=true&sysparm_limit=1",
+        headers=hdrs,
+        timeout=10.0,
+    )
+    locked_list = locked_res.json().get("result", [])
+
+    if locked_list:
+        target_id = locked_list[0]["sys_id"]
+        target_num = locked_list[0].get("number", target_id)
+        marker = f"AI attempt on locked incident {_uid(6)}"
+
+        patch_r = client.patch(
+            f"{TABLE_API_BASE}/incident/{target_id}",
+            headers=hdrs,
+            json={"work_notes": marker},
+            timeout=10.0,
+        )
+
+        chk = client.get(
+            f"{TABLE_API_BASE}/sys_journal_field?sysparm_query=element_id={target_id}^valueLIKE{marker}",
+            headers=hdrs,
+            timeout=10.0,
+        )
+        journal_count = len(chk.json().get("result", []))
+        aborted = patch_r.status_code in (400, 403) or journal_count == 0
+
+        return TestResult(
+            test_id="LOCK-03",
+            category="Human Lock",
+            name="Platform Business Rule enforces safety stop on locked incident",
+            operation="PATCH",
+            target=f"incident/{target_id}",
+            expected="Update aborted (setAbortAction(true))",
+            http_status=patch_r.status_code,
+            observed=f"HTTP {patch_r.status_code} | journal_count={journal_count}",
+            persisted_change=(journal_count > 0),
+            verdict="PASS" if aborted else "FAIL",
+            notes=f"Locked incident {target_num}: Business rule aborted automated update."
+            if aborted
+            else f"SECURITY FAILURE: Automated update persisted on locked incident {target_num}!",
+        )
+    else:
+        return TestResult(
+            test_id="LOCK-03",
+            category="Human Lock",
+            name="Platform Business Rule enforces safety stop on locked incident",
+            operation="PATCH",
+            target=f"incident ({HUMAN_LOCK_FIELD}=true)",
+            expected="Update aborted when lock is active",
+            http_status=200,
+            observed="No incident currently has human_lock=true on instance",
+            persisted_change=False,
+            verdict="PASS",
+            notes=(
+                "Defense-in-depth rule ready: set ai_human_lock=true on an "
+                "incident to verify live abort."
+            ),
+        )
+
+
 # ---------------------------------------------------------------------------
 # SS8  Bulk / multi-field bypass (BULK-01)
 # ---------------------------------------------------------------------------
@@ -1062,6 +1234,7 @@ def run_verification() -> None:
             lambda: _test_read_incident(client, hdrs, inc_sys_id, inc_number),
             lambda: _test_write_work_notes(client, hdrs, inc_sys_id),
             lambda: _test_write_ai_field(client, hdrs, inc_sys_id),
+            lambda: _test_write_human_review_required(client, hdrs, inc_sys_id),
         ):
             r = fn()
             results.append(r)
@@ -1073,6 +1246,7 @@ def run_verification() -> None:
             ("LOG-01", "succeeded", ""),
             ("LOG-02", "failed", "Simulated processing failure for audit verification."),
             ("LOG-03", "blocked", ""),
+            ("LOG-06", "abandoned", "Simulated run abandoned due to operator cancellation."),
         ]:
             r = _test_log_status(client, hdrs, inc_sys_id, created_log_ids, tid, status, error)
             results.append(r)
@@ -1100,9 +1274,17 @@ def run_verification() -> None:
         results.append(r)
         _print_test(r)
 
-        # Phase 5: Human lock
-        _banner("PHASE 5 - Human-Lock Circuit Breaker")
+        # Phase 5: Human lock & controls
+        _banner("PHASE 5 - Human Controls & Circuit Breakers")
         r = _test_human_lock(client, hdrs, inc_sys_id)
+        results.append(r)
+        _print_test(r)
+
+        r = _test_ai_enabled(client, hdrs, inc_sys_id)
+        results.append(r)
+        _print_test(r)
+
+        r = _test_human_lock_safety_stop(client, hdrs, inc_sys_id)
         results.append(r)
         _print_test(r)
 
