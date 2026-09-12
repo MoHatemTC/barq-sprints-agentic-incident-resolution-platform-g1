@@ -13,6 +13,7 @@ from app.exceptions.servicenow import (
     ServiceNowConflictError,
     ServiceNowConnectionError,
     ServiceNowError,
+    ServiceNowHumanLockError,
     ServiceNowNotFoundError,
     ServiceNowRateLimitError,
     ServiceNowServerError,
@@ -328,7 +329,7 @@ class TestFindIncidentByNumber:
 class TestUpdateIncident:
     async def test_update_sends_patch(self) -> None:
         resp = _api_response(result=_incident_result())
-        client, http, _ = _build_client(responses=[resp])
+        client, http, _ = _build_client(responses=[resp, resp])
 
         payload = IncidentUpdatePayload(
             ai_processing_state=AIProcessingState.IN_PROGRESS,
@@ -342,7 +343,7 @@ class TestUpdateIncident:
 
     async def test_update_body_contains_ai_fields(self) -> None:
         resp = _api_response(result=_incident_result())
-        client, http, _ = _build_client(responses=[resp])
+        client, http, _ = _build_client(responses=[resp, resp])
 
         payload = IncidentUpdatePayload(
             ai_processing_state=AIProcessingState.IN_PROGRESS,
@@ -356,7 +357,7 @@ class TestUpdateIncident:
 
     async def test_update_sets_content_type_json(self) -> None:
         resp = _api_response(result=_incident_result())
-        client, http, _ = _build_client(responses=[resp])
+        client, http, _ = _build_client(responses=[resp, resp])
 
         payload = IncidentUpdatePayload(ai_classification="network")
         await client.update_incident("abc123", payload)
@@ -368,7 +369,7 @@ class TestUpdateIncident:
 class TestAddWorkNote:
     async def test_add_work_note_sends_patch(self) -> None:
         resp = _api_response(result=_incident_result())
-        client, http, _ = _build_client(responses=[resp])
+        client, http, _ = _build_client(responses=[resp, resp])
 
         await client.add_work_note("abc123", "AI is investigating")
 
@@ -379,7 +380,7 @@ class TestAddWorkNote:
 
     async def test_add_work_note_returns_incident(self) -> None:
         resp = _api_response(result=_incident_result())
-        client, http, _ = _build_client(responses=[resp])
+        client, http, _ = _build_client(responses=[resp, resp])
 
         incident = await client.add_work_note("abc123", "Note text")
         assert incident.sys_id == "abc123"
@@ -622,3 +623,36 @@ class TestAPICredentialSafety:
 
         body_in_details = exc_info.value.details.get("body", "")
         assert len(body_in_details) <= 500
+
+
+class TestHumanLockSafety:
+    async def test_human_lock_field_mapping_and_write_protection(self) -> None:
+        """Verify that ai_human_lock is correctly read from ServiceNow and blocks writes."""
+        locked_incident_data = _incident_result(
+            sys_id="locked123",
+            number="INC0010001",
+            **{f"{_SCOPE}_ai_human_lock": "true"},
+        )
+
+        responses = [
+            _api_response(result=locked_incident_data),  # get_incident directly
+            _api_response(result=locked_incident_data),  # get_incident inside update_incident
+            _api_response(
+                result=locked_incident_data
+            ),  # get_incident inside add_work_note (if implemented)
+        ]
+
+        client, http, _ = _build_client(responses=responses)
+
+        # Verify model reads the field correctly from the alias
+        incident = await client.get_incident("locked123")
+        assert incident.ai_human_lock is True
+
+        # Verify update_incident raises ServiceNowHumanLockError on locked incident
+        payload = IncidentUpdatePayload(ai_confidence=0.90)
+        with pytest.raises(ServiceNowHumanLockError, match="is locked"):
+            await client.update_incident("locked123", payload)
+
+        # Verify add_work_note raises ServiceNowHumanLockError on locked incident
+        with pytest.raises(ServiceNowHumanLockError, match="is locked"):
+            await client.add_work_note("locked123", "Attempting note on locked incident")

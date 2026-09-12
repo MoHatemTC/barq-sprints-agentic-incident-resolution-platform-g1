@@ -13,6 +13,7 @@ from app.exceptions.servicenow import (
     ServiceNowConflictError,
     ServiceNowConnectionError,
     ServiceNowError,
+    ServiceNowHumanLockError,
     ServiceNowNotFoundError,
     ServiceNowRateLimitError,
     ServiceNowServerError,
@@ -75,11 +76,25 @@ class ServiceNowClient:
         return Incident.model_validate(incidents[0])
 
     async def update_incident(self, sys_id: str, payload: IncidentUpdatePayload) -> Incident:
+        current_incident = await self.get_incident(sys_id)
+        if current_incident.ai_human_lock:
+            raise ServiceNowHumanLockError(
+                f"Incident {sys_id} is locked for human review and cannot be updated by the agent",
+                details={"sys_id": sys_id},
+            )
+
         body = payload.to_table_api_body()
         result = await self._request("PATCH", f"/api/now/table/incident/{sys_id}", json=body)
         return Incident.model_validate(result)
 
     async def add_work_note(self, sys_id: str, note: str) -> Incident:
+        current_incident = await self.get_incident(sys_id)
+        if current_incident.ai_human_lock:
+            raise ServiceNowHumanLockError(
+                f"Incident {sys_id} is locked for human review and cannot be updated by the agent",
+                details={"sys_id": sys_id},
+            )
+
         body = WorkNoteUpdate(note=note).to_table_api_body()
         result = await self._request("PATCH", f"/api/now/table/incident/{sys_id}", json=body)
         return Incident.model_validate(result)

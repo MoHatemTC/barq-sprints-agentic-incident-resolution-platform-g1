@@ -49,7 +49,7 @@ class Incident(BaseModel):
     ai_human_review_required: bool = Field(
         default=False, alias=f"{_SCOPE}_ai_human_review_required"
     )
-    ai_human_locked: bool = Field(default=False, alias=f"{_SCOPE}_ai_human_locked")
+    ai_human_lock: bool = Field(default=False, alias=f"{_SCOPE}_ai_human_lock")
     ai_failure_reason: str | None = Field(default=None, alias=f"{_SCOPE}_ai_failure_reason")
 
     @model_validator(mode="before")
@@ -63,7 +63,7 @@ class Incident(BaseModel):
             "active",
             f"{_SCOPE}_ai_enabled",
             f"{_SCOPE}_ai_human_review_required",
-            f"{_SCOPE}_ai_human_locked",
+            f"{_SCOPE}_ai_human_lock",
         }
         state_field = f"{_SCOPE}_ai_processing_state"
 

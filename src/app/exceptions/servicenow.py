@@ -57,3 +57,7 @@ class ServiceNowTimeoutError(ServiceNowError):
 
 class ServiceNowConnectionError(ServiceNowError):
     """DNS/TCP failure before any response arrived. Safe to retry."""
+
+
+class ServiceNowHumanLockError(ServiceNowError):
+    """Raised when an incident is locked for human review and cannot be modified by the AI agent."""
