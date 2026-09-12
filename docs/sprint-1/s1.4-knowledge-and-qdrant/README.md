@@ -4,21 +4,16 @@
 
 ## Status
 
-Not started beyond infrastructure. The Docker Compose scaffold for Qdrant is
-merged (`docker-compose.yml`); no corpus design, KB publication, or vector
-collection exists yet.
+Implementation complete. Verified real operational corpus (11 runbooks extracted from the BARQ manual), dual-vector Qdrant hybrid collection (`BAAI/bge-small-en-v1.5` dense + `Qdrant/bm25` sparse), deterministic UUIDv5 chunking pipeline, and incident ground truth coverage matrix.
 
-## What lands in this folder once work begins
+## Deliverables in this Folder
 
-- Corpus design: what articles must contain, what metadata they carry
-  (category, service, status, version, security level), and the
-  incident-to-article ground-truth mapping that Sprint 2 and Sprint 4 both
-  depend on
-- Whichever acquisition path the mentor assigns — authored from scratch, or a
-  supplied dataset validated and normalised
-- Qdrant collection setup: dense and sparse vectors, one collection
+- [Corpus Design Specification](sprint1_corpus_design.md) (`sprint1_corpus_design.md`): Article schema, metadata validation rules, security tier taxonomy, 11-record inventory, and incident coverage matrix.
+- [Index Specification](sprint1_index_spec.md) (`sprint1_index_spec.md`): Hybrid vector configuration, single-batch BM25 IDF fitting rules, payload indexing, deterministic UUIDv5 identities, and persistence architecture.
 
-## Requirements
+## Architecture Summary
 
-Article content must contain real command syntax, error codes, file paths and
-version strings — sparse retrieval has nothing to match against generic prose.
+- **Source Corpus**: 11 operational runbooks (`data/corpus/barq_articles.json`) with realistic terminal commands, log paths, error codes, and version-specific mitigations.
+- **Chunking Pipeline**: `src/app/retrieval/chunking.py` implementing header-aware markdown splitting (Section 11.7 parameters: 700 chars, 120 overlap) producing exactly 45 bounded chunks.
+- **Hybrid Vector Store**: Qdrant collection `incident_knowledge_base` with 45 points, indexed payload fields (`service`, `category`, `lifecycle_state`, `security_tier`, `version`), and deterministic idempotency.
+- **Ground Truth Evaluation**: `data/coverage_matrix.csv` with 13 benchmark scenarios for retrieval evaluation.
