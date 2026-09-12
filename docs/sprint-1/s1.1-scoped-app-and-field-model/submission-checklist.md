@@ -26,7 +26,7 @@ Do not request a formal review until every required item is checked.
 - [x] Confidence rejects 1.1 on the Incident form, restores the prior valid value, and displays a clear error.
 - [x] Suggestion and Resolution retain different values on source Incident `INC0010018`.
 - [x] Start/end timestamps persist and are queryable on the source PDI.
-- [x] Failed state and Failure Reason persist on the source PDI.
+- [x] The dedicated Failure Reason field is present on the source-PDI Default Incident view; this package does not claim a separate failed-state persistence test that was not captured.
 - [x] Human-lock enforcement ownership is recorded; runtime eligibility enforcement is explicitly assigned to downstream S1.3.
 
 ## Documentation and evidence
@@ -53,15 +53,15 @@ Do not request a formal review until every required item is checked.
 
 ## GitHub and submission
 
-- [x] Work is on `feature/s1-1-ai-incident-field-model`, not directly on `main`.
+- [x] Work was completed on `feature/s1-1-ai-incident-field-model`, not directly on `main`.
 - [x] `git diff --check` passes.
 - [x] The feature branch is pushed.
-- [x] Pull request #1 into `main` is open, accessible, and ready for human review.
-- [ ] Aya Ashraf has completed the human PR review.
+- [x] Pull request #1 was merged into `main` on September 9, 2026.
 - [x] The PR and repository links were opened and verified.
 - [ ] Airtable status is updated when access becomes available.
 - [x] Sarah received the PR, XML, dictionary, acceptance matrix, and screenshot links.
-- [x] Formal review attempt 1 was requested after the initial checks; Sarah's two documentation findings are addressed in commit `a49a4b2`.
+- [x] Sarah's requested clean-import evidence and per-field writer/permission details are present in the merged repository.
+- [x] The team documentation restructure moved the final evidence to `docs/sprint-1/s1.1-scoped-app-and-field-model/`; all submission links must use these current paths.
 
 ## Submission message
 
@@ -77,12 +77,13 @@ The submission includes:
 - docs/sprint-1/s1.1-scoped-app-and-field-model/field-model.md
 - Incident form and import-verification screenshots
 
-Pull request: [LINK]
-Update-set XML: [LINK]
-Field dictionary: [LINK]
-Screenshots: [LINK]
+Merged pull request: https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pull/1
+Update-set XML: https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/blob/main/servicenow/ai_incident_orchestrator/ai_incident_orchestrator_s1_1.xml
+Field dictionary: https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/blob/main/docs/sprint-1/s1.1-scoped-app-and-field-model/field-model.md
+Clean-import verification: https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/blob/main/docs/sprint-1/s1.1-scoped-app-and-field-model/secondary-import-verification.md
+Screenshots: https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/tree/main/docs/sprint-1/s1.1-scoped-app-and-field-model/screenshots
 
-I verified that every link is accessible and that the update set previews, commits, and works on a clean secondary instance without manual repair.
+The update set previewed and committed on authorized teammate PDI dev204871 with 39 inserts, zero updates, zero deletions, zero collisions, and no manual repair. The imported form and confidence validation were retested successfully.
 
 Please let me know if you need any clarification. Thank you.
 ```

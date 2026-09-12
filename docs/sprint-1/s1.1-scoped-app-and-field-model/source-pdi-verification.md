@@ -19,7 +19,7 @@ Verification performed on September 8, 2026 against source PDI `dev434590` on th
 - AI Processing State has five choices: `pending`, `in_progress`, `awaiting_approval`, `complete`, and `failed`.
 - The Default Incident view contains the AI Incident Orchestrator section with thirteen fields plus the layout split markers.
 - Two scoped Client Scripts validate AI Confidence on change and on submit.
-- Synthetic Incident `INC0010018` stores distinct suggestion/resolution values, model attribution, timing, review/lock flags, and failure information.
+- Synthetic Incident `INC0010018` stores distinct suggestion/resolution values, model attribution, timing, and review/lock flags. The form also displays the dedicated Failure Reason field required by the schema.
 
 ## Secondary-instance verification
 

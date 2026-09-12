@@ -10,7 +10,7 @@
 - Owner: Ali Ezz
 - Human reviewer: Aya Ashraf
 - Deadline: Sunday, September 13, 2026 at 11:59 PM Cairo time
-- Status: Implemented, exported, and verified on source PDI `dev434590` and secondary PDI `dev204871`
+- Status: Implemented, exported, verified on source PDI `dev434590` and secondary PDI `dev204871`, and merged through PR #1 on September 9, 2026
 
 ## Design contract
 
@@ -108,8 +108,8 @@ ServiceNow does not permit a scripted before Business Rule in a private scope to
 4. Mohamed owns formal OAuth/ACL implementation in S1.2; S1.1 documents intended access.
 5. The AI Incident Orchestrator section belongs on the Default Incident view.
 6. Clean-import verification will use an authorized teammate's clean PDI on the same release.
-7. Aya Ashraf is the human pull-request reviewer.
-8. S1.1 is due Sunday, September 13, 2026 at 11:59 PM Cairo time; the automated extension notice is disregarded.
+7. S1.1 was merged through repository PR #1 on September 9, 2026. Mentor acceptance remains a separate internship review step.
+8. The authoritative S1.1 deadline is Sunday, September 13, 2026 at 11:59 PM Cairo time; the automated extension notice is disregarded.
 
 The W0.5 CAD notes remain useful for comparison, but their absence does not block implementation using ServiceNow's generated scoped prefix and the confirmed model above.
 
@@ -129,3 +129,4 @@ The W0.5 CAD notes remain useful for comparison, but their absence does not bloc
 - Secondary commit: Completed successfully on `2026-09-08` without manual configuration or repair.
 - Secondary functional verification: Passed on `2026-09-08`; the Incident form displayed the imported section/fields and automatically removed an out-of-range confidence value while showing the expected error.
 - Confidence boundary verification: The form accepted inclusive boundary values `0` and `1` without validation errors.
+- Repository verification: PR #1 merged into `main` on `2026-09-09`; after the team documentation restructure, the final S1.1 documents reside under `docs/sprint-1/s1.1-scoped-app-and-field-model/`.
