@@ -122,3 +122,5 @@ data/corpus/*
 !data/corpus/README.md
 !data/corpus/barq_ingestion_report.md
 !data/corpus/barq_articles.json
+
+src/app/ignored_folder
