@@ -190,7 +190,7 @@ hits = retrieve_knowledge(
   ```bash
   uv run pytest tests/retrieval/test_ingest.py -v
   ```
-- **Single Retrieval Entry Point & P3 Filter Test Suite (11 Tests)**:
+- **Single Retrieval Entry Point & P3 Filter Test Suite (12 Tests)**:
   ```bash
   uv run pytest tests/retrieval/test_search.py -v
   ```
