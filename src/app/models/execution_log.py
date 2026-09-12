@@ -5,6 +5,8 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.utils.datetime import assume_utc, require_timezone
+
 _SCOPE = "x_2215032_ai_inc_0"
 EXECUTION_LOG_TABLE = f"{_SCOPE}_ai_execution_log"
 
@@ -32,6 +34,11 @@ class ExecutionLogEntry(BaseModel):
     result: str | None = None
     error: str | None = None
 
+    @field_validator("timestamp")
+    @classmethod
+    def _attach_utc_timezone(cls, value: datetime | None) -> datetime | None:
+        return None if value is None else assume_utc(value)
+
 
 class ExecutionLogCreatePayload(BaseModel):
     """Write model: the body we POST to create a new execution log record."""
@@ -52,6 +59,11 @@ class ExecutionLogCreatePayload(BaseModel):
             raise ValueError("field must not be blank")
         return v
 
+    @field_validator("timestamp")
+    @classmethod
+    def _require_timezone(cls, value: datetime) -> datetime:
+        return require_timezone(value)
+
     def to_table_api_body(self) -> dict[str, str]:
         """Serialise to the flat dict the ServiceNow Table API expects."""
         body: dict[str, str] = {
@@ -60,7 +72,7 @@ class ExecutionLogCreatePayload(BaseModel):
             "agent": self.agent,
             "action": self.action,
             "status": self.status.value,
-            "timestamp": self.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+            "timestamp": self.timestamp.astimezone(UTC).strftime("%Y-%m-%d %H:%M:%S"),
         }
         if self.result is not None:
             body["result"] = self.result

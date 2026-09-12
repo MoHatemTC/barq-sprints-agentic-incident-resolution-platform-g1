@@ -1,11 +1,13 @@
 # mypy: disable-error-code="literal-required"
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from app.utils.datetime import assume_utc, require_timezone
 
 _SCOPE = "x_2215032_ai_inc_0"
 
@@ -80,6 +82,11 @@ class Incident(BaseModel):
 
         return cleaned
 
+    @field_validator("ai_processing_start", "ai_processing_end")
+    @classmethod
+    def _attach_utc_timezone(cls, value: datetime | None) -> datetime | None:
+        return None if value is None else assume_utc(value)
+
 
 class IncidentUpdatePayload(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
@@ -115,6 +122,11 @@ class IncidentUpdatePayload(BaseModel):
     ai_failure_reason: str | None = Field(
         default=None, alias=f"{_SCOPE}_ai_failure_reason", max_length=4000
     )
+
+    @field_validator("ai_processing_start", "ai_processing_end")
+    @classmethod
+    def _require_timezone(cls, value: datetime) -> datetime:
+        return require_timezone(value)
 
     @model_validator(mode="after")
     def _enforce_validation_rules(self) -> IncidentUpdatePayload:
@@ -156,7 +168,9 @@ class IncidentUpdatePayload(BaseModel):
             elif isinstance(value, float):
                 body[key] = f"{value:.2f}"
             elif isinstance(value, datetime):
-                body[key] = value.strftime("%Y-%m-%d %H:%M:%S")
+                if value.tzinfo is None:
+                    raise ValueError("datetime must include timezone information")
+                body[key] = value.astimezone(UTC).strftime("%Y-%m-%d %H:%M:%S")
             else:
                 body[key] = str(value)
         return body

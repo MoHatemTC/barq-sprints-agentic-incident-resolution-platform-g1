@@ -14,7 +14,7 @@ Added `ServiceNowTokenManager` to handle access token caching, expiry, and refre
 * If a request receives a `401`, `ServiceNowClient` refreshes the token and retries the request once.
 * Token acquisition and refreshes are protected by an `asyncio.Lock` to prevent duplicate refreshes when multiple requests encounter an expired token at the same time.
 * A failed refresh clears the in-memory token state and re-raises the error.
-* Credentials and raw ServiceNow responses are never included in logs or exception messages.
+* Credentials are never included in logs or exception messages.
 
 ### Incident Reading
 
@@ -40,14 +40,16 @@ Added support for updating AI-related incident fields through:
 
 ### AI Execution Logging (FR-02)
 
-Added `create_execution_log(payload)` to record every processing attempt in the `ai_execution_log` table.
+Added `write_execution_log(payload)` to record every processing attempt in the `ai_execution_log` table.
 
 Supported execution states are:
 
+* `started`
 * `succeeded`
 * `failed`
 * `blocked`
 * `awaiting_approval`
+* `abandoned`
 
 Execution log writes are intentionally non-blocking for the main pipeline. If the audit table write fails, the error is logged and the method returns `None` instead of bringing down incident processing.
 
