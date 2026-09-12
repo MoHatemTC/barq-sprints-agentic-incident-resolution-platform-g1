@@ -4,17 +4,14 @@
 
 ## Status
 
-Not started by the owner. A draft scaffold exists in
-[PR #18](../../../../pull/18) — six eligibility conditions and the
-identifier-only payload — but it is unverified on a PDI and explicitly a
-starting point, not a deliverable.
+S1.3 eligibility and asynchronous event delivery are implemented. The
+canonical documents below record the event contract, verification evidence,
+and current Sprint 1 transport status.
 
-## What lands in this folder once merged
+## Canonical deliverables
 
-- `eligibility-and-event-contract.md` — the six conditions mapped to field
-  names, the payload shape, and the rationale for sending identifiers only
-- The Business Rule script, verified against a request-inspection endpoint
-  since the receiving webhook is Sprint 2
+- [Outbound Event Contract v1](../../event_contract_v1.md)
+- [S1.3 Eligibility and Outbound Event Verification](../../sprint2_eligibility_evidence.md)
 
 ## Requirements
 
