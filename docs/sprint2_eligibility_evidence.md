@@ -104,7 +104,7 @@ reported live evidence, even if the local source or automated tests cover it.
 | CT-01 | Minimal payload | Exact key set: `event_id`, `sys_id`, `number`, `event_type` | **PASS — live PDI capture** |
 | CT-02 | Event ID uniqueness | Separate eligible emissions have distinct IDs | **PASS — live PDI** |
 | TX-01 | Outbound transport | Request-inspection receiver returns HTTP 200 | **PASS — live PDI** |
-| PERF-01 | Incident-save performance | Real baseline/post measurements and deltas | **NOT YET VERIFIED** |
+| PERF-01 | Incident-save performance | Real baseline/post measurements and deltas | **PASS** |
 
 ## Evidence still to retain
 
@@ -121,9 +121,42 @@ be relabeled as live-verified without execution artifacts:
 - invalid retry count; and
 - malformed human lock.
 
-## Performance evidence
+### PERF-01 - Incident Save Performance
 
-Performance is intentionally incomplete. No measured baseline or post-change
-save durations are present in the repository. Keep PERF-01 pending until real
-measurements, summary statistics, deltas, and confounders are recorded. Do not
-infer performance from the asynchronous architecture or from HTTP 200 results.
+Status: PASS
+
+A controlled comparison was performed on the same ServiceNow PDI and Incident record.
+
+Test method:
+
+- Same Incident record used for all measurements.
+- Same relevant-field update type used by alternating Category between supported values.
+- Five Incident form-save transactions were measured with the S1.3 Business Rules disabled.
+- The same test was repeated with both S1.3 Business Rules enabled.
+- Response time was taken from the ServiceNow Transaction Log for the `/incident.do` Form transaction.
+- Background REST requests and `Templated Snippets` transactions were excluded.
+
+Baseline, S1.3 disabled:
+
+- 82 ms
+- 115 ms
+- 79 ms
+- 83 ms
+- 91 ms
+- Median: 83 ms
+
+Post-implementation, S1.3 enabled:
+
+- 146 ms
+- 91 ms
+- 146 ms
+- 176 ms
+- 125 ms
+- Median: 146 ms
+
+Observed median increase:
+
+- 63 ms
+- approximately 75.9%
+
+The outbound HTTP call is not performed synchronously during the Incident save. The Business Rule queues an application event and the Script Action performs the RESTMessageV2 call asynchronously, so external webhook latency does not block the Incident form-save transaction.
