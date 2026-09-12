@@ -86,6 +86,32 @@
 <application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
 <category>customer</category>
 <comments/>
+<name>sys_properties_f6bc7c9b7fe648698bff4cf14982f81b</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_properties"><sys_properties action="INSERT_OR_UPDATE"><choices/><description>Comma-separated Incident categories eligible for S1.3 processing.</description><ignore_cache>false</ignore_cache><is_private>false</is_private><name>x_2215032_ai_inc_0.s1_3_supported_categories</name><read_roles/><suffix>s1_3_supported_categories</suffix><sys_class_name>sys_properties</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-12 02:05:59</sys_created_on><sys_id>f6bc7c9b7fe648698bff4cf14982f81b</sys_id><sys_mod_count>0</sys_mod_count><sys_name>x_2215032_ai_inc_0.s1_3_supported_categories</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_update_name>sys_properties_f6bc7c9b7fe648698bff4cf14982f81b</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-12 02:05:59</sys_updated_on><type>string</type><value>software,network,hardware,inquiry</value><write_roles/></sys_properties></record_update>]]></payload>
+<payload_hash>0</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.3 - Eligibility Business Rule &amp; Minimal Outbound Event Contract">9e6f509183134710b5309e80ceaad355</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-12 02:05:59</sys_created_on>
+<sys_id>6d90bd32dde04660a099c3e91ab0fe6a</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a092a9a7e10000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-12 02:05:59</sys_updated_on>
+<table/>
+<target_name>x_2215032_ai_inc_0.s1_3_supported_categories</target_name>
+<type>System Property</type>
+<update_domain>global</update_domain>
+<update_guid>0ff8b2ab40c84391b1fb351f209a1e82</update_guid>
+<update_guid_history>0ff8b2ab40c84391b1fb351f209a1e82:0</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
 <name>sys_scope_privilege_514602c1835fc310b5309e80ceaad375</name>
 <payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_scope_privilege"><sys_scope_privilege action="INSERT_OR_UPDATE"><operation>execute</operation><source_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</source_scope><status>allowed</status><sys_class_name>sys_scope_privilege</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-11 14:56:55</sys_created_on><sys_id>514602c1835fc310b5309e80ceaad375</sys_id><sys_mod_count>0</sys_mod_count><sys_name>Glide API: string utilities</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_update_name>sys_scope_privilege_514602c1835fc310b5309e80ceaad375</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-11 14:56:55</sys_updated_on><target_name>Glide API: string utilities</target_name><target_scope display_value="Global">global</target_scope><target_type>scriptable</target_type></sys_scope_privilege></record_update>]]></payload>
 <payload_hash>-834481067</payload_hash>
@@ -335,18 +361,48 @@
         'x_2215032_ai_inc_0_ai_retry_count'
     ];
 
-    var SUPPORTED_CATEGORIES = [
-        'software',
-        'hardware',
-        'network',
-        'database'
-    ];
+    var SUPPORTED_CATEGORIES_PROPERTY =
+        'x_2215032_ai_inc_0.s1_3_supported_categories';
+
+    var CATEGORY_PATTERN =
+        /^[a-z0-9]+(?:[-_][a-z0-9]+)*$/;
 
     var PROCESSING_STATE =
         'x_2215032_ai_inc_0_ai_processing_state';
 
     var RETRY_COUNT =
         'x_2215032_ai_inc_0_ai_retry_count';
+
+    function getSupportedCategories() {
+        var configuredValue = String(
+            gs.getProperty(
+                SUPPORTED_CATEGORIES_PROPERTY,
+                ''
+            ) || ''
+        );
+
+        var categories = configuredValue
+            .split(',')
+            .map(function trimCategory(category) {
+                return category.trim();
+            })
+            .filter(function removeEmptyCategory(category) {
+                return category.length &gt; 0;
+            });
+
+        if (
+            categories.length === 0 ||
+            categories.some(
+                function hasMalformedCategory(category) {
+                    return !CATEGORY_PATTERN.test(category);
+                }
+            )
+        ) {
+            return [];
+        }
+
+        return categories;
+    }
 
     function hasRelevantUpdate() {
         for (var i = 0; i &lt; RELEVANT_FIELDS.length; i++) {
@@ -425,7 +481,7 @@
     }
 
     if (
-        SUPPORTED_CATEGORIES.indexOf(category) === -1
+        getSupportedCategories().indexOf(category) === -1
     ) {
         suppress(current, 'unsupported_category');
         return;
@@ -709,12 +765,42 @@
     var HUMAN_LOCK =
         'x_2215032_ai_inc_0_ai_human_lock';
 
-    var SUPPORTED_CATEGORIES = [
-        'software',
-        'hardware',
-        'network',
-        'database'
-    ];
+    var SUPPORTED_CATEGORIES_PROPERTY =
+        'x_2215032_ai_inc_0.s1_3_supported_categories';
+
+    var CATEGORY_PATTERN =
+        /^[a-z0-9]+(?:[-_][a-z0-9]+)*$/;
+
+    function getSupportedCategories() {
+        var configuredValue = String(
+            gs.getProperty(
+                SUPPORTED_CATEGORIES_PROPERTY,
+                ''
+            ) || ''
+        );
+
+        var categories = configuredValue
+            .split(',')
+            .map(function trimCategory(category) {
+                return category.trim();
+            })
+            .filter(function removeEmptyCategory(category) {
+                return category.length &gt; 0;
+            });
+
+        if (
+            categories.length === 0 ||
+            categories.some(
+                function hasMalformedCategory(category) {
+                    return !CATEGORY_PATTERN.test(category);
+                }
+            )
+        ) {
+            return [];
+        }
+
+        return categories;
+    }
 
     var processingState =
         current.getValue(PROCESSING_STATE);
@@ -797,7 +883,7 @@
     }
 
     if (
-        SUPPORTED_CATEGORIES.indexOf(
+        getSupportedCategories().indexOf(
             current.getValue('category')
         ) === -1
     ) {

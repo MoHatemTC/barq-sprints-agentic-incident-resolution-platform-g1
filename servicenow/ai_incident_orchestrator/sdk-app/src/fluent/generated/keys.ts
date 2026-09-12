@@ -41,6 +41,10 @@ declare global {
                         table: 'sys_rest_message'
                         id: '5992d74202fb43fbbb9f1bcf6cb20a4e'
                     }
+                    s1_3_supported_categories: {
+                        table: 'sys_properties'
+                        id: 'f6bc7c9b7fe648698bff4cf14982f81b'
+                    }
                     'src_server_business-rules_incident-eligibility_ts': {
                         table: 'sys_module'
                         id: 'a5815c8f3d0b4f93ab425f3e4498f103'

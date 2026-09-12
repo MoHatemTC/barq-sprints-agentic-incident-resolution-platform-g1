@@ -41,7 +41,11 @@ changes:
 - `x_2215032_ai_inc_0_ai_human_lock`
 - `x_2215032_ai_inc_0_ai_retry_count`
 
-Supported categories are `software`, `hardware`, `network`, and `database`.
+Supported categories come from the scoped system property
+`x_2215032_ai_inc_0.s1_3_supported_categories`. Its current Sprint 1 default,
+aligned with the S1.4 corpus, is `software,network,hardware,inquiry`; the
+property remains the configuration source of truth rather than a fixed list in
+either Business Rule.
 `pending` is eligible. On update, a retry event is eligible only for a new
 transition into `failed`; a record already in `failed` does not emit another
 retry because of an unrelated or otherwise relevant update. The after rule uses

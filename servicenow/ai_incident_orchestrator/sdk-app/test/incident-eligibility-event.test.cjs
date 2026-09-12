@@ -5,6 +5,8 @@ const test = require('node:test')
 const vm = require('node:vm')
 
 const GENERATED_UPDATE_PATH = path.resolve(__dirname, '..', 'dist', 'app', 'update')
+const SUPPORTED_CATEGORIES_PROPERTY = 'x_2215032_ai_inc_0.s1_3_supported_categories'
+const DEFAULT_SUPPORTED_CATEGORIES = 'software,network,hardware,inquiry'
 
 function generatedModule(exportName) {
     const modulePath = fs
@@ -32,13 +34,29 @@ function loadFunction(exportName, globals = {}) {
     return context.__loadedFunction
 }
 
-function eligibilityHarness() {
+function categoryProperty(configuredValue = DEFAULT_SUPPORTED_CATEGORIES) {
+    return (name, defaultValue) => {
+        assert.equal(name, SUPPORTED_CATEGORIES_PROPERTY)
+        assert.equal(defaultValue, '')
+        return configuredValue
+    }
+}
+
+function retryGs(logs, configuredCategories = DEFAULT_SUPPORTED_CATEGORIES) {
+    return {
+        getProperty: categoryProperty(configuredCategories),
+        info: (message) => logs.push(message),
+    }
+}
+
+function eligibilityHarness(configuredCategories = DEFAULT_SUPPORTED_CATEGORIES) {
     const logs = []
     const queued = []
     let guidSequence = 0
     const gs = {
         eventQueue: (name, current, parm1, parm2) => queued.push({ name, current, parm1, parm2 }),
         generateGUID: () => `event-${++guidSequence}`,
+        getProperty: categoryProperty(configuredCategories),
         info: (message) => logs.push(message),
     }
 
@@ -140,7 +158,7 @@ for (const [previousRetryCount, advancedRetryCount] of [['0', '1'], ['1', '2']])
     test(`new failed transition advances retry_count ${previousRetryCount} -> ${advancedRetryCount} and emits`, () => {
         const retryLogs = []
         const escalate = loadFunction('escalateExhaustedRetry', {
-            gs: { info: (message) => retryLogs.push(message) },
+            gs: retryGs(retryLogs),
         })
         const { evaluate, queued } = eligibilityHarness()
         const previous = record('update', {
@@ -178,7 +196,7 @@ test('pending remains eligible regardless of an exhausted retry counter', () => 
 test('new failed transition at retry_count 2 emits nothing and requires human review', () => {
     const retryLogs = []
     const escalate = loadFunction('escalateExhaustedRetry', {
-        gs: { info: (message) => retryLogs.push(message) },
+        gs: retryGs(retryLogs),
     })
     const { evaluate, logs, queued } = eligibilityHarness()
     const previous = record('update', {
@@ -205,7 +223,7 @@ test('invalid retry count fails closed without an event', () => {
     for (const retryCount of ['not-a-number', '-1']) {
         const retryLogs = []
         const escalate = loadFunction('escalateExhaustedRetry', {
-            gs: { info: (message) => retryLogs.push(message) },
+            gs: retryGs(retryLogs),
         })
         const { evaluate, logs, queued } = eligibilityHarness()
         const previous = record('update', {
@@ -238,7 +256,7 @@ test('failed to failed unrelated or relevant updates do not emit another retry',
     for (const [currentOverrides, previousOverrides] of updates) {
         const retryLogs = []
         const escalate = loadFunction('escalateExhaustedRetry', {
-            gs: { info: (message) => retryLogs.push(message) },
+            gs: retryGs(retryLogs),
         })
         const { evaluate, queued } = eligibilityHarness()
         const current = record('update', {
@@ -272,7 +290,7 @@ test('new failed transition consumes no retry when another eligibility condition
     for (const overrides of ineligibleOverrides) {
         const logs = []
         const escalate = loadFunction('escalateExhaustedRetry', {
-            gs: { info: (message) => logs.push(message) },
+            gs: retryGs(logs),
         })
         const previous = record('update', {
             x_2215032_ai_inc_0_ai_processing_state: 'pending',
@@ -323,11 +341,80 @@ test('Human Lock 0, empty, and null allow normal eligibility', () => {
     }
 })
 
+test('all configured S1.4 corpus categories are eligible', () => {
+    for (const category of ['software', 'network', 'hardware', 'inquiry']) {
+        const { evaluate, queued } = eligibilityHarness()
+
+        evaluate(record('insert', { category }), null)
+
+        assert.equal(queued.length, 1, `${category} should be eligible`)
+    }
+})
+
+test('database and unknown categories are suppressed as unsupported', () => {
+    for (const category of ['database', 'unknown_category']) {
+        const { evaluate, logs, queued } = eligibilityHarness()
+
+        evaluate(record('insert', { category }), null)
+
+        assert.equal(queued.length, 0)
+        assert.deepEqual(logs, [
+            'S1.3 eligibility suppressed: unsupported_category number=INC0012345 sys_id=0123456789abcdef0123456789abcdef',
+        ])
+    }
+})
+
+test('configured category entries are trimmed and empty entries are ignored', () => {
+    const { evaluate, queued } = eligibilityHarness(' software, network , , hardware, inquiry ')
+
+    evaluate(record('insert', { category: 'inquiry' }), null)
+
+    assert.equal(queued.length, 1)
+})
+
+test('empty or malformed category configuration fails closed', () => {
+    for (const configuredCategories of ['', ' , , ', 'software,not valid']) {
+        const { evaluate, logs, queued } = eligibilityHarness(configuredCategories)
+
+        evaluate(record('insert', { category: 'software' }), null)
+
+        assert.equal(queued.length, 0)
+        assert.deepEqual(logs, [
+            'S1.3 eligibility suppressed: unsupported_category number=INC0012345 sys_id=0123456789abcdef0123456789abcdef',
+        ])
+    }
+})
+
+test('retry rule uses the configured category property and fails closed when empty', () => {
+    for (const [configuredCategories, expectedRetryCount] of [
+        [' software ', '1'],
+        ['network', '0'],
+        ['', '0'],
+    ]) {
+        const logs = []
+        const escalate = loadFunction('escalateExhaustedRetry', {
+            gs: retryGs(logs, configuredCategories),
+        })
+        const previous = record('update', {
+            x_2215032_ai_inc_0_ai_processing_state: 'pending',
+            x_2215032_ai_inc_0_ai_retry_count: '0',
+        })
+        const current = record('update', {
+            x_2215032_ai_inc_0_ai_processing_state: 'failed',
+            x_2215032_ai_inc_0_ai_retry_count: '0',
+        })
+
+        escalate(current, previous)
+
+        assert.equal(current.getValue('x_2215032_ai_inc_0_ai_retry_count'), expectedRetryCount)
+    }
+})
+
 test('retry rule treats empty and null Human Lock as unlocked', () => {
     for (const humanLock of ['', null]) {
         const logs = []
         const escalate = loadFunction('escalateExhaustedRetry', {
-            gs: { info: (message) => logs.push(message) },
+            gs: retryGs(logs),
         })
         const previous = record('update', {
             x_2215032_ai_inc_0_ai_processing_state: 'pending',
@@ -416,7 +503,7 @@ test('Script Action logs an error and makes no HTTP call when the endpoint prope
 
 test('retry escalation sets human review before update without calling current.update()', () => {
     const logs = []
-    const escalate = loadFunction('escalateExhaustedRetry', { gs: { info: (message) => logs.push(message) } })
+    const escalate = loadFunction('escalateExhaustedRetry', { gs: retryGs(logs) })
     const current = record('update', {
         x_2215032_ai_inc_0_ai_processing_state: 'failed',
         x_2215032_ai_inc_0_ai_retry_count: '2',

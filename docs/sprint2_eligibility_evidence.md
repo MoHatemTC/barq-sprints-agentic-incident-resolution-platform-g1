@@ -51,7 +51,11 @@ Relevant update fields:
 - `x_2215032_ai_inc_0_ai_human_lock`
 - `x_2215032_ai_inc_0_ai_retry_count`
 
-Supported categories are `software`, `hardware`, `network`, and `database`.
+Supported categories come from the scoped system property
+`x_2215032_ai_inc_0.s1_3_supported_categories`. Its current Sprint 1 default,
+aligned with the S1.4 corpus, is `software,network,hardware,inquiry`; the
+property is the configuration source of truth and is not permanently fixed in
+either Business Rule.
 
 | Condition | Result |
 |---|---|

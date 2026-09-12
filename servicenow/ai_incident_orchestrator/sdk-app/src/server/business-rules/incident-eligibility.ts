@@ -9,7 +9,31 @@ const RELEVANT_FIELDS = [
     'x_2215032_ai_inc_0_ai_retry_count',
 ]
 
-const SUPPORTED_CATEGORIES = ['software', 'hardware', 'network', 'database']
+const SUPPORTED_CATEGORIES_PROPERTY = 'x_2215032_ai_inc_0.s1_3_supported_categories'
+const CATEGORY_PATTERN = /^[a-z0-9]+(?:[-_][a-z0-9]+)*$/
+
+function getSupportedCategories(): string[] {
+    const configuredValue = String(gs.getProperty(SUPPORTED_CATEGORIES_PROPERTY, '') || '')
+    const categories = configuredValue
+        .split(',')
+        .map(function trimCategory(category) {
+            return category.trim()
+        })
+        .filter(function removeEmptyCategory(category) {
+            return category.length > 0
+        })
+
+    if (
+        categories.length === 0 ||
+        categories.some(function hasMalformedCategory(category) {
+            return !CATEGORY_PATTERN.test(category)
+        })
+    ) {
+        return []
+    }
+
+    return categories
+}
 
 function hasRelevantUpdate(current: any, previous: any): boolean {
     return RELEVANT_FIELDS.some(function fieldChanged(fieldName) {
@@ -63,7 +87,7 @@ export function evaluateIncidentEligibility(current: any, previous: any): void {
         return
     }
 
-    if (SUPPORTED_CATEGORIES.indexOf(category) === -1) {
+    if (getSupportedCategories().indexOf(category) === -1) {
         suppress(current, 'unsupported_category')
         return
     }

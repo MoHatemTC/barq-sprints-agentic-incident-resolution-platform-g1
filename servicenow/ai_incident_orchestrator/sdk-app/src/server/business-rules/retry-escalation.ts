@@ -3,7 +3,31 @@ import { gs } from '@servicenow/glide'
 const PROCESSING_STATE = 'x_2215032_ai_inc_0_ai_processing_state'
 const RETRY_COUNT = 'x_2215032_ai_inc_0_ai_retry_count'
 const HUMAN_REVIEW_REQUIRED = 'x_2215032_ai_inc_0_ai_human_review_required'
-const SUPPORTED_CATEGORIES = ['software', 'hardware', 'network', 'database']
+const SUPPORTED_CATEGORIES_PROPERTY = 'x_2215032_ai_inc_0.s1_3_supported_categories'
+const CATEGORY_PATTERN = /^[a-z0-9]+(?:[-_][a-z0-9]+)*$/
+
+function getSupportedCategories(): string[] {
+    const configuredValue = String(gs.getProperty(SUPPORTED_CATEGORIES_PROPERTY, '') || '')
+    const categories = configuredValue
+        .split(',')
+        .map(function trimCategory(category) {
+            return category.trim()
+        })
+        .filter(function removeEmptyCategory(category) {
+            return category.length > 0
+        })
+
+    if (
+        categories.length === 0 ||
+        categories.some(function hasMalformedCategory(category) {
+            return !CATEGORY_PATTERN.test(category)
+        })
+    ) {
+        return []
+    }
+
+    return categories
+}
 
 export function escalateExhaustedRetry(current: any, previous: any): void {
     if (current.getValue(PROCESSING_STATE) !== 'failed') {
@@ -32,7 +56,7 @@ export function escalateExhaustedRetry(current: any, previous: any): void {
     if (
         current.getValue('active') !== '1' ||
         current.getValue('x_2215032_ai_inc_0_ai_enabled') !== '1' ||
-        SUPPORTED_CATEGORIES.indexOf(current.getValue('category')) === -1 ||
+        getSupportedCategories().indexOf(current.getValue('category')) === -1 ||
         current.getValue('x_2215032_ai_inc_0_ai_human_lock') === '1'
     ) {
         return
