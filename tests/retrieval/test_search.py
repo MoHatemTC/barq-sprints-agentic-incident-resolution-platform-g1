@@ -18,6 +18,7 @@ from app.models.knowledge import Article, SecurityLevel, WorkflowState
 from app.retrieval.embedding import EmbeddedText, FastEmbedEngine
 from app.retrieval.ingest import ingest_articles
 from app.retrieval.search import (
+    RetrievalHit,
     _build_filter,
     retrieve_knowledge,
 )
@@ -217,6 +218,52 @@ def test_malformed_payload_raises() -> None:
             collection_name="col",
             engine=_dummy_mock_engine(),
         )
+
+
+def test_wrong_typed_payload_value_raises() -> None:
+    """A present-but-invalid value (title=None) fails loud instead of becoming the text 'None'."""
+    spy_client = MagicMock(spec=QdrantClient)
+    bad_point = ScoredPoint(
+        id="null-title-uuid",
+        version=1,
+        score=0.42,
+        payload={
+            "article_number": "KB0010",
+            "version": "2.0",
+            "title": None,  # wrong type: str field receiving None
+            "category": "software",
+            "service": "order-service",
+            "workflow_state": "published",
+            "security_level": "internal",
+            "section": "Resolution",
+            "chunk_index": 0,
+            "total_chunks": 1,
+            "chunk_text": "Drain the connection pool.",
+        },
+        vector=None,
+    )
+    spy_client.query_points.return_value = MagicMock(points=[bad_point])
+
+    with pytest.raises(ValueError, match="null-title-uuid.*malformed payload"):
+        retrieve_knowledge(
+            spy_client,
+            "test query",
+            collection_name="col",
+            engine=_dummy_mock_engine(),
+        )
+
+
+def test_root_shim_exposes_entry_point() -> None:
+    """The retrieval.* compatibility namespace exposes the same public API as app.retrieval."""
+    from retrieval.search import (
+        RetrievalHit as ShimRetrievalHit,
+    )
+    from retrieval.search import (
+        retrieve_knowledge as shim_retrieve_knowledge,
+    )
+
+    assert shim_retrieve_knowledge is retrieve_knowledge
+    assert ShimRetrievalHit is RetrievalHit
 
 
 # ---------------------------------------------------------------------------

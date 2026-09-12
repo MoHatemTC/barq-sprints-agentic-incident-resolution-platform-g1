@@ -168,7 +168,8 @@ barq-sprints-agentic-incident-resolution-platform-g1/
 ├── src/retrieval/               # Root Re-Export Shims (packaged in the wheel)
 │   ├── __init__.py              # Package marker
 │   ├── embedding.py             # Re-exports FastEmbedEngine, EmbeddingEngine, EmbeddedText, DENSE_VECTOR_SIZE
-│   └── ingest.py                # Re-exports ingest_articles, build_point_id, KB_NAMESPACE
+│   ├── ingest.py                # Re-exports ingest_articles, build_point_id, KB_NAMESPACE
+│   └── search.py                # Re-exports retrieve_knowledge, RetrievalHit
 ├── data/
 │   ├── barq-system-kb.pdf       # Source BARQ Operations Manual (Edition 4.0, git-ignored, INTERNAL)
 │   ├── coverage_matrix.csv      # Real incident-to-runbook ground truth mapping (13 scenarios)

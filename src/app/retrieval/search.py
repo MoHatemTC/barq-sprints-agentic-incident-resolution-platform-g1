@@ -9,7 +9,7 @@ Rank Fusion (RRF), enforcing the safety-critical P3 invariant:
 from __future__ import annotations
 
 import structlog
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, ValidationError
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
     FieldCondition,
@@ -22,6 +22,7 @@ from qdrant_client.models import (
 )
 
 from app.clients.qdrant import DENSE_VECTOR_NAME, SPARSE_VECTOR_NAME
+from app.models.knowledge import KnowledgePayload
 from app.retrieval.embedding import EmbeddingEngine, FastEmbedEngine
 
 logger = structlog.get_logger(__name__)
@@ -167,23 +168,27 @@ def retrieve_knowledge(
             raise ValueError(f"Point {point.id} returned without payload")
 
         try:
+            # Validate against the ingestion contract first: missing keys AND
+            # wrong-typed values (e.g. title=None) must fail loud, not coerce
+            # into plausible-looking hits.
+            validated = KnowledgePayload.model_validate(payload)
             hit = RetrievalHit(
                 score=float(point.score),
-                article_id=str(payload["article_id"]),
-                article_number=str(payload["article_number"]),
-                version=str(payload["version"]),
-                title=str(payload["title"]),
-                section=str(payload["section"]),
-                chunk_index=int(payload["chunk_index"]),
-                chunk_text=str(payload["chunk_text"]),
-                workflow_state=str(payload["workflow_state"]),
-                category=str(payload["category"]),
-service=payload["service"],
+                article_id=validated.article_id,
+                article_number=validated.article_number,
+                version=validated.version,
+                title=validated.title,
+                section=validated.section,
+                chunk_index=validated.chunk_index,
+                chunk_text=validated.chunk_text,
+                workflow_state=validated.workflow_state.value,
+                category=validated.category,
+                service=validated.service,
             )
             hits.append(hit)
-        except (KeyError, TypeError, ValueError) as err:
+        except (ValidationError, TypeError, ValueError) as err:
             raise ValueError(
-                f"Point {point.id} has malformed payload missing required field: {err}"
+                f"Point {point.id} has malformed payload violating the ingestion contract: {err}"
             ) from err
 
     return hits
