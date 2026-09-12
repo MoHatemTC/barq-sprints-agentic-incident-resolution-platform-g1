@@ -46,7 +46,10 @@ class ServiceNowTokenManager:
                 return self._token
 
             if self._refresh_token:
-                await self._refresh_access_token()
+                try:
+                    await self._refresh_access_token()
+                except ServiceNowAuthenticationError:
+                    await self._fetch_access_token()
             else:
                 await self._fetch_access_token()
 
