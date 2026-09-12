@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import email.utils
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, patch
 
 import httpx
@@ -832,3 +834,81 @@ class TestHumanLockSafety:
         # Verify add_work_note raises ServiceNowHumanLockError on locked incident
         with pytest.raises(ServiceNowHumanLockError, match="is locked"):
             await client.add_work_note("locked123", "Attempting note on locked incident")
+
+
+class TestTransportErrorsEscapeAsServiceNowError:
+    async def test_connection_reset_mid_response_raises_connection_error(self) -> None:
+        """httpx.ReadError (connection reset mid-response)."""
+        client, http, _ = _build_client()
+        http.request.side_effect = httpx.ReadError("connection reset by peer")
+
+        with pytest.raises(ServiceNowConnectionError, match="Transport error"):
+            await client.get_incident("abc123")
+
+    async def test_server_closes_connection_raises_connection_error(self) -> None:
+        """httpx.RemoteProtocolError (server closed the connection)."""
+        client, http, _ = _build_client()
+        http.request.side_effect = httpx.RemoteProtocolError(
+            "Server disconnected without sending a response"
+        )
+
+        with pytest.raises(ServiceNowConnectionError, match="Transport error"):
+            await client.get_incident("abc123")
+
+    async def test_more_specific_handlers_still_take_priority(self) -> None:
+        client, http, _ = _build_client()
+        http.request.side_effect = httpx.ConnectError("connection refused")
+
+        with pytest.raises(ServiceNowConnectionError, match="Failed to connect"):
+            await client.get_incident("abc123")
+
+
+class TestRetryAfterDateForm:
+    async def test_retry_after_http_date_form_is_parsed(self) -> None:
+        future = datetime.now(UTC) + timedelta(seconds=45)
+        header_value = email.utils.format_datetime(future, usegmt=True)
+
+        resp = _api_response(
+            status_code=429,
+            result=None,
+            text="Rate limited",
+            headers={"Retry-After": header_value},
+        )
+        client, http, _ = _build_client(responses=[resp])
+
+        with pytest.raises(ServiceNowRateLimitError) as exc_info:
+            await client.get_incident("abc")
+
+        # allow a couple seconds of test-execution slack either side
+        assert exc_info.value.retry_after is not None
+        assert 40.0 <= exc_info.value.retry_after <= 46.0
+
+    async def test_retry_after_garbage_value_does_not_raise(self) -> None:
+        """An unparseable header must degrade to None, not crash the call."""
+        resp = _api_response(
+            status_code=429,
+            result=None,
+            text="Rate limited",
+            headers={"Retry-After": "not-a-real-header-value"},
+        )
+        client, http, _ = _build_client(responses=[resp])
+
+        with pytest.raises(ServiceNowRateLimitError) as exc_info:
+            await client.get_incident("abc")
+
+        assert exc_info.value.retry_after is None
+
+    async def test_retry_after_numeric_form_still_works(self) -> None:
+        """Regression guard: the original delay-seconds form still parses."""
+        resp = _api_response(
+            status_code=429,
+            result=None,
+            text="Rate limited",
+            headers={"Retry-After": "30"},
+        )
+        client, http, _ = _build_client(responses=[resp])
+
+        with pytest.raises(ServiceNowRateLimitError) as exc_info:
+            await client.get_incident("abc")
+
+        assert exc_info.value.retry_after == 30.0

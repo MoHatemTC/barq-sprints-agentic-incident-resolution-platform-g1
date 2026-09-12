@@ -1,5 +1,6 @@
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
+from email.utils import parsedate_to_datetime
 from typing import Any
 
 
@@ -26,6 +27,23 @@ def values_equal(requested: Any, persisted: Any) -> bool:
             pass
 
     return requested == persisted
+
+
+def parse_retry_after(value: str | None) -> int | float | None:
+    if not value:
+        return None
+
+    try:
+        return float(value)
+    except ValueError:
+        pass
+
+    try:
+        retry_at = parsedate_to_datetime(value)
+        now = datetime.now(retry_at.tzinfo)
+        return max(0.0, (retry_at - now).total_seconds())
+    except (TypeError, ValueError, OverflowError):
+        return None
 
 
 def _normalize_bool(value: Any) -> bool | None:

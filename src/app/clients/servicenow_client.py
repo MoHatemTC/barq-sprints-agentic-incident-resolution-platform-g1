@@ -29,7 +29,7 @@ from app.models.execution_log import (
 )
 from app.models.incident import Incident, IncidentUpdatePayload
 from app.models.work_note import WorkNoteUpdate
-from app.utils.servicenow import values_equal
+from app.utils.servicenow import parse_retry_after, values_equal
 
 logger = structlog.getLogger(__name__)
 
@@ -206,6 +206,10 @@ class ServiceNowClient:
             ) from exc
         except httpx.ConnectError as exc:
             raise ServiceNowConnectionError(f"Failed to connect to {url}: {exc}") from exc
+        except httpx.TransportError as exc:
+            raise ServiceNowConnectionError(
+                f"Transport error while requesting {method} {url}"
+            ) from exc
 
         if response.status_code == status.HTTP_401_UNAUTHORIZED and _retry_on_auth_failure:
             logger.warning(
@@ -249,10 +253,10 @@ class ServiceNowClient:
                 details={"body": response.text[:500]},
             )
         if response.status_code == status.HTTP_429_TOO_MANY_REQUESTS:
-            retry_after = response.headers.get("Retry-After")
+            retry_after = parse_retry_after(response.headers.get("Retry-After"))
             raise ServiceNowRateLimitError(
                 f"Rate limited on {method} {path}",
-                retry_after=float(retry_after) if retry_after else None,
+                retry_after=retry_after,
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 details={"body": response.text[:500]},
             )

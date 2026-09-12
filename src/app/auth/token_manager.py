@@ -100,6 +100,10 @@ class ServiceNowTokenManager:
             raise ServiceNowConnectionError(
                 "Could not connect to ServiceNow OAuth endpoint"
             ) from exc
+        except httpx.TransportError as exc:
+            raise ServiceNowConnectionError(
+                "Transport error while requesting OAuth token from ServiceNow"
+            ) from exc
 
         if response.status_code != status.HTTP_200_OK:
             logger.error(
@@ -111,7 +115,15 @@ class ServiceNowTokenManager:
                 f"ServiceNow rejected OAuth token request with status {response.status_code}",
                 status_code=response.status_code,
             )
-        token = OAuthTokenResponse.model_validate(response.json())
+
+        try:
+            token = OAuthTokenResponse.model_validate(response.json())
+        except ValueError as exc:
+            raise ServiceNowAuthenticationError(
+                "OAuth endpoint returned a non-token response (is the PDI hibernating?)",
+                status_code=response.status_code,
+            ) from exc
+
         self._token = token.access_token
 
         if token.refresh_token:
