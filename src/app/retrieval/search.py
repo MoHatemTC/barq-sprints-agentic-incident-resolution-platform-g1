@@ -178,7 +178,7 @@ def retrieve_knowledge(
                 chunk_text=str(payload["chunk_text"]),
                 workflow_state=str(payload["workflow_state"]),
                 category=str(payload["category"]),
-                service=payload.get("service"),
+service=payload["service"],
             )
             hits.append(hit)
         except (KeyError, TypeError, ValueError) as err:
