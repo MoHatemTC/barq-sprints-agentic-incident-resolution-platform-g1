@@ -113,10 +113,11 @@ def retrieve_knowledge(
         A list of `RetrievalHit` objects ordered by descending RRF fusion rank score.
 
     Raises:
-        ValueError: If a retrieved point has missing or malformed payload fields.
+        ValueError: If the query is empty or whitespace-only, or if a retrieved
+            point has missing or malformed payload fields.
     """
     if not query or not query.strip():
-        return []
+        raise ValueError("query must be a non-empty string")
 
     target_collection = collection_name or _get_default_collection_name()
 

@@ -175,12 +175,19 @@ def test_filter_applied_to_top_level_query() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_empty_results_return_empty_list() -> None:
-    """Empty query string or zero matching points returns empty list gracefully."""
+def test_blank_query_raises_loudly() -> None:
+    """An empty/whitespace query is invalid input and must fail loud, not return []."""
     spy_client = MagicMock(spec=QdrantClient)
-    assert retrieve_knowledge(spy_client, "") == []
-    assert retrieve_knowledge(spy_client, "   ") == []
+    with pytest.raises(ValueError, match="query must be a non-empty string"):
+        retrieve_knowledge(spy_client, "")
+    with pytest.raises(ValueError, match="query must be a non-empty string"):
+        retrieve_knowledge(spy_client, "   ")
+    assert not spy_client.query_points.called
 
+
+def test_empty_results_return_empty_list() -> None:
+    """Zero matching points returns an empty list gracefully."""
+    spy_client = MagicMock(spec=QdrantClient)
     spy_client.query_points.return_value = MagicMock(points=[])
     hits = retrieve_knowledge(
         spy_client,
