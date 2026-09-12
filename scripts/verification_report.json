@@ -1,6 +1,6 @@
 {
   "sprint": "S1.2",
-  "generated_at": "2026-09-12T13:59:02.588555+00:00",
+  "generated_at": "2026-09-12T14:24:03.328166+00:00",
   "instance": "https://dev407364.service-now.com",
   "service_account": "ai_orchestrator_svc",
   "summary": {
@@ -134,10 +134,10 @@
       "target": "x_2215032_ai_inc_0_ai_execution_log",
       "expected": "201 Created + all required fields persisted",
       "http_status": 201,
-      "observed": "HTTP 201 (sys_id=fa8283dd471fc710c148497f316d43d1)",
+      "observed": "HTTP 201 (sys_id=154843d9475fc710c148497f316d437e)",
       "persisted_change": true,
       "verdict": "PASS",
-      "notes": "exec_id=exec_verify_ed41f8b65a52 | sys_id=fa8283dd471fc710c148497f316d43d1"
+      "notes": "exec_id=exec_verify_6cf1a718ada0 | sys_id=154843d9475fc710c148497f316d437e"
     },
     {
       "test_id": "LOG-02",
@@ -147,10 +147,10 @@
       "target": "x_2215032_ai_inc_0_ai_execution_log",
       "expected": "201 Created + all required fields persisted",
       "http_status": 201,
-      "observed": "HTTP 201 (sys_id=3e8283dd471fc710c148497f316d43e4)",
+      "observed": "HTTP 201 (sys_id=1d4843d9475fc710c148497f316d438f)",
       "persisted_change": true,
       "verdict": "PASS",
-      "notes": "exec_id=exec_verify_6d6edf04261c | sys_id=3e8283dd471fc710c148497f316d43e4"
+      "notes": "exec_id=exec_verify_b0964ea60a2a | sys_id=1d4843d9475fc710c148497f316d438f"
     },
     {
       "test_id": "LOG-03",
@@ -160,10 +160,10 @@
       "target": "x_2215032_ai_inc_0_ai_execution_log",
       "expected": "201 Created + all required fields persisted",
       "http_status": 201,
-      "observed": "HTTP 201 (sys_id=4f8283dd471fc710c148497f316d43e9)",
+      "observed": "HTTP 201 (sys_id=5d4843d9475fc710c148497f316d4394)",
       "persisted_change": true,
       "verdict": "PASS",
-      "notes": "exec_id=exec_verify_ca5a36c0a407 | sys_id=4f8283dd471fc710c148497f316d43e9"
+      "notes": "exec_id=exec_verify_07ccc0fc0be0 | sys_id=5d4843d9475fc710c148497f316d4394"
     },
     {
       "test_id": "LOG-06",
@@ -173,10 +173,10 @@
       "target": "x_2215032_ai_inc_0_ai_execution_log",
       "expected": "201 Created + all required fields persisted",
       "http_status": 201,
-      "observed": "HTTP 201 (sys_id=478283dd471fc710c148497f316d43fb)",
+      "observed": "HTTP 201 (sys_id=ad4843d9475fc710c148497f316d4399)",
       "persisted_change": true,
       "verdict": "PASS",
-      "notes": "exec_id=exec_verify_7bcd59dc44ee | sys_id=478283dd471fc710c148497f316d43fb"
+      "notes": "exec_id=exec_verify_e9d81340d4f6 | sys_id=ad4843d9475fc710c148497f316d4399"
     },
     {
       "test_id": "LOG-04",
@@ -189,14 +189,14 @@
       "observed": "HTTP 200 (1 record(s) found)",
       "persisted_change": false,
       "verdict": "PASS",
-      "notes": "exec_id='exec_idx_3e6578fb3be94c46' -> sys_id=9782c3dd471fc710c148497f316d4300"
+      "notes": "exec_id='exec_idx_cb421ec7e65a42d6' -> sys_id=254843d9475fc710c148497f316d43c4"
     },
     {
       "test_id": "LOG-05",
       "category": "Execution Log",
       "name": "Cannot delete execution log records (append-only)",
       "operation": "DELETE",
-      "target": "x_2215032_ai_inc_0_ai_execution_log/9382c3dd471fc710c148497f316d4312",
+      "target": "x_2215032_ai_inc_0_ai_execution_log/f54843d9475fc710c148497f316d43c9",
       "expected": "403 or 404 (delete blocked)",
       "http_status": 403,
       "observed": "HTTP 403 (record_exists=True)",

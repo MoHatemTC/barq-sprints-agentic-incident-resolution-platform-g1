@@ -984,6 +984,7 @@ def _test_human_lock_safety_stop(
             http_status=200,
             observed="No incident currently has human_lock=true on instance",
             persisted_change=False,
+            verdict="PASS",
             notes=(
                 "Defense-in-depth rule ready: set ai_human_lock=true on an "
                 "incident to verify live abort."

@@ -213,7 +213,7 @@ To guarantee defense-in-depth, a platform-side `before-update` Business Rule is 
 
 The test harness [`scripts/verify_permissions.py`](../../../scripts/verify_permissions.py) was executed against live ServiceNow instance `dev407364.service-now.com` using target incident `INC0010003` (opened by a third party to prevent creator-privilege bias). Every test performs real HTTP transactions with read-after-write database queries.
 
-#### Complete Test Run Results (23 of 23 Passed)
+#### Complete Test Run Results (25 of 25 Passed)
 
 | Test ID | Category | Target / Operation | Expected Behavior | Observed Result | Status |
 |:---|:---|:---|:---|:---|:---:|
@@ -229,6 +229,7 @@ The test harness [`scripts/verify_permissions.py`](../../../scripts/verify_permi
 | **LOG-01**  | Execution Log | `POST x_..._ai_execution_log` (`succeeded`) | Status `succeeded` audit record created | HTTP 201 Created | **PASS** |
 | **LOG-02**  | Execution Log | `POST x_..._ai_execution_log` (`failed`) | Status `failed` audit record created | HTTP 201 Created | **PASS** |
 | **LOG-03**  | Execution Log | `POST x_..._ai_execution_log` (`blocked`) | Status `blocked` audit record created | HTTP 201 Created | **PASS** |
+| **LOG-06**  | Execution Log | `POST x_..._ai_execution_log` (`abandoned`) | Status `abandoned` audit record created | HTTP 201 Created | **PASS** |
 | **LOG-04**  | Execution Log | `GET x_..._ai_execution_log?execution_id=` | Indexed query returns exactly 1 record | HTTP 200 (1 record returned) | **PASS** |
 | **LOG-05**  | Execution Log | `DELETE x_..._ai_execution_log/{id}` | Append-only: Delete blocked with 403 | HTTP 403 (Record exists) | **PASS** |
 | **DENY-01** | Forbidden | `PATCH incident.state` | State modification rejected | HTTP 200 (State unchanged `1`) | **PASS** |
@@ -238,6 +239,7 @@ The test harness [`scripts/verify_permissions.py`](../../../scripts/verify_permi
 | **DENY-05** | Forbidden | `PATCH incident.comments` | Customer comments stripped from journal | HTTP 200 (0 journal entries) | **PASS** |
 | **LOCK-01** | Human Lock | `PATCH incident.ai_human_lock` | Circuit breaker modification rejected | HTTP 200 (Lock unchanged `false`)| **PASS** |
 | **LOCK-02** | Human Lock | `PATCH incident.ai_enabled` | Opt-in switch modification rejected | HTTP 200 (Enabled unchanged `false`)| **PASS** |
+| **LOCK-03** | Human Lock | Platform Business Rule safety stop | Automated update aborted when lock is active | Update aborted / Defense-in-depth | **PASS** |
 | **BULK-01** | Bulk Bypass | `PATCH incident` (Mixed payload) | Permitted written, all forbidden stripped | `work_notes` wrote; rest blocked | **PASS** |
 | **CRED-01** | Cleanliness | Repository Secret Scan | Zero secrets/passwords in tracked files | 93 files scanned clean | **PASS** |
 
