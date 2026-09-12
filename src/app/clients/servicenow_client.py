@@ -4,6 +4,7 @@ from typing import Any
 import httpx
 import structlog
 from fastapi import status
+from pydantic import ValidationError
 
 from app.auth.token_manager import ServiceNowTokenManager
 from app.core.config import Settings
@@ -104,17 +105,14 @@ class ServiceNowClient:
     ) -> ExecutionLogEntry | None:
         body = payload.to_table_api_body()
         start_time = time.perf_counter()
+
         try:
-            result = await self._request("POST", f"/api/now/table/{EXECUTION_LOG_TABLE}", json=body)
-            latency_ms = (time.perf_counter() - start_time) * 1000
-            logger.info(
-                "execution_log_written",
-                execution_id=payload.execution_id,
-                incident_sys_id=payload.incident_sys_id,
-                latency_ms=latency_ms,
+            result = await self._request(
+                "POST",
+                f"/api/now/table/{EXECUTION_LOG_TABLE}",
+                json=body,
             )
-            return ExecutionLogEntry.model_validate(result)
-        except Exception:
+        except ServiceNowError:
             latency_ms = (time.perf_counter() - start_time) * 1000
             logger.exception(
                 "execution_log_write_failed",
@@ -125,6 +123,29 @@ class ServiceNowClient:
                 latency_ms=latency_ms,
             )
             return None
+
+        try:
+            entry = ExecutionLogEntry.model_validate(result)
+        except ValidationError:
+            latency_ms = (time.perf_counter() - start_time) * 1000
+            logger.exception(
+                "execution_log_response_unparseable",
+                execution_id=payload.execution_id,
+                incident_sys_id=payload.incident_sys_id,
+                agent=payload.agent,
+                action=payload.action,
+                latency_ms=latency_ms,
+            )
+            return None
+
+        latency_ms = (time.perf_counter() - start_time) * 1000
+        logger.info(
+            "execution_log_written",
+            execution_id=payload.execution_id,
+            incident_sys_id=payload.incident_sys_id,
+            latency_ms=latency_ms,
+        )
+        return entry
 
     ################################################
 
@@ -138,6 +159,11 @@ class ServiceNowClient:
         _retry_on_auth_failure: bool = True,
     ) -> Any:
         url = f"{self._settings.servicenow_instance_url}{path}"
+        params = {
+            **(params or {}),
+            "sysparm_exclude_reference_link": "true",
+        }
+
         token = await self._tokens.get_token()
         headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
         if json is not None:

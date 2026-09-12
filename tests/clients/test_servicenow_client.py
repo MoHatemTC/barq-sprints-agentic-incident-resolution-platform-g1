@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import httpx
 import pytest
@@ -416,6 +416,7 @@ class TestWriteExecutionLog:
 
         entry = await client.write_execution_log(_log_payload())
 
+        assert entry is not None
         assert entry.sys_id == "log_abc123"
         assert entry.execution_id == "exec_test_001"
         assert entry.status == ExecutionStatus.SUCCEEDED
@@ -534,6 +535,63 @@ class TestWriteExecutionLog:
         entry = await client.write_execution_log(_log_payload())
         assert entry is None
 
+    async def test_write_log_handles_realistic_servicenow_reference_response(
+        self,
+    ) -> None:
+        """A successful 201 response with reference objects must parse correctly."""
+        result = _execution_log_result()
+        resp = _api_response(status_code=201, result=result)
+
+        client, http, _ = _build_client(responses=[resp])
+
+        entry = await client.write_execution_log(_log_payload())
+
+        assert entry is not None
+        assert entry.sys_id == "log_abc123"
+        assert entry.execution_id == "exec_test_001"
+        assert entry.incident_reference == "inc_abc123"
+
+    async def test_write_log_success_logs_only_written_event(self) -> None:
+        """A valid 201 response logs success and does not log a failure."""
+        result = _execution_log_result()
+        resp = _api_response(status_code=201, result=result)
+
+        client, http, _ = _build_client(responses=[resp])
+
+        with patch("app.clients.servicenow_client.logger") as mock_logger:
+            entry = await client.write_execution_log(_log_payload())
+
+        assert entry is not None
+
+        mock_logger.info.assert_called_once()
+
+        info_call = mock_logger.info.call_args
+        assert info_call.args[0] == "execution_log_written"
+
+        mock_logger.exception.assert_not_called()
+
+    async def test_write_log_unparseable_response_is_not_write_failure(self) -> None:
+        """A successful HTTP response with invalid data is a parsing failure."""
+        result = _execution_log_result(
+            incident_reference={
+                "link": "https://dev00000.service-now.com/api/now/table/incident/inc_abc123",
+                "value": "inc_abc123",
+            }
+        )
+        resp = _api_response(status_code=201, result=result)
+
+        client, http, _ = _build_client(responses=[resp])
+
+        with patch("app.clients.servicenow_client.logger") as mock_logger:
+            entry = await client.write_execution_log(_log_payload())
+
+        assert entry is None
+
+        mock_logger.exception.assert_called_once()
+
+        exception_call = mock_logger.exception.call_args
+        assert exception_call.args[0] == "execution_log_response_unparseable"
+
 
 class TestResourceManagement:
     async def test_aclose_closes_owned_client(self) -> None:
@@ -598,6 +656,22 @@ class TestResponseParsing:
         client, http, _ = _build_client(responses=[resp])
         result = await client._request("GET", "/api/now/table/incident/x")
         assert result["sys_id"] == "abc123"
+
+    async def test_request_preserves_existing_params_and_excludes_reference_links(
+        self,
+    ) -> None:
+        resp = _api_response(result=[_incident_result()])
+        client, http, _ = _build_client(responses=[resp])
+
+        await client.find_incident_by_number("INC0010001")
+
+        params = http.request.call_args.kwargs["params"]
+
+        assert params == {
+            "sysparm_query": "number=INC0010001",
+            "sysparm_limit": 2,
+            "sysparm_exclude_reference_link": "true",
+        }
 
 
 class TestAPICredentialSafety:
