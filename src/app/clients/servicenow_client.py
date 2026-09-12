@@ -295,8 +295,12 @@ class ServiceNowClient:
         sys_id: str,
     ) -> None:
         rejected_fields = []
+        JOURNAL_FIELDS = {"work_notes", "comments"}
 
         for field, requested_value in requested.items():
+            if field in JOURNAL_FIELDS:
+                continue
+
             persisted_value = persisted.get(field)
 
             if not values_equal(requested_value, persisted_value):

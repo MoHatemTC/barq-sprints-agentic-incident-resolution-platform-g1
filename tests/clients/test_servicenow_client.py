@@ -469,6 +469,31 @@ class TestUpdateIncident:
 
         assert incident.ai_human_review_required is True
 
+    async def test_update_succeeds_with_work_note_and_ai_field(self) -> None:
+        """A 2xx response should not reject writes for journal fields like work_notes."""
+        initial_incident = _incident_result()
+        updated_incident = _incident_result(
+            **{f"{_SCOPE}_ai_classification": "network"},
+            work_notes="",
+        )
+
+        responses = [
+            _api_response(result=initial_incident),
+            _api_response(result=updated_incident),
+        ]
+
+        client, http, _ = _build_client(responses=responses)
+
+        payload = IncidentUpdatePayload(
+            ai_classification="network",
+            work_notes="Testing journal fields",
+        )
+
+        incident = await client.update_incident("abc123", payload)
+
+        assert incident.sys_id == "abc123"
+        assert incident.ai_classification == "network"
+
 
 class TestAddWorkNote:
     async def test_add_work_note_sends_patch(self) -> None:
