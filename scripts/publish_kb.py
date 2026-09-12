@@ -13,7 +13,6 @@ kb_knowledge table.
 
 import argparse
 import json
-import logging
 import sys
 from pathlib import Path
 
@@ -28,9 +27,6 @@ from app.publishing.servicenow_kb import (
 )
 from app.retrieval.sources import LocalJSONSource
 
-# stdlib logging still governs third-party library output (httpx);
-# our own messages go through structlog.
-logging.basicConfig(level=logging.WARNING)
 logger = structlog.get_logger("publish_kb")
 
 DEFAULT_CORPUS = Path("data/corpus/barq_articles.json")
