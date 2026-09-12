@@ -56,9 +56,12 @@ The 11 extracted records span 4 core ITIL categories across 9 enterprise service
 - **`KB0010-v1.0` (Retired)**: Recommended restarting the application server upon connection pool exhaustion. On 14 March 2026, applying this advice dropped in-flight orders and triggered Major Incident `INC0009884` (a 40-minute Tier 1 outage).
 - **`KB0010-v2.0` (Published)**: The active operational standard. Strictly warns *"Do not restart the application server"* and mandates emergency change `CHG0030455` for connection pool draining.
 
-Vector retrieval applies a mandatory published-only filter during incident response:
+Vector retrieval enforces a mandatory published-only filter at the entry point (`src/app/retrieval/search.py`):
 ```python
-Filter(must=[FieldCondition(key="workflow_state", match=MatchValue(value="published"))])
+from app.retrieval import retrieve_knowledge
+
+# Mandatory published filter is built internally and cannot be bypassed
+hits = retrieve_knowledge(client, query_text)
 ```
 
 ---

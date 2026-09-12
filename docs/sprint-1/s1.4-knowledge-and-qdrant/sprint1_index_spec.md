@@ -150,34 +150,26 @@ Because `/qdrant/storage` is mounted to the named Docker volume `barq_qdrant_dat
 
 ---
 
-## 8. Hybrid Search Querying Pattern (Sprint 2 Preview)
+## 8. Hybrid Search Querying Pattern & Single Retrieval Entry Point
 
-> [!IMPORTANT]
-> **Binding Sprint 2 requirement (P3 review finding, reproduced on real data):** unfiltered, the retired `KB0010-v1.0` ranks FIRST for the pool-exhaustion query — the MIR-2026-03 failure mode inside our own index. When the retrieval entry point is built, the `workflow_state == "published"` filter must be **constructed inside the entry point and always applied** — not a parameter callers can omit. Callers may only narrow further (service, category, security level). Required acceptance test: ingesting the real corpus and querying with the INC0010052 phrasing must never return `KB0010-v1.0`. "Published and current version" holds by the corpus invariant of at most one published version per article (enforced by `tests/retrieval/test_corpus.py`).
+> [!NOTE]
+> **Implemented Safety Invariant (P3 Resolution):**
+> Unfiltered hybrid search allowed the retired `KB0010-v1.0` to rank FIRST for pool-exhaustion queries (reproducing the MIR-2026-03 failure mode).
+> The single retrieval entry point is implemented in `src/app/retrieval/search.py` (`retrieve_knowledge`).
+> The `workflow_state == "published"` filter is constructed internally and cannot be omitted or bypassed by callers.
+> Furthermore, based on Qdrant Advisor validation, the filter is placed inside **both `Prefetch` clauses AND the top-level `query_filter`** (ensuring filter enforcement across in-memory mock engines and preventing candidate starvation on production Qdrant).
+> Callers can only narrow further via `extra_filter` (e.g. by service, category, or security level).
+> The acceptance test suite in `tests/retrieval/test_search.py` asserts that querying with the `INC0010052` phrasing never returns `KB0010-v1.0` and always returns `KB0010-v2.0`.
 
-In Sprint 2, retrieval combines dense and sparse scores using Reciprocal Rank Fusion (RRF):
+Retrieval combines dense and sparse scores using Reciprocal Rank Fusion (RRF):
 
 ```python
-from qdrant_client.models import Prefetch, Query, Fusion
+from app.retrieval import retrieve_knowledge
 
-# Hybrid query with metadata pre-filtering
-results = client.query_points(
-    collection_name="incident_knowledge_base",
-    prefetch=[
-        Prefetch(
-            query=dense_vector,
-            using="dense",
-            limit=20,
-            filter=role_and_state_filter,
-        ),
-        Prefetch(
-            query=sparse_vector,
-            using="sparse",
-            limit=20,
-            filter=role_and_state_filter,
-        ),
-    ],
-    query=Query.fusion(Fusion.RRF),
+# Hybrid query with mandatory published filter (cannot be omitted)
+hits = retrieve_knowledge(
+    client=client,
+    query="the order service is returning errors and the pool is exhausted",
     limit=5,
 )
 ```
@@ -197,6 +189,10 @@ results = client.query_points(
 - **Automated Ingestion Test Suite (8 Tests)**:
   ```bash
   uv run pytest tests/retrieval/test_ingest.py -v
+  ```
+- **Single Retrieval Entry Point & P3 Filter Test Suite (12 Tests)**:
+  ```bash
+  uv run pytest tests/retrieval/test_search.py -v
   ```
 - **Chunking Regression Test Suite**:
   ```bash
