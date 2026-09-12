@@ -319,11 +319,23 @@ test('Script Action reconstructs and sends exactly the four-field payload', () =
         setRequestBody(body) {
             this.body = body
         }
+        setEndpoint(endpoint) {
+            this.endpoint = endpoint
+        }
         execute() {
+            assert.equal(this.endpoint, 'https://events.example.test/s1-3')
             return { getStatusCode: () => 200 }
         }
     }
-    const gs = { info: () => {}, error: (message) => assert.fail(message) }
+    const gs = {
+        getProperty: (name, defaultValue) => {
+            assert.equal(name, 'x_2215032_ai_inc_0.s1_3_event_endpoint')
+            assert.equal(defaultValue, '')
+            return 'https://events.example.test/s1-3'
+        },
+        info: () => {},
+        error: (message) => assert.fail(message),
+    }
     const send = loadFunction('sendS13Event', { gs, sn_ws: { RESTMessageV2: FakeRESTMessageV2 } })
 
     send(record('insert'), { parm1: { toString: () => 'event-from-parm1' }, parm2: 'incident.created' })
@@ -331,6 +343,7 @@ test('Script Action reconstructs and sends exactly the four-field payload', () =
     assert.equal(requests.length, 1)
     assert.equal(requests[0].messageName, 'AI Incident Orchestrator S1.3 Event')
     assert.equal(requests[0].methodName, 'post')
+    assert.equal(requests[0].endpoint, 'https://events.example.test/s1-3')
     assert.deepEqual(JSON.parse(requests[0].body), {
         event_id: 'event-from-parm1',
         sys_id: BASE_VALUES.sys_id,
@@ -338,6 +351,29 @@ test('Script Action reconstructs and sends exactly the four-field payload', () =
         event_type: 'incident.created',
     })
     assert.deepEqual(Object.keys(JSON.parse(requests[0].body)), ['event_id', 'sys_id', 'number', 'event_type'])
+})
+
+test('Script Action logs an error and makes no HTTP call when the endpoint property is empty', () => {
+    let requestCount = 0
+    class FakeRESTMessageV2 {
+        constructor() {
+            requestCount += 1
+        }
+    }
+    const errors = []
+    const gs = {
+        getProperty: () => '',
+        info: () => {},
+        error: (message) => errors.push(message),
+    }
+    const send = loadFunction('sendS13Event', { gs, sn_ws: { RESTMessageV2: FakeRESTMessageV2 } })
+
+    send(record('insert'), { parm1: 'event-from-parm1', parm2: 'incident.created' })
+
+    assert.equal(requestCount, 0)
+    assert.deepEqual(errors, [
+        'S1.3 outbound event endpoint is not configured: x_2215032_ai_inc_0.s1_3_event_endpoint',
+    ])
 })
 
 test('retry escalation sets human review before update without calling current.update()', () => {

@@ -1,5 +1,13 @@
-import { Record, RestMessage, ScriptAction } from '@servicenow/sdk/core'
+import { Property, Record, RestMessage, ScriptAction } from '@servicenow/sdk/core'
 import { sendS13Event } from '../server/script-actions/send-s1-3-event'
+
+export const s13EventEndpoint = Property({
+    $id: Now.ID['s1_3_event_endpoint'],
+    name: 'x_2215032_ai_inc_0.s1_3_event_endpoint',
+    type: 'string',
+    value: '',
+    description: 'Endpoint URL for outbound S1.3 incident events. Configure this separately in each instance.',
+})
 
 export const outboundEventRegistration = Record({
     $id: Now.ID['s1_3_outbound_event_registration'],
@@ -17,8 +25,8 @@ export const outboundEventRegistration = Record({
 export const s13RestMessage = RestMessage({
     $id: Now.ID['s1_3_outbound_rest_message'],
     name: 'AI Incident Orchestrator S1.3 Event',
-    endpoint: 'https://webhook.site/514ff1db-a9d9-4a26-af8d-e67a97e287d2',
-    description: 'Sprint 1 no-auth request-inspection transport for the minimal S1.3 event.',
+    endpoint: '',
+    description: 'Runtime-configured transport for the minimal S1.3 event.',
     access: 'packagePrivate',
     authenticationType: 'noAuthentication',
     headers: [

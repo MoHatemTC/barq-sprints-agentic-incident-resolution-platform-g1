@@ -25,6 +25,10 @@ declare global {
                         table: 'sys_rest_message_headers'
                         id: 'c192f5bc5ee54e2f9196a66a2dc0ded2'
                     }
+                    s1_3_event_endpoint: {
+                        table: 'sys_properties'
+                        id: '10004351b68a4c5f9c9e26f7c2b90973'
+                    }
                     s1_3_outbound_event_registration: {
                         table: 'sysevent_register'
                         id: '8c39c91afe0c43b4af888ace66a9cb8b'

@@ -2,6 +2,7 @@ import { gs } from '@servicenow/glide'
 
 declare const sn_ws: {
     RESTMessageV2: new (messageName: string, methodName: string) => {
+        setEndpoint(endpoint: string): void
         setRequestBody(content: string): void
         execute(): { getStatusCode(): number }
     }
@@ -9,6 +10,14 @@ declare const sn_ws: {
 
 export function sendS13Event(current: any, event: any): void {
     try {
+        const endpointProperty = 'x_2215032_ai_inc_0.s1_3_event_endpoint'
+        const endpoint = String(gs.getProperty(endpointProperty, '')).trim()
+
+        if (!endpoint) {
+            gs.error('S1.3 outbound event endpoint is not configured: ' + endpointProperty)
+            return
+        }
+
         const outboundEvent = {
             event_id: String(event.parm1),
             sys_id: current.getUniqueValue(),
@@ -17,6 +26,7 @@ export function sendS13Event(current: any, event: any): void {
         }
 
         const request = new sn_ws.RESTMessageV2('AI Incident Orchestrator S1.3 Event', 'post')
+        request.setEndpoint(endpoint)
         request.setRequestBody(JSON.stringify(outboundEvent))
 
         const response = request.execute()
