@@ -17,8 +17,15 @@ function hasRelevantUpdate(current: any, previous: any): boolean {
     })
 }
 
-function suppress(reason: string): void {
-    gs.info('S1.3 eligibility suppressed: ' + reason)
+function suppress(current: any, reason: string): void {
+    gs.info(
+        'S1.3 eligibility suppressed: ' +
+            reason +
+            ' number=' +
+            current.getValue('number') +
+            ' sys_id=' +
+            current.getUniqueValue()
+    )
 }
 
 export function evaluateIncidentEligibility(current: any, previous: any): void {
@@ -26,7 +33,7 @@ export function evaluateIncidentEligibility(current: any, previous: any): void {
 
     if (operation === 'update') {
         if (!previous) {
-            suppress('previous_unavailable')
+            suppress(current, 'previous_unavailable')
             return
         }
 
@@ -42,42 +49,42 @@ export function evaluateIncidentEligibility(current: any, previous: any): void {
     const currentRetryCount = parseInt(retryValue || '0', 10)
 
     if (current.getValue('active') !== '1') {
-        suppress('inactive')
+        suppress(current, 'inactive')
         return
     }
 
     if (current.getValue('x_2215032_ai_inc_0_ai_enabled') !== '1') {
-        suppress('ai_disabled')
+        suppress(current, 'ai_disabled')
         return
     }
 
     if (processingState === 'complete') {
-        suppress('already_processed')
+        suppress(current, 'already_processed')
         return
     }
 
     if (SUPPORTED_CATEGORIES.indexOf(category) === -1) {
-        suppress('unsupported_category')
+        suppress(current, 'unsupported_category')
         return
     }
 
     if (processingState === 'in_progress') {
-        suppress('already_running')
+        suppress(current, 'already_running')
         return
     }
 
     if (processingState === 'awaiting_approval') {
-        suppress('awaiting_approval')
+        suppress(current, 'awaiting_approval')
         return
     }
 
     if (processingState !== 'pending' && processingState !== 'failed') {
-        suppress('invalid_processing_state')
+        suppress(current, 'invalid_processing_state')
         return
     }
 
     if (isNaN(currentRetryCount) || currentRetryCount < 0) {
-        suppress('invalid_retry_count')
+        suppress(current, 'invalid_retry_count')
         return
     }
 
@@ -92,25 +99,20 @@ export function evaluateIncidentEligibility(current: any, previous: any): void {
         retryCount = parseInt(previousRetryValue || '0', 10)
 
         if (isNaN(retryCount) || retryCount < 0) {
-            suppress('invalid_retry_count')
+            suppress(current, 'invalid_retry_count')
             return
         }
     }
 
     if (processingState === 'failed') {
         if (retryCount >= 2) {
-            suppress('retry_limit_exhausted')
+            suppress(current, 'retry_limit_exhausted')
             return
         }
     }
 
     if (humanLock === '1') {
-        suppress('human_locked')
-        return
-    }
-
-    if (humanLock !== '0') {
-        suppress('invalid_human_lock')
+        suppress(current, 'human_locked')
         return
     }
 

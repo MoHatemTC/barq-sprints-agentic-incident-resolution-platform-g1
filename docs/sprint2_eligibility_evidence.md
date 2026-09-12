@@ -66,9 +66,12 @@ Supported categories are `software`, `hardware`, `network`, and `database`.
 | New transition to `failed`, previous retry count >= 2 | Suppress as `retry_limit_exhausted` and require human review |
 | Record already `failed` | Do not emit another retry event |
 | Human lock true | Suppress as `human_locked` |
-| Malformed human lock | Suppress as `invalid_human_lock` |
+| Human lock false, empty, or null | Treat as unlocked |
 | State `pending`, all other checks pass | Eligible |
 | New transition to `failed`, previous retry count 0 or 1, all other checks pass | Advance the count and emit one retry event |
+
+Every suppression log uses `S1.3 eligibility suppressed: <reason> number=<number> sys_id=<sys_id>`
+so the outcome can be traced to its Incident.
 
 The retry model is one original attempt plus two retries. A new failed
 transition with previous count `0` advances to `1` and permits Retry 1. A new
@@ -93,7 +96,7 @@ reported live evidence, even if the local source or automated tests cover it.
 | EL-07 | Human lock | `human_locked`; no outbound request | **PASS — live PDI** |
 | EL-08 | Invalid processing state | `invalid_processing_state`; no outbound request | **NOT LIVE-VERIFIED** |
 | EL-09 | Invalid retry count | `invalid_retry_count`; no outbound request | **NOT LIVE-VERIFIED** |
-| EL-10 | Malformed human lock | `invalid_human_lock`; no outbound request | **NOT LIVE-VERIFIED** |
+| EL-10 | Blank/null human lock | Eligible when all other checks pass | **NOT LIVE-VERIFIED** |
 | EL-11 | Eligible insert | One queued `incident.created` emission | **PASS — live PDI** |
 | EL-12 | Eligible relevant update | One queued `incident.updated` emission | **PASS — live PDI** |
 | EL-13 | Irrelevant update | No emission | **PASS — live PDI** |
@@ -119,7 +122,7 @@ be relabeled as live-verified without execution artifacts:
 
 - invalid processing state;
 - invalid retry count; and
-- malformed human lock.
+- blank/null human lock treated as unlocked.
 
 ### PERF-01 - Incident Save Performance
 

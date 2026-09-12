@@ -196,7 +196,9 @@ test('new failed transition at retry_count 2 emits nothing and requires human re
     assert.equal(queued.length, 0)
     assert.equal(current.getValue('x_2215032_ai_inc_0_ai_human_review_required'), '1')
     assert.deepEqual(retryLogs, ['S1.3 retry escalation: retry_limit_exhausted'])
-    assert.deepEqual(logs, ['S1.3 eligibility suppressed: retry_limit_exhausted'])
+    assert.deepEqual(logs, [
+        'S1.3 eligibility suppressed: retry_limit_exhausted number=INC0012345 sys_id=0123456789abcdef0123456789abcdef',
+    ])
 })
 
 test('invalid retry count fails closed without an event', () => {
@@ -221,7 +223,9 @@ test('invalid retry count fails closed without an event', () => {
         assert.equal(queued.length, 0)
         assert.equal(current.getValue('x_2215032_ai_inc_0_ai_human_review_required'), '1')
         assert.deepEqual(retryLogs, ['S1.3 retry escalation: invalid_retry_count'])
-        assert.deepEqual(logs, ['S1.3 eligibility suppressed: invalid_retry_count'])
+        assert.deepEqual(logs, [
+            'S1.3 eligibility suppressed: invalid_retry_count number=INC0012345 sys_id=0123456789abcdef0123456789abcdef',
+        ])
     }
 })
 
@@ -297,14 +301,48 @@ test('every suppression outcome queues no event', () => {
         [{ x_2215032_ai_inc_0_ai_processing_state: 'awaiting_approval' }, 'awaiting_approval'],
         [{ x_2215032_ai_inc_0_ai_processing_state: 'corrupt_state' }, 'invalid_processing_state'],
         [{ x_2215032_ai_inc_0_ai_human_lock: '1' }, 'human_locked'],
-        [{ x_2215032_ai_inc_0_ai_human_lock: 'malformed' }, 'invalid_human_lock'],
     ]
 
     for (const [overrides, reason] of suppressed) {
         const { evaluate, logs, queued } = eligibilityHarness()
         evaluate(record('insert', overrides), null)
         assert.equal(queued.length, 0, reason)
-        assert.deepEqual(logs, [`S1.3 eligibility suppressed: ${reason}`])
+        assert.deepEqual(logs, [
+            `S1.3 eligibility suppressed: ${reason} number=INC0012345 sys_id=0123456789abcdef0123456789abcdef`,
+        ])
+    }
+})
+
+test('Human Lock 0, empty, and null allow normal eligibility', () => {
+    for (const humanLock of ['0', '', null]) {
+        const { evaluate, queued } = eligibilityHarness()
+
+        evaluate(record('insert', { x_2215032_ai_inc_0_ai_human_lock: humanLock }), null)
+
+        assert.equal(queued.length, 1, `Human Lock ${String(humanLock)} should be unlocked`)
+    }
+})
+
+test('retry rule treats empty and null Human Lock as unlocked', () => {
+    for (const humanLock of ['', null]) {
+        const logs = []
+        const escalate = loadFunction('escalateExhaustedRetry', {
+            gs: { info: (message) => logs.push(message) },
+        })
+        const previous = record('update', {
+            x_2215032_ai_inc_0_ai_processing_state: 'pending',
+            x_2215032_ai_inc_0_ai_retry_count: '0',
+        })
+        const current = record('update', {
+            x_2215032_ai_inc_0_ai_processing_state: 'failed',
+            x_2215032_ai_inc_0_ai_retry_count: '0',
+            x_2215032_ai_inc_0_ai_human_lock: humanLock,
+        })
+
+        escalate(current, previous)
+
+        assert.equal(current.getValue('x_2215032_ai_inc_0_ai_retry_count'), '1')
+        assert.deepEqual(logs, ['S1.3 retry count advanced: 0 -> 1'])
     }
 })
 

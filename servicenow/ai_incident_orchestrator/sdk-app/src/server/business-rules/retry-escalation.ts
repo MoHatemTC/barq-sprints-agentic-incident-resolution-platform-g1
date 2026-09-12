@@ -33,7 +33,7 @@ export function escalateExhaustedRetry(current: any, previous: any): void {
         current.getValue('active') !== '1' ||
         current.getValue('x_2215032_ai_inc_0_ai_enabled') !== '1' ||
         SUPPORTED_CATEGORIES.indexOf(current.getValue('category')) === -1 ||
-        current.getValue('x_2215032_ai_inc_0_ai_human_lock') !== '0'
+        current.getValue('x_2215032_ai_inc_0_ai_human_lock') === '1'
     ) {
         return
     }
