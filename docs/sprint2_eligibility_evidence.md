@@ -132,38 +132,31 @@ be relabeled as live-verified without execution artifacts:
 
 Status: PASS
 
-A controlled comparison was performed on the same ServiceNow PDI and Incident record.
+A 20-sample controlled comparison was performed on the same ServiceNow PDI and Incident. The same relevant-field update was repeated by alternating supported Category values. Response time was taken from the `/incident.do` Form transaction in the ServiceNow Transaction Log; background REST and `Templated Snippets` transactions were excluded.
 
-Test method:
+Baseline, S1.3 Business Rules disabled (ms):
 
-- Same Incident record used for all measurements.
-- Same relevant-field update type used by alternating Category between supported values.
-- Five Incident form-save transactions were measured with the S1.3 Business Rules disabled.
-- The same test was repeated with both S1.3 Business Rules enabled.
-- Response time was taken from the ServiceNow Transaction Log for the `/incident.do` Form transaction.
-- Background REST requests and `Templated Snippets` transactions were excluded.
+`170, 178, 90, 96, 184, 82, 92, 164, 111, 80, 88, 87, 88, 77, 73, 71, 77, 79, 83, 74`
 
-Baseline, S1.3 disabled:
+- n: 20
+- Median: 87.5 ms
+- p95: 178.3 ms
+- Minimum: 71 ms
+- Maximum: 184 ms
 
-- 82 ms
-- 115 ms
-- 79 ms
-- 83 ms
-- 91 ms
-- Median: 83 ms
+Post-implementation, both S1.3 Business Rules enabled (ms):
 
-Post-implementation, S1.3 enabled:
+`141, 92, 91, 79, 90, 80, 78, 155, 241, 79, 76, 94, 79, 84, 80, 144, 194, 82, 89, 77`
 
-- 146 ms
-- 91 ms
-- 146 ms
-- 176 ms
-- 125 ms
-- Median: 146 ms
+- n: 20
+- Median: 86.5 ms
+- p95: 196.4 ms
+- Minimum: 76 ms
+- Maximum: 241 ms
 
-Observed median increase:
+Comparison:
 
-- 63 ms
-- approximately 75.9%
+- Median delta: -1.0 ms (approximately -1.1%)
+- p95 delta: approximately +18.1 ms (approximately +10.1%)
 
-The outbound HTTP call is not performed synchronously during the Incident save. The Business Rule queues an application event and the Script Action performs the RESTMessageV2 call asynchronously, so external webhook latency does not block the Incident form-save transaction.
+The 20-sample data does not show material degradation in median Incident save performance. The p95 is slightly higher and is not claimed as an improvement. External HTTP remains asynchronous through the event queue and Script Action, so external HTTP latency remains outside the Incident form-save transaction.
