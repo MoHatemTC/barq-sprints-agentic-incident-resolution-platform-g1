@@ -13,7 +13,7 @@ This matrix maps Ahmed Mansour's S1.1 brief to concrete implementation and evide
 | Queryable start/end timing | Two Date/Time columns | `02-incident-ai-section.png`; field dictionary |
 | Human Review and Human Lock | Separate Boolean fields; Human Review means review required, while Human Lock is the downstream hard-stop contract | `02-incident-ai-section.png`; field dictionary; S1.3 ownership explicitly documented |
 | Explicit failure reason | Failure Reason String (4000) | Form screenshots; field dictionary |
-| Organized Default-view Incident form section | Dedicated AI Incident Orchestrator section with all 13 fields | `02-incident-ai-section.png`; `04-populated-ai-fields.png`; `src/fluent/incident-form-layout.now.ts` |
+| Organized Default-view Incident form section | Dedicated AI Incident Orchestrator section with all 13 fields | `02-incident-ai-section.png`; `servicenow/ai_incident_orchestrator/sdk-app/src/fluent/incident-form-layout.now.ts` |
 | Exported ServiceNow update-set XML | Completed update set exported through the official ServiceNow SDK | `servicenow/ai_incident_orchestrator/ai_incident_orchestrator_s1_1.xml`; 39 records; zero delete actions |
 | Markdown field dictionary | Types, values, writers, intended permissions, lifecycle, scope, and rationale documented | `docs/sprint-1/s1.1-scoped-app-and-field-model/field-model.md` |
 | Incident-form screenshots | Scope, layout, values, choices, and validation captured | `docs/sprint-1/s1.1-scoped-app-and-field-model/screenshots/` |
