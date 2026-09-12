@@ -1,6 +1,6 @@
 # S1.1 — Scoped Application and Incident Field Model
 
-Owner: [@ali-ezz](https://github.com/ali-ezz)  
+Owner: [@ali-ezz](https://github.com/ali-ezz)
 Status: Implemented, clean-import verified, and merged through [PR #1](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pull/1)
 
 This folder is the final evidence package for BARQ G1 Sprint 1 task S1.1. The ServiceNow application is named **AI Incident Orchestrator**, uses scope `x_2215032_ai_inc_0`, and extends Incident with 13 scoped fields covering eligibility, lifecycle, classification, confidence, suggestion, resolution, attribution, timing, human review, human lock, and failure diagnostics.
