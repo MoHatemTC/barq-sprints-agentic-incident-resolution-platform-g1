@@ -26,7 +26,7 @@ Do not request a formal review until every required item is checked.
 - [x] Confidence rejects 1.1 on the Incident form, restores the prior valid value, and displays a clear error.
 - [x] Suggestion and Resolution retain different values on source Incident `INC0010018`.
 - [x] Start/end timestamps persist and are queryable on the source PDI.
-- [x] Failed state and Failure Reason persist on the source PDI.
+- [x] The dedicated Failure Reason field is present on the source-PDI Default Incident view; this package does not claim a separate failed-state persistence test that was not captured.
 - [x] Human-lock enforcement ownership is recorded; runtime eligibility enforcement is explicitly assigned to downstream S1.3.
 
 ## Documentation and evidence
