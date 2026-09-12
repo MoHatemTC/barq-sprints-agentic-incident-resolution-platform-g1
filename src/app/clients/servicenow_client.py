@@ -20,6 +20,7 @@ from app.exceptions.servicenow import (
     ServiceNowServerError,
     ServiceNowTimeoutError,
     ServiceNowValidationError,
+    ServiceNowWriteRejectedError,
 )
 from app.models.execution_log import (
     EXECUTION_LOG_TABLE,
@@ -28,6 +29,7 @@ from app.models.execution_log import (
 )
 from app.models.incident import Incident, IncidentUpdatePayload
 from app.models.work_note import WorkNoteUpdate
+from app.utils.servicenow import values_equal
 
 logger = structlog.getLogger(__name__)
 
@@ -76,8 +78,13 @@ class ServiceNowClient:
             )
         return Incident.model_validate(incidents[0])
 
-    async def update_incident(self, sys_id: str, payload: IncidentUpdatePayload) -> Incident:
+    async def update_incident(
+        self,
+        sys_id: str,
+        payload: IncidentUpdatePayload,
+    ) -> Incident:
         current_incident = await self.get_incident(sys_id)
+
         if current_incident.ai_human_lock:
             raise ServiceNowHumanLockError(
                 f"Incident {sys_id} is locked for human review and cannot be updated by the agent",
@@ -85,8 +92,22 @@ class ServiceNowClient:
             )
 
         body = payload.to_table_api_body()
-        result = await self._request("PATCH", f"/api/now/table/incident/{sys_id}", json=body)
-        return Incident.model_validate(result)
+
+        result = await self._request(
+            "PATCH",
+            f"/api/now/table/incident/{sys_id}",
+            json=body,
+        )
+
+        returned_incident = Incident.model_validate(result)
+
+        self._verify_write_persisted(
+            requested=body,
+            persisted=result,
+            sys_id=sys_id,
+        )
+
+        return returned_incident
 
     async def add_work_note(self, sys_id: str, note: str) -> Incident:
         current_incident = await self.get_incident(sys_id)
@@ -262,3 +283,26 @@ class ServiceNowClient:
         except ValueError as exc:
             raise ServiceNowError(f"Non-JSON response from {method} {path}") from exc
         return data.get("result", data)
+
+    def _verify_write_persisted(
+        self,
+        requested: dict[str, str],
+        persisted: dict[str, Any],
+        sys_id: str,
+    ) -> None:
+        rejected_fields = []
+
+        for field, requested_value in requested.items():
+            persisted_value = persisted.get(field)
+
+            if not values_equal(requested_value, persisted_value):
+                rejected_fields.append(field)
+
+        if rejected_fields:
+            raise ServiceNowWriteRejectedError(
+                f"ServiceNow rejected writes for fields: {', '.join(rejected_fields)}",
+                details={
+                    "sys_id": sys_id,
+                    "rejected_fields": rejected_fields,
+                },
+            )

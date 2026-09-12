@@ -84,7 +84,6 @@ class Incident(BaseModel):
 class IncidentUpdatePayload(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
-    state: str | None = None
     work_notes: str | None = None
 
     ai_processing_state: AIProcessingState | None = Field(
@@ -145,12 +144,10 @@ class IncidentUpdatePayload(BaseModel):
 
     def to_table_api_body(self) -> dict[str, str]:
         body: dict[str, str] = {}
-        if self.state is not None:
-            body["state"] = self.state
         if self.work_notes is not None:
             body["work_notes"] = self.work_notes
 
-        data = self.model_dump(by_alias=True, exclude={"state", "work_notes"}, exclude_none=True)
+        data = self.model_dump(by_alias=True, exclude={"work_notes"}, exclude_none=True)
         for key, value in data.items():
             if isinstance(value, AIProcessingState):
                 body[key] = value.value

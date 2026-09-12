@@ -61,3 +61,7 @@ class ServiceNowConnectionError(ServiceNowError):
 
 class ServiceNowHumanLockError(ServiceNowError):
     """Raised when an incident is locked for human review and cannot be modified by the AI agent."""
+
+
+class ServiceNowWriteRejectedError(ServiceNowError):
+    """ServiceNow returned 2xx but did not persist one or more requested fields."""

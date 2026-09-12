@@ -19,6 +19,7 @@ from app.exceptions.servicenow import (
     ServiceNowServerError,
     ServiceNowTimeoutError,
     ServiceNowValidationError,
+    ServiceNowWriteRejectedError,
 )
 from app.models.execution_log import ExecutionLogCreatePayload, ExecutionStatus
 from app.models.incident import _SCOPE, AIProcessingState, IncidentUpdatePayload
@@ -328,13 +329,26 @@ class TestFindIncidentByNumber:
 
 class TestUpdateIncident:
     async def test_update_sends_patch(self) -> None:
-        resp = _api_response(result=_incident_result())
-        client, http, _ = _build_client(responses=[resp, resp])
+        initial_incident = _incident_result()
+        updated_incident = _incident_result(
+            **{
+                f"{_SCOPE}_ai_processing_state": "in_progress",
+                f"{_SCOPE}_ai_confidence": 0.85,
+            },
+        )
+
+        responses = [
+            _api_response(result=initial_incident),
+            _api_response(result=updated_incident),
+        ]
+
+        client, http, _ = _build_client(responses=responses)
 
         payload = IncidentUpdatePayload(
             ai_processing_state=AIProcessingState.IN_PROGRESS,
             ai_confidence=0.85,
         )
+
         await client.update_incident("abc123", payload)
 
         call = http.request.call_args
@@ -342,28 +356,116 @@ class TestUpdateIncident:
         assert "/api/now/table/incident/abc123" in call.args[1]
 
     async def test_update_body_contains_ai_fields(self) -> None:
-        resp = _api_response(result=_incident_result())
-        client, http, _ = _build_client(responses=[resp, resp])
+        initial_incident = _incident_result()
+        updated_incident = _incident_result(
+            **{
+                f"{_SCOPE}_ai_processing_state": "in_progress",
+                f"{_SCOPE}_ai_confidence": 0.85,
+            },
+        )
+
+        responses = [
+            _api_response(result=initial_incident),
+            _api_response(result=updated_incident),
+        ]
+
+        client, http, _ = _build_client(responses=responses)
 
         payload = IncidentUpdatePayload(
             ai_processing_state=AIProcessingState.IN_PROGRESS,
             ai_confidence=0.85,
         )
+
         await client.update_incident("abc123", payload)
 
         body = http.request.call_args.kwargs["json"]
+
         assert body[f"{_SCOPE}_ai_processing_state"] == "in_progress"
         assert body[f"{_SCOPE}_ai_confidence"] == "0.85"
 
     async def test_update_sets_content_type_json(self) -> None:
-        resp = _api_response(result=_incident_result())
-        client, http, _ = _build_client(responses=[resp, resp])
+        initial_incident = _incident_result()
+        updated_incident = _incident_result(
+            **{f"{_SCOPE}_ai_classification": "network"},
+        )
+
+        responses = [
+            _api_response(result=initial_incident),
+            _api_response(result=updated_incident),
+        ]
+
+        client, http, _ = _build_client(responses=responses)
 
         payload = IncidentUpdatePayload(ai_classification="network")
+
         await client.update_incident("abc123", payload)
 
         headers = http.request.call_args.kwargs["headers"]
+
         assert headers["Content-Type"] == "application/json"
+
+    async def test_update_raises_when_service_now_drops_field(self) -> None:
+        """A 2xx response that does not persist a requested field is rejected."""
+        initial_incident = _incident_result()
+        updated_incident = _incident_result(
+            **{f"{_SCOPE}_ai_classification": "hardware"},
+        )
+
+        responses = [
+            _api_response(result=initial_incident),
+            _api_response(result=updated_incident),
+        ]
+
+        client, http, _ = _build_client(responses=responses)
+
+        payload = IncidentUpdatePayload(ai_classification="network")
+
+        with pytest.raises(
+            ServiceNowWriteRejectedError,
+            match=f"{_SCOPE}_ai_classification",
+        ):
+            await client.update_incident("abc123", payload)
+
+    async def test_update_succeeds_when_service_now_persists_fields(self) -> None:
+        """A 2xx response containing requested values is accepted."""
+        initial_incident = _incident_result()
+        updated_incident = _incident_result(
+            **{f"{_SCOPE}_ai_classification": "network"},
+        )
+
+        responses = [
+            _api_response(result=initial_incident),
+            _api_response(result=updated_incident),
+        ]
+
+        client, http, _ = _build_client(responses=responses)
+
+        payload = IncidentUpdatePayload(ai_classification="network")
+
+        incident = await client.update_incident("abc123", payload)
+
+        assert incident.sys_id == "abc123"
+        assert incident.ai_classification == "network"
+
+    async def test_update_accepts_boolean_representation_from_servicenow(self) -> None:
+        """Boolean strings and boolean values are treated as equivalent."""
+        initial_incident = _incident_result()
+        updated_incident = _incident_result(
+            **{f"{_SCOPE}_ai_human_review_required": True},
+        )
+
+        responses = [
+            _api_response(result=initial_incident),
+            _api_response(result=updated_incident),
+        ]
+
+        client, http, _ = _build_client(responses=responses)
+
+        payload = IncidentUpdatePayload(ai_human_review_required=True)
+
+        incident = await client.update_incident("abc123", payload)
+
+        assert incident.ai_human_review_required is True
 
 
 class TestAddWorkNote:
