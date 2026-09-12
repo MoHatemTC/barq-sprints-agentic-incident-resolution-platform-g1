@@ -1,0 +1,991 @@
+<?xml version="1.0" encoding="UTF-8"?><unload unload_date="2026-09-12 02:06:00">
+<sys_remote_update_set action="INSERT_OR_UPDATE">
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<application_name>AI Incident Orchestrator</application_name>
+<application_scope>x_2215032_ai_inc_0</application_scope>
+<application_version>1.0.1</application_version>
+<collisions/>
+<commit_date/>
+<deleted/>
+<description>S1.3 scoped changes for Incident eligibility, minimal outbound event transport, and verification evidence</description>
+<inserted/>
+<name>BARQ G1 - S1.3 - Eligibility Business Rule &amp; Minimal Outbound Event Contract</name>
+<origin_sys_id/>
+<parent display_value=""/>
+<release_date/>
+<remote_base_update_set display_value=""/>
+<remote_parent_id/>
+<remote_sys_id>61a6798183dbc310b5309e80ceaad3ed</remote_sys_id>
+<state>loaded</state>
+<summary/>
+<sys_class_name>sys_remote_update_set</sys_class_name>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-12 02:05:59</sys_created_on>
+<sys_id>9e6f509183134710b5309e80ceaad355</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-12 02:05:59</sys_updated_on>
+<update_set display_value=""/>
+<update_source display_value=""/>
+<updated/>
+</sys_remote_update_set>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_rest_message_04b4db0d83970710b5309e80ceaad35a</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_rest_message"><sys_rest_message action="INSERT_OR_UPDATE"><access>package_private</access><authentication_type>no_authentication</authentication_type><basic_auth_password/><basic_auth_profile/><basic_auth_user/><description/><name>AI Incident Orchestrator S1.3 Event</name><oauth2_profile/><protocol_name/><rest_endpoint/><sys_class_name>sys_rest_message</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-11 20:44:02</sys_created_on><sys_id>04b4db0d83970710b5309e80ceaad35a</sys_id><sys_mod_count>0</sys_mod_count><sys_name>AI Incident Orchestrator S1.3 Event</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_update_name>sys_rest_message_04b4db0d83970710b5309e80ceaad35a</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-11 20:44:02</sys_updated_on><use_basic_auth>false</use_basic_auth><use_mutual_auth>false</use_mutual_auth></sys_rest_message></record_update>]]></payload>
+<payload_hash>-1122573782</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.3 - Eligibility Business Rule &amp; Minimal Outbound Event Contract">9e6f509183134710b5309e80ceaad355</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-12 02:05:59</sys_created_on>
+<sys_id>126f509183134710b5309e80ceaad358</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a0923688010000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-12 02:05:59</sys_updated_on>
+<table/>
+<target_name>AI Incident Orchestrator S1.3 Event</target_name>
+<type>REST Message</type>
+<update_domain>global</update_domain>
+<update_guid>02b5db8d399707107b0208e8d336b4a5</update_guid>
+<update_guid_history>02b5db8d399707107b0208e8d336b4a5:-1122573782</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_properties_10004351b68a4c5f9c9e26f7c2b90973</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_properties"><sys_properties action="INSERT_OR_UPDATE"><choices/><description>Endpoint URL for outbound S1.3 incident events. Configure this separately in each instance.</description><ignore_cache>false</ignore_cache><is_private>false</is_private><name>x_2215032_ai_inc_0.s1_3_event_endpoint</name><read_roles/><suffix>s1_3_event_endpoint</suffix><sys_class_name>sys_properties</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-12 02:05:59</sys_created_on><sys_id>10004351b68a4c5f9c9e26f7c2b90973</sys_id><sys_mod_count>0</sys_mod_count><sys_name>x_2215032_ai_inc_0.s1_3_event_endpoint</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_update_name>sys_properties_10004351b68a4c5f9c9e26f7c2b90973</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-12 02:05:59</sys_updated_on><type>string</type><value/><write_roles/></sys_properties></record_update>]]></payload>
+<payload_hash>0</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.3 - Eligibility Business Rule &amp; Minimal Outbound Event Contract">9e6f509183134710b5309e80ceaad355</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-12 02:05:59</sys_created_on>
+<sys_id>4b411c0419634c1aa174409a932bf480</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a092a9a7d10000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-12 02:05:59</sys_updated_on>
+<table/>
+<target_name>x_2215032_ai_inc_0.s1_3_event_endpoint</target_name>
+<type>System Property</type>
+<update_domain>global</update_domain>
+<update_guid>2a67c20e2ccb4af2aed3b5f0e62bfe95</update_guid>
+<update_guid_history>2a67c20e2ccb4af2aed3b5f0e62bfe95:0</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_properties_f6bc7c9b7fe648698bff4cf14982f81b</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_properties"><sys_properties action="INSERT_OR_UPDATE"><choices/><description>Comma-separated Incident categories eligible for S1.3 processing.</description><ignore_cache>false</ignore_cache><is_private>false</is_private><name>x_2215032_ai_inc_0.s1_3_supported_categories</name><read_roles/><suffix>s1_3_supported_categories</suffix><sys_class_name>sys_properties</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-12 02:05:59</sys_created_on><sys_id>f6bc7c9b7fe648698bff4cf14982f81b</sys_id><sys_mod_count>0</sys_mod_count><sys_name>x_2215032_ai_inc_0.s1_3_supported_categories</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_update_name>sys_properties_f6bc7c9b7fe648698bff4cf14982f81b</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-12 02:05:59</sys_updated_on><type>string</type><value>software,network,hardware,inquiry</value><write_roles/></sys_properties></record_update>]]></payload>
+<payload_hash>0</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.3 - Eligibility Business Rule &amp; Minimal Outbound Event Contract">9e6f509183134710b5309e80ceaad355</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-12 02:05:59</sys_created_on>
+<sys_id>6d90bd32dde04660a099c3e91ab0fe6a</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a092a9a7e10000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-12 02:05:59</sys_updated_on>
+<table/>
+<target_name>x_2215032_ai_inc_0.s1_3_supported_categories</target_name>
+<type>System Property</type>
+<update_domain>global</update_domain>
+<update_guid>0ff8b2ab40c84391b1fb351f209a1e82</update_guid>
+<update_guid_history>0ff8b2ab40c84391b1fb351f209a1e82:0</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_scope_privilege_514602c1835fc310b5309e80ceaad375</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_scope_privilege"><sys_scope_privilege action="INSERT_OR_UPDATE"><operation>execute</operation><source_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</source_scope><status>allowed</status><sys_class_name>sys_scope_privilege</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-11 14:56:55</sys_created_on><sys_id>514602c1835fc310b5309e80ceaad375</sys_id><sys_mod_count>0</sys_mod_count><sys_name>Glide API: string utilities</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_update_name>sys_scope_privilege_514602c1835fc310b5309e80ceaad375</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-11 14:56:55</sys_updated_on><target_name>Glide API: string utilities</target_name><target_scope display_value="Global">global</target_scope><target_type>scriptable</target_type></sys_scope_privilege></record_update>]]></payload>
+<payload_hash>-834481067</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.3 - Eligibility Business Rule &amp; Minimal Outbound Event Contract">9e6f509183134710b5309e80ceaad355</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-12 02:05:59</sys_created_on>
+<sys_id>166f509183134710b5309e80ceaad359</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a090f8bc3e0000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-12 02:05:59</sys_updated_on>
+<table/>
+<target_name>Glide API: string utilities</target_name>
+<type>Cross scope privilege</type>
+<update_domain>global</update_domain>
+<update_guid>dd4602c15c5fc310bf69ef71159b5377</update_guid>
+<update_guid_history>dd4602c15c5fc310bf69ef71159b5377:-834481067</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_scope_privilege_aa1cdfc983d70710b5309e80ceaad34a</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_scope_privilege"><sys_scope_privilege action="INSERT_OR_UPDATE"><operation>execute</operation><source_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</source_scope><status>allowed</status><sys_class_name>sys_scope_privilege</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-11 21:11:55</sys_created_on><sys_id>aa1cdfc983d70710b5309e80ceaad34a</sys_id><sys_mod_count>0</sys_mod_count><sys_name>Glide API: event management</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_update_name>sys_scope_privilege_aa1cdfc983d70710b5309e80ceaad34a</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-11 21:11:55</sys_updated_on><target_name>Glide API: event management</target_name><target_scope display_value="Global">global</target_scope><target_type>scriptable</target_type></sys_scope_privilege></record_update>]]></payload>
+<payload_hash>1469083449</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.3 - Eligibility Business Rule &amp; Minimal Outbound Event Contract">9e6f509183134710b5309e80ceaad355</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-12 02:05:59</sys_created_on>
+<sys_id>1a6f509183134710b5309e80ceaad35a</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a092500e410000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-12 02:05:59</sys_updated_on>
+<table/>
+<target_name>Glide API: event management</target_name>
+<type>Cross scope privilege</type>
+<update_domain>global</update_domain>
+<update_guid>6a1cdfc9b1d707100d4740445f17cc4d</update_guid>
+<update_guid_history>6a1cdfc9b1d707100d4740445f17cc4d:1469083449</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_ui_section_13ecf04d29674d7a838b8524c8abb773</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update><sys_ui_section caption="AI Incident Orchestrator" section_id="13ecf04d29674d7a838b8524c8abb773" sys_domain="global" table="incident" version="3" view=""><sys_ui_element action="INSERT_OR_UPDATE"><element>x_2215032_ai_inc_0_ai_enabled</element><position>0</position><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-11 22:49:46</sys_created_on><sys_id>0c823349839b0710b5309e80ceaad3f6</sys_id><sys_mod_count>0</sys_mod_count><sys_ui_formatter/><sys_ui_section caption="AI Incident Orchestrator" display_value="AI Incident Orchestrator" name="incident" sys_domain="global" view="Default view">13ecf04d29674d7a838b8524c8abb773</sys_ui_section><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-11 22:49:46</sys_updated_on><sys_user/><type/></sys_ui_element><sys_ui_element action="INSERT_OR_UPDATE"><element>x_2215032_ai_inc_0_ai_processing_state</element><position>1</position><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-11 22:49:46</sys_created_on><sys_id>00823349839b0710b5309e80ceaad3f8</sys_id><sys_mod_count>0</sys_mod_count><sys_ui_formatter/><sys_ui_section caption="AI Incident Orchestrator" display_value="AI Incident Orchestrator" name="incident" sys_domain="global" view="Default view">13ecf04d29674d7a838b8524c8abb773</sys_ui_section><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-11 22:49:46</sys_updated_on><sys_user/><type/></sys_ui_element><sys_ui_element action="INSERT_OR_UPDATE"><element>x_2215032_ai_inc_0_ai_classification</element><position>2</position><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-11 22:49:46</sys_created_on><sys_id>c8823349839b0710b5309e80ceaad3f8</sys_id><sys_mod_count>0</sys_mod_count><sys_ui_formatter/><sys_ui_section caption="AI Incident Orchestrator" display_value="AI Incident Orchestrator" name="incident" sys_domain="global" view="Default view">13ecf04d29674d7a838b8524c8abb773</sys_ui_section><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-11 22:49:46</sys_updated_on><sys_user/><type/></sys_ui_element><sys_ui_element action="INSERT_OR_UPDATE"><element>x_2215032_ai_inc_0_ai_confidence</element><position>3</position><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-11 22:49:46</sys_created_on><sys_id>84823349839b0710b5309e80ceaad3f9</sys_id><sys_mod_count>0</sys_mod_count><sys_ui_formatter/><sys_ui_section caption="AI Incident Orchestrator" display_value="AI Incident Orchestrator" name="incident" sys_domain="global" view="Default view">13ecf04d29674d7a838b8524c8abb773</sys_ui_section><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-11 22:49:46</sys_updated_on><sys_user/><type/></sys_ui_element><sys_ui_element action="INSERT_OR_UPDATE"><element>x_2215032_ai_inc_0_ai_model_name</element><position>4</position><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-11 22:49:46</sys_created_on><sys_id>40823349839b0710b5309e80ceaad3fa</sys_id><sys_mod_count>0</sys_mod_count><sys_ui_formatter/><sys_ui_section caption="AI Incident Orchestrator" display_value="AI Incident Orchestrator" name="incident" sys_domain="global" view="Default view">13ecf04d29674d7a838b8524c8abb773</sys_ui_section><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-11 22:49:46</sys_updated_on><sys_user/><type/></sys_ui_element><sys_ui_element action="INSERT_OR_UPDATE"><element>x_2215032_ai_inc_0_ai_agent_version</element><position>5</position><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-11 22:49:46</sys_created_on><sys_id>0c823349839b0710b5309e80ceaad3fa</sys_id><sys_mod_count>0</sys_mod_count><sys_ui_formatter/><sys_ui_section caption="AI Incident Orchestrator" display_value="AI Incident Orchestrator" name="incident" sys_domain="global" view="Default view">13ecf04d29674d7a838b8524c8abb773</sys_ui_section><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-11 22:49:46</sys_updated_on><sys_user/><type/></sys_ui_element><sys_ui_element action="INSERT_OR_UPDATE"><element>x_2215032_ai_inc_0_ai_processing_start</element><position>6</position><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-11 22:49:46</sys_created_on><sys_id>c4823349839b0710b5309e80ceaad3fb</sys_id><sys_mod_count>0</sys_mod_count><sys_ui_formatter/><sys_ui_section caption="AI Incident Orchestrator" display_value="AI Incident Orchestrator" name="incident" sys_domain="global" view="Default view">13ecf04d29674d7a838b8524c8abb773</sys_ui_section><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-11 22:49:46</sys_updated_on><sys_user/><type/></sys_ui_element><sys_ui_element action="INSERT_OR_UPDATE"><element>x_2215032_ai_inc_0_ai_processing_end</element><position>7</position><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-11 22:49:47</sys_created_on><sys_id>80823349839b0710b5309e80ceaad3fc</sys_id><sys_mod_count>0</sys_mod_count><sys_ui_formatter/><sys_ui_section caption="AI Incident Orchestrator" display_value="AI Incident Orchestrator" name="incident" sys_domain="global" view="Default view">13ecf04d29674d7a838b8524c8abb773</sys_ui_section><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-11 22:49:47</sys_updated_on><sys_user/><type/></sys_ui_element><sys_ui_element action="INSERT_OR_UPDATE"><element>.split</element><position>8</position><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-11 22:49:47</sys_created_on><sys_id>4c823349839b0710b5309e80ceaad3fc</sys_id><sys_mod_count>0</sys_mod_count><sys_ui_formatter/><sys_ui_section caption="AI Incident Orchestrator" display_value="AI Incident Orchestrator" name="incident" sys_domain="global" view="Default view">13ecf04d29674d7a838b8524c8abb773</sys_ui_section><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-11 22:49:47</sys_updated_on><sys_user/><type>.split</type></sys_ui_element><sys_ui_element action="INSERT_OR_UPDATE"><element>x_2215032_ai_inc_0_ai_human_review_required</element><position>9</position><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-11 22:49:47</sys_created_on><sys_id>08823349839b0710b5309e80ceaad3fd</sys_id><sys_mod_count>0</sys_mod_count><sys_ui_formatter/><sys_ui_section caption="AI Incident Orchestrator" display_value="AI Incident Orchestrator" name="incident" sys_domain="global" view="Default view">13ecf04d29674d7a838b8524c8abb773</sys_ui_section><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-11 22:49:47</sys_updated_on><sys_user/><type/></sys_ui_element><sys_ui_element action="INSERT_OR_UPDATE"><element>x_2215032_ai_inc_0_ai_human_lock</element><position>10</position><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-11 22:49:47</sys_created_on><sys_id>c0823349839b0710b5309e80ceaad3fe</sys_id><sys_mod_count>0</sys_mod_count><sys_ui_formatter/><sys_ui_section caption="AI Incident Orchestrator" display_value="AI Incident Orchestrator" name="incident" sys_domain="global" view="Default view">13ecf04d29674d7a838b8524c8abb773</sys_ui_section><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-11 22:49:47</sys_updated_on><sys_user/><type/></sys_ui_element><sys_ui_element action="INSERT_OR_UPDATE"><element>x_2215032_ai_inc_0_ai_failure_reason</element><position>11</position><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-11 22:49:47</sys_created_on><sys_id>8c823349839b0710b5309e80ceaad3fe</sys_id><sys_mod_count>0</sys_mod_count><sys_ui_formatter/><sys_ui_section caption="AI Incident Orchestrator" display_value="AI Incident Orchestrator" name="incident" sys_domain="global" view="Default view">13ecf04d29674d7a838b8524c8abb773</sys_ui_section><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-11 22:49:47</sys_updated_on><sys_user/><type/></sys_ui_element><sys_ui_element action="INSERT_OR_UPDATE"><element>.end_split</element><position>12</position><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-11 22:49:47</sys_created_on><sys_id>48823349839b0710b5309e80ceaad3ff</sys_id><sys_mod_count>0</sys_mod_count><sys_ui_formatter/><sys_ui_section caption="AI Incident Orchestrator" display_value="AI Incident Orchestrator" name="incident" sys_domain="global" view="Default view">13ecf04d29674d7a838b8524c8abb773</sys_ui_section><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-11 22:49:47</sys_updated_on><sys_user/><type>.end_split</type></sys_ui_element><sys_ui_element action="INSERT_OR_UPDATE"><element>x_2215032_ai_inc_0_ai_suggestion</element><position>13</position><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-11 22:49:47</sys_created_on><sys_id>04827349839b0710b5309e80ceaad300</sys_id><sys_mod_count>0</sys_mod_count><sys_ui_formatter/><sys_ui_section caption="AI Incident Orchestrator" display_value="AI Incident Orchestrator" name="incident" sys_domain="global" view="Default view">13ecf04d29674d7a838b8524c8abb773</sys_ui_section><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-11 22:49:47</sys_updated_on><sys_user/><type/></sys_ui_element><sys_ui_element action="INSERT_OR_UPDATE"><element>x_2215032_ai_inc_0_ai_resolution</element><position>14</position><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-11 22:49:47</sys_created_on><sys_id>cc827349839b0710b5309e80ceaad300</sys_id><sys_mod_count>0</sys_mod_count><sys_ui_formatter/><sys_ui_section caption="AI Incident Orchestrator" display_value="AI Incident Orchestrator" name="incident" sys_domain="global" view="Default view">13ecf04d29674d7a838b8524c8abb773</sys_ui_section><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-11 22:49:47</sys_updated_on><sys_user/><type/></sys_ui_element><sys_ui_element action="INSERT_OR_UPDATE"><element>x_2215032_ai_inc_0_ai_retry_count</element><position>15</position><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-11 22:49:47</sys_created_on><sys_id>88827349839b0710b5309e80ceaad301</sys_id><sys_mod_count>0</sys_mod_count><sys_ui_formatter/><sys_ui_section caption="AI Incident Orchestrator" display_value="AI Incident Orchestrator" name="incident" sys_domain="global" view="Default view">13ecf04d29674d7a838b8524c8abb773</sys_ui_section><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-11 22:49:47</sys_updated_on><sys_user/><type/></sys_ui_element><sys_ui_section action="INSERT_OR_UPDATE"><caption>AI Incident Orchestrator</caption><header>false</header><name>incident</name><roles/><sys_class_name>sys_ui_section</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-08 02:54:01</sys_created_on><sys_domain>global</sys_domain><sys_domain_path>/</sys_domain_path><sys_id>13ecf04d29674d7a838b8524c8abb773</sys_id><sys_mod_count>0</sys_mod_count><sys_name>incident</sys_name><sys_overrides/><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_update_name>sys_ui_section_13ecf04d29674d7a838b8524c8abb773</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-08 02:54:01</sys_updated_on><sys_user/><title>false</title><view display_value="Default view" name="NULL">Default view</view><view_name/></sys_ui_section></sys_ui_section></record_update>]]></payload>
+<payload_hash>-117453337</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.3 - Eligibility Business Rule &amp; Minimal Outbound Event Contract">9e6f509183134710b5309e80ceaad355</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-12 02:05:59</sys_created_on>
+<sys_id>1e6f509183134710b5309e80ceaad35b</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a092a9a7c10000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-12 02:05:59</sys_updated_on>
+<table>incident</table>
+<target_name>Incident</target_name>
+<type>Form Layout</type>
+<update_domain>global</update_domain>
+<update_guid>04827349d19b07108bc66d3067ac2d06</update_guid>
+<update_guid_history>04827349d19b07108bc66d3067ac2d06:-117453337,60144008701fc750ea4b76a6b55fbf97:-1251991552</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sysevent_script_action_2cbb53c983d70710b5309e80ceaad3a7</name>
+<payload>&lt;?xml version="1.0" encoding="UTF-8"?&gt;&lt;record_update sys_domain="global" table="sysevent_script_action"&gt;&lt;sysevent_script_action action="INSERT_OR_UPDATE"&gt;&lt;active&gt;true&lt;/active&gt;&lt;condition_script/&gt;&lt;description/&gt;&lt;event_name&gt;x_2215032_ai_inc_0.s1_3_outbound_event&lt;/event_name&gt;&lt;name&gt;AI Incident Orchestrator - Send S1.3 Eve&lt;/name&gt;&lt;order&gt;100&lt;/order&gt;&lt;script&gt;&lt;![CDATA[(function executeAction(current, event) {
+
+    try {
+        var endpointProperty = 'x_2215032_ai_inc_0.s1_3_event_endpoint';
+        var endpoint = String(gs.getProperty(endpointProperty, '')).trim();
+
+        if (!endpoint) {
+            gs.error(
+                'S1.3 outbound event endpoint is not configured: ' +
+                endpointProperty
+            );
+            return;
+        }
+
+        var outboundEvent = {
+            event_id: String(event.parm1),
+            sys_id: current.getUniqueValue(),
+            number: current.getValue('number'),
+            event_type: String(event.parm2)
+        };
+
+        var request = new sn_ws.RESTMessageV2(
+            'AI Incident Orchestrator S1.3 Event',
+            'post'
+        );
+
+        request.setEndpoint(endpoint);
+        request.setRequestBody(JSON.stringify(outboundEvent));
+
+        var response = request.execute();
+        var statusCode = response.getStatusCode();
+
+        if (statusCode &gt;= 200 &amp;&amp; statusCode &lt; 300) {
+            gs.info(
+                'S1.3 outbound event sent: ' +
+                outboundEvent.event_id +
+                ' status=' +
+                statusCode
+            );
+        } else {
+            gs.error(
+                'S1.3 outbound event failed: ' +
+                outboundEvent.event_id +
+                ' status=' +
+                statusCode
+            );
+        }
+
+    } catch (ex) {
+        gs.error(
+            'S1.3 outbound event error: ' +
+            ex.message
+        );
+    }
+
+})(current, event);]]&gt;&lt;/script&gt;&lt;synchronous&gt;false&lt;/synchronous&gt;&lt;sys_class_name&gt;sysevent_script_action&lt;/sys_class_name&gt;&lt;sys_created_by&gt;admin&lt;/sys_created_by&gt;&lt;sys_created_on&gt;2026-09-11 21:11:13&lt;/sys_created_on&gt;&lt;sys_domain&gt;global&lt;/sys_domain&gt;&lt;sys_domain_path&gt;/&lt;/sys_domain_path&gt;&lt;sys_id&gt;2cbb53c983d70710b5309e80ceaad3a7&lt;/sys_id&gt;&lt;sys_mod_count&gt;2&lt;/sys_mod_count&gt;&lt;sys_name&gt;AI Incident Orchestrator - Send S1.3 Eve&lt;/sys_name&gt;&lt;sys_overrides/&gt;&lt;sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0"&gt;51a63bbf738bc7502aedfed25ab8b789&lt;/sys_package&gt;&lt;sys_policy/&gt;&lt;sys_scope display_value="AI Incident Orchestrator"&gt;51a63bbf738bc7502aedfed25ab8b789&lt;/sys_scope&gt;&lt;sys_update_name&gt;sysevent_script_action_2cbb53c983d70710b5309e80ceaad3a7&lt;/sys_update_name&gt;&lt;sys_updated_by&gt;admin&lt;/sys_updated_by&gt;&lt;sys_updated_on&gt;2026-09-11 21:29:55&lt;/sys_updated_on&gt;&lt;/sysevent_script_action&gt;&lt;/record_update&gt;</payload>
+<payload_hash>-686813038</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.3 - Eligibility Business Rule &amp; Minimal Outbound Event Contract">9e6f509183134710b5309e80ceaad355</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-12 02:05:59</sys_created_on>
+<sys_id>526f509183134710b5309e80ceaad357</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a0926089f40000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-12 02:05:59</sys_updated_on>
+<table>x_2215032_ai_inc_0.s1_3_outbound_event</table>
+<target_name>AI Incident Orchestrator - Send S1.3 Eve</target_name>
+<type>Script Action</type>
+<update_domain>global</update_domain>
+<update_guid>52302345fa1b0710726506153ca19201</update_guid>
+<update_guid_history>52302345fa1b0710726506153ca19201:-686813038,624fdb8d0ad707105f86f9e1d340bd9f:-200365132,d8fb5bc9ebd70710154b43f28a371b4f:-1095270201</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_rest_message_fn_0eb55b8d83970710b5309e80ceaad385</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_rest_message_fn"><sys_rest_message_fn action="INSERT_OR_UPDATE"><authentication_type>inherit_from_parent</authentication_type><basic_auth_password/><basic_auth_profile/><basic_auth_user/><content/><function_name>Default GET</function_name><http_method>get</http_method><lock>false</lock><oauth2_profile/><protocol_name/><qualified_name>AI Incident Orchestrator S1.3 Event [ Default GET ]</qualified_name><rest_endpoint/><rest_message display_value="AI Incident Orchestrator S1.3 Event">04b4db0d83970710b5309e80ceaad35a</rest_message><sys_class_name>sys_rest_message_fn</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-11 20:44:02</sys_created_on><sys_id>0eb55b8d83970710b5309e80ceaad385</sys_id><sys_mod_count>0</sys_mod_count><sys_name>Default GET</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_update_name>sys_rest_message_fn_0eb55b8d83970710b5309e80ceaad385</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-11 20:44:02</sys_updated_on><use_auth_mid_server/><use_basic_auth>false</use_basic_auth><use_mid_server/><use_mutual_auth>false</use_mutual_auth></sys_rest_message_fn></record_update>]]></payload>
+<payload_hash>-2051194555</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.3 - Eligibility Business Rule &amp; Minimal Outbound Event Contract">9e6f509183134710b5309e80ceaad355</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-12 02:05:59</sys_created_on>
+<sys_id>566f509183134710b5309e80ceaad358</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a0923687e80000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-12 02:05:59</sys_updated_on>
+<table/>
+<target_name>Default GET</target_name>
+<type>HTTP Method</type>
+<update_domain>global</update_domain>
+<update_guid>8eb55b8d81970710156ae9f9d676768a</update_guid>
+<update_guid_history>8eb55b8d81970710156ae9f9d676768a:-2051194555</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_scope_privilege_5a981b0583d70710b5309e80ceaad3cc</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_scope_privilege"><sys_scope_privilege action="INSERT_OR_UPDATE"><operation>execute</operation><source_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</source_scope><status>allowed</status><sys_class_name>sys_scope_privilege</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-11 20:56:37</sys_created_on><sys_id>5a981b0583d70710b5309e80ceaad3cc</sys_id><sys_mod_count>0</sys_mod_count><sys_name>ScriptableRESTMessageClient.setRequestBody</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_update_name>sys_scope_privilege_5a981b0583d70710b5309e80ceaad3cc</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-11 20:56:37</sys_updated_on><target_name>ScriptableRESTMessageClient.setRequestBody</target_name><target_scope display_value="Global">global</target_scope><target_type>scriptable</target_type></sys_scope_privilege></record_update>]]></payload>
+<payload_hash>-179605439</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.3 - Eligibility Business Rule &amp; Minimal Outbound Event Contract">9e6f509183134710b5309e80ceaad355</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-12 02:05:59</sys_created_on>
+<sys_id>5a6f509183134710b5309e80ceaad359</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a092420c200000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-12 02:05:59</sys_updated_on>
+<table/>
+<target_name>ScriptableRESTMessageClient.setRequestBody</target_name>
+<type>Cross scope privilege</type>
+<update_domain>global</update_domain>
+<update_guid>92981b05aad70710ede83344f0f0f1d0</update_guid>
+<update_guid_history>92981b05aad70710ede83344f0f0f1d0:-179605439</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_scope_privilege_d2981b0583d70710b5309e80ceaad3d2</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_scope_privilege"><sys_scope_privilege action="INSERT_OR_UPDATE"><operation>execute</operation><source_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</source_scope><status>allowed</status><sys_class_name>sys_scope_privilege</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-11 20:56:37</sys_created_on><sys_id>d2981b0583d70710b5309e80ceaad3d2</sys_id><sys_mod_count>0</sys_mod_count><sys_name>ScriptableRESTMessageClient.execute</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_update_name>sys_scope_privilege_d2981b0583d70710b5309e80ceaad3d2</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-11 20:56:37</sys_updated_on><target_name>ScriptableRESTMessageClient.execute</target_name><target_scope display_value="Global">global</target_scope><target_type>scriptable</target_type></sys_scope_privilege></record_update>]]></payload>
+<payload_hash>1891006229</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.3 - Eligibility Business Rule &amp; Minimal Outbound Event Contract">9e6f509183134710b5309e80ceaad355</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-12 02:05:59</sys_created_on>
+<sys_id>5e6f509183134710b5309e80ceaad35a</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a092420c400000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-12 02:05:59</sys_updated_on>
+<table/>
+<target_name>ScriptableRESTMessageClient.execute</target_name>
+<type>Cross scope privilege</type>
+<update_domain>global</update_domain>
+<update_guid>9a981b0570d7071043e4749c877e54f9</update_guid>
+<update_guid_history>9a981b0570d7071043e4749c877e54f9:1891006229</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_script_a109b9c583dbc310b5309e80ceaad339</name>
+<payload>&lt;?xml version="1.0" encoding="UTF-8"?&gt;&lt;record_update sys_domain="global" table="sys_script"&gt;&lt;sys_script action="INSERT_OR_UPDATE"&gt;&lt;abort_action&gt;false&lt;/abort_action&gt;&lt;access&gt;package_private&lt;/access&gt;&lt;action_delete&gt;false&lt;/action_delete&gt;&lt;action_insert&gt;true&lt;/action_insert&gt;&lt;action_query&gt;false&lt;/action_query&gt;&lt;action_update&gt;true&lt;/action_update&gt;&lt;active&gt;true&lt;/active&gt;&lt;add_message&gt;false&lt;/add_message&gt;&lt;advanced&gt;true&lt;/advanced&gt;&lt;change_fields&gt;false&lt;/change_fields&gt;&lt;client_callable&gt;false&lt;/client_callable&gt;&lt;collection&gt;incident&lt;/collection&gt;&lt;condition/&gt;&lt;description/&gt;&lt;execute_function&gt;false&lt;/execute_function&gt;&lt;filter_condition/&gt;&lt;is_rest&gt;false&lt;/is_rest&gt;&lt;message/&gt;&lt;name&gt;AI Incident Orchestrator - Evaluate Elig&lt;/name&gt;&lt;order&gt;100&lt;/order&gt;&lt;priority&gt;100&lt;/priority&gt;&lt;rest_method/&gt;&lt;rest_method_text/&gt;&lt;rest_service/&gt;&lt;rest_service_text/&gt;&lt;rest_variables/&gt;&lt;role_conditions/&gt;&lt;script&gt;&lt;![CDATA[(function executeRule(current, previous) {
+
+    var RELEVANT_FIELDS = [
+        'active',
+        'category',
+        'x_2215032_ai_inc_0_ai_enabled',
+        'x_2215032_ai_inc_0_ai_processing_state',
+        'x_2215032_ai_inc_0_ai_human_lock',
+        'x_2215032_ai_inc_0_ai_retry_count'
+    ];
+
+    var SUPPORTED_CATEGORIES_PROPERTY =
+        'x_2215032_ai_inc_0.s1_3_supported_categories';
+
+    var CATEGORY_PATTERN =
+        /^[a-z0-9]+(?:[-_][a-z0-9]+)*$/;
+
+    var PROCESSING_STATE =
+        'x_2215032_ai_inc_0_ai_processing_state';
+
+    var RETRY_COUNT =
+        'x_2215032_ai_inc_0_ai_retry_count';
+
+    function getSupportedCategories() {
+        var configuredValue = String(
+            gs.getProperty(
+                SUPPORTED_CATEGORIES_PROPERTY,
+                ''
+            ) || ''
+        );
+
+        var categories = configuredValue
+            .split(',')
+            .map(function trimCategory(category) {
+                return category.trim();
+            })
+            .filter(function removeEmptyCategory(category) {
+                return category.length &gt; 0;
+            });
+
+        if (
+            categories.length === 0 ||
+            categories.some(
+                function hasMalformedCategory(category) {
+                    return !CATEGORY_PATTERN.test(category);
+                }
+            )
+        ) {
+            return [];
+        }
+
+        return categories;
+    }
+
+    function hasRelevantUpdate() {
+        for (var i = 0; i &lt; RELEVANT_FIELDS.length; i++) {
+            var fieldName = RELEVANT_FIELDS[i];
+
+            if (
+                current.getValue(fieldName) !==
+                previous.getValue(fieldName)
+            ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    function suppress(current, reason) {
+        gs.info(
+            'S1.3 eligibility suppressed: ' +
+            reason +
+            ' number=' +
+            current.getValue('number') +
+            ' sys_id=' +
+            current.getUniqueValue()
+        );
+    }
+
+    var operation = current.operation();
+
+    if (operation === 'update') {
+
+        if (!previous) {
+            suppress(current, 'previous_unavailable');
+            return;
+        }
+
+        if (!hasRelevantUpdate()) {
+            return;
+        }
+    }
+
+    var processingState =
+        current.getValue(PROCESSING_STATE);
+
+    var category =
+        current.getValue('category');
+
+    var humanLock =
+        current.getValue(
+            'x_2215032_ai_inc_0_ai_human_lock'
+        );
+
+    var retryValue =
+        current.getValue(RETRY_COUNT);
+
+    var retryCount =
+        parseInt(retryValue || '0', 10);
+
+    if (current.getValue('active') !== '1') {
+        suppress(current, 'inactive');
+        return;
+    }
+
+    if (
+        current.getValue(
+            'x_2215032_ai_inc_0_ai_enabled'
+        ) !== '1'
+    ) {
+        suppress(current, 'ai_disabled');
+        return;
+    }
+
+    if (processingState === 'complete') {
+        suppress(current, 'already_processed');
+        return;
+    }
+
+    if (
+        getSupportedCategories().indexOf(category) === -1
+    ) {
+        suppress(current, 'unsupported_category');
+        return;
+    }
+
+    if (processingState === 'in_progress') {
+        suppress(current, 'already_running');
+        return;
+    }
+
+    if (processingState === 'awaiting_approval') {
+        suppress(current, 'awaiting_approval');
+        return;
+    }
+
+    if (
+        processingState !== 'pending' &amp;&amp;
+        processingState !== 'failed'
+    ) {
+        suppress(current, 'invalid_processing_state');
+        return;
+    }
+
+    if (isNaN(retryCount) || retryCount &lt; 0) {
+        suppress(current, 'invalid_retry_count');
+        return;
+    }
+
+    /*
+     * Failed processing is a retry only when the record
+     * newly transitions into Failed.
+     */
+    if (
+        processingState === 'failed' &amp;&amp;
+        operation === 'update'
+    ) {
+        var previousProcessingState =
+            previous.getValue(PROCESSING_STATE);
+
+        /*
+         * An unrelated edit while already Failed must
+         * not generate another retry.
+         */
+        if (previousProcessingState === 'failed') {
+            return;
+        }
+
+        var previousRetryValue =
+            previous.getValue(RETRY_COUNT);
+
+        var previousRetryCount =
+            parseInt(
+                previousRetryValue || '0',
+                10
+            );
+
+        if (
+            isNaN(previousRetryCount) ||
+            previousRetryCount &lt; 0
+        ) {
+            suppress(current, 'invalid_retry_count');
+            return;
+        }
+
+        /*
+         * Count before this failure determines whether
+         * another retry is available.
+         *
+         * previous 0 -&gt; Retry 1
+         * previous 1 -&gt; Retry 2
+         * previous 2 -&gt; exhausted
+         */
+        if (previousRetryCount &gt;= 2) {
+            suppress(current, 'retry_limit_exhausted');
+            return;
+        }
+    }
+
+    if (humanLock === '1') {
+        suppress(current, 'human_locked');
+        return;
+    }
+
+    var eventType =
+        operation === 'insert'
+            ? 'incident.created'
+            : 'incident.updated';
+
+    var eventId =
+        gs.generateGUID();
+
+    gs.info(
+        'S1.3 eligibility passed: ' +
+        eventType +
+        ' event_id=' +
+        eventId
+    );
+
+    gs.eventQueue(
+        'x_2215032_ai_inc_0.s1_3_outbound_event',
+        current,
+        eventId,
+        eventType
+    );
+
+})(current, previous);]]&gt;&lt;/script&gt;&lt;sys_class_name&gt;sys_script&lt;/sys_class_name&gt;&lt;sys_created_by&gt;admin&lt;/sys_created_by&gt;&lt;sys_created_on&gt;2026-09-11 14:04:17&lt;/sys_created_on&gt;&lt;sys_domain&gt;global&lt;/sys_domain&gt;&lt;sys_domain_path&gt;/&lt;/sys_domain_path&gt;&lt;sys_id&gt;a109b9c583dbc310b5309e80ceaad339&lt;/sys_id&gt;&lt;sys_mod_count&gt;8&lt;/sys_mod_count&gt;&lt;sys_name&gt;AI Incident Orchestrator - Evaluate Elig&lt;/sys_name&gt;&lt;sys_overrides/&gt;&lt;sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0"&gt;51a63bbf738bc7502aedfed25ab8b789&lt;/sys_package&gt;&lt;sys_policy/&gt;&lt;sys_scope display_value="AI Incident Orchestrator"&gt;51a63bbf738bc7502aedfed25ab8b789&lt;/sys_scope&gt;&lt;sys_update_name&gt;sys_script_a109b9c583dbc310b5309e80ceaad339&lt;/sys_update_name&gt;&lt;sys_updated_by&gt;admin&lt;/sys_updated_by&gt;&lt;sys_updated_on&gt;2026-09-12 02:04:55&lt;/sys_updated_on&gt;&lt;template/&gt;&lt;when&gt;after&lt;/when&gt;&lt;/sys_script&gt;&lt;sys_translated_text action="delete_multiple" query="documentkey=a109b9c583dbc310b5309e80ceaad339"/&gt;&lt;/record_update&gt;</payload>
+<payload_hash>-916216708</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.3 - Eligibility Business Rule &amp; Minimal Outbound Event Contract">9e6f509183134710b5309e80ceaad355</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-12 02:05:59</sys_created_on>
+<sys_id>926f509183134710b5309e80ceaad35b</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a0935c50c60000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-12 02:05:59</sys_updated_on>
+<table>incident</table>
+<target_name>AI Incident Orchestrator - Evaluate Elig</target_name>
+<type>Business Rule</type>
+<update_domain>global</update_domain>
+<update_guid>3e2fd89d14df071015b47faf3d7a1c00</update_guid>
+<update_guid_history>3e2fd89d14df071015b47faf3d7a1c00:-916216708,721fdc51b11347108ba433c5994d26c0:-166556150,dc40cc15351f0710e8b5c6883c86ef64:-916216708,4bdeb381951f071048522df4d45f005a:-258760468,c5703f056c9b071003a57bf81b7c05b6:27393523,7b0f5781e51b0710d614f4be507326b8:-525859389,7c7b5b8971d70710e09f05c5021e376c:207553708,6118db89dc97071023fc3a00269625cc:-1696932239,263a318900dbc310f22e18e8342c8922:-1005214473</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_dictionary_incident_x_2215032_ai_inc_0_ai_retry_count</name>
+<payload>&lt;?xml version="1.0" encoding="UTF-8"?&gt;&lt;record_update&gt;&lt;sys_dictionary action="INSERT_OR_UPDATE" element="x_2215032_ai_inc_0_ai_retry_count" table="incident"&gt;&lt;active&gt;true&lt;/active&gt;&lt;array&gt;false&lt;/array&gt;&lt;attributes/&gt;&lt;audit&gt;false&lt;/audit&gt;&lt;calculation&gt;&lt;![CDATA[(function calculatedFieldValue(current) {
+
+	// Add your code here
+	return '';  // return the calculated value
+
+})(current);]]&gt;&lt;/calculation&gt;&lt;choice/&gt;&lt;choice_field/&gt;&lt;choice_table/&gt;&lt;column_label&gt;AI Retry Count&lt;/column_label&gt;&lt;comments/&gt;&lt;create_roles/&gt;&lt;default_value&gt;0&lt;/default_value&gt;&lt;defaultsort/&gt;&lt;delete_roles/&gt;&lt;dependent/&gt;&lt;dependent_on_field/&gt;&lt;display&gt;false&lt;/display&gt;&lt;dynamic_creation&gt;false&lt;/dynamic_creation&gt;&lt;dynamic_creation_script/&gt;&lt;dynamic_default_value/&gt;&lt;dynamic_ref_qual/&gt;&lt;element&gt;x_2215032_ai_inc_0_ai_retry_count&lt;/element&gt;&lt;element_reference&gt;false&lt;/element_reference&gt;&lt;foreign_database/&gt;&lt;formula/&gt;&lt;function_definition/&gt;&lt;function_field&gt;false&lt;/function_field&gt;&lt;internal_type display_value="Integer"&gt;integer&lt;/internal_type&gt;&lt;mandatory&gt;false&lt;/mandatory&gt;&lt;max_length&gt;40&lt;/max_length&gt;&lt;name&gt;incident&lt;/name&gt;&lt;next_element/&gt;&lt;primary&gt;false&lt;/primary&gt;&lt;read_only&gt;false&lt;/read_only&gt;&lt;read_only_option/&gt;&lt;read_roles/&gt;&lt;reference/&gt;&lt;reference_cascade_rule/&gt;&lt;reference_floats&gt;false&lt;/reference_floats&gt;&lt;reference_key/&gt;&lt;reference_qual/&gt;&lt;reference_qual_condition/&gt;&lt;reference_type/&gt;&lt;spell_check&gt;false&lt;/spell_check&gt;&lt;staged&gt;false&lt;/staged&gt;&lt;sys_class_name&gt;sys_dictionary&lt;/sys_class_name&gt;&lt;sys_created_by&gt;admin&lt;/sys_created_by&gt;&lt;sys_created_on&gt;2026-09-11 22:35:10&lt;/sys_created_on&gt;&lt;sys_id&gt;969e6341839b0710b5309e80ceaad3dc&lt;/sys_id&gt;&lt;sys_name&gt;AI Retry Count&lt;/sys_name&gt;&lt;sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0"&gt;51a63bbf738bc7502aedfed25ab8b789&lt;/sys_package&gt;&lt;sys_policy/&gt;&lt;sys_scope display_value="AI Incident Orchestrator"&gt;51a63bbf738bc7502aedfed25ab8b789&lt;/sys_scope&gt;&lt;sys_update_name&gt;sys_dictionary_incident_x_2215032_ai_inc_0_ai_retry_count&lt;/sys_update_name&gt;&lt;sys_updated_by&gt;admin&lt;/sys_updated_by&gt;&lt;sys_updated_on&gt;2026-09-11 22:35:10&lt;/sys_updated_on&gt;&lt;table_reference&gt;false&lt;/table_reference&gt;&lt;text_index&gt;false&lt;/text_index&gt;&lt;unique&gt;false&lt;/unique&gt;&lt;use_dependent_field&gt;false&lt;/use_dependent_field&gt;&lt;use_dynamic_default&gt;false&lt;/use_dynamic_default&gt;&lt;use_reference_qualifier&gt;simple&lt;/use_reference_qualifier&gt;&lt;virtual&gt;false&lt;/virtual&gt;&lt;virtual_type&gt;script&lt;/virtual_type&gt;&lt;widget/&gt;&lt;write_roles/&gt;&lt;xml_view&gt;false&lt;/xml_view&gt;&lt;/sys_dictionary&gt;&lt;/record_update&gt;</payload>
+<payload_hash>-1334159677</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.3 - Eligibility Business Rule &amp; Minimal Outbound Event Contract">9e6f509183134710b5309e80ceaad355</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-12 02:05:59</sys_created_on>
+<sys_id>966f509183134710b5309e80ceaad357</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a0929c4ca40000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-12 02:05:59</sys_updated_on>
+<table>incident</table>
+<target_name>Incident.AI Retry Count</target_name>
+<type>Dictionary</type>
+<update_domain>global</update_domain>
+<update_guid>1e2fe3811b9b0710b684c1512cc51088</update_guid>
+<update_guid_history>1e2fe3811b9b0710b684c1512cc51088:-1334159677</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_rest_message_fn_bed513cd83970710b5309e80ceaad3b4</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_rest_message_fn"><sys_rest_message_fn action="INSERT_OR_UPDATE"><authentication_type>inherit_from_parent</authentication_type><basic_auth_password/><basic_auth_profile/><basic_auth_user/><content/><function_name>post</function_name><http_method>post</http_method><lock>false</lock><oauth2_profile/><protocol_name/><qualified_name>AI Incident Orchestrator S1.3 Event [ post ]</qualified_name><rest_endpoint/><rest_message display_value="AI Incident Orchestrator S1.3 Event">04b4db0d83970710b5309e80ceaad35a</rest_message><sys_class_name>sys_rest_message_fn</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-11 20:47:56</sys_created_on><sys_id>bed513cd83970710b5309e80ceaad3b4</sys_id><sys_mod_count>0</sys_mod_count><sys_name>post</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_update_name>sys_rest_message_fn_bed513cd83970710b5309e80ceaad3b4</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-11 20:47:56</sys_updated_on><use_auth_mid_server/><use_basic_auth>false</use_basic_auth><use_mid_server/><use_mutual_auth>false</use_mutual_auth></sys_rest_message_fn></record_update>]]></payload>
+<payload_hash>-1242877849</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.3 - Eligibility Business Rule &amp; Minimal Outbound Event Contract">9e6f509183134710b5309e80ceaad355</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-12 02:05:59</sys_created_on>
+<sys_id>9a6f509183134710b5309e80ceaad358</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a0923a1bc20000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-12 02:05:59</sys_updated_on>
+<table/>
+<target_name>post</target_name>
+<type>HTTP Method</type>
+<update_domain>global</update_domain>
+<update_guid>df961f0da49707100535e3847bdf3ca3</update_guid>
+<update_guid_history>df961f0da49707100535e3847bdf3ca3:-1242877849</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_scope_privilege_6a981b0583d70710b5309e80ceaad3fb</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_scope_privilege"><sys_scope_privilege action="INSERT_OR_UPDATE"><operation>execute</operation><source_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</source_scope><status>allowed</status><sys_class_name>sys_scope_privilege</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-11 20:56:37</sys_created_on><sys_id>6a981b0583d70710b5309e80ceaad3fb</sys_id><sys_mod_count>0</sys_mod_count><sys_name>ScriptableRESTResponse.getStatusCode</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_update_name>sys_scope_privilege_6a981b0583d70710b5309e80ceaad3fb</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-11 20:56:37</sys_updated_on><target_name>ScriptableRESTResponse.getStatusCode</target_name><target_scope display_value="Global">global</target_scope><target_type>scriptable</target_type></sys_scope_privilege></record_update>]]></payload>
+<payload_hash>1857406241</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.3 - Eligibility Business Rule &amp; Minimal Outbound Event Contract">9e6f509183134710b5309e80ceaad355</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-12 02:05:59</sys_created_on>
+<sys_id>9e6f509183134710b5309e80ceaad359</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a092420eff0000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-12 02:05:59</sys_updated_on>
+<table/>
+<target_name>ScriptableRESTResponse.getStatusCode</target_name>
+<type>Cross scope privilege</type>
+<update_domain>global</update_domain>
+<update_guid>ea981b056ad70710a6438f11e743cffd</update_guid>
+<update_guid_history>ea981b056ad70710a6438f11e743cffd:1857406241</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sysevent_register_f73a9fc583d70710b5309e80ceaad3e6</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sysevent_register"><sysevent_register action="INSERT_OR_UPDATE"><caller_access/><derived_priority>100</derived_priority><description>Queues an eligible S1.3 minimal outbound incident event for asynchronous transport.</description><event_name>x_2215032_ai_inc_0.s1_3_outbound_event</event_name><fired_by>AI Incident Orchestrator S1.3 eligibility Business Rule</fired_by><priority>100</priority><queue/><suffix>s1_3_outbound_event</suffix><sys_class_name>sysevent_register</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-11 21:06:17</sys_created_on><sys_id>f73a9fc583d70710b5309e80ceaad3e6</sys_id><sys_mod_count>0</sys_mod_count><sys_name>x_2215032_ai_inc_0.s1_3_outbound_event</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_update_name>sysevent_register_f73a9fc583d70710b5309e80ceaad3e6</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-11 21:06:17</sys_updated_on><table>incident</table></sysevent_register></record_update>]]></payload>
+<payload_hash>-816322541</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.3 - Eligibility Business Rule &amp; Minimal Outbound Event Contract">9e6f509183134710b5309e80ceaad355</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-12 02:05:59</sys_created_on>
+<sys_id>d26f509183134710b5309e80ceaad356</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a0924ae9720000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-12 02:05:59</sys_updated_on>
+<table>incident</table>
+<target_name>x_2215032_ai_inc_0.s1_3_outbound_event</target_name>
+<type>Event Registration</type>
+<update_domain>global</update_domain>
+<update_guid>1cda5749aad70710e3bbccb70d215e80</update_guid>
+<update_guid_history>1cda5749aad70710e3bbccb70d215e80:-816322541</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_scope_privilege_76c337c9839b0710b5309e80ceaad35f</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_scope_privilege"><sys_scope_privilege action="INSERT_OR_UPDATE"><operation>execute</operation><source_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</source_scope><status>allowed</status><sys_class_name>sys_scope_privilege</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-11 22:55:25</sys_created_on><sys_id>76c337c9839b0710b5309e80ceaad35f</sys_id><sys_mod_count>0</sys_mod_count><sys_name>GlideRecord.setValue</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_update_name>sys_scope_privilege_76c337c9839b0710b5309e80ceaad35f</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-11 22:55:25</sys_updated_on><target_name>GlideRecord.setValue</target_name><target_scope display_value="Global">global</target_scope><target_type>scriptable</target_type></sys_scope_privilege></record_update>]]></payload>
+<payload_hash>978652257</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.3 - Eligibility Business Rule &amp; Minimal Outbound Event Contract">9e6f509183134710b5309e80ceaad355</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-12 02:05:59</sys_created_on>
+<sys_id>d26f509183134710b5309e80ceaad35a</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a092aed1110000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-12 02:05:59</sys_updated_on>
+<table/>
+<target_name>GlideRecord.setValue</target_name>
+<type>Cross scope privilege</type>
+<update_domain>global</update_domain>
+<update_guid>3ec337c9e89b0710a99f46a63e432c62</update_guid>
+<update_guid_history>3ec337c9e89b0710a99f46a63e432c62:978652257</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_script_e68f23c1839b0710b5309e80ceaad3d2</name>
+<payload>&lt;?xml version="1.0" encoding="UTF-8"?&gt;&lt;record_update sys_domain="global" table="sys_script"&gt;&lt;sys_script action="INSERT_OR_UPDATE"&gt;&lt;abort_action&gt;false&lt;/abort_action&gt;&lt;access&gt;package_private&lt;/access&gt;&lt;action_delete&gt;false&lt;/action_delete&gt;&lt;action_insert&gt;false&lt;/action_insert&gt;&lt;action_query&gt;false&lt;/action_query&gt;&lt;action_update&gt;true&lt;/action_update&gt;&lt;active&gt;true&lt;/active&gt;&lt;add_message&gt;false&lt;/add_message&gt;&lt;advanced&gt;true&lt;/advanced&gt;&lt;change_fields&gt;false&lt;/change_fields&gt;&lt;client_callable&gt;false&lt;/client_callable&gt;&lt;collection&gt;incident&lt;/collection&gt;&lt;condition/&gt;&lt;description/&gt;&lt;execute_function&gt;false&lt;/execute_function&gt;&lt;filter_condition/&gt;&lt;is_rest&gt;false&lt;/is_rest&gt;&lt;message/&gt;&lt;name&gt;AI Incident Orchestrator - Retry Escalat&lt;/name&gt;&lt;order&gt;90&lt;/order&gt;&lt;priority&gt;100&lt;/priority&gt;&lt;rest_method/&gt;&lt;rest_method_text/&gt;&lt;rest_service/&gt;&lt;rest_service_text/&gt;&lt;rest_variables/&gt;&lt;role_conditions/&gt;&lt;script&gt;&lt;![CDATA[(function executeRule(current, previous) {
+
+    var PROCESSING_STATE =
+        'x_2215032_ai_inc_0_ai_processing_state';
+
+    var RETRY_COUNT =
+        'x_2215032_ai_inc_0_ai_retry_count';
+
+    var HUMAN_REVIEW_REQUIRED =
+        'x_2215032_ai_inc_0_ai_human_review_required';
+
+    var AI_ENABLED =
+        'x_2215032_ai_inc_0_ai_enabled';
+
+    var HUMAN_LOCK =
+        'x_2215032_ai_inc_0_ai_human_lock';
+
+    var SUPPORTED_CATEGORIES_PROPERTY =
+        'x_2215032_ai_inc_0.s1_3_supported_categories';
+
+    var CATEGORY_PATTERN =
+        /^[a-z0-9]+(?:[-_][a-z0-9]+)*$/;
+
+    function getSupportedCategories() {
+        var configuredValue = String(
+            gs.getProperty(
+                SUPPORTED_CATEGORIES_PROPERTY,
+                ''
+            ) || ''
+        );
+
+        var categories = configuredValue
+            .split(',')
+            .map(function trimCategory(category) {
+                return category.trim();
+            })
+            .filter(function removeEmptyCategory(category) {
+                return category.length &gt; 0;
+            });
+
+        if (
+            categories.length === 0 ||
+            categories.some(
+                function hasMalformedCategory(category) {
+                    return !CATEGORY_PATTERN.test(category);
+                }
+            )
+        ) {
+            return [];
+        }
+
+        return categories;
+    }
+
+    var processingState =
+        current.getValue(PROCESSING_STATE);
+
+    /*
+     * Retry accounting only happens when the Incident
+     * newly transitions into Failed.
+     */
+    if (processingState !== 'failed') {
+        return;
+    }
+
+    if (!previous) {
+        return;
+    }
+
+    if (
+        previous.getValue(PROCESSING_STATE) === 'failed'
+    ) {
+        return;
+    }
+
+    var retryValue =
+        current.getValue(RETRY_COUNT);
+
+    var retryCount =
+        parseInt(retryValue || '0', 10);
+
+    /*
+     * Invalid retry state fails closed and escalates
+     * to human review.
+     */
+    if (
+        isNaN(retryCount) ||
+        retryCount &lt; 0
+    ) {
+        current.setValue(
+            HUMAN_REVIEW_REQUIRED,
+            '1'
+        );
+
+        gs.info(
+            'S1.3 retry escalation: invalid_retry_count'
+        );
+
+        return;
+    }
+
+    /*
+     * Two retries have already been consumed.
+     * Do not increment again. Escalate instead.
+     */
+    if (retryCount &gt;= 2) {
+        current.setValue(
+            HUMAN_REVIEW_REQUIRED,
+            '1'
+        );
+
+        gs.info(
+            'S1.3 retry escalation: retry_limit_exhausted'
+        );
+
+        return;
+    }
+
+    /*
+     * Only consume a retry if the Incident is otherwise
+     * eligible for AI processing.
+     */
+    if (
+        current.getValue('active') !== '1'
+    ) {
+        return;
+    }
+
+    if (
+        current.getValue(AI_ENABLED) !== '1'
+    ) {
+        return;
+    }
+
+    if (
+        getSupportedCategories().indexOf(
+            current.getValue('category')
+        ) === -1
+    ) {
+        return;
+    }
+
+    if (
+        current.getValue(HUMAN_LOCK) === '1'
+    ) {
+        return;
+    }
+
+    /*
+     * This is a BEFORE Business Rule.
+     * Updating current here becomes part of the same
+     * Incident save, so no current.update() is needed.
+     *
+     * 0 -&gt; 1 = Retry 1 consumed
+     * 1 -&gt; 2 = Retry 2 consumed
+     */
+    current.setValue(
+        RETRY_COUNT,
+        String(retryCount + 1)
+    );
+
+    gs.info(
+        'S1.3 retry count advanced: ' +
+        retryCount +
+        ' -&gt; ' +
+        (retryCount + 1)
+    );
+
+})(current, previous);]]&gt;&lt;/script&gt;&lt;sys_class_name&gt;sys_script&lt;/sys_class_name&gt;&lt;sys_created_by&gt;admin&lt;/sys_created_by&gt;&lt;sys_created_on&gt;2026-09-11 22:38:38&lt;/sys_created_on&gt;&lt;sys_domain&gt;global&lt;/sys_domain&gt;&lt;sys_domain_path&gt;/&lt;/sys_domain_path&gt;&lt;sys_id&gt;e68f23c1839b0710b5309e80ceaad3d2&lt;/sys_id&gt;&lt;sys_mod_count&gt;5&lt;/sys_mod_count&gt;&lt;sys_name&gt;AI Incident Orchestrator - Retry Escalat&lt;/sys_name&gt;&lt;sys_overrides/&gt;&lt;sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0"&gt;51a63bbf738bc7502aedfed25ab8b789&lt;/sys_package&gt;&lt;sys_policy/&gt;&lt;sys_scope display_value="AI Incident Orchestrator"&gt;51a63bbf738bc7502aedfed25ab8b789&lt;/sys_scope&gt;&lt;sys_update_name&gt;sys_script_e68f23c1839b0710b5309e80ceaad3d2&lt;/sys_update_name&gt;&lt;sys_updated_by&gt;admin&lt;/sys_updated_by&gt;&lt;sys_updated_on&gt;2026-09-12 02:02:38&lt;/sys_updated_on&gt;&lt;template/&gt;&lt;when&gt;before&lt;/when&gt;&lt;/sys_script&gt;&lt;sys_translated_text action="delete_multiple" query="documentkey=e68f23c1839b0710b5309e80ceaad3d2"/&gt;&lt;/record_update&gt;</payload>
+<payload_hash>-831803126</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.3 - Eligibility Business Rule &amp; Minimal Outbound Event Contract">9e6f509183134710b5309e80ceaad355</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-12 02:05:59</sys_created_on>
+<sys_id>d66f509183134710b5309e80ceaad35b</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a0935a37c10000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-12 02:05:59</sys_updated_on>
+<table>incident</table>
+<target_name>AI Incident Orchestrator - Retry Escalat</target_name>
+<type>Business Rule</type>
+<update_domain>global</update_domain>
+<update_guid>01aedc11d41347104744a42c0880b9fe</update_guid>
+<update_guid_history>01aedc11d41347104744a42c0880b9fe:-831803126,649e1c11c11347104454b49b7aa83eee:1627141323,f704cc1d721f0710269de5b5028248bc:-831803126,4bf18419eb1f0710cbf5744b7f22a70f:-130487389,18208815571f0710424739fd13216cd2:1864983028,74ff6bc1e09b07101f694449726b1914:-485252246</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_documentation_incident_x_2215032_ai_inc_0_ai_retry_count_en</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update><sys_documentation element="x_2215032_ai_inc_0_ai_retry_count" label="AI Retry Count" language="en" table="incident"><sys_documentation action="INSERT_OR_UPDATE"><element>x_2215032_ai_inc_0_ai_retry_count</element><help/><hint/><label>AI Retry Count</label><language>en</language><name>incident</name><plural>AI Retry Counts</plural><sys_class_name>sys_documentation</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-11 22:35:11</sys_created_on><sys_id>1e2fe381839b0710b5309e80ceaad368</sys_id><sys_mod_count>0</sys_mod_count><sys_name>AI Retry Count</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_update_name>sys_documentation_incident_x_2215032_ai_inc_0_ai_retry_count_en</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-11 22:35:11</sys_updated_on><url/><url_target/></sys_documentation></sys_documentation></record_update>]]></payload>
+<payload_hash>1197323007</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.3 - Eligibility Business Rule &amp; Minimal Outbound Event Contract">9e6f509183134710b5309e80ceaad355</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-12 02:05:59</sys_created_on>
+<sys_id>da6f509183134710b5309e80ceaad357</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a0929c4cd60000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-12 02:05:59</sys_updated_on>
+<table>incident</table>
+<target_name>Incident.AI Retry Count</target_name>
+<type>Field Label</type>
+<update_domain>global</update_domain>
+<update_guid>ea2fe3815a9b07103f8a45563511e68c</update_guid>
+<update_guid_history>ea2fe3815a9b07103f8a45563511e68c:1197323007</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_rest_message_fn_headers_cbd5db0d83970710b5309e80ceaad36b</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_rest_message_fn_headers"><sys_rest_message_fn_headers action="INSERT_OR_UPDATE"><name>Content-Type</name><rest_message_function display_value="">bed513cd83970710b5309e80ceaad3b4</rest_message_function><sys_class_name>sys_rest_message_fn_headers</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-11 20:47:56</sys_created_on><sys_id>cbd5db0d83970710b5309e80ceaad36b</sys_id><sys_mod_count>0</sys_mod_count><sys_name>Content-Type</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_update_name>sys_rest_message_fn_headers_cbd5db0d83970710b5309e80ceaad36b</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-11 20:47:56</sys_updated_on><value>application/json</value></sys_rest_message_fn_headers></record_update>]]></payload>
+<payload_hash>-735665851</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.3 - Eligibility Business Rule &amp; Minimal Outbound Event Contract">9e6f509183134710b5309e80ceaad355</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-12 02:05:59</sys_created_on>
+<sys_id>de6f509183134710b5309e80ceaad358</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a0923a1ba50000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-12 02:05:59</sys_updated_on>
+<table/>
+<target_name>Content-Type</target_name>
+<type>HTTP Headers</type>
+<update_domain>global</update_domain>
+<update_guid>1f961f0d9f97071015a6ef653052089f</update_guid>
+<update_guid_history>1f961f0d9f97071015a6ef653052089f:-735665851</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+</unload>

@@ -9,9 +9,53 @@ declare global {
                         table: 'sys_module'
                         id: 'f63a6ab3e92d4288af78261e9cf42d50'
                     }
+                    incident_eligibility_business_rule: {
+                        table: 'sys_script'
+                        id: '2ec47c661eac49c3b91ce9e4793c2cbd'
+                    }
                     package_json: {
                         table: 'sys_module'
                         id: '05f9724cc56043af8f1cd2b6a4d6e0e2'
+                    }
+                    retry_escalation_business_rule: {
+                        table: 'sys_script'
+                        id: '0b32ef5a5de84641a11117f69d00d545'
+                    }
+                    s1_3_content_type_header: {
+                        table: 'sys_rest_message_headers'
+                        id: 'c192f5bc5ee54e2f9196a66a2dc0ded2'
+                    }
+                    s1_3_event_endpoint: {
+                        table: 'sys_properties'
+                        id: '10004351b68a4c5f9c9e26f7c2b90973'
+                    }
+                    s1_3_outbound_event_registration: {
+                        table: 'sysevent_register'
+                        id: '8c39c91afe0c43b4af888ace66a9cb8b'
+                    }
+                    s1_3_outbound_event_script_action: {
+                        table: 'sysevent_script_action'
+                        id: 'be005990afae487ca38ee9b4173337c4'
+                    }
+                    s1_3_outbound_rest_message: {
+                        table: 'sys_rest_message'
+                        id: '5992d74202fb43fbbb9f1bcf6cb20a4e'
+                    }
+                    s1_3_supported_categories: {
+                        table: 'sys_properties'
+                        id: 'f6bc7c9b7fe648698bff4cf14982f81b'
+                    }
+                    'src_server_business-rules_incident-eligibility_ts': {
+                        table: 'sys_module'
+                        id: 'a5815c8f3d0b4f93ab425f3e4498f103'
+                    }
+                    'src_server_business-rules_retry-escalation_ts': {
+                        table: 'sys_module'
+                        id: '8f70a79ed7564a0b8235fd761a726993'
+                    }
+                    'src_server_script-actions_send-s1-3-event_ts': {
+                        table: 'sys_module'
+                        id: 'e39f239a437d4b7a893cff2d5d87a001'
                     }
                     validate_ai_confidence_on_change: {
                         table: 'sys_script_client'
@@ -23,6 +67,23 @@ declare global {
                     }
                 }
                 composite: [
+                    {
+                        table: 'sys_ui_element'
+                        id: '00fec0a8f9b74f9e8d2916cccceba32d'
+                        key: {
+                            sys_ui_section: {
+                                id: '13ecf04d29674d7a838b8524c8abb773'
+                                key: {
+                                    name: 'incident'
+                                    caption: 'AI Incident Orchestrator'
+                                    view: 'Default view'
+                                    sys_domain: 'NULL'
+                                }
+                            }
+                            element: 'x_2215032_ai_inc_0_ai_retry_count'
+                            position: '15'
+                        }
+                    },
                     {
                         table: 'sys_documentation'
                         id: '045dbef99a5347eda5eced82009a333d'
@@ -340,6 +401,14 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_rest_message_fn'
+                        id: '919f02839f7549759b8862df723df8b0'
+                        key: {
+                            rest_message: '5992d74202fb43fbbb9f1bcf6cb20a4e'
+                            function_name: 'post'
+                        }
+                    },
+                    {
                         table: 'sys_choice'
                         id: '93895f6139234899b026fc1a84a6dc37'
                         key: {
@@ -383,6 +452,14 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_dictionary'
+                        id: '99acd41ebfa14ca29383de471b9f2a0d'
+                        key: {
+                            name: 'incident'
+                            element: 'x_2215032_ai_inc_0_ai_retry_count'
+                        }
+                    },
+                    {
                         table: 'sys_ui_form_section'
                         id: '99fc003bcb8a419a9a3dbe76b14fe67e'
                         key: {
@@ -413,6 +490,15 @@ declare global {
                             }
                             element: 'x_2215032_ai_inc_0_ai_human_review_required'
                             position: '9'
+                        }
+                    },
+                    {
+                        table: 'sys_documentation'
+                        id: '9c99c1190b334d43a98df5af2144da49'
+                        key: {
+                            name: 'incident'
+                            element: 'x_2215032_ai_inc_0_ai_retry_count'
+                            language: 'en'
                         }
                     },
                     {
