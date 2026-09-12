@@ -1135,32 +1135,7 @@
 <update_set display_value=""/>
 <view/>
 </sys_update_xml>
-<sys_update_xml action="INSERT_OR_UPDATE">
-<action>INSERT_OR_UPDATE</action>
-<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
-<category>customer</category>
-<comments/>
-<name>sys_security_acl_af603445471b0710c148497f316d43c5</name>
-<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_security_acl"><sys_security_acl action="INSERT_OR_UPDATE"><active>true</active><admin_overrides>true</admin_overrides><advanced>false</advanced><applies_to/><condition/><controlled_by_refs/><decision_type>allow</decision_type><description>Allow delete for all fields in x_2215032_ai_inc_0_ai_execution_log, for users with roles (admin, itil).</description><local_or_existing>Existing</local_or_existing><name>x_2215032_ai_inc_0_ai_execution_log.*</name><operation display_value="delete">delete</operation><script/><security_attribute/><sys_class_name>sys_security_acl</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-11 08:42:31</sys_created_on><sys_id>af603445471b0710c148497f316d43c5</sys_id><sys_mod_count>6</sys_mod_count><sys_name>x_2215032_ai_inc_0_ai_execution_log.*</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_update_name>sys_security_acl_af603445471b0710c148497f316d43c5</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-11 09:18:06</sys_updated_on><type display_value="record">record</type></sys_security_acl></record_update>]]></payload>
-<payload_hash>1944060150</payload_hash>
-<remote_update_set display_value="AI Incident Orchestrator - S1.2 Execution Log and ACLs">f8b389cd479b0710c148497f316d4384</remote_update_set>
-<replace_on_upgrade>false</replace_on_upgrade>
-<sys_created_by>admin</sys_created_by>
-<sys_created_on>2026-09-11 10:06:03</sys_created_on>
-<sys_id>78b389cd479b0710c148497f316d43ac</sys_id>
-<sys_mod_count>0</sys_mod_count>
-<sys_recorded_at>1a08fc28a800000001</sys_recorded_at>
-<sys_updated_by>admin</sys_updated_by>
-<sys_updated_on>2026-09-11 10:06:03</sys_updated_on>
-<table>x_2215032_ai_inc_0_ai_execution_log.*</table>
-<target_name>x_2215032_ai_inc_0_ai_execution_log.*</target_name>
-<type>Access Control</type>
-<update_domain>global</update_domain>
-<update_guid>dab838c5445b0710ba92b28e357fb6d8</update_guid>
-<update_guid_history>dab838c5445b0710ba92b28e357fb6d8:1944060150,e9a7b4451f5b071012ae2ce82ea1df9f:1515548292,d14178c51c1b07104411739f23e21d4f:-718311848,0501fc85c41b0710a3d67afb12fd4c04:-1080033804,c9907845181b0710b8d7a4f78b3f9bf1:1170133646</update_guid_history>
-<update_set display_value=""/>
-<view/>
-</sys_update_xml>
+
 <sys_update_xml action="INSERT_OR_UPDATE">
 <action>INSERT_OR_UPDATE</action>
 <application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
@@ -1187,32 +1162,7 @@
 <update_set display_value=""/>
 <view/>
 </sys_update_xml>
-<sys_update_xml action="INSERT_OR_UPDATE">
-<action>INSERT_OR_UPDATE</action>
-<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
-<category>customer</category>
-<comments/>
-<name>sys_security_acl_role_bba7bc0d471b0710c148497f316d4329</name>
-<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_security_acl_role"><sys_security_acl_role action="INSERT_OR_UPDATE"><sys_class_name>sys_security_acl_role</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-11 09:13:43</sys_created_on><sys_id>bba7bc0d471b0710c148497f316d4329</sys_id><sys_mod_count>0</sys_mod_count><sys_name>x_2215032_ai_inc_0_ai_execution_log.*.itil</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_security_acl display_value="x_2215032_ai_inc_0_ai_execution_log.*">af603445471b0710c148497f316d43c5</sys_security_acl><sys_update_name>sys_security_acl_role_bba7bc0d471b0710c148497f316d4329</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-11 09:13:43</sys_updated_on><sys_user_role display_value="itil" name="itil">282bf1fac6112285017366cb5f867469</sys_user_role></sys_security_acl_role></record_update>]]></payload>
-<payload_hash>-1505356412</payload_hash>
-<remote_update_set display_value="AI Incident Orchestrator - S1.2 Execution Log and ACLs">f8b389cd479b0710c148497f316d4384</remote_update_set>
-<replace_on_upgrade>false</replace_on_upgrade>
-<sys_created_by>admin</sys_created_by>
-<sys_created_on>2026-09-11 10:06:03</sys_created_on>
-<sys_id>78b389cd479b0710c148497f316d43c4</sys_id>
-<sys_mod_count>0</sys_mod_count>
-<sys_recorded_at>1a08fbe89560000001</sys_recorded_at>
-<sys_updated_by>admin</sys_updated_by>
-<sys_updated_on>2026-09-11 10:06:03</sys_updated_on>
-<table>x_2215032_ai_inc_0_ai_execution_log.*</table>
-<target_name>x_2215032_ai_inc_0_ai_execution_log.*.itil</target_name>
-<type>Access Roles</type>
-<update_domain>global</update_domain>
-<update_guid>5eb778457b5b07109745085dd6348af2</update_guid>
-<update_guid_history>5eb778457b5b07109745085dd6348af2:-1505356412</update_guid_history>
-<update_set display_value=""/>
-<view/>
-</sys_update_xml>
+
 <sys_update_xml action="INSERT_OR_UPDATE">
 <action>INSERT_OR_UPDATE</action>
 <application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
@@ -2650,8 +2600,86 @@
 <application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
 <category>customer</category>
 <comments/>
+<name>sys_security_acl_a1e0b1e4475f4310c148497f316d4301</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_security_acl"><sys_security_acl action="INSERT_OR_UPDATE"><active>true</active><admin_overrides>true</admin_overrides><advanced>false</advanced><applies_to/><condition/><controlled_by_refs/><decision_type>allow</decision_type><description>Human controlled: allow itil and admin to write x_2215032_ai_inc_0_ai_enabled</description><local_or_existing>Existing</local_or_existing><name>incident.x_2215032_ai_inc_0_ai_enabled</name><operation display_value="write">write</operation><script/><security_attribute/><sys_class_name>sys_security_acl</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-12 13:00:00</sys_created_on><sys_id>a1e0b1e4475f4310c148497f316d4301</sys_id><sys_mod_count>0</sys_mod_count><sys_name>incident.x_2215032_ai_inc_0_ai_enabled</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_update_name>sys_security_acl_a1e0b1e4475f4310c148497f316d4301</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-12 13:00:00</sys_updated_on><type display_value="record">record</type></sys_security_acl></record_update>]]></payload>
+<payload_hash>1842095131</payload_hash>
+<remote_update_set display_value="AI Incident Orchestrator - S1.2 Execution Log and ACLs">f8b389cd479b0710c148497f316d4384</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-12 13:00:00</sys_created_on>
+<sys_id>f1b389cd479b0710c148497f316d4301</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a08fc8ff7c0000002</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-12 13:00:00</sys_updated_on>
+<table>incident.x_2215032_ai_inc_0_ai_enabled</table>
+<target_name>incident.x_2215032_ai_inc_0_ai_enabled</target_name>
+<type>Access Control</type>
+<update_domain>global</update_domain>
+<update_guid>a1e0b1e4475f4310c148497f316d4301</update_guid>
+<update_guid_history>a1e0b1e4475f4310c148497f316d4301:1842095131</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_security_acl_role_a1e0b1e4475f4310c148497f316d4302</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_security_acl_role"><sys_security_acl_role action="INSERT_OR_UPDATE"><sys_class_name>sys_security_acl_role</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-12 13:00:00</sys_created_on><sys_id>a1e0b1e4475f4310c148497f316d4302</sys_id><sys_mod_count>0</sys_mod_count><sys_name>incident.x_2215032_ai_inc_0_ai_enabled.itil</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_security_acl display_value="incident.x_2215032_ai_inc_0_ai_enabled">a1e0b1e4475f4310c148497f316d4301</sys_security_acl><sys_update_name>sys_security_acl_role_a1e0b1e4475f4310c148497f316d4302</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-12 13:00:00</sys_updated_on><sys_user_role display_value="itil" name="itil">282bf1fac6112285017366cb5f867469</sys_user_role></sys_security_acl_role></record_update>]]></payload>
+<payload_hash>1842095132</payload_hash>
+<remote_update_set display_value="AI Incident Orchestrator - S1.2 Execution Log and ACLs">f8b389cd479b0710c148497f316d4384</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-12 13:00:00</sys_created_on>
+<sys_id>f1b389cd479b0710c148497f316d4302</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a08fc8ff7c0000002</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-12 13:00:00</sys_updated_on>
+<table>incident.x_2215032_ai_inc_0_ai_enabled</table>
+<target_name>incident.x_2215032_ai_inc_0_ai_enabled.itil</target_name>
+<type>Access Roles</type>
+<update_domain>global</update_domain>
+<update_guid>a1e0b1e4475f4310c148497f316d4302</update_guid>
+<update_guid_history>a1e0b1e4475f4310c148497f316d4302:1842095132</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_security_acl_role_a1e0b1e4475f4310c148497f316d4303</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_security_acl_role"><sys_security_acl_role action="INSERT_OR_UPDATE"><sys_class_name>sys_security_acl_role</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-12 13:00:00</sys_created_on><sys_id>a1e0b1e4475f4310c148497f316d4303</sys_id><sys_mod_count>0</sys_mod_count><sys_name>incident.x_2215032_ai_inc_0_ai_enabled.admin</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_security_acl display_value="incident.x_2215032_ai_inc_0_ai_enabled">a1e0b1e4475f4310c148497f316d4301</sys_security_acl><sys_update_name>sys_security_acl_role_a1e0b1e4475f4310c148497f316d4303</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-12 13:00:00</sys_updated_on><sys_user_role display_value="admin" name="admin">2831a114c611228501d4ea6c309d626d</sys_user_role></sys_security_acl_role></record_update>]]></payload>
+<payload_hash>1842095133</payload_hash>
+<remote_update_set display_value="AI Incident Orchestrator - S1.2 Execution Log and ACLs">f8b389cd479b0710c148497f316d4384</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-12 13:00:00</sys_created_on>
+<sys_id>f1b389cd479b0710c148497f316d4303</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a08fc8ff7c0000002</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-12 13:00:00</sys_updated_on>
+<table>incident.x_2215032_ai_inc_0_ai_enabled</table>
+<target_name>incident.x_2215032_ai_inc_0_ai_enabled.admin</target_name>
+<type>Access Roles</type>
+<update_domain>global</update_domain>
+<update_guid>a1e0b1e4475f4310c148497f316d4303</update_guid>
+<update_guid_history>a1e0b1e4475f4310c148497f316d4303:1842095133</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
 <name>sys_security_acl_role_20707445471b0710c148497f316d4371</name>
-<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_security_acl_role"><sys_security_acl_role action="INSERT_OR_UPDATE"><sys_class_name>sys_security_acl_role</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-11 08:42:31</sys_created_on><sys_id>20707445471b0710c148497f316d4371</sys_id><sys_mod_count>0</sys_mod_count><sys_name>.admin</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_security_acl display_value="">af603445471b0710c148497f316d43c5</sys_security_acl><sys_update_name>sys_security_acl_role_20707445471b0710c148497f316d4371</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-11 08:42:31</sys_updated_on><sys_user_role display_value="admin" name="admin">2831a114c611228501d4ea6c309d626d</sys_user_role></sys_security_acl_role></record_update>]]></payload>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_security_acl_role"><sys_security_acl_role action="INSERT_OR_UPDATE"><sys_class_name>sys_security_acl_role</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-11 08:42:31</sys_created_on><sys_id>20707445471b0710c148497f316d4371</sys_id><sys_mod_count>0</sys_mod_count><sys_name>x_2215032_ai_inc_0_ai_execution_log.admin</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_security_acl display_value="x_2215032_ai_inc_0_ai_execution_log">7c036368471f4310c148497f316d433f</sys_security_acl><sys_update_name>sys_security_acl_role_20707445471b0710c148497f316d4371</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-11 08:42:31</sys_updated_on><sys_user_role display_value="admin" name="admin">2831a114c611228501d4ea6c309d626d</sys_user_role></sys_security_acl_role></record_update>]]></payload>
 <payload_hash>-1667828375</payload_hash>
 <remote_update_set display_value="AI Incident Orchestrator - S1.2 Execution Log and ACLs">f8b389cd479b0710c148497f316d4384</remote_update_set>
 <replace_on_upgrade>false</replace_on_upgrade>
@@ -2662,8 +2690,8 @@
 <sys_recorded_at>1a08fa1f6a80000001</sys_recorded_at>
 <sys_updated_by>admin</sys_updated_by>
 <sys_updated_on>2026-09-11 10:06:03</sys_updated_on>
-<table>af603445471b0710c148497f316d43c5</table>
-<target_name>.admin</target_name>
+<table>x_2215032_ai_inc_0_ai_execution_log</table>
+<target_name>x_2215032_ai_inc_0_ai_execution_log.admin</target_name>
 <type>Access Roles</type>
 <update_domain>global</update_domain>
 <update_guid>85907845b31b0710e9c5ff5847122aeb</update_guid>
@@ -2694,6 +2722,45 @@
 <update_domain>global</update_domain>
 <update_guid>e90525b81c5f8310391102f18e3ee98b</update_guid>
 <update_guid_history>e90525b81c5f8310391102f18e3ee98b:-1884482956</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_script_58a74e41c3054f128be48e02d41b539c</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update sys_domain="global" table="sys_script"><sys_script action="INSERT_OR_UPDATE"><abort_action>false</abort_action><access>package_private</access><action_delete>false</action_delete><action_insert>false</action_insert><action_query>false</action_query><action_update>true</action_update><active>true</active><add_message>false</add_message><advanced>true</advanced><change_fields>false</change_fields><client_callable>false</client_callable><collection>incident</collection><condition/><description>Enforces server-side human lock safety stop rejecting automated AI updates when incident is locked by a human operator.</description><execute_function>false</execute_function><filter_condition/><is_rest>false</is_rest><message/><name>AI Enforce Human Lock Safety Stop</name><order>50</order><priority>100</priority><rest_method/><rest_method_text/><rest_service/><rest_service_text/><rest_variables/><role_conditions/><script><![CDATA[(function executeRule(current, previous /*null when async*/) {
+    // Enforce safety stop if human lock is active
+    if (current.x_2215032_ai_inc_0_ai_human_lock == true) {
+        // Check if modification is initiated by the AI service account or role
+        var isAiCaller = gs.hasRole('x_2215032_ai_inc_0.integration_writer') || 
+                         gs.getUserName() == 'ai_orchestrator_svc';
+        
+        if (isAiCaller) {
+            // If previous was not locked, but this update is trying to set something, or if it was already locked
+            gs.addErrorMessage('Incident is locked by a human operator (AI Human Lock). Automated AI updates are rejected.');
+            current.setAbortAction(true);
+        }
+    }
+})(current, previous);]]]]><![CDATA[></script><sys_class_name>sys_script</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-12 13:00:00</sys_created_on><sys_domain>global</sys_domain><sys_domain_path>/</sys_domain_path><sys_id>58a74e41c3054f128be48e02d41b539c</sys_id><sys_mod_count>0</sys_mod_count><sys_name>AI Enforce Human Lock Safety Stop</sys_name><sys_overrides/><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_update_name>sys_script_58a74e41c3054f128be48e02d41b539c</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-12 13:00:00</sys_updated_on><template/><when>before</when></sys_script><sys_translated_text action="delete_multiple" query="documentkey=58a74e41c3054f128be48e02d41b539c"/></record_update>]]></payload>
+<payload_hash>-179102185</payload_hash>
+<remote_update_set display_value="AI Incident Orchestrator - S1.2 Execution Log and ACLs">f8b389cd479b0710c148497f316d4384</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-12 13:00:00</sys_created_on>
+<sys_id>8f3e2b10a95c4788b5d194c728e93f12</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a08fc901bb0000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-12 13:00:00</sys_updated_on>
+<table>incident</table>
+<target_name>AI Enforce Human Lock Safety Stop</target_name>
+<type>Business Rule</type>
+<update_domain>global</update_domain>
+<update_guid>752c6d78aa9f8310964f7c15958cc1ae</update_guid>
+<update_guid_history>752c6d78aa9f8310964f7c15958cc1ae:-179102185</update_guid_history>
 <update_set display_value=""/>
 <view/>
 </sys_update_xml>
