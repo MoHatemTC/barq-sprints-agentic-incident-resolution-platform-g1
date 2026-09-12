@@ -2,7 +2,7 @@
 
 Uses httpx.MockTransport as an in-process fake ServiceNow — no live PDI
 required. The fake mirrors the Table API contract the publisher relies on:
-OAuth token exchange, encoded-query GET, POST, PATCH, and per-sys_id GET.
+encoded-query GET, POST, PATCH, and per-sys_id GET.
 """
 
 from typing import Any
@@ -13,268 +13,204 @@ import pytest
 from app.models.knowledge import Article
 from app.publishing.payload import U_SOURCE_ID_FIELD, build_kb_payload
 from app.publishing.servicenow_kb import (
+    KB_TABLE,
     ServiceNowAuthError,
     ServiceNowKBClient,
     ServiceNowKBError,
     ServiceNowKBSchemaError,
-    ServiceNowRequestError,
     ServiceNowWriteRejectedError,
     publish_article,
 )
-from tests.helpers import mock_settings
 
 INSTANCE = "https://fake-pdi.service-now.com"
 KB_SYS_ID = "kb-base-1111111111111111"
 
 
-@pytest.mark.asyncio
-async def test_publish_to_fresh_instance_creates_all(
-    sample_articles: list[Article], fake: Any
+class FakeServiceNow:
+    """In-memory kb_knowledge table speaking the Table API wire format."""
+
+    def __init__(self) -> None:
+        self.rows: list[dict[str, Any]] = []
+        self.next_sys_id = 1
+        self.query_returns_400 = False
+        self.reject_auth = False
+        # consumed once: corrupt one field on the next read-back
+        self.tamper_next_readback: tuple[str, str] | None = None
+
+    def handler(self, request: httpx.Request) -> httpx.Response:
+        if self.reject_auth:
+            return httpx.Response(401, json={"error": "unauthorized"})
+
+        path = request.url.path
+        params = dict(request.url.params)
+
+        if request.method == "GET" and path == f"/api/now/table/{KB_TABLE}":
+            if self.query_returns_400:
+                return httpx.Response(400, json={"error": "Invalid query"})
+            query = params.get("sysparm_query", "")
+            prefix = f"{U_SOURCE_ID_FIELD}="
+            if query.startswith(prefix):
+                wanted = query[len(prefix) :]
+                matches = [r for r in self.rows if r[U_SOURCE_ID_FIELD] == wanted]
+            else:
+                matches = self.rows
+            return httpx.Response(200, json={"result": matches})
+
+        if request.method == "POST" and path == f"/api/now/table/{KB_TABLE}":
+            payload = httpx.Request(  # noqa: F841 — parse body below
+                request.method, request.url, content=request.read()
+            )
+            import json as _json
+
+            body = _json.loads(request.read())
+            row = {"sys_id": f"sys{self.next_sys_id:011d}", **body}
+            self.next_sys_id += 1
+            self.rows.append(row)
+            return httpx.Response(201, json={"result": row})
+
+        if request.method == "PATCH" and path.startswith(f"/api/now/table/{KB_TABLE}/"):
+            import json as _json
+
+            sys_id = path.rsplit("/", 1)[-1]
+            body = _json.loads(request.read())
+            for row in self.rows:
+                if row["sys_id"] == sys_id:
+                    row.update(body)
+                    return httpx.Response(200, json={"result": row})
+            return httpx.Response(404, json={"error": "not found"})
+
+        if request.method == "GET" and path.startswith(f"/api/now/table/{KB_TABLE}/"):
+            sys_id = path.rsplit("/", 1)[-1]
+            for row in self.rows:
+                if row["sys_id"] == sys_id:
+                    served = dict(row)
+                    if self.tamper_next_readback:
+                        field, value = self.tamper_next_readback
+                        served[field] = value
+                        self.tamper_next_readback = None
+                    return httpx.Response(200, json={"result": served})
+            return httpx.Response(404, json={"error": "not found"})
+
+        return httpx.Response(405, json={"error": "method not allowed"})
+
+    def build_client(self) -> ServiceNowKBClient:
+        return ServiceNowKBClient(
+            INSTANCE,
+            "admin",
+            "secret",
+            transport=httpx.MockTransport(self.handler),
+        )
+
+
+@pytest.fixture
+def fake() -> FakeServiceNow:
+    return FakeServiceNow()
+
+
+def test_publish_to_fresh_instance_creates_all(
+    sample_articles: list[Article], fake: FakeServiceNow
 ) -> None:
     client = fake.build_client()
-    try:
-        outcomes = [await publish_article(client, a, KB_SYS_ID) for a in sample_articles]
+    outcomes = [publish_article(client, a, KB_SYS_ID) for a in sample_articles]
 
-        assert outcomes == ["created"] * len(sample_articles)
-        assert len(fake.rows) == len(sample_articles)
-        stored_ids = {row[U_SOURCE_ID_FIELD] for row in fake.rows}
-        assert stored_ids == {a.article_id for a in sample_articles}
-    finally:
-        await client.aclose()
+    assert outcomes == ["created"] * len(sample_articles)
+    assert len(fake.rows) == len(sample_articles)
+    stored_ids = {row[U_SOURCE_ID_FIELD] for row in fake.rows}
+    assert stored_ids == {a.article_id for a in sample_articles}
 
 
-@pytest.mark.asyncio
-async def test_republish_updates_in_place_with_zero_duplicates(
-    sample_articles: list[Article], fake: Any
+def test_republish_updates_in_place_with_zero_duplicates(
+    sample_articles: list[Article], fake: FakeServiceNow
 ) -> None:
     client = fake.build_client()
-    try:
-        for article in sample_articles:
-            await publish_article(client, article, KB_SYS_ID)
-        post_count = len(fake.rows)
+    for article in sample_articles:
+        publish_article(client, article, KB_SYS_ID)
+    post_count = len(fake.rows)
 
-        outcomes = [await publish_article(client, a, KB_SYS_ID) for a in sample_articles]
+    outcomes = [publish_article(client, a, KB_SYS_ID) for a in sample_articles]
 
-        assert outcomes == ["updated"] * len(sample_articles)
-        assert len(fake.rows) == post_count, "re-run must never duplicate rows"
-    finally:
-        await client.aclose()
+    assert outcomes == ["updated"] * len(sample_articles)
+    assert len(fake.rows) == post_count, "re-run must never duplicate rows"
 
 
-@pytest.mark.asyncio
-async def test_renamed_title_still_finds_row_by_source_id(
-    sample_articles: list[Article], fake: Any
+def test_renamed_title_still_finds_row_by_source_id(
+    sample_articles: list[Article], fake: FakeServiceNow
 ) -> None:
     """A human renames the title in the UI — the u_source_id lookup still wins."""
     client = fake.build_client()
-    try:
-        article = sample_articles[0]
-        await publish_article(client, article, KB_SYS_ID)
+    article = sample_articles[0]
+    publish_article(client, article, KB_SYS_ID)
 
-        for row in fake.rows:
-            row["short_description"] = "A human renamed this title in the UI"
+    for row in fake.rows:
+        row["short_description"] = "A human renamed this title in the UI"
 
-        outcome = await publish_article(client, article, KB_SYS_ID)
+    outcome = publish_article(client, article, KB_SYS_ID)
 
-        assert outcome == "updated"
-        assert len(fake.rows) == 1
-        assert fake.rows[0]["short_description"] == article.title
-    finally:
-        await client.aclose()
+    assert outcome == "updated"
+    assert len(fake.rows) == 1
+    assert fake.rows[0]["short_description"] == article.title
 
 
-@pytest.mark.asyncio
-async def test_readback_mismatch_fails_loud(sample_articles: list[Article], fake: Any) -> None:
-    client = fake.build_client()
-    try:
-        # instance returns invalid state to simulate tampering or write rejection
-        fake.tamper_next_readback = ("workflow_state", "corrupted_state")
-
-        with pytest.raises(ServiceNowWriteRejectedError, match="workflow_state"):
-            await publish_article(client, sample_articles[0], KB_SYS_ID)
-    finally:
-        await client.aclose()
-
-
-@pytest.mark.asyncio
-async def test_verify_stored_fails_when_article_stuck_in_draft(
-    sample_articles: list[Article], fake: Any
-) -> None:
-    """Fail-closed: if an article was published but ends up stuck in draft, fail loud."""
-    client = fake.build_client()
-    try:
-        article = sample_articles[0]
-        assert article.workflow_state.value == "published"
-        fake.tamper_next_readback = ("workflow_state", "draft")
-
-        with pytest.raises(ServiceNowWriteRejectedError, match="target workflow state"):
-            await publish_article(client, article, KB_SYS_ID)
-    finally:
-        await client.aclose()
-
-
-@pytest.mark.asyncio
-async def test_duplicate_source_id_rows_fail_loud(
-    sample_articles: list[Article], fake: Any
+def test_readback_mismatch_fails_loud(
+    sample_articles: list[Article], fake: FakeServiceNow
 ) -> None:
     client = fake.build_client()
-    try:
-        payload = build_kb_payload(sample_articles[0], KB_SYS_ID)
-        fake.rows.append({"sys_id": "dup1", **payload})
-        fake.rows.append({"sys_id": "dup2", **payload})
+    fake.tamper_next_readback = (
+        "workflow_state",
+        "draft",
+    )  # instance says something else
 
-        with pytest.raises(ServiceNowKBError, match="Duplicate"):
-            await publish_article(client, sample_articles[0], KB_SYS_ID)
-    finally:
-        await client.aclose()
+    with pytest.raises(ServiceNowWriteRejectedError, match="workflow_state"):
+        publish_article(client, sample_articles[0], KB_SYS_ID)
 
 
-@pytest.mark.asyncio
-async def test_find_by_source_id_scoped_to_kb(sample_articles: list[Article], fake: Any) -> None:
-    """Articles in another KB must not be matched or overwritten."""
-    client = fake.build_client()
-    try:
-        article = sample_articles[0]
-        payload = build_kb_payload(article, "other-kb-999999999")
-        fake.rows.append({"sys_id": "row_in_other_kb", **payload})
-
-        with pytest.raises(ServiceNowKBError, match="already exists in a different Knowledge Base"):
-            await client.find_by_source_id(article.article_id, kb_sys_id=KB_SYS_ID)
-    finally:
-        await client.aclose()
-
-
-@pytest.mark.asyncio
-async def test_missing_u_source_id_column_shows_remedy(
-    sample_articles: list[Article], fake: Any
+def test_duplicate_source_id_rows_fail_loud(
+    sample_articles: list[Article], fake: FakeServiceNow
 ) -> None:
+    client = fake.build_client()
+    payload = build_kb_payload(sample_articles[0], KB_SYS_ID)
+    fake.rows.append({"sys_id": "dup1", **payload})
+    fake.rows.append({"sys_id": "dup2", **payload})
+
+    with pytest.raises(ServiceNowKBError, match="Duplicate"):
+        publish_article(client, sample_articles[0], KB_SYS_ID)
+
+
+def test_missing_u_source_id_column_shows_remedy(
+    sample_articles: list[Article], fake: FakeServiceNow
+) -> None:
+    """Running against a table without the custom field must explain the fix."""
     fake.query_returns_400 = True
     client = fake.build_client()
-    try:
-        with pytest.raises(ServiceNowKBSchemaError, match="schema columns"):
-            await publish_article(client, sample_articles[0], KB_SYS_ID)
-    finally:
-        await client.aclose()
+
+    with pytest.raises(ServiceNowKBSchemaError, match="u_source_id"):
+        publish_article(client, sample_articles[0], KB_SYS_ID)
 
 
-@pytest.mark.asyncio
-async def test_bad_credentials_raise_auth_error(sample_articles: list[Article], fake: Any) -> None:
+def test_bad_credentials_raise_auth_error(
+    sample_articles: list[Article], fake: FakeServiceNow
+) -> None:
     fake.reject_auth = True
     client = fake.build_client()
-    try:
-        with pytest.raises(ServiceNowAuthError, match="401"):
-            await publish_article(client, sample_articles[0], KB_SYS_ID)
-    finally:
-        await client.aclose()
+
+    with pytest.raises(ServiceNowAuthError, match="401"):
+        publish_article(client, sample_articles[0], KB_SYS_ID)
 
 
-@pytest.mark.asyncio
-async def test_client_sends_bearer_auth_header() -> None:
+def test_client_sends_basic_auth_header(fake: FakeServiceNow) -> None:
     seen: dict[str, str] = {}
 
     def spy(request: httpx.Request) -> httpx.Response:
-        path = request.url.path
-        if path == "/oauth_token.do":
-            return httpx.Response(
-                200,
-                json={
-                    "access_token": "bearer_token_xyz",
-                    "token_type": "Bearer",
-                    "expires_in": 1800,
-                },
-            )
         seen["authorization"] = request.headers.get("authorization", "")
         return httpx.Response(200, json={"result": []})
 
-    settings = mock_settings(
-        servicenow_instance_url=INSTANCE,
-        servicenow_kb_id=KB_SYS_ID,
-        servicenow_client_id="test_cid",
-        servicenow_client_secret="test_secret",
-        servicenow_username="svc_user",
-        servicenow_password="svc_password",
+    client = ServiceNowKBClient(
+        INSTANCE, "admin", "s3cret", transport=httpx.MockTransport(spy)
     )
-    http_client = httpx.AsyncClient(base_url=INSTANCE, transport=httpx.MockTransport(spy))
-    client = ServiceNowKBClient(settings, http_client=http_client)
-    try:
-        await client.find_by_source_id("KB0001-v2.0", kb_sys_id=KB_SYS_ID)
-        assert seen["authorization"] == "Bearer bearer_token_xyz"
-    finally:
-        await client.aclose()
+    client.find_by_source_id("KB0001-v2.0")
+    client.close()
 
+    import base64
 
-@pytest.mark.asyncio
-async def test_ensure_schema_verifies_cleanly(fake: Any) -> None:
-    client = fake.build_client()
-    try:
-        await client.ensure_schema()
-    finally:
-        await client.aclose()
-
-
-@pytest.mark.asyncio
-async def test_ensure_categories_resolves_and_creates(fake: Any) -> None:
-    client = fake.build_client()
-    try:
-        cats = ["network", "software"]
-        mapping = await client.ensure_categories(KB_SYS_ID, cats)
-
-        assert "network" in mapping
-        assert "software" in mapping
-        assert mapping["network"] == "cat_network"
-        assert mapping["software"] == "cat_software"
-    finally:
-        await client.aclose()
-
-
-@pytest.mark.asyncio
-async def test_publish_article_with_dynamic_category(
-    sample_articles: list[Article], fake: Any
-) -> None:
-    client = fake.build_client()
-    try:
-        article = sample_articles[0]
-        cat_mapping = {article.category: "sys-cat-999"}
-
-        outcome = await publish_article(client, article, KB_SYS_ID, category_mapping=cat_mapping)
-
-        assert outcome == "created"
-        assert fake.rows[0]["kb_category"] == "sys-cat-999"
-        assert "category" not in fake.rows[0]
-    finally:
-        await client.aclose()
-
-
-@pytest.mark.asyncio
-async def test_sync_version_raises_on_auth_error(fake: Any) -> None:
-    fake.reject_auth = True
-    client = fake.build_client()
-    try:
-        with pytest.raises(ServiceNowAuthError):
-            await client.sync_version("ver-123", "2.0")
-    finally:
-        await client.aclose()
-
-
-@pytest.mark.asyncio
-async def test_sync_version_raises_on_server_error(fake: Any) -> None:
-    fake.kb_version_returns_error = True
-    client = fake.build_client()
-    try:
-        with pytest.raises(ServiceNowRequestError):
-            await client.sync_version("ver-123", "2.0")
-    finally:
-        await client.aclose()
-
-
-@pytest.mark.asyncio
-async def test_publish_article_fails_loud_when_version_sync_fails(
-    sample_articles: list[Article], fake: Any
-) -> None:
-    fake.kb_version_returns_error = True
-    client = fake.build_client()
-    try:
-        with pytest.raises(ServiceNowRequestError):
-            await publish_article(client, sample_articles[0], KB_SYS_ID)
-    finally:
-        await client.aclose()
+    expected = base64.b64encode(b"admin:s3cret").decode()
+    assert seen["authorization"] == f"Basic {expected}"

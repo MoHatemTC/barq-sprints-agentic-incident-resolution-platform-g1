@@ -5,24 +5,22 @@ looks the row up by our stable u_source_id stamp — creating it on a fresh
 PDI, updating it in place on re-runs — and verifies every write by reading
 the row back. Exits non-zero if any article fails.
 
-Requires in .env: SERVICENOW_INSTANCE_URL, SERVICENOW_CLIENT_ID,
-SERVICENOW_CLIENT_SECRET, SERVICENOW_USERNAME, SERVICENOW_PASSWORD,
-SERVICENOW_KB_ID (sys_id of the target Knowledge Base created in the PDI)
-and required custom columns on the kb_knowledge table.
+Requires in .env: SERVICENOW_INSTANCE_URL, SERVICENOW_USERNAME,
+SERVICENOW_PASSWORD, SERVICENOW_KB_ID (sys_id of the target Knowledge Base
+created in the PDI) and the u_source_id String field present on the
+kb_knowledge table.
 """
 
-from __future__ import annotations
-
 import argparse
-import asyncio
 import json
+import logging
 import sys
 from pathlib import Path
 
 import structlog
 
 from app.core.config import get_settings
-from app.publishing.payload import U_SOURCE_ID_FIELD, build_kb_payload
+from app.publishing.payload import build_kb_payload
 from app.publishing.servicenow_kb import (
     ServiceNowKBClient,
     ServiceNowKBError,
@@ -30,14 +28,36 @@ from app.publishing.servicenow_kb import (
 )
 from app.retrieval.sources import LocalJSONSource
 
+# stdlib logging still governs third-party library output (httpx);
+# our own messages go through structlog.
+logging.basicConfig(level=logging.WARNING)
 logger = structlog.get_logger("publish_kb")
 
 DEFAULT_CORPUS = Path("data/corpus/barq_articles.json")
 DEFAULT_REPORT = Path("data/corpus/publish_report.json")
 
 
-async def async_main(args: argparse.Namespace) -> int:
+def main() -> int:
     settings = get_settings()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--corpus",
+        type=Path,
+        default=DEFAULT_CORPUS,
+        help=f"Path to the articles JSON array (default: {DEFAULT_CORPUS})",
+    )
+    parser.add_argument(
+        "--report",
+        type=Path,
+        default=DEFAULT_REPORT,
+        help=f"Path for the machine-readable publish report (default: {DEFAULT_REPORT})",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Build and validate payloads without any HTTP traffic.",
+    )
+    args = parser.parse_args()
 
     if not args.corpus.exists():
         print(
@@ -65,40 +85,30 @@ async def async_main(args: argparse.Namespace) -> int:
             payload = build_kb_payload(article, settings.servicenow_kb_id)
             logger.info(
                 "payload_validated",
-                article_id=payload[U_SOURCE_ID_FIELD],
+                article_id=payload["u_source_id"],
                 short_description=payload["short_description"],
                 body_html_chars=len(payload["text"]),
             )
         logger.info("dry_run_complete", articles=len(articles), http_calls=0)
         _write_report(
             args.report,
-            {
-                "username": settings.servicenow_username,
-                "dry_run": True,
-                "created": 0,
-                "updated": 0,
-                "failed": [],
-                "results": [],
-            },
+            {"dry_run": True, "created": 0, "updated": 0, "failed": [], "results": []},
         )
         return 0
 
-    client = ServiceNowKBClient(settings)
+    client = ServiceNowKBClient(
+        instance_url=settings.servicenow_instance_url,
+        username=settings.servicenow_username,
+        password=settings.servicenow_password.get_secret_value(),
+        timeout_seconds=settings.servicenow_timeout_seconds,
+    )
+
     results: list[dict[str, str]] = []
     failed: list[dict[str, str]] = []
-
     try:
-        unique_categories = sorted({a.category for a in articles if a.category})
-        category_mapping = await client.run_preflight(settings.servicenow_kb_id, unique_categories)
-
         for article in articles:
             try:
-                outcome = await publish_article(
-                    client,
-                    article,
-                    settings.servicenow_kb_id,
-                    category_mapping=category_mapping,
-                )
+                outcome = publish_article(client, article, settings.servicenow_kb_id)
                 results.append({"article_id": article.article_id, "outcome": outcome})
             except ServiceNowKBError as err:
                 logger.error(
@@ -108,14 +118,13 @@ async def async_main(args: argparse.Namespace) -> int:
                 )
                 failed.append({"article_id": article.article_id, "error": str(err)})
     finally:
-        await client.aclose()
+        client.close()
 
     created = sum(1 for r in results if r["outcome"] == "created")
     updated = sum(1 for r in results if r["outcome"] == "updated")
     _write_report(
         args.report,
         {
-            "username": settings.servicenow_username,
             "dry_run": False,
             "created": created,
             "updated": updated,
@@ -142,29 +151,6 @@ async def async_main(args: argparse.Namespace) -> int:
         report=str(args.report),
     )
     return 0
-
-
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--corpus",
-        type=Path,
-        default=DEFAULT_CORPUS,
-        help=f"Path to the articles JSON array (default: {DEFAULT_CORPUS})",
-    )
-    parser.add_argument(
-        "--report",
-        type=Path,
-        default=DEFAULT_REPORT,
-        help=f"Path for the machine-readable publish report (default: {DEFAULT_REPORT})",
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Build and validate payloads without any HTTP traffic.",
-    )
-    args = parser.parse_args()
-    return asyncio.run(async_main(args))
 
 
 def _write_report(path: Path, report: dict[str, object]) -> None:
