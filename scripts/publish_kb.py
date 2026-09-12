@@ -106,9 +106,17 @@ def main() -> int:
     results: list[dict[str, str]] = []
     failed: list[dict[str, str]] = []
     try:
+        unique_categories = sorted({a.category for a in articles if a.category})
+        category_mapping = client.run_preflight(settings.servicenow_kb_id, unique_categories)
+
         for article in articles:
             try:
-                outcome = publish_article(client, article, settings.servicenow_kb_id)
+                outcome = publish_article(
+                    client,
+                    article,
+                    settings.servicenow_kb_id,
+                    category_mapping=category_mapping,
+                )
                 results.append({"article_id": article.article_id, "outcome": outcome})
             except ServiceNowKBError as err:
                 logger.error(
