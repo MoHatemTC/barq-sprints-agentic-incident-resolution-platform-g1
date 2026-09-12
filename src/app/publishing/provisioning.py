@@ -1,13 +1,13 @@
 """Instance provisioning and preflight configuration for ServiceNow Knowledge Base.
 
-Verifies that target instances have the required database schema columns
-in place (via scoped application update set), dynamically resolves categories
-under the target Knowledge Base, and fails loud on any missing prerequisites.
+Ensures that any target instance (new PDI or production) has the required
+database columns, category hierarchy, list view layouts, and instance settings
+in place before articles are published.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
@@ -31,63 +31,137 @@ if TYPE_CHECKING:
 logger = structlog.get_logger(__name__)
 
 # Required custom schema columns for the canonical corpus
-REQUIRED_SCHEMA_FIELDS: tuple[str, ...] = (
-    U_SOURCE_ID_FIELD,
+REQUIRED_SCHEMA_FIELDS: tuple[dict[str, Any], ...] = (
+    {
+        "name": "kb_knowledge",
+        "element": U_SOURCE_ID_FIELD,
+        "column_label": "Source ID",
+        "internal_type": "string",
+        "max_length": 40,
+    },
+    {
+        "name": "kb_knowledge",
+        "element": U_SERVICE_FIELD,
+        "column_label": "Service",
+        "internal_type": "string",
+        "max_length": 50,
+    },
+    {
+        "name": "kb_knowledge",
+        "element": U_VERSION_FIELD,
+        "column_label": "Version",
+        "internal_type": "string",
+        "max_length": 20,
+    },
+    {
+        "name": "kb_knowledge",
+        "element": U_SECURITY_LEVEL_FIELD,
+        "column_label": "Security Level",
+        "internal_type": "string",
+        "max_length": 50,
+    },
+    {
+        "name": "kb_knowledge",
+        "element": U_ARTICLE_NUMBER_FIELD,
+        "column_label": "Article Number",
+        "internal_type": "string",
+        "max_length": 20,
+    },
+)
+
+# Columns to display by default in the list view
+DEFAULT_LIST_COLUMNS: tuple[str, ...] = (
+    "workflow_state",
     U_SERVICE_FIELD,
     U_VERSION_FIELD,
     U_SECURITY_LEVEL_FIELD,
-    U_ARTICLE_NUMBER_FIELD,
+    U_SOURCE_ID_FIELD,
 )
 
 
 class ServiceNowProvisioner:
-    """Validates and prepares ServiceNow Knowledge Base infrastructure."""
+    """Provisions and validates ServiceNow infrastructure prerequisites."""
 
     def __init__(self, client: ServiceNowKBClient) -> None:
         self._client = client
 
-    async def ensure_schema(self) -> None:
-        """Verify all required custom columns exist on the kb_knowledge table.
-
-        Fails loud if any required column is missing, instructing the user
-        to install the update set ('servicenow/kb_knowledge_custom_fields.xml').
-        Does not perform runtime DDL in Global scope.
+    def ensure_schema(self) -> None:
+        """Ensure all custom fields exist on the kb_knowledge table.
 
         Raises:
-            ServiceNowKBSchemaError: If required columns are missing or dictionary query fails.
+            ServiceNowKBSchemaError: If inspecting or creating custom columns fails.
             ServiceNowAuthError: If authentication fails.
-            ServiceNowAccessError: If account lacks dictionary read permissions.
+            ServiceNowAccessError: If account lacks dictionary admin permissions.
         """
-        missing_fields: list[str] = []
-
-        for element in REQUIRED_SCHEMA_FIELDS:
+        for field in REQUIRED_SCHEMA_FIELDS:
+            element = field["element"]
             query = f"name=kb_knowledge^element={element}"
             try:
-                res = await self._client.request(
-                    "GET",
-                    "/api/now/table/sys_dictionary",
-                    params={"sysparm_query": query, "sysparm_fields": "element"},
+                res = (
+                    self._client.request(
+                        "GET",
+                        "/api/now/table/sys_dictionary",
+                        params={"sysparm_query": query},
+                    )
+                    .json()
+                    .get("result", [])
                 )
-                records = res.json().get("result", [])
-                if not records:
-                    missing_fields.append(element)
+                if not res:
+                    self._client.request(
+                        "POST", "/api/now/table/sys_dictionary", json=field
+                    )
+                    logger.info("schema_field_created", element=element)
             except (ServiceNowAuthError, ServiceNowAccessError):
                 raise
             except Exception as exc:
                 raise ServiceNowKBSchemaError(
-                    f"Failed to inspect schema column {element!r} on kb_knowledge: {exc}"
+                    f"Failed to inspect or provision custom schema column {element!r} "
+                    f"on kb_knowledge: {exc}"
                 ) from exc
 
-        if missing_fields:
-            raise ServiceNowKBSchemaError(
-                f"Required schema column(s) {missing_fields} are missing from kb_knowledge. "
-                "Ensure custom fields are created on kb_knowledge in ServiceNow "
-                "before publishing articles."
+        self.ensure_list_views()
+
+    def ensure_list_views(self) -> None:
+        """Ensure the default list views display workflow state and custom fields."""
+        try:
+            lists = (
+                self._client.request(
+                    "GET",
+                    "/api/now/table/sys_ui_list",
+                    params={"sysparm_query": "name=kb_knowledge^view=Default view"},
+                )
+                .json()
+                .get("result", [])
             )
 
-        logger.info("schema_verified", verified_columns=list(REQUIRED_SCHEMA_FIELDS))
+            for list_rec in lists:
+                lid = list_rec.get("sys_id")
+                if not lid:
+                    continue
+                elements = (
+                    self._client.request(
+                        "GET",
+                        "/api/now/table/sys_ui_list_element",
+                        params={"sysparm_query": f"list_id={lid}"},
+                    )
+                    .json()
+                    .get("result", [])
+                )
+                existing_cols = {el.get("element") for el in elements}
+                position = len(elements)
 
-    async def ensure_categories(
+                for col in DEFAULT_LIST_COLUMNS:
+                    if col not in existing_cols:
+                        self._client.request(
+                            "POST",
+                            "/api/now/table/sys_ui_list_element",
+                            json={"list_id": lid, "element": col, "position": position},
+                        )
+                        position += 1
+        except Exception as exc:
+            logger.debug("ensure_list_view_elements_failed", error=str(exc))
+
+    def ensure_categories(
         self,
         kb_sys_id: str,
         categories: list[str],
@@ -104,88 +178,77 @@ class ServiceNowProvisioner:
         """
         mapping: dict[str, str] = {}
         try:
-            res = await self._client.request(
-                "GET",
-                "/api/now/table/kb_category",
-                params={
-                    "sysparm_query": f"parent_id={kb_sys_id}",
-                    "sysparm_fields": "sys_id,value,label",
-                },
-            )
-            existing = {
-                (row.get("value") or "").lower(): str(row["sys_id"])
-                for row in res.json().get("result", [])
-                if row.get("value") or row.get("label")
-            }
-            # Also index by label in case values differ
-            existing.update(
-                {
-                    (row.get("label") or "").lower(): str(row["sys_id"])
-                    for row in res.json().get("result", [])
-                    if row.get("label")
-                }
+            res = (
+                self._client.request(
+                    "GET",
+                    "/api/now/table/kb_category",
+                    params={"sysparm_query": f"parent_id={kb_sys_id}"},
+                )
+                .json()
+                .get("result", [])
             )
         except (ServiceNowAuthError, ServiceNowAccessError):
             raise
         except Exception as exc:
-            raise ServiceNowRequestError(f"Failed to query kb_category: {exc}") from exc
+            raise ServiceNowRequestError(
+                f"Failed to query kb_category for KB {kb_sys_id!r}: {exc}"
+            ) from exc
+
+        existing_by_value = {
+            r.get("value", "").lower(): r["sys_id"] for r in res if "sys_id" in r
+        }
+        existing_by_label = {
+            r.get("label", "").lower(): r["sys_id"] for r in res if "sys_id" in r
+        }
 
         for cat in categories:
-            normalized = cat.strip().lower()
-            if not normalized:
-                continue
-
-            if normalized in existing:
-                mapping[cat] = existing[normalized]
-                continue
-
-            display_label = cat.strip().title()
-            try:
-                create_res = await self._client.request(
-                    "POST",
-                    "/api/now/table/kb_category",
-                    json={
-                        "parent_id": kb_sys_id,
-                        "parent_table": "kb_knowledge_base",
-                        "label": display_label,
-                        "value": normalized,
-                    },
-                )
-                cat_sys_id = create_res.json().get("result", {}).get("sys_id")
-                if not cat_sys_id:
-                    raise ServiceNowRequestError(
-                        f"ServiceNow created category {cat!r} but returned no sys_id: "
-                        f"{create_res.text[:300]}"
+            cat_lower = cat.lower()
+            if cat_lower in existing_by_value:
+                mapping[cat] = existing_by_value[cat_lower]
+            elif cat_lower in existing_by_label:
+                mapping[cat] = existing_by_label[cat_lower]
+            else:
+                try:
+                    create_res = (
+                        self._client.request(
+                            "POST",
+                            "/api/now/table/kb_category",
+                            json={
+                                "label": cat.capitalize(),
+                                "value": cat_lower,
+                                "parent_id": kb_sys_id,
+                                "parent_table": "kb_knowledge_base",
+                            },
+                        )
+                        .json()
+                        .get("result", {})
                     )
-                mapping[cat] = str(cat_sys_id)
-                existing[normalized] = str(cat_sys_id)
-                logger.info(
-                    "category_created",
-                    category=cat,
-                    sys_id=cat_sys_id,
-                    kb_sys_id=kb_sys_id,
-                )
-            except (ServiceNowAuthError, ServiceNowAccessError):
-                raise
-            except Exception as exc:
-                raise ServiceNowRequestError(
-                    f"Failed to create category {cat!r} in kb_category: {exc}"
-                ) from exc
+                except (ServiceNowAuthError, ServiceNowAccessError):
+                    raise
+                except Exception as exc:
+                    raise ServiceNowRequestError(
+                        f"Failed to create kb_category {cat!r} for KB {kb_sys_id!r}: {exc}"
+                    ) from exc
 
+                if "sys_id" in create_res:
+                    mapping[cat] = create_res["sys_id"]
+                    logger.info(
+                        "category_created", category=cat, sys_id=create_res["sys_id"]
+                    )
+                else:
+                    raise ServiceNowRequestError(
+                        f"ServiceNow returned no sys_id when creating kb_category {cat!r}"
+                    )
         return mapping
 
-    async def run_preflight(
+    def run_preflight(
         self,
         kb_sys_id: str,
         categories: list[str],
     ) -> dict[str, str]:
-        """Execute preflight configuration checks.
-
-        Returns:
-            Resolved category mapping.
-        """
+        """Execute all preflight configuration checks in a single orchestrated call."""
         logger.info("running_preflight_provisioning")
-        await self.ensure_schema()
-        mapping = await self.ensure_categories(kb_sys_id, categories)
-        logger.info("preflight_provisioning_complete", categories=len(mapping))
-        return mapping
+        self.ensure_schema()
+        category_mapping = self.ensure_categories(kb_sys_id, categories)
+        logger.info("preflight_provisioning_complete", categories=len(category_mapping))
+        return category_mapping

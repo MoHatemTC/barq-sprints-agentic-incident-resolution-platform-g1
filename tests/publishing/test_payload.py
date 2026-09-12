@@ -52,3 +52,20 @@ def test_u_source_id_distinguishes_versions(sample_articles: list[Article]) -> N
     assert payload_v2[U_SOURCE_ID_FIELD] != payload_v1[U_SOURCE_ID_FIELD]
     assert payload_v2[U_SOURCE_ID_FIELD].endswith("-v2.0")
     assert payload_v1[U_SOURCE_ID_FIELD].endswith("-v1.0")
+
+
+def test_payload_with_dynamic_category_mapping(sample_articles: list[Article]) -> None:
+    article = sample_articles[0]  # category is network
+    mapping = {article.category: "cat-sys-id-123"}
+    payload = build_kb_payload(article, "kb-base-sys-id", category_mapping=mapping)
+
+    assert "category" not in payload
+    assert payload["kb_category"] == "cat-sys-id-123"
+
+
+def test_payload_without_category_mapping(sample_articles: list[Article]) -> None:
+    article = sample_articles[0]
+    payload = build_kb_payload(article, "kb-base-sys-id", category_mapping=None)
+
+    assert "category" not in payload
+    assert "kb_category" not in payload

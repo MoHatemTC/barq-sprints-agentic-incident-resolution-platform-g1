@@ -17,14 +17,23 @@ from app.models.knowledge import Article
 from app.publishing.html import markdown_to_html
 
 U_SOURCE_ID_FIELD = "u_source_id"
+U_SERVICE_FIELD = "u_service"
+U_VERSION_FIELD = "u_version"
+U_SECURITY_LEVEL_FIELD = "u_security_level"
+U_ARTICLE_NUMBER_FIELD = "u_article_number"
 
 
-def build_kb_payload(article: Article, kb_sys_id: str) -> dict[str, Any]:
+def build_kb_payload(
+    article: Article,
+    kb_sys_id: str,
+    category_mapping: dict[str, str] | None = None,
+) -> dict[str, Any]:
     """Build the Table API body for creating/updating one kb_knowledge record.
 
     Args:
         article: Canonical article from the corpus.
         kb_sys_id: sys_id of the target kb_knowledge_base record.
+        category_mapping: Optional dynamic mapping of category names to kb_category sys_ids.
 
     Returns:
         JSON body for POST/PATCH against /api/now/table/kb_knowledge.
@@ -48,10 +57,18 @@ def build_kb_payload(article: Article, kb_sys_id: str) -> dict[str, Any]:
         f" &middot; security={article.security_level.value}</p>"
     )
 
-    return {
+    payload: dict[str, Any] = {
         "short_description": article.title,
         "text": source_header + markdown_to_html(article.body),
         "workflow_state": article.workflow_state.value,
         "kb_knowledge_base": kb_sys_id,
         U_SOURCE_ID_FIELD: article_id,
+        U_SERVICE_FIELD: article.service,
+        U_VERSION_FIELD: article.version,
+        U_SECURITY_LEVEL_FIELD: article.security_level.value,
+        U_ARTICLE_NUMBER_FIELD: article.article_number,
     }
+    if category_mapping and article.category in category_mapping:
+        payload["kb_category"] = category_mapping[article.category]
+
+    return payload
