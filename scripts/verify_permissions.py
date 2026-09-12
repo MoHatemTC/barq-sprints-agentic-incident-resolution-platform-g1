@@ -54,6 +54,7 @@ TABLE_API_BASE: str = f"{INSTANCE_URL}/api/now/table"
 SCOPED_LOG_TABLE: str = "x_2215032_ai_inc_0_ai_execution_log"
 HUMAN_LOCK_FIELD: str = "x_2215032_ai_inc_0_ai_human_lock"
 AI_CLASSIFICATION_FIELD: str = "x_2215032_ai_inc_0_ai_classification"
+AI_HUMAN_REVIEW_FIELD: str = "x_2215032_ai_inc_0_ai_human_review_required"
 
 # Known OOB ServiceNow group sys_id used in assignment_group test
 _DENY_GROUP_ID: str = "287ebd7da9fe198100f92cc8d1d2154e"
@@ -478,6 +479,62 @@ def _test_write_ai_field(client: httpx.Client, hdrs: dict[str, str], inc_sys_id:
         notes=f"'{before}' -> '{after}' (restored after test)."
         if ok
         else f"Expected '{target_value}', got '{after}'.",
+    )
+
+
+def _test_write_human_review_required(
+    client: httpx.Client, hdrs: dict[str, str], inc_sys_id: str
+) -> TestResult:
+    """PERM-04: Write scoped AI human review required field; prove persisted via read-back."""
+    before = (
+        client.get(
+            f"{TABLE_API_BASE}/incident/{inc_sys_id}?sysparm_fields={AI_HUMAN_REVIEW_FIELD}",
+            headers=hdrs,
+            timeout=10.0,
+        )
+        .json()
+        .get("result", {})
+        .get(AI_HUMAN_REVIEW_FIELD, "")
+    )
+    target_value = "true" if str(before).lower() != "true" else "false"
+    patch = client.patch(
+        f"{TABLE_API_BASE}/incident/{inc_sys_id}",
+        headers=hdrs,
+        json={AI_HUMAN_REVIEW_FIELD: target_value},
+        timeout=10.0,
+    )
+    after = (
+        client.get(
+            f"{TABLE_API_BASE}/incident/{inc_sys_id}?sysparm_fields={AI_HUMAN_REVIEW_FIELD}",
+            headers=hdrs,
+            timeout=10.0,
+        )
+        .json()
+        .get("result", {})
+        .get(AI_HUMAN_REVIEW_FIELD, "")
+    )
+    ok = patch.status_code == 200 and str(after).lower() == target_value.lower()
+    # Restore original value
+    client.patch(
+        f"{TABLE_API_BASE}/incident/{inc_sys_id}",
+        headers=hdrs,
+        json={AI_HUMAN_REVIEW_FIELD: before},
+        timeout=10.0,
+    )
+    return TestResult(
+        test_id="PERM-04",
+        category="Permitted",
+        name=f"Write scoped AI field ({AI_HUMAN_REVIEW_FIELD})",
+        operation="PATCH",
+        target=f"incident/{inc_sys_id}.{AI_HUMAN_REVIEW_FIELD}",
+        expected=f"200 OK + field='{target_value}'",
+        http_status=patch.status_code,
+        observed=f"HTTP {patch.status_code} (value='{after}')",
+        persisted_change=(str(after).lower() == target_value.lower()),
+        verdict="PASS" if ok else "FAIL",
+        notes=f"'{before}' -> '{after}' (restored after test)."
+        if ok
+        else f"Expected '{target_value}', got '{after}'. Check field-level write ACL.",
     )
 
 
@@ -1062,6 +1119,7 @@ def run_verification() -> None:
             lambda: _test_read_incident(client, hdrs, inc_sys_id, inc_number),
             lambda: _test_write_work_notes(client, hdrs, inc_sys_id),
             lambda: _test_write_ai_field(client, hdrs, inc_sys_id),
+            lambda: _test_write_human_review_required(client, hdrs, inc_sys_id),
         ):
             r = fn()
             results.append(r)

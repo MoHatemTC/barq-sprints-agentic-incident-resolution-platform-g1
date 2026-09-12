@@ -12,7 +12,7 @@
 - **Target Instance**: `dev407364.service-now.com`
 - **Verification Harness**: [`scripts/verify_permissions.py`](../../../scripts/verify_permissions.py)
 - **Machine-Readable Report**: [`scripts/verification_report.json`](../../../scripts/verification_report.json)
-- **Verification Status**: **21 / 21 PASS (100% Verified Empirical Compliance)**
+- **Verification Status**: **22 / 22 PASS (100% Verified Empirical Compliance)**
 
 ---
 
@@ -21,8 +21,8 @@
 Task S1.2 delivers the foundational security, identity, and audit infrastructure for the AI Incident Resolution Platform. Built under strict zero-trust principles and ServiceNow private-scope isolation, the deliverable unites three core architectural pillars:
 
 1. **Dedicated Non-Admin Service Identity (FR-06)**: An automated machine account (`ai_orchestrator_svc`) authenticating exclusively via OAuth 2.0. The account holds no administrative, security admin, or ITIL fulfiller roles, eliminating privilege creep.
-2. **Append-Only AI Execution Log Table (FR-02)**: A scoped audit repository (`x_2215032_ai_inc_0_ai_execution_log`) that records every processing attempt (success, failure, or blocked state) with indexed execution IDs for tamper-proof trace correlation. Deletion is cryptographically/operationally prohibited.
-3. **Least-Privilege Field-Level ACL Boundaries**: Explicit Access Control Lists that grant the integration account write access strictly to internal diagnostic work notes and agent-authored scoped AI fields (`AI Classification`), while enforcing hard, unbypassable denials on incident lifecycle state, assignments, customer comments, priority, and human-lock safety controls.
+2. **Append-Only AI Execution Log Table (FR-02)**: A scoped audit repository (`x_2215032_ai_inc_0_ai_execution_log`) that records every processing attempt (`started`, `succeeded`, `failed`, `blocked`, `awaiting_approval`, or `abandoned`) with indexed execution IDs for tamper-proof trace correlation. Deletion is strictly prohibited via RBAC ACLs (non-admin roles denied delete access).
+3. **Least-Privilege Field-Level ACL Boundaries**: Explicit Access Control Lists that grant the integration account write access strictly to internal diagnostic work notes and agent-authored scoped AI fields (including `ai_classification`, `ai_human_review_required`, and downstream orchestration state fields), while enforcing hard, unbypassable denials on incident lifecycle state, assignments, customer comments, priority, and human-lock safety controls.
 
 ---
 
@@ -40,7 +40,7 @@ Task S1.2 delivers the foundational security, identity, and audit infrastructure
 
 | Role Name | Scope | Purpose & Need |
 |---|---|---|
-| `x_2215032_ai_inc_0.integration_writer` | Scoped (`x_2215032_ai_inc_0`) | Grants write permission to permitted scoped incident fields (`AI Classification`) and table-level write boundary. |
+| `x_2215032_ai_inc_0.integration_writer` | Scoped (`x_2215032_ai_inc_0`) | Grants write permission to permitted scoped incident AI fields (e.g. `ai_classification`, `ai_human_review_required`, suggestion, resolution) and internal `work_notes`. |
 | `x_2215032_ai_inc_0.ai_execution_log_user` | Scoped (`x_2215032_ai_inc_0`) | Grants create and read access to the AI Execution Log table. |
 | `snc_platform_rest_api_access` | Global (System) | Grants baseline technical access to ServiceNow REST Table API endpoints without granting record permissions. |
 
@@ -64,10 +64,10 @@ Per **FR-02**, every AI processing attempt—including successes, handled failur
 | Technical Column | Display Label | Data Type | Constraint / Value Range | Architectural Purpose |
 |---|---|---|---|---|
 | `incident_reference` | Incident Reference | Reference (`incident`) | Valid Incident `sys_id` | Foreign key binding the audit record to the parent incident. |
-| `execution_id` | Execution ID | String (40) | Unique string (e.g. `exec_verify_<hex>`) | **Indexed unique trace key** for distributed tracing and single-record lookup. |
+| `execution_id` | Execution ID | String (100) | Unique string (e.g. `exec_verify_<hex>`) | **Indexed unique trace key** for distributed tracing and single-record lookup. |
 | `agent` | Agent | String (100) | Free text (e.g. `verification_harness`, `triage_agent`) | Attributes work to the exact agent / workflow node. |
 | `action` | Action | String (100) | `read`, `execute`, `propose`, `escalate` | The specific operational action attempted. |
-| `status` | Status | String (40) | `succeeded`, `failed`, `blocked`, `awaiting_approval` | Durable execution lifecycle outcome. |
+| `status` | Status | String (40) | `started`, `succeeded`, `failed`, `blocked`, `awaiting_approval`, `abandoned` | Durable execution lifecycle outcome choices. |
 | `timestamp` | Timestamp | Date/Time | UTC format (`YYYY-MM-DD HH:MM:SS`) | Timestamp of execution start/event. |
 | `result` | Result | String (4000) | Max 4000 characters | Diagnostic summary, classification output, or resolution suggestion. |
 | `error` | Error | String (4000) | Max 4000 characters (blank on success) | Full diagnostic error message, stack trace, or reason for blockage. |
@@ -91,6 +91,8 @@ Permissions are bounded strictly to the minimal operational surface required for
 |  [PERMITTED WRITES]                                                            |
 |    * incident.work_notes                                -> Internal ITIL notes |
 |    * incident.x_2215032_ai_inc_0_ai_classification      -> Agent Taxonomy Tag  |
+|    * incident.x_2215032_ai_inc_0_ai_human_review_required -> Human Triage Flag|
+|    * (and scoped AI execution fields: suggestion, resolution, confidence, etc.)|
 |                                                                                |
 |  [FORBIDDEN WRITES - HARD ACL BLOCKED]                                          |
 |    * incident.state             -> Prevents unauthorized incident closure      |
@@ -108,6 +110,7 @@ Permissions are bounded strictly to the minimal operational surface required for
 |---|:---:|---|---|
 | `incident.work_notes` | **ALLOW** | `integration_writer` | Internal journal field. Allows the orchestrator to publish diagnostic findings, runbooks, and suggested steps visible only to ITIL fulfillers. |
 | `incident.x_2215032_ai_inc_0_ai_classification` | **ALLOW** | `integration_writer` | Scoped field authored by the LangGraph Classification Agent to record incident category (`software`, `hardware`, etc.). |
+| `incident.x_2215032_ai_inc_0_ai_human_review_required` | **ALLOW** | `integration_writer` | Scoped boolean flag allowing the triage agent to flag complex or low-confidence incidents for manual operator inspection. |
 | `incident.state` | **DENY** | Human Fulfiller / Admin | Prevents autonomous agents from resolving or closing incidents without human approval. |
 | `incident.assigned_to` | **DENY** | Human Fulfiller / Dispatcher | Prevents automated assignment loops or uncoordinated reassignment. |
 | `incident.assignment_group` | **DENY** | Service Desk Lead / Admin | Prevents ticket hijacking across support departments. |
@@ -121,7 +124,7 @@ Permissions are bounded strictly to the minimal operational surface required for
 
 The test harness [`scripts/verify_permissions.py`](../../../scripts/verify_permissions.py) was executed against live ServiceNow instance `dev407364.service-now.com` using target incident `INC0010003` (opened by a third party to prevent creator-privilege bias). Every test performs real HTTP transactions with read-after-write database queries.
 
-#### Complete Test Run Results (21 of 21 Passed)
+#### Complete Test Run Results (22 of 22 Passed)
 
 | Test ID | Category | Target / Operation | Expected Behavior | Observed Result | Status |
 |:---|:---|:---|:---|:---|:---:|
@@ -133,6 +136,7 @@ The test harness [`scripts/verify_permissions.py`](../../../scripts/verify_permi
 | **PERM-01** | Permitted | `GET /api/now/table/incident/{id}` | Read incident record | HTTP 200 (`INC0010003`) | **PASS** |
 | **PERM-02** | Permitted | `PATCH incident.work_notes` | Persisted in `sys_journal_field` | HTTP 200 (Count = 1) | **PASS** |
 | **PERM-03** | Permitted | `PATCH incident.ai_classification` | Write scoped AI classification field | HTTP 200 (Value: `software`) | **PASS** |
+| **PERM-04** | Permitted | `PATCH incident.ai_human_review_required` | Write scoped human review flag | HTTP 200 (Value: `true`) | **PASS** |
 | **LOG-01**  | Execution Log | `POST x_..._ai_execution_log` (`succeeded`) | Status `succeeded` audit record created | HTTP 201 Created | **PASS** |
 | **LOG-02**  | Execution Log | `POST x_..._ai_execution_log` (`failed`) | Status `failed` audit record created | HTTP 201 Created | **PASS** |
 | **LOG-03**  | Execution Log | `POST x_..._ai_execution_log` (`blocked`) | Status `blocked` audit record created | HTTP 201 Created | **PASS** |
@@ -145,7 +149,7 @@ The test harness [`scripts/verify_permissions.py`](../../../scripts/verify_permi
 | **DENY-05** | Forbidden | `PATCH incident.comments` | Customer comments stripped from journal | HTTP 200 (0 journal entries) | **PASS** |
 | **LOCK-01** | Human Lock | `PATCH incident.ai_human_lock` | Circuit breaker modification rejected | HTTP 200 (Lock unchanged `false`)| **PASS** |
 | **BULK-01** | Bulk Bypass | `PATCH incident` (Mixed payload) | Permitted written, all forbidden stripped | `work_notes` wrote; rest blocked | **PASS** |
-| **CRED-01** | Cleanliness | Repository Secret Scan | Zero secrets/passwords in tracked files | 60 files scanned clean | **PASS** |
+| **CRED-01** | Cleanliness | Repository Secret Scan | Zero secrets/passwords in tracked files | 93 files scanned clean | **PASS** |
 
 > [!NOTE]
 > **ServiceNow Field-Level Stripping Semantics**: When a client sends a `PATCH` request containing forbidden fields, ServiceNow returns `HTTP 200 OK` while silently stripping unauthorized fields in accordance with ACL rules. The verification harness never relies on HTTP status codes alone; every test performs an independent read-after-write GET request against the database and `sys_journal_field` to prove that forbidden values were never persisted.
