@@ -127,6 +127,6 @@ The W0.5 CAD notes remain useful for comparison, but their absence does not bloc
 - Secondary test PDI: `dev204871` (authorized teammate instance)
 - Secondary preview: Passed with 39 inserts, zero updates, zero deletes, zero collisions, and no unresolved errors.
 - Secondary commit: Completed successfully on `2026-09-08` without manual configuration or repair.
-- Secondary functional verification: Passed on `2026-09-08`; the Incident form displayed the imported section/fields and automatically removed an out-of-range confidence value while showing the expected error.
-- Confidence boundary verification: The form accepted inclusive boundary values `0` and `1` without validation errors.
+- Secondary functional verification: Passed on `2026-09-08`; the Incident form displayed the imported section/fields and showed the expected range error for an out-of-range confidence value.
+- Confidence boundary verification: The scoped Client Script logic accepts inclusive boundary values `0` and `1`. This is established by reading the validation script, not by a captured screenshot.
 - Repository verification: PR #1 merged into `main` on `2026-09-09`; after the team documentation restructure, the final S1.1 documents reside under `docs/sprint-1/s1.1-scoped-app-and-field-model/`.

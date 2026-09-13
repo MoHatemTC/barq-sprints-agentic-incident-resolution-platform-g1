@@ -22,10 +22,10 @@ Do not request a formal review until every required item is checked.
 
 - [x] The approved Incident Default view contains an AI Incident Orchestrator section.
 - [x] All required fields are present exactly once in the section metadata.
-- [x] Confidence accepts boundary values 0 and 1 on the Incident form.
+- [x] The confidence validation logic accepts inclusive boundary values 0 and 1 (established from the Client Script source; no screenshot of a 0 or 1 save is included).
 - [x] Confidence rejects 1.1 on the Incident form, restores the prior valid value, and displays a clear error.
 - [x] Suggestion and Resolution retain different values on source Incident `INC0010018`.
-- [x] Start/end timestamps persist and are queryable on the source PDI.
+- [x] Start/end timestamps persist on the source PDI and are shown populated on the Incident form in screenshot `02`. They are Date/Time dictionary fields and therefore filterable, but no list or filter capture is included.
 - [x] The dedicated Failure Reason field is present on the source-PDI Default Incident view; this package does not claim a separate failed-state persistence test that was not captured.
 - [x] Human-lock enforcement ownership is recorded; runtime eligibility enforcement is explicitly assigned to downstream S1.3.
 
@@ -43,7 +43,7 @@ Do not request a formal review until every required item is checked.
 
 - [x] Final application/update set contents were reviewed (39 update records; zero delete actions).
 - [x] Final update set is Complete.
-- [x] XML was exported through the official ServiceNow SDK and never hand-edited.
+- [x] The update set was built from SDK-deployed artifacts and exported from the completed update set using ServiceNow's **Export to XML**, matching `implementation-runbook.md`. The file is in the update-set `<unload>` format and was never hand-edited.
 - [x] XML is stored in `servicenow/ai_incident_orchestrator/`.
 - [x] XML was previewed on a clean secondary PDI of the same release.
 - [x] Preview produced 39 inserts, zero deletes, zero collisions, and no unresolved errors.
