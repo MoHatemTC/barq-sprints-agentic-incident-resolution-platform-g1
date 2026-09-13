@@ -124,3 +124,4 @@ data/corpus/*
 !data/corpus/barq_articles.json
 
 src/app/ignored_folder
+.zcode/
