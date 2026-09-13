@@ -75,17 +75,23 @@ Per **FR-02**, every AI processing attempt—including successes, handled failur
 
 | Technical Column | Display Label | Data Type | Constraint / Value Range | Architectural Purpose |
 |---|---|---|---|---|
-| `incident_reference` | Incident Reference | Reference (`incident`) | Valid Incident `sys_id` (max_length: 32, sys_id storage) | Foreign key binding the audit record to the parent incident. |
-| `execution_id` | Execution ID | String (100) | Unique string (e.g. `exec_verify_<hex>`); **non-unique btree DB index** for fast lookup | **Indexed trace key** for distributed tracing and single-record lookup. Non-unique to allow batch operations with shared execution context. |
-| `agent` | Agent | String (150) | Free text (e.g. `verification_harness`, `triage_agent`) | Attributes work to the exact agent / workflow node. |
-| `action` | Action | Choice (40) | Choice: `read`, `execute`, `propose`, `escalate` | The specific operational action attempted. Enforced as a server-side choice list. |
-| `status` | Status | Choice (40) | Choice: `started`, `succeeded`, `failed`, `blocked`, `awaiting_approval`, `abandoned` | Durable execution lifecycle outcome choices. Enforced as a server-side choice list. |
+| `incident_reference` | Incident Reference | Reference (`incident`) | **Mandatory**; Valid Incident `sys_id` (max_length: 32) | Foreign key binding the audit record to the parent incident. |
+| `execution_id` | Execution ID | String (100) | **Mandatory**; Correlation trace string (e.g. `exec_<hex>`); **non-unique btree DB index** | **Indexed trace correlation key** for distributed tracing and multi-event lifecycle correlation. Intentionally non-unique to allow multi-step pipeline actions and retries to share an execution context while `sys_id` enforces record-level primary uniqueness. |
+| `agent` | Agent | String (150) | **Mandatory**; Free text (e.g. `verification_harness`, `triage_agent`) | Attributes work to the exact agent / workflow node. |
+| `action` | Action | Choice (40) | **Mandatory**; Choice: `read`, `execute`, `propose`, `escalate` | The specific operational action attempted. Enforced as a server-side choice list. |
+| `status` | Status | Choice (40) | **Mandatory**; Choice: `started`, `succeeded`, `failed`, `blocked`, `awaiting_approval`, `abandoned` | Durable execution lifecycle outcome choices. Enforced as a server-side choice list. |
 | `timestamp` | Timestamp | Date/Time (`glide_date_time`) | UTC format (`YYYY-MM-DD HH:MM:SS`) | Timestamp of execution start/event. |
 | `result` | Result | String (5000) | Max 5000 characters | Diagnostic summary, classification output, or resolution suggestion. |
 | `error` | Error | String (5000) | Max 5000 characters (blank on success) | Full diagnostic error message, stack trace, or reason for blockage. |
 
 > [!NOTE]
 > The table collection dictionary entry includes `enforce_dot_walk_cross_scope_access=true`, meaning cross-scope script dot-walking into this table's fields is explicitly enforced rather than relying on default scope isolation.
+
+#### Row Model & Trace Correlation Architecture
+The relationship between execution log rows and pipeline runs is formally defined as:
+- **Primary Key vs. Trace Key**: ServiceNow's native `sys_id` serves as the unique primary key for every record. The `execution_id` is an **indexed trace correlation key** backed by a non-unique B-tree database index (`<unique_index>false</unique_index>`).
+- **Distributed Trace Grouping**: Retaining a non-unique index on `execution_id` enables distributed tracing across multi-node or multi-event runs, allowing multiple audit entries (such as individual agent node actions or safe retry sequences) to correlate under a single parent execution trace without triggering database collision errors.
+- **Lookup Invariant**: Single-event lookups can resolve individual rows, while trace queries by `execution_id` return the complete chronological trail of events for that pipeline execution.
 
 #### Append-Only Protection (SS7 / LOG-05)
 To prevent rogue actors or automation bugs from tampering with audit records, the table enforces a strict **append-only policy**:
@@ -150,8 +156,8 @@ Permissions are bounded strictly to the minimal operational surface required for
 | `incident.x_2215032_ai_inc_0_ai_processing_end` | **ALLOW** | ALLOW (via `incident.*` wildcard) | Timestamp when AI pipeline finished processing this incident. |
 | `incident.x_2215032_ai_inc_0_ai_agent_version` | **ALLOW** | ALLOW (via `incident.*` wildcard) | Version string of the AI agent/model that processed the incident. |
 | `incident.x_2215032_ai_inc_0_ai_model_name` | **ALLOW** | ALLOW (via `incident.*` wildcard) | Name of the LLM model used (e.g., `gemini-2.5-pro`). |
-| `incident.x_2215032_ai_inc_0_ai_human_lock` | **DENY** | **ALLOW** | **Emergency Circuit Breaker**. Writable only by `itil`/`admin`. If `true`, all automated AI runs halt. The AI cannot unlock itself. |
-| `incident.x_2215032_ai_inc_0_ai_enabled` | **DENY** | **ALLOW** | **Human Opt-In Switch**. Writable only by `itil`/`admin`. Explicitly controls whether an incident is eligible for AI processing. The AI cannot opt tickets in. |
+| `incident.x_2215032_ai_inc_0_ai_human_lock` | **DENY** | **ALLOW** | **Emergency Circuit Breaker**. Writable only by `admin`. If `true`, all automated AI runs halt. The AI cannot unlock itself. |
+| `incident.x_2215032_ai_inc_0_ai_enabled` | **DENY** | **ALLOW** | **Human Opt-In Switch**. Writable only by `admin`. Explicitly controls whether an incident is eligible for AI processing. The AI cannot opt tickets in. |
 | `incident.state` | **DENY** | ALLOW | Prevents autonomous agents from resolving or closing incidents without human approval. |
 | `incident.assigned_to` | **DENY** | ALLOW | Prevents automated assignment loops or uncoordinated reassignment. |
 | `incident.assignment_group` | **DENY** | ALLOW | Prevents ticket hijacking across support departments. |
@@ -249,7 +255,7 @@ To guarantee defense-in-depth, a platform-side `before-update` Business Rule is 
 #### Defense-in-Depth Layering
 | Layer | Control Mechanism | Protection Provided |
 |---|---|---|
-| **Layer 1: Field ACL** | `incident.x_2215032_ai_inc_0_ai_human_lock` (write ACL) | Integration service account cannot modify or clear the lock flag. Only `itil` and `admin` can set/clear it. |
+| **Layer 1: Field ACL** | `incident.x_2215032_ai_inc_0_ai_human_lock` (write ACL) | Integration service account cannot modify or clear the lock flag. Only `admin` can set/clear it. |
 | **Layer 2: Client Orchestrator** | Pre-flight check in Python orchestrator | Avoids unneeded API calls when the incident is already known to be locked. |
 | **Layer 3: Platform Business Rule** | `AI Enforce Human Lock Safety Stop` (`before-update`) | Closes the race window. Rejects incoming `PATCH` requests on the server side via `current.setAbortAction(true)` if `ai_human_lock == true`. |
 
