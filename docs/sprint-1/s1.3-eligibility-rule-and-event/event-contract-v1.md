@@ -37,9 +37,13 @@ changes:
 - `active`
 - `category`
 - `x_2215032_ai_inc_0_ai_enabled`
-- `x_2215032_ai_inc_0_ai_processing_state`
 - `x_2215032_ai_inc_0_ai_human_lock`
-- `x_2215032_ai_inc_0_ai_retry_count`
+
+`x_2215032_ai_inc_0_ai_processing_state` and `x_2215032_ai_inc_0_ai_retry_count` are
+deliberately **not** relevant fields. The orchestrator writes both back, and treating
+them as relevant made every write-back re-enter the rule. Retries are handled
+separately: only a genuine new transition into `failed` re-evaluates, and the
+`retry_count >= 2` cap applies to every emission path.
 
 Supported categories come from the scoped system property
 `x_2215032_ai_inc_0.s1_3_supported_categories`. Its current Sprint 1 default,
