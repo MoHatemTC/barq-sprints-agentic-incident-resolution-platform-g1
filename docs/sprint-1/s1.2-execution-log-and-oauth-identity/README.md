@@ -1,14 +1,18 @@
 # S1.2 — AI Execution Log table, OAuth integration identity, field-level ACLs
 
-**Owner:** [@MohamedAbdelaiem](https://github.com/MohamedAbdelaiem) · **Tracking:** [#7](../../../../issues/7), [#8](../../../../issues/8)
+**Owner:** [@MohamedAbdelaiem](https://github.com/MohamedAbdelaiem) · **Tracking:** [#7](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/issues/7), [#8](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/issues/8)
 
 ## Status
 
-In progress. [PR #14](../../../../pull/14) delivers the execution log table, a
-dedicated non-admin service account, ACLs and a verification harness, but the
-update set is built entirely in the ServiceNow Global scope rather than
-`x_2215032_ai_inc_0`, which the Sprint 1 success standard requires. Needs a
-scoped rebuild before it lands here.
+Merged in [#29](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pull/29): the execution log table, a dedicated non-admin
+service account, field-level ACLs and an automated verification harness, rebuilt
+inside scope `x_2215032_ai_inc_0` after the first submission was built entirely in
+the ServiceNow Global scope.
+
+A rework is in review in [#32](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pull/32), covering the execution-log status
+taxonomy, a write ACL for `ai_human_review_required`, and a platform-side human-lock
+Business Rule. Open findings from the post-merge audit are tracked in
+[#46](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/issues/46)–[#52](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/issues/52).
 
 ## What lands in this folder once merged
 

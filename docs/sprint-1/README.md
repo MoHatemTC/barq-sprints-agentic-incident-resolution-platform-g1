@@ -3,20 +3,24 @@
 Goal: the platform side exists as a real ServiceNow application, with an audit
 trail and an identity a risk owner would sign off. Covers FR-01, FR-02, FR-06.
 
-Tracked in the [Sprint 1 milestone](../../milestone/1).
+Tracked in the [Sprint 1 milestone](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/milestone/1).
 
 | Task | Scope | Owner | Status |
 |---|---|---|---|
-| [S1.1](s1.1-scoped-app-and-field-model/) | Scoped application and Incident field model | [@ali-ezz](https://github.com/ali-ezz) | ✅ Merged |
-| [S1.2](s1.2-execution-log-and-oauth-identity/) | AI Execution Log table, OAuth integration identity, field-level ACLs | [@MohamedAbdelaiem](https://github.com/MohamedAbdelaiem) | 🟡 In review — [#14](../../pull/14) |
-| [S1.3](s1.3-eligibility-rule-and-event/) | Eligibility Business Rule, identifier-only outbound event | [@ahmedtamer101](https://github.com/ahmedtamer101) | 🔴 Not started — draft in [#18](../../pull/18) |
-| [S1.4](s1.4-knowledge-and-qdrant/) | Knowledge corpus, ServiceNow KB, Qdrant hybrid collection | [@kerolos-mohsen](https://github.com/kerolos-mohsen) | 🔴 Not started |
-| [S1.5](s1.5-servicenow-client/) | ServiceNow Table API client, incident write-back | [@Tasneemmohammed0](https://github.com/Tasneemmohammed0) | 🟡 In progress — [#5](../../pull/5) |
+| [S1.1](s1.1-scoped-app-and-field-model/) | Scoped application and Incident field model | [@ali-ezz](https://github.com/ali-ezz) | ✅ Merged — [#1](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pull/1) |
+| [S1.2](s1.2-execution-log-and-oauth-identity/) | AI Execution Log table, OAuth integration identity, field-level ACLs | [@MohamedAbdelaiem](https://github.com/MohamedAbdelaiem) | ✅ Merged — [#29](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pull/29); rework in review — [#32](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pull/32) |
+| [S1.3](s1.3-eligibility-rule-and-event/) | Eligibility Business Rule, identifier-only outbound event | [@ahmedtamer101](https://github.com/ahmedtamer101) | 🟡 In review — [#30](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pull/30) |
+| [S1.4](s1.4-knowledge-and-qdrant/) | Knowledge corpus, ServiceNow KB, Qdrant hybrid collection | [@kerolos-mohsen](https://github.com/kerolos-mohsen) | ✅ Merged — [#28](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pull/28), [#33](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pull/33); KB publishing in review — [#39](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pull/39) |
+| [S1.5](s1.5-servicenow-client/) | ServiceNow Table API client, incident write-back | [@Tasneemmohammed0](https://github.com/Tasneemmohammed0) | ✅ Merged — [#27](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pull/27) |
 
 **Definition of done — the target state, not a claim about today.** The
 application exports cleanly as an update set; an execution log record can be
 written through the API by the integration user; no admin credential exists
 anywhere in the repository or configuration.
 
-This status table is a snapshot from when it was last edited. The issues and
-pull requests linked above are the live source of truth.
+This status table is a snapshot, last updated 13 September 2026. The
+[pull requests](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pulls) and [issues](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/issues) are the live source of truth.
+
+Links here are absolute. Relative forms like `../../pull/14` resolve against
+`/blob/main/` from this directory and 404; that pattern only works from the
+repository root.

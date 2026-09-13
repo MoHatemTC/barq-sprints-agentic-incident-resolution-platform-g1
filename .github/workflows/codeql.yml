@@ -2,9 +2,10 @@ name: CodeQL
 
 # Advanced setup (a workflow file) rather than default setup, because default
 # setup requires repository admin access, which this token does not have.
-# Scoped to Python: that is where OAuth tokens, credentials and ServiceNow API
-# calls live. The servicenow/ directory is generated SDK/Fluent config, not
-# application logic, so scanning it would be noise without signal.
+# Scoped to Python and to hand-written ServiceNow JavaScript. The generated
+# Fluent/SDK output under sdk-app/src/fluent/generated/ is excluded as noise,
+# but the hand-written server scripts and scaffolds are real logic that runs
+# with platform privileges, so they are scanned.
 
 on:
   pull_request:
@@ -12,12 +13,14 @@ on:
       - "src/**"
       - "scripts/**"
       - "tests/**"
+      - "servicenow/**"
   push:
     branches: [main]
     paths:
       - "src/**"
       - "scripts/**"
       - "tests/**"
+      - "servicenow/**"
   schedule:
     - cron: "0 3 * * 1" # weekly, Monday 03:00 UTC
 
@@ -36,13 +39,24 @@ jobs:
     if: >-
       github.event_name != 'pull_request' ||
       github.event.pull_request.head.repo.full_name == github.repository
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [python, javascript-typescript]
     steps:
       - uses: actions/checkout@v7
 
       - uses: github/codeql-action/init@v3
         with:
-          languages: python
+          languages: ${{ matrix.language }}
+          # Generated Fluent/SDK output is machine-written and would be noise.
+          # The hand-written server scripts and scaffolds are not excluded.
+          config: |
+            paths-ignore:
+              - servicenow/**/sdk-app/src/fluent/generated/**
+              - "**/node_modules/**"
+              - "**/*.min.js"
 
       - uses: github/codeql-action/analyze@v3
         with:
-          category: "/language:python"
+          category: "/language:${{ matrix.language }}"

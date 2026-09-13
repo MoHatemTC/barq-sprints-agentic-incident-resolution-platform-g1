@@ -1,46 +1,68 @@
 # Path-based PR labelling. Matches actions/labeler v5 syntax.
+#
+# Globs describe where code actually lives, not where it was expected to go.
+# When a workstream adds a directory, add it here in the same PR — a code-only
+# PR that gets no label is invisible to anyone filtering by workstream.
+
 S1.1:
   - changed-files:
       - any-glob-to-any-file:
           - "servicenow/ai_incident_orchestrator/sdk-app/**"
+          - "servicenow/ai_incident_orchestrator/ai_incident_orchestrator_s1_1.xml"
           - "docs/sprint-1/s1.1-scoped-app-and-field-model/**"
 
 S1.2:
   - changed-files:
       - any-glob-to-any-file:
           - "scripts/verify_permissions.py"
+          - "scripts/verification_report.json"
+          - "servicenow/ai_incident_orchestrator/ai_incident_orchestrator_s1_2.xml"
           - "docs/sprint-1/s1.2-execution-log-and-oauth-identity/**"
-          - "servicenow/ai_incident_orchestrator/sys_remote_update_set_*.xml"
 
 S1.3:
   - changed-files:
       - any-glob-to-any-file:
-          - "servicenow/ai_incident_orchestrator/business_rules/**"
+          - "servicenow/ai_incident_orchestrator/ai_incident_orchestrator_s1_3.xml"
+          - "servicenow/scaffolds/**"
           - "docs/sprint-1/s1.3-eligibility-rule-and-event/**"
 
 S1.4:
   - changed-files:
       - any-glob-to-any-file:
-          - "docker-compose.yml"
+          - "src/app/retrieval/**"
+          - "src/app/publishing/**"
+          - "src/app/clients/qdrant.py"
+          - "src/app/models/knowledge.py"
+          - "scripts/extract_barq_kb.py"
+          - "scripts/seed_qdrant.py"
+          - "scripts/setup_qdrant.py"
+          - "scripts/validate_corpus.py"
+          - "scripts/publish_kb.py"
+          - "tests/publishing/**"
           - "data/**"
+          - "docker-compose.yml"
           - "docs/sprint-1/s1.4-knowledge-and-qdrant/**"
 
 S1.5:
   - changed-files:
       - any-glob-to-any-file:
-          - "src/app/clients/**"
+          - "src/app/clients/servicenow_client.py"
           - "src/app/auth/**"
-          - "src/app/models/**"
           - "src/app/exceptions/**"
+          - "src/app/models/incident.py"
+          - "src/app/models/execution_log.py"
+          - "src/app/models/oauth.py"
+          - "src/app/models/work_note.py"
           - "scripts/test_client.py"
           - "docs/sprint-1/s1.5-servicenow-client/**"
 
 ci:
   - changed-files:
       - any-glob-to-any-file:
-          - ".github/workflows/**"
+          - ".github/**"
           - "justfile"
           - "pyproject.toml"
+          - "uv.lock"
 
 documentation:
   - changed-files:

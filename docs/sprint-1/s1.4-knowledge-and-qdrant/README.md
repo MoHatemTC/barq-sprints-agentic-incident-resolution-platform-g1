@@ -1,6 +1,6 @@
 # S1.4 — Knowledge corpus, ServiceNow KB, Qdrant hybrid collection
 
-**Owner:** [@kerolos-mohsen](https://github.com/kerolos-mohsen) · **Tracking:** [#11](../../../../issues/11)
+**Owner:** [@kerolos-mohsen](https://github.com/kerolos-mohsen) · **Tracking:** [#11](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/issues/11)
 
 ## Status
 
