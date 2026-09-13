@@ -102,9 +102,7 @@ def test_labeler_glob_matches_a_tracked_file(label: str, pattern: str) -> None:
     )
 
 
-@pytest.mark.parametrize(
-    "pattern", _codeowners_patterns(), ids=lambda v: str(v).replace("/", "_")
-)
+@pytest.mark.parametrize("pattern", _codeowners_patterns(), ids=lambda v: str(v).replace("/", "_"))
 def test_codeowners_path_matches_a_tracked_file(pattern: str) -> None:
     if pattern in PLANNED:
         pytest.skip(f"planned path: {PLANNED[pattern]}")
