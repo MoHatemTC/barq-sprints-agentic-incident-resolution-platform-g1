@@ -105,7 +105,10 @@ def validate_environment() -> None:
 
     if USERNAME.strip().lower() == "admin":
         print("\n[ERROR] SERVICENOW_USERNAME cannot be 'admin'.")
-        print("verify_permissions.py verifies least-privilege boundaries for the integration identity, not admin.\n")
+        print(
+            "verify_permissions.py verifies least-privilege boundaries "
+            "for the integration identity, not admin.\n"
+        )
         sys.exit(1)
 
 
@@ -375,10 +378,15 @@ def _test_mid_run_expiry(client: httpx.Client) -> TestResult:
         http_status=recovered_status or resp.status_code,
         observed=f"Initial: HTTP {resp.status_code} -> Re-auth: HTTP {recovered_status}",
         persisted_change=False,
-        verdict="PASS" if ok else "FAIL",
-        notes=f"Stale token rejected (HTTP {resp.status_code}); re-authenticated successfully (HTTP {recovered_status})."
-        if ok
-        else f"Re-authentication failed after 401: initial={resp.status_code}, recovered={recovered_status}.",
+        notes=(
+            f"Stale token rejected (HTTP {resp.status_code}); "
+            f"re-authenticated successfully (HTTP {recovered_status})."
+            if ok
+            else (
+                f"Re-auth failed after 401: "
+                f"initial={resp.status_code}, recovered={recovered_status}."
+            )
+        ),
     )
 
 
@@ -622,9 +630,11 @@ def _test_log_status(
         exec_ok = str(rec_exec) == exec_id
         agent_ok = bool(rec_ag)
 
-        fields_ok = status_ok and action_ok and exec_ok and agent_ok
         if not fields_ok:
-            details = f"Field mismatch: expected status={status}, action=execute; got status={rec_st}, action={rec_act}, exec_id={rec_exec}"
+            details = (
+                f"Field mismatch: expected status={status}, action=execute; "
+                f"got status={rec_st}, action={rec_act}, exec_id={rec_exec}"
+            )
 
     ok = http_status == 201 and bool(sys_id) and fields_ok
     return TestResult(
