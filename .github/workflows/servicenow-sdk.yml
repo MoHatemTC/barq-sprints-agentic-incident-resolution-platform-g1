@@ -1,0 +1,115 @@
+name: ServiceNow SDK
+
+# Issue #54: nothing in CI ever built the scoped app, so the 4.8.0 -> 4.11.2 bump in
+# #24 merged on a Python-only run. That build rewrites the committed
+# src/fluent/generated/keys.ts, marks every choice sys_id in the exported
+# ai_incident_orchestrator_s1_1.xml as deleted, and mints replacements that differ on
+# each fresh build. This job makes that class of change fail loudly instead of silently.
+
+on:
+  pull_request:
+    paths:
+      - "servicenow/**"
+      - ".github/workflows/servicenow-sdk.yml"
+      - ".github/scripts/check_build_matches_export.py"
+      - ".gitattributes"
+  push:
+    # dev is the integration branch and carries the same gate as main, matching #59.
+    branches: [main, dev]
+    paths:
+      - "servicenow/**"
+      - ".github/workflows/servicenow-sdk.yml"
+      - ".github/scripts/check_build_matches_export.py"
+      - ".gitattributes"
+
+concurrency:
+  group: servicenow-sdk-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: servicenow/ai_incident_orchestrator/sdk-app
+
+jobs:
+  build:
+    name: Build the scoped app and check the tree is clean
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # The SDK declares node >=20.18.0. Pinned to the LTS major so a runner image
+      # change cannot alter what the build produces.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: servicenow/ai_incident_orchestrator/sdk-app/package-lock.json
+
+      # The lockfile is the pin, so it must pin where packages come from too. npm only
+      # rewrites registry.npmjs.org hosts to a configured registry, so a lockfile
+      # generated behind a mirror silently sends CI and every teammate to that mirror.
+      - name: Check the lockfile resolves to the public registry
+        run: |
+          bad=$(grep -o '"resolved": "https://[^/]*' package-lock.json \
+                | sed 's|.*https://||' | sort -u | grep -v '^registry\.npmjs\.org$' || true)
+          if [ -n "$bad" ]; then
+            echo "::error::package-lock.json resolves to a non-public registry: $bad"
+            echo "Regenerate with: npm install --registry=https://registry.npmjs.org/"
+            exit 1
+          fi
+          echo "All resolved URLs point at registry.npmjs.org."
+
+      # ci, not install: the lockfile is the pin. If package.json and the lockfile
+      # disagree this fails here rather than resolving to something else.
+      - name: Install
+        run: npm ci
+
+      # Read the manifest off disk. The package's "exports" map does not expose
+      # ./package.json, so require() of it throws ERR_PACKAGE_PATH_NOT_EXPORTED.
+      #
+      # This warns rather than fails on purpose. Pinning a version is not the property
+      # worth enforcing — reproducing the exported update set is, and the record check
+      # below is what enforces it. A future SDK that reproduces the export should be
+      # able to pass. Don't "fix" this into an error.
+      - name: Record the SDK version actually installed
+        run: |
+          version=$(node -p "JSON.parse(require('fs').readFileSync('node_modules/@servicenow/sdk/package.json','utf8')).version")
+          echo "@servicenow/sdk $version"
+          echo "\`@servicenow/sdk\` **$version**" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$version" != "4.8.0" ]; then
+            echo "::warning::4.8.0 is the version verified to reproduce the exported update set (#54). Installed: $version"
+          fi
+
+      # --frozenKeys makes the SDK itself reject a build that would rewrite the key
+      # registry. It exits 0 on 4.8.0 against the committed keys.ts. If it ever reports
+      # "Keys file is out-of-date", do not rebuild without the flag: that is the step
+      # that re-mints choice sys_ids. .gitattributes keeps the bytes stable across
+      # platforms so this cannot fail merely because of a CRLF checkout.
+      - name: Build with frozen keys
+        run: npx now-sdk build --frozenKeys
+
+      # dist/, node_modules/, .now/ and target/ are gitignored, so a reproducible build
+      # leaves nothing behind. Anything modified or untracked here is the build editing
+      # its own source — exactly what #54 describes.
+      - name: Fail if the build modified tracked files
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error::The SDK build modified the working tree. A build must not edit its own source."
+            git status --porcelain
+            git diff
+            exit 1
+          fi
+          echo "Working tree clean after build."
+
+      # The exported XML is the authoritative artifact: it is what was imported and
+      # committed on dev434590 and dev204871. A clean tree alone would not catch a build
+      # that regenerated keys.ts and then had its output committed, so compare the
+      # records themselves.
+      - name: Check the built records still match the exported update set
+        working-directory: .
+        run: python3 .github/scripts/check_build_matches_export.py

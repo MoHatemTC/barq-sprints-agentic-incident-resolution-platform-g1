@@ -18,7 +18,7 @@ This matrix maps Ahmed Mansour's S1.1 brief to concrete implementation and evide
 | Markdown field dictionary | Types, values, writers, intended permissions, lifecycle, scope, and rationale documented | `docs/sprint-1/s1.1-scoped-app-and-field-model/field-model.md` |
 | Incident-form screenshots | Scope, layout, values, choices, and validation captured | `docs/sprint-1/s1.1-scoped-app-and-field-model/screenshots/` |
 | Clean import without manual repair | Preview and commit on authorized teammate PDI `dev204871` | `docs/sprint-1/s1.1-scoped-app-and-field-model/secondary-import-verification.md`; `07-secondary-import-preview.png`: 39 inserts and zero collisions; `08-secondary-import-committed.png`; `09-secondary-import-verification.png` |
-| Reproducible implementation | Official ServiceNow SDK project and implementation runbook | `servicenow/ai_incident_orchestrator/sdk-app/`; `docs/sprint-1/s1.1-scoped-app-and-field-model/implementation-runbook.md`; `npm run build` passes |
+| Reproducible implementation | Official ServiceNow SDK project and implementation runbook | `servicenow/ai_incident_orchestrator/sdk-app/`; `docs/sprint-1/s1.1-scoped-app-and-field-model/implementation-runbook.md`; verified at **`@servicenow/sdk` 4.8.0**: `npm ci && npx now-sdk build --frozenKeys` exits 0, leaves `keys.ts` byte-identical, and emits the same five choice sys_ids as the exported XML. Checked in CI by `.github/workflows/servicenow-sdk.yml`. Not reproducible at 4.11.2 — see #54 |
 
 ## Scope boundary
 

@@ -18,4 +18,17 @@ Before committing the XML:
 4. Verify the Incident field model, form section, and confidence validation after import.
 5. Record the result in `docs/sprint-1/s1.1-scoped-app-and-field-model/field-model.md` and capture screenshots under `docs/sprint-1/s1.1-scoped-app-and-field-model/screenshots/`.
 
-The official SDK source under `sdk-app/` is the reproducible implementation source. It is not a substitute for the mentor-required exported update-set XML.
+## Which artifact is authoritative
+
+`ai_incident_orchestrator_s1_1.xml` is. It is what was previewed and committed on `dev434590` and `dev204871`, and its record sys_ids are the ones live on those instances.
+
+The official SDK source under `sdk-app/` is the reproducible implementation source, and it is not a substitute for the mentor-required exported update-set XML. "Reproducible" is a claim with a verified version attached to it:
+
+| | |
+|---|---|
+| Verified SDK version | **`@servicenow/sdk` 4.8.0** (with `@servicenow/glide` 27.0.5) |
+| Verified with | `npm ci && npx now-sdk build --frozenKeys` |
+| Result | exit 0; `src/fluent/generated/keys.ts` byte-identical; the five processing-state choice sys_ids equal to those in the exported XML |
+| Enforced by | `.github/workflows/servicenow-sdk.yml` on every PR touching `servicenow/**` |
+
+**Do not bump `@servicenow/sdk` without re-verifying those rows.** 4.11.2 was merged in #24 on a Python-only CI run and does not satisfy them: the build rewrites the committed `keys.ts`, marks all five exported choice sys_ids `deleted: true`, mints replacements that differ on every fresh build, and moves the choice file to `dist/app/author_elective_update/`. Following the runbook with that build would replace the Processing State choices on the target instance. See #54; the pin back to 4.8.0 is deliberate.
