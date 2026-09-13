@@ -50,10 +50,16 @@ jobs:
       - name: Install
         run: npm ci
 
+      # Read the manifest off disk. The package's "exports" map does not expose
+      # ./package.json, so require() of it throws ERR_PACKAGE_PATH_NOT_EXPORTED.
       - name: Record the SDK version actually installed
         run: |
-          node -p "'@servicenow/sdk ' + require('@servicenow/sdk/package.json').version" \
-            >> "$GITHUB_STEP_SUMMARY"
+          version=$(node -p "JSON.parse(require('fs').readFileSync('node_modules/@servicenow/sdk/package.json','utf8')).version")
+          echo "@servicenow/sdk $version"
+          echo "\`@servicenow/sdk\` **$version**" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$version" != "4.8.0" ]; then
+            echo "::warning::4.8.0 is the version verified to reproduce the exported update set (#54). Installed: $version"
+          fi
 
       # --frozenKeys makes the SDK itself reject a build that would rewrite the key
       # registry. It exits 0 on 4.8.0 against the committed keys.ts.
