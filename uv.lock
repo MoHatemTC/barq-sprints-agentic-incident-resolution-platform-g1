@@ -108,6 +108,7 @@ name = "barq-sprints-agentic-incident-resolution-platform-g1"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "beautifulsoup4" },
     { name = "fastapi" },
     { name = "fastembed" },
     { name = "httpx" },
@@ -134,6 +135,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "beautifulsoup4", specifier = ">=4.12.3" },
     { name = "fastapi", specifier = ">=0.141.1" },
     { name = "fastembed", specifier = ">=0.8.0" },
     { name = "httpx", specifier = ">=0.28.1" },

@@ -6,6 +6,9 @@ readme = "README.md"
 requires-python = ">=3.12"
 
 dependencies = [
+    # Imported directly by src/app/retrieval/extraction.py. It arrived only as a
+    # markdownify transitive before, so a markdownify change could have broken imports.
+    "beautifulsoup4>=4.12.3",
     "fastapi>=0.141.1",
     "fastembed>=0.8.0",
     "httpx>=0.28.1",

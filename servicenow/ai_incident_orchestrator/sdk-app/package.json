@@ -15,5 +15,11 @@
     "devDependencies": {
         "@servicenow/sdk": "4.8.0",
         "@servicenow/glide": "27.0.5"
+    },
+    "overrides": {
+        "undici": "^7.29.1",
+        "tmp": "^0.2.7",
+        "js-yaml": "^4.3.2",
+        "@fastify/static": "^10.1.3"
     }
 }
