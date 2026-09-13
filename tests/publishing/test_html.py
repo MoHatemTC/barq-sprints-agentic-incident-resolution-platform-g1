@@ -103,7 +103,7 @@ def test_corpus_round_trip_preserves_structure_for_all_articles() -> None:
 
 def test_fixture_round_trip_preserves_code_blocks() -> None:
     """Fixtures carry fenced code blocks — the round trip must keep them."""
-    from fixtures.articles import POSTGRES_V2
+    from tests.fixtures.articles import POSTGRES_V2
 
     html_out = markdown_to_html(POSTGRES_V2["body"])
     assert 'class="language-sql"' in html_out
