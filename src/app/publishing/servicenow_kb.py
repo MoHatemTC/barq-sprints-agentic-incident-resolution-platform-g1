@@ -296,7 +296,21 @@ async def publish_article(
         ):
             outcome = "updated"
         else:
-            await client.update(sys_id, payload)
+            try:
+                await client.update(sys_id, payload)
+            except (ServiceNowRequestError, ServiceNowAccessError) as err:
+                # In ServiceNow, direct PATCH on published articles raises 403 ACL Exception
+                # for standard integration users without admin checkout.
+                # If the record is already published, let read-back verification confirm
+                # whether stored fields match the expected payload.
+                if (
+                    "403" in str(err)
+                    and existing.get("workflow_state") == "published"
+                    and article.workflow_state.value == "published"
+                ):
+                    pass
+                else:
+                    raise
             outcome = "updated"
 
     stored = await client.get(sys_id)

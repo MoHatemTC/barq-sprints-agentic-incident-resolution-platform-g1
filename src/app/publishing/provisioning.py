@@ -81,7 +81,7 @@ class ServiceNowProvisioner:
         if missing_fields:
             raise ServiceNowKBSchemaError(
                 f"Required schema column(s) {missing_fields} are missing from kb_knowledge. "
-                "Import and commit 'servicenow/kb_knowledge_custom_fields.xml' in ServiceNow "
+                "Ensure custom fields are created on kb_knowledge in ServiceNow "
                 "before publishing articles."
             )
 
