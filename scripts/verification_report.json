@@ -1,6 +1,6 @@
 {
   "sprint": "S1.2",
-  "generated_at": "2026-09-13T16:49:50.433739+00:00",
+  "generated_at": "2026-09-13T18:43:05.920166+00:00",
   "instance": "https://dev407364.service-now.com",
   "service_account": "ai_orchestrator_svc",
   "summary": {
@@ -134,10 +134,10 @@
       "target": "x_2215032_ai_inc_0_ai_execution_log",
       "expected": "201 Created + all required fields persisted",
       "http_status": 201,
-      "observed": "HTTP 201 (sys_id=a53338b1479f8b10c148497f316d4397)",
+      "observed": "HTTP 201 (sys_id=fa2d057d4753cb10c148497f316d4347)",
       "persisted_change": true,
       "verdict": "PASS",
-      "notes": "exec_id=exec_verify_3ef74d39dc90 | sys_id=a53338b1479f8b10c148497f316d4397"
+      "notes": "exec_id=exec_verify_a3e66b929e39 | sys_id=fa2d057d4753cb10c148497f316d4347"
     },
     {
       "test_id": "LOG-02",
@@ -147,10 +147,10 @@
       "target": "x_2215032_ai_inc_0_ai_execution_log",
       "expected": "201 Created + all required fields persisted",
       "http_status": 201,
-      "observed": "HTTP 201 (sys_id=a533bc71479f8b10c148497f316d4333)",
+      "observed": "HTTP 201 (sys_id=032d057d4753cb10c148497f316d434d)",
       "persisted_change": true,
       "verdict": "PASS",
-      "notes": "exec_id=exec_verify_d2bc4a07a5d0 | sys_id=a533bc71479f8b10c148497f316d4333"
+      "notes": "exec_id=exec_verify_8f92fecdcccb | sys_id=032d057d4753cb10c148497f316d434d"
     },
     {
       "test_id": "LOG-03",
@@ -160,10 +160,10 @@
       "target": "x_2215032_ai_inc_0_ai_execution_log",
       "expected": "201 Created + all required fields persisted",
       "http_status": 201,
-      "observed": "HTTP 201 (sys_id=b53338b1479f8b10c148497f316d43c3)",
+      "observed": "HTTP 201 (sys_id=cb2d057d4753cb10c148497f316d439c)",
       "persisted_change": true,
       "verdict": "PASS",
-      "notes": "exec_id=exec_verify_61624d9d97b8 | sys_id=b53338b1479f8b10c148497f316d43c3"
+      "notes": "exec_id=exec_verify_7c99d3718bbd | sys_id=cb2d057d4753cb10c148497f316d439c"
     },
     {
       "test_id": "LOG-06",
@@ -173,10 +173,10 @@
       "target": "x_2215032_ai_inc_0_ai_execution_log",
       "expected": "201 Created + all required fields persisted",
       "http_status": 201,
-      "observed": "HTTP 201 (sys_id=f53338b1479f8b10c148497f316d43c8)",
+      "observed": "HTTP 201 (sys_id=132d057d4753cb10c148497f316d43a4)",
       "persisted_change": true,
       "verdict": "PASS",
-      "notes": "exec_id=exec_verify_b5df8f5c64f2 | sys_id=f53338b1479f8b10c148497f316d43c8"
+      "notes": "exec_id=exec_verify_a0d2ffb6759e | sys_id=132d057d4753cb10c148497f316d43a4"
     },
     {
       "test_id": "LOG-04",
@@ -189,14 +189,14 @@
       "observed": "HTTP 200 (1 record(s) found)",
       "persisted_change": false,
       "verdict": "PASS",
-      "notes": "exec_id='exec_idx_6bfdd1527c6a4c39' -> sys_id=4e3338b1479f8b10c148497f316d43f2"
+      "notes": "exec_id='exec_idx_c0e91bda75c14f6d' -> sys_id=df2d057d4753cb10c148497f316d43c1"
     },
     {
       "test_id": "LOG-05",
       "category": "Execution Log",
       "name": "Cannot delete execution log records (append-only)",
       "operation": "DELETE",
-      "target": "x_2215032_ai_inc_0_ai_execution_log/ce33f4b1479f8b10c148497f316d43f3",
+      "target": "x_2215032_ai_inc_0_ai_execution_log/a32d057d4753cb10c148497f316d43c7",
       "expected": "403 or 404 (delete blocked)",
       "http_status": 403,
       "observed": "HTTP 403 (record_exists=True)",
@@ -209,7 +209,7 @@
       "category": "Execution Log",
       "name": "Cannot modify execution log records (append-only)",
       "operation": "PATCH",
-      "target": "x_2215032_ai_inc_0_ai_execution_log/563378b1479f8b10c148497f316d4332",
+      "target": "x_2215032_ai_inc_0_ai_execution_log/f72d057d4753cb10c148497f316d43e7",
       "expected": "401/403 or write ignored (record immutable)",
       "http_status": 403,
       "observed": "HTTP 403 (modified=False)",
@@ -342,10 +342,10 @@
       "target": "D:\\spritns\\barq-sprints-agentic-incident-resolution-platform-g1",
       "expected": "No prohibited credentials in tracked source files",
       "http_status": 0,
-      "observed": "Scanned 93 files; 0 finding(s)",
+      "observed": "Scanned 119 files; 0 finding(s)",
       "persisted_change": false,
       "verdict": "PASS",
-      "notes": "Clean - 93 files scanned."
+      "notes": "Clean - 119 files scanned."
     }
   ]
 }
