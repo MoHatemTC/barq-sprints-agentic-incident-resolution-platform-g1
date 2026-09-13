@@ -8,7 +8,8 @@ the row back. Exits non-zero if any article fails.
 Requires in .env: SERVICENOW_INSTANCE_URL, SERVICENOW_CLIENT_ID,
 SERVICENOW_CLIENT_SECRET, SERVICENOW_USERNAME, SERVICENOW_PASSWORD,
 SERVICENOW_KB_ID (sys_id of the target Knowledge Base created in the PDI)
-and required custom columns on the kb_knowledge table.
+and required custom columns on the kb_knowledge table (deployed via
+'servicenow/kb_knowledge_custom_fields.xml').
 """
 
 from __future__ import annotations

@@ -34,7 +34,7 @@ async def test_provisioner_ensure_schema_missing_columns_fails_loud(fake: Any) -
         provisioner = ServiceNowProvisioner(client)
         with pytest.raises(
             ServiceNowKBSchemaError,
-            match="Required schema column",
+            match="Import and commit 'servicenow/kb_knowledge_custom_fields.xml'",
         ):
             await provisioner.ensure_schema()
     finally:
