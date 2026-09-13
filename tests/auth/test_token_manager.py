@@ -275,12 +275,21 @@ class TestCredentialSafety:
                 assert "svc_pass" not in call_str
 
     async def test_forced_timeout_does_not_leak_secrets_in_traceback(self) -> None:
+        import uuid
+
         def _raise_timeout(request: httpx.Request) -> httpx.Response:
             raise httpx.TimeoutException("forced timeout")
 
         transport = httpx.MockTransport(_raise_timeout)
         real_http = httpx.AsyncClient(transport=transport)
-        settings = mock_settings()  # client_secret="test-secret", password="svc_pass"
+
+        unique = uuid.uuid4().hex
+        sentinel_secret = f"secret-{unique}"
+        sentinel_password = f"password-{unique}"
+        settings = mock_settings(
+            servicenow_client_secret=sentinel_secret,
+            servicenow_password=sentinel_password,
+        )
         mgr = ServiceNowTokenManager(settings, real_http)
 
         try:
@@ -288,8 +297,8 @@ class TestCredentialSafety:
                 await mgr.get_token()
 
             rendered = str(excinfo.getrepr(style="long", funcargs=True))
-            assert "test-secret" not in rendered
-            assert "svc_pass" not in rendered
+            assert sentinel_secret not in rendered
+            assert sentinel_password not in rendered
         finally:
             await real_http.aclose()
 

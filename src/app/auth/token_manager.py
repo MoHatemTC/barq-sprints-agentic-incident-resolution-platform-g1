@@ -69,9 +69,10 @@ class ServiceNowTokenManager:
             self._expires_at = None
             raise
 
-    async def _send_token_request(self, *, grant_type: str) -> None:
+    def _build_form_data(self, grant_type: str) -> dict[str, str]:
+        """Builds form payload without retaining secrets."""
         if grant_type == "password":
-            form = {
+            return {
                 "grant_type": "password",
                 "client_id": self._settings.servicenow_client_id,
                 "client_secret": self._settings.servicenow_client_secret.get_secret_value(),
@@ -79,7 +80,7 @@ class ServiceNowTokenManager:
                 "password": self._settings.servicenow_password.get_secret_value(),
             }
         elif grant_type == "refresh_token":
-            form = {
+            return {
                 "grant_type": "refresh_token",
                 "client_id": self._settings.servicenow_client_id,
                 "client_secret": self._settings.servicenow_client_secret.get_secret_value(),
@@ -88,27 +89,28 @@ class ServiceNowTokenManager:
         else:
             raise ValueError(f"Unsupported grant_type: {grant_type!r}")
 
+    async def _send_token_request(self, *, grant_type: str) -> None:
         url = f"{self._settings.servicenow_instance_url}/oauth_token.do"
         try:
             response = await self._http.post(
                 url,
-                data=form,
+                data=self._build_form_data(grant_type),
                 headers={"Content-Type": "application/x-www-form-urlencoded"},
                 timeout=self._settings.servicenow_timeout_seconds,
             )
-        except httpx.TimeoutException as exc:
+        except httpx.TimeoutException:
             raise ServiceNowTimeoutError(
                 f"Timed out requesting OAuth token from {url} after "
                 f"{self._settings.servicenow_timeout_seconds} seconds"
-            ) from exc
-        except httpx.ConnectError as exc:
+            ) from None
+        except httpx.ConnectError:
             raise ServiceNowConnectionError(
                 "Could not connect to ServiceNow OAuth endpoint"
-            ) from exc
-        except httpx.TransportError as exc:
+            ) from None
+        except httpx.TransportError:
             raise ServiceNowConnectionError(
                 "Transport error while requesting OAuth token from ServiceNow"
-            ) from exc
+            ) from None
 
         if response.status_code != status.HTTP_200_OK:
             logger.error(
