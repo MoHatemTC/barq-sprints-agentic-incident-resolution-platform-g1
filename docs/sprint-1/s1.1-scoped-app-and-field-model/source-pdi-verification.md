@@ -23,4 +23,4 @@ Verification performed on September 8, 2026 against source PDI `dev434590` on th
 
 ## Secondary-instance verification
 
-The exported XML was previewed and committed on authorized teammate PDI `dev204871`. Preview reported 39 inserts, zero updates, zero deletes, and zero collisions. Commit completed without manual repair. An existing Incident then displayed the imported AI Incident Orchestrator section, fields, processing-state default, and confidence validation; an out-of-range value was automatically removed with the expected error.
+The exported XML was previewed and committed on authorized teammate PDI `dev204871`. Preview reported 39 inserts, zero updates, zero deletes, and zero collisions. Commit completed without manual repair. An existing Incident then displayed the imported AI Incident Orchestrator section, fields, processing-state default, and confidence validation; an out-of-range value produced the expected range error.
