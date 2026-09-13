@@ -6,6 +6,9 @@ readme = "README.md"
 requires-python = ">=3.12"
 
 dependencies = [
+    # Imported directly by src/app/retrieval/extraction.py. It arrived only as a
+    # markdownify transitive before, so a markdownify change could have broken imports.
+    "beautifulsoup4>=4.12.3",
     "fastapi>=0.141.1",
     "fastembed>=0.8.0",
     "httpx>=0.28.1",
@@ -24,6 +27,10 @@ dev = [
     "hatchling>=1.32.0",
     "mypy>=2.3.1",
     "pre-commit>=4.6.2",
+    # tests/repo/test_path_config_drift.py parses .github/labeler.yml. It only arrived
+    # transitively through pre-commit before, so the drift check could break on an
+    # unrelated dependency change.
+    "pyyaml>=6.0.2",
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
     "pytest-cov>=7.1.0",
