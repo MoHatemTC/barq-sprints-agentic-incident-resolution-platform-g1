@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 import httpx
 import pytest
+from pydantic import SecretStr, ValidationError, field_validator
 
 from app.clients.servicenow_client import ServiceNowClient
 from app.core.config import Settings
@@ -19,20 +20,53 @@ from app.models.execution_log import (
 )
 from app.models.incident import AIProcessingState, IncidentUpdatePayload
 
+
+class LiveServiceNowTestSettings(Settings):
+    servicenow_test_incident_sys_id: str
+
+    @field_validator(
+        "servicenow_client_id",
+        "servicenow_client_secret",
+        "servicenow_username",
+        "servicenow_password",
+        "servicenow_test_incident_sys_id",
+    )
+    @classmethod
+    def required_value_must_not_be_blank(cls, value: str | SecretStr) -> str | SecretStr:
+        raw_value = value.get_secret_value() if isinstance(value, SecretStr) else value
+        if not raw_value.strip():
+            raise ValueError("must not be blank")
+        return value
+
+
+def _load_live_test_settings() -> tuple[LiveServiceNowTestSettings | None, str]:
+    if os.environ.get("SERVICENOW_LIVE_TESTS") != "1":
+        return None, "Live PDI tests require explicit SERVICENOW_LIVE_TESTS=1 opt-in"
+
+    try:
+        return LiveServiceNowTestSettings(_env_file=".env"), ""
+    except ValidationError as exc:
+        invalid_fields = sorted(
+            {str(error["loc"][0]).upper() for error in exc.errors() if error["loc"]}
+        )
+        return None, (
+            "Live PDI tests require complete, valid ServiceNow configuration; "
+            f"missing or invalid: {', '.join(invalid_fields)}"
+        )
+
+
+_LIVE_TEST_SETTINGS, _LIVE_TEST_SKIP_REASON = _load_live_test_settings()
+
 pytestmark = pytest.mark.skipif(
-    os.environ.get("SERVICENOW_LIVE_TESTS") != "1"
-    or not os.environ.get("SERVICENOW_TEST_INCIDENT_SYS_ID")
-    or not os.environ.get("SERVICENOW_PASSWORD"),
-    reason=(
-        "Live PDI test — set SERVICENOW_LIVE_TESTS=1, SERVICENOW_TEST_INCIDENT_SYS_ID, "
-        "and real ServiceNow OAuth credentials (env or .env) to run"
-    ),
+    _LIVE_TEST_SETTINGS is None,
+    reason=_LIVE_TEST_SKIP_REASON,
 )
 
 
 @pytest.fixture
-def settings() -> Settings:
-    return Settings()
+def settings() -> LiveServiceNowTestSettings:
+    assert _LIVE_TEST_SETTINGS is not None
+    return _LIVE_TEST_SETTINGS
 
 
 @pytest.fixture
@@ -42,8 +76,8 @@ async def client(settings: Settings) -> ServiceNowClient:
 
 
 @pytest.fixture
-def test_sys_id() -> str:
-    return os.environ["SERVICENOW_TEST_INCIDENT_SYS_ID"]
+def test_sys_id(settings: LiveServiceNowTestSettings) -> str:
+    return settings.servicenow_test_incident_sys_id
 
 
 @pytest.mark.asyncio

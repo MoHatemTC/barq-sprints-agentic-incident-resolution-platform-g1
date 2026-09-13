@@ -20,6 +20,16 @@ arbitrary `.env` present** — unit tests run with `.env` loading disabled
 break the suite. `tests/conftest.py` backfills fake ServiceNow settings for ordinary
 runs only; if you add a required setting, add it there too or you will break everyone else's checkout.
 
+Live ServiceNow tests require an explicit process-level opt-in and should be run separately:
+
+```bash
+SERVICENOW_LIVE_TESTS=1 uv run pytest tests/clients/test_servicenow_integration.py
+```
+
+The required ServiceNow credentials and `SERVICENOW_TEST_INCIDENT_SYS_ID` may come
+from `.env` or the process environment; process values take precedence. Missing or
+invalid live configuration skips the module instead of starting a partial live run.
+
 ## Commit messages
 
 Explain **why**, not what — the diff already shows what. State the problem, then the
