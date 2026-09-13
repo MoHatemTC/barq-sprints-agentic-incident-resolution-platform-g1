@@ -47,7 +47,7 @@ Every record in `data/corpus/barq_articles.json` and every point payload in Qdra
 | `service` | Keyword | Open controlled vocabulary slug (`corporate-vpn`, `corporate-email`, `file-services`, `print-services`, `identity`, `endpoint`, `sap-erp`, `corporate-wifi`, `order-processing`) | `KEYWORD` | Configuration item (CI) and service routing |
 | `workflow_state` | Keyword | Closed enum: `published`, `draft`, `retired` | `KEYWORD` | Lifecycle governance; excludes decommissioned runbooks from standard resolution |
 | `version` | Keyword | Semver string (`1.0`, `2.0`, `3.0`, `4.0`) | `KEYWORD` | Version-specific resolution targeting |
-| `security_level` | Keyword | Closed enum: `public`, `internal`, `restricted` | `KEYWORD` | Tiered role-based access control (RBAC) filtering |
+| `security_level` | Keyword | Closed enum: `public`, `internal`, `restricted` | `KEYWORD` | Tiered role-based access control (RBAC) filtering. **Enforced** by `retrieve_knowledge`'s `max_security_level`, default `internal` (#45) |
 
 ### 3.2 Core Article Identity Fields
 - `article_number`: Unique KB identifier in the manual's four-digit format `^KB\d{4}$` (`KB0001` through `KB0010`).
@@ -79,6 +79,28 @@ Because raw PDF tables in the Operations Manual do not feature a native security
 The mapping is implemented as the `SECURITY_TIERS` table in [src/app/retrieval/barq_manual.py](../../../src/app/retrieval/barq_manual.py) and asserted per-article by [tests/retrieval/test_corpus.py](../../../tests/retrieval/test_corpus.py).
 
 ---
+
+
+### Category vocabulary vs the S1.1 classification labels (#70)
+
+The corpus categories are **not** the same words as the AI Classification labels in
+`field-model.md`. The mapping is held in code as `CORPUS_CATEGORY_TO_CLASSIFICATION`
+(`src/app/models/knowledge.py`) and is the single source of truth:
+
+| S1.1 classification label | Corpus category | Articles |
+|---|---|---|
+| `hardware` | `hardware` | KB0004, KB0007 |
+| `software` | `software` | KB0002, KB0008, KB0010 |
+| `network` | `network` | KB0001, KB0003, KB0009 |
+| `access` | **`inquiry`** | KB0005, KB0006 |
+| `security` | *(none yet)* | — |
+| `other` | *(none yet)* | — |
+
+`inquiry` is the mismatch that mattered: both articles are `identity` service incidents
+that a classifier would label `access`. Before #70 nothing mapped them, so Sprint 2
+filtering by classification would have returned nothing for those incidents.
+
+`tests/models/test_classification_vocabulary.py` enforces this in both directions.
 
 ## 4. Real Knowledge Base Corpus Inventory (11 Records)
 

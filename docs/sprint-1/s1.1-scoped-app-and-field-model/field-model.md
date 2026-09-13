@@ -24,7 +24,7 @@ All fields must be created while **AI Incident Orchestrator** is the active appl
 |---|---|---|---|---|---|---|
 | AI Enabled | `x_2215032_ai_inc_0_ai_enabled` | True/False | Default `false`; `true` or `false` | Authorized fulfiller or platform administrator | Human-controlled; integration identity reads only | Explicitly opts an Incident into AI processing. Required now because the S1.3 eligibility Business Rule depends on it. |
 | AI Processing State | `x_2215032_ai_inc_0_ai_processing_state` | Choice | Default `pending`; `pending`, `in_progress`, `awaiting_approval`, `complete`, or `failed` | Orchestrator through the integration identity | Integration identity may update; authorized support users may perform controlled recovery | Stores the durable lifecycle state. `in_progress` prevents concurrent processing; `awaiting_approval` pauses automation; terminal states are `complete` and `failed`. |
-| AI Classification | `x_2215032_ai_inc_0_ai_classification` | String (100) | Free text produced by the classifier. Initial expected labels: `hardware`, `software`, `network`, `access`, `security`, and `other`; S1.4 may refine labels without a schema change. | Classification node through the integration identity | Integration identity writes; support users read | Stores the class determined by the agent. A String intentionally avoids freezing a taxonomy before the S1.4 classification contract is finalized. |
+| AI Classification | `x_2215032_ai_inc_0_ai_classification` | String (100) | Free text produced by the classifier. Initial expected labels: `hardware`, `software`, `network`, `access`, `security`, and `other`; S1.4 refined the corpus vocabulary; the mapping is recorded below and enforced by a test. | Classification node through the integration identity | Integration identity writes; support users read | Stores the class determined by the agent. A String intentionally avoids freezing a taxonomy before the S1.4 classification contract is finalized. |
 | AI Confidence | `x_2215032_ai_inc_0_ai_confidence` | Decimal, scale 2 | Blank until scored; inclusive range `0.00`–`1.00` | Confidence-check node through the integration identity | Integration identity writes; support users read | Stores the normalized confidence score. Scoped onChange/onSubmit validation enforces the range on forms; every API writer must enforce the identical contract before writing. |
 | AI Suggestion | `x_2215032_ai_inc_0_ai_suggestion` | Large String (4000) | Blank or text up to 4000 characters | Generation node through the integration identity | Integration identity writes; reviewers read | Preserves the action or response proposed by the agent before approval or execution. It is not the final resolution. |
 | AI Resolution | `x_2215032_ai_inc_0_ai_resolution` | Large String (4000) | Blank or text up to 4000 characters | Approved action workflow, safe-action executor, or authorized fulfiller | Integration identity may write an approved/safe result; authorized human fulfillers may write the final outcome | Records what was actually accepted and applied, including a human-modified outcome. It must never overwrite the original suggestion. |
@@ -99,6 +99,25 @@ Permission rules:
 - The human-lock field must never be writable by the automated integration identity.
 
 ServiceNow does not permit a scripted before Business Rule in a private scope to abort writes on the Global-scope Incident table. Creating such a rule in Global would violate the explicit zero-Global-artifacts acceptance criterion. S1.1 therefore uses scoped form validation and defines the server/API invariant as part of the integration writer contract; S1.2 ACLs and downstream writers must preserve that boundary.
+
+### Classification vocabulary and the S1.4 corpus (#70)
+
+The field is String(100) so the taxonomy could be refined without a schema change. S1.4 did refine it, and the corpus uses its own category words. The mapping below is the single source of truth, held in code as `CORPUS_CATEGORY_TO_CLASSIFICATION` in `src/app/models/knowledge.py`:
+
+| S1.1 classification label | S1.4 corpus category | Articles |
+|---|---|---|
+| `hardware` | `hardware` | KB0004, KB0007 |
+| `software` | `software` | KB0002, KB0008, KB0010 |
+| `network` | `network` | KB0001, KB0003, KB0009 |
+| `access` | **`inquiry`** | KB0005 (account lockout), KB0006 (MFA after a lost device) |
+| `security` | *(none yet)* | — |
+| `other` | *(none yet)* | — |
+
+`inquiry` is the one that does not read across: both articles are `identity` service, and a classifier seeing those incidents would label them `access`. Without this mapping, Sprint 2 filtering of retrieval by classification would return nothing for every `access` incident.
+
+`security` and `other` are deliberately uncovered — a classifier may still emit them, and retrieval will return nothing. That is a gap to close with corpus content, not a defect in the mapping, and it is declared in `CLASSIFICATIONS_WITHOUT_CORPUS_COVERAGE`.
+
+`tests/models/test_classification_vocabulary.py` fails if the corpus grows a category with no mapping, if a label is neither mapped nor declared uncovered, or if a declared-uncovered label quietly gains coverage.
 
 ### Cross-scope privileges (open — #56)
 
