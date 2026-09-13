@@ -109,6 +109,14 @@ def validate_environment() -> None:
         print("Ensure a valid .env file is present. No admin credentials in source.\n")
         sys.exit(1)
 
+    if USERNAME.strip().lower() == "admin":
+        print("\n[ERROR] SERVICENOW_USERNAME cannot be 'admin'.")
+        print(
+            "verify_permissions.py verifies least-privilege boundaries "
+            "for the integration identity, not admin.\n"
+        )
+        sys.exit(1)
+
 
 # ---------------------------------------------------------------------------
 # Auth helpers  (tokens are NEVER printed)
@@ -259,7 +267,7 @@ def _test_identity(client: httpx.Client, hdrs: dict[str, str]) -> TestResult:
     """AUTH-02: Authenticated identity is the expected service account."""
     resp = client.get(
         f"{TABLE_API_BASE}/sys_user"
-        f"?sysparm_query=user_name={USERNAME}&sysparm_fields=user_name,name",
+        f"?sysparm_query=sys_id=javascript:gs.getUserID()&sysparm_fields=user_name,name,sys_id",
         headers=hdrs,
         timeout=10.0,
     )
@@ -270,13 +278,15 @@ def _test_identity(client: httpx.Client, hdrs: dict[str, str]) -> TestResult:
         category="Authentication",
         name=f"Identity is expected service account ({USERNAME})",
         operation="GET",
-        target="/api/now/table/sys_user",
-        expected=f"user_name={USERNAME}",
+        target="/api/now/table/sys_user?sysparm_query=sys_id=javascript:gs.getUserID()",
+        expected=f"Token owner user_name={USERNAME}",
         http_status=resp.status_code,
         observed=(f"user_name={results[0].get('user_name', 'N/A')}" if results else "no result"),
         persisted_change=False,
         verdict="PASS" if ok else "FAIL",
-        notes=f"Account display name: {results[0].get('name', '')}" if results else "",
+        notes=f"Token owner: {results[0].get('name', '')} ({results[0].get('user_name', '')})"
+        if results
+        else "Failed to resolve authenticated session identity.",
     )
 
 
@@ -334,10 +344,10 @@ def _test_invalid_token(client: httpx.Client) -> TestResult:
 
 
 def _test_mid_run_expiry(client: httpx.Client) -> TestResult:
-    """TOKEN-01: Mid-run expiry detection.
+    """TOKEN-01: Mid-run expiry detection and re-authentication.
 
-    A simulated stale token returns 401/403, not a silent 200.
-    The harness must re-authenticate rather than continuing as if the call succeeded.
+    A simulated stale token returns 401/403.
+    The harness detects the 401 and re-authenticates to acquire a fresh token.
     """
     simulated_expired = {
         "Authorization": "Bearer SIMULATED_EXPIRED_TOKEN_MIDRUN_0000",
@@ -349,19 +359,43 @@ def _test_mid_run_expiry(client: httpx.Client) -> TestResult:
         headers=simulated_expired,
         timeout=10.0,
     )
-    detected = resp.status_code in (401, 403)
+    detected_401 = resp.status_code in (401, 403)
+
+    reauth_ok = False
+    recovered_status = 0
+    if detected_401:
+        auth_res, fresh_token = _test_auth_success(client)
+        if auth_res.verdict == "PASS" and fresh_token:
+            fresh_hdrs = _auth_headers(fresh_token)
+            rec_resp = client.get(
+                f"{TABLE_API_BASE}/incident?sysparm_limit=1",
+                headers=fresh_hdrs,
+                timeout=10.0,
+            )
+            recovered_status = rec_resp.status_code
+            reauth_ok = recovered_status == 200
+
+    ok = detected_401 and reauth_ok
     return TestResult(
         test_id="TOKEN-01",
         category="Token Lifecycle",
-        name="Mid-run expiry detected (harness does not swallow 401)",
-        operation="GET",
+        name="Mid-run expiry detected (harness re-authenticates)",
+        operation="GET + POST",
         target="/api/now/table/incident",
-        expected="HTTP 401 or 403",
-        http_status=resp.status_code,
-        observed=f"HTTP {resp.status_code}",
+        expected="Stale token returns 401 -> Re-authentication succeeds (HTTP 200)",
+        http_status=recovered_status or resp.status_code,
+        observed=f"Initial: HTTP {resp.status_code} -> Re-auth: HTTP {recovered_status}",
         persisted_change=False,
-        verdict="PASS" if detected else "FAIL",
-        notes="Harness must re-authenticate on 401/403 rather than continuing silently.",
+        verdict="PASS" if ok else "FAIL",
+        notes=(
+            f"Stale token rejected (HTTP {resp.status_code}); "
+            f"re-authenticated successfully (HTTP {recovered_status})."
+            if ok
+            else (
+                f"Re-auth failed after 401: "
+                f"initial={resp.status_code}, recovered={recovered_status}."
+            )
+        ),
     )
 
 
@@ -593,17 +627,26 @@ def _test_log_status(
         created_ids.append(sys_id)
 
     fields_ok = False
+    details = ""
     if http_status == 201 and sys_id:
         rb = client.get(f"{TABLE_API_BASE}/{SCOPED_LOG_TABLE}/{sys_id}", headers=hdrs, timeout=10.0)
         rec = rb.json().get("result", {})
-        # Fields may be prefixed with u_ depending on scope config
-        fields_ok = bool(sys_id) and any(
-            [
-                rec.get("u_execution_id") or rec.get("execution_id"),
-                rec.get("u_agent") or rec.get("agent"),
-                rec.get("u_status") or rec.get("status"),
-            ]
-        )
+        rec_exec = rec.get("execution_id") or rec.get("u_execution_id", "")
+        rec_st = rec.get("status") or rec.get("u_status", "")
+        rec_act = rec.get("action") or rec.get("u_action", "")
+        rec_ag = rec.get("agent") or rec.get("u_agent", "")
+
+        status_ok = str(rec_st).lower() == status.lower()
+        action_ok = str(rec_act).lower() == "execute"
+        exec_ok = str(rec_exec) == exec_id
+        agent_ok = bool(rec_ag)
+
+        fields_ok = status_ok and action_ok and exec_ok and agent_ok
+        if not fields_ok:
+            details = (
+                f"Field mismatch: expected status={status}, action=execute; "
+                f"got status={rec_st}, action={rec_act}, exec_id={rec_exec}"
+            )
 
     ok = http_status == 201 and bool(sys_id) and fields_ok
     return TestResult(
@@ -612,16 +655,14 @@ def _test_log_status(
         name=f"Create execution log: status={status} (FR-02)",
         operation="POST",
         target=SCOPED_LOG_TABLE,
-        expected="201 Created + all required fields persisted",
+        expected=f"201 Created + status='{status}' + action='execute'",
         http_status=http_status,
         observed=f"HTTP {http_status} (sys_id={sys_id or 'N/A'})",
         persisted_change=ok,
         verdict="PASS" if ok else "FAIL",
-        notes=(
-            f"exec_id={exec_id} | sys_id={sys_id}"
-            if ok
-            else "Record not created or fields missing."
-        ),
+        notes=f"exec_id={exec_id} | sys_id={sys_id} | status={status} confirmed"
+        if ok
+        else (details or "Record not created or fields missing."),
     )
 
 
@@ -660,7 +701,7 @@ def _test_execution_id_lookup(
     return TestResult(
         test_id="LOG-04",
         category="Execution Log",
-        name="Execution ID indexed lookup (unique key)",
+        name="Execution ID indexed lookup (correlation trace key)",
         operation="GET",
         target=f"{SCOPED_LOG_TABLE}?execution_id=<unique>",
         expected="Exactly 1 record matching execution_id",

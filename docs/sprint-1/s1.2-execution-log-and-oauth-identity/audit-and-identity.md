@@ -93,6 +93,10 @@ The relationship between execution log rows and pipeline runs is formally define
 - **Distributed Trace Grouping**: Retaining a non-unique index on `execution_id` enables distributed tracing across multi-node or multi-event runs, allowing multiple audit entries (such as individual agent node actions or safe retry sequences) to correlate under a single parent execution trace without triggering database collision errors.
 - **Lookup Invariant**: Single-event lookups can resolve individual rows, while trace queries by `execution_id` return the complete chronological trail of events for that pipeline execution.
 
+> [!IMPORTANT]
+> **Non-Unique `execution_id` by Architectural Design**:
+> The `execution_id` field is intentionally **not unique** at the database schema level (`<unique_index>false</unique_index>`). It serves as an indexed correlation and distributed tracing key, enabling multi-step pipeline nodes, sub-agent tasks, and retry attempts for a single incident execution context to share the same trace ID. Record-level uniqueness is guaranteed exclusively by ServiceNow's native primary key (`sys_id`).
+
 #### Append-Only Protection (SS7 / LOG-05)
 To prevent rogue actors or automation bugs from tampering with audit records, the table enforces a strict **append-only policy**:
 - **Delete ACL Rule**: `x_2215032_ai_inc_0_ai_execution_log` (operation: `delete`, sys_id: `7c036368471f4310c148497f316d433f`).
@@ -174,6 +178,29 @@ Permissions are bounded strictly to the minimal operational surface required for
 > Under standard ServiceNow field-level ACL stripping semantics, incoming `PATCH` requests containing unauthorized fields (such as `comments`) return `HTTP 200 OK` while silently stripping the forbidden field (verified by `DENY-05` and `BULK-01`, confirming 0 journal entries created).
 > 
 > All experimental, inactive, or historical comment-intercepting Business Rules (such as `AI Block Customer Comments`, `AI Block Comments Journal Entry`, and destructive rules calling `deleteRecord()`) have been **completely purged** from the shipped update set artifact (`ai_incident_orchestrator_s1_2.xml`). No comment-blocking Business Rules exist or ship in this release, eliminating any risk of journal corruption or unexpected transaction aborts.
+
+---
+
+### 3.3 Out-of-the-Box (OOB) Platform ACLs & Role Bindings
+
+In standard ServiceNow application packaging, scoped update sets capture role mappings (`sys_security_acl_role`) that bind the scoped role (`x_2215032_ai_inc_0.integration_writer`) to necessary platform capabilities. Baseline OOB ACLs themselves originate from ServiceNow core plugins (`com.snc.itsm`, `com.glide.task`, `com.snc.system_security`) and exist identically across instances; they are not duplicated inside the scoped update set to avoid schema collision.
+
+The 8 baseline platform ACLs bound to `integration_writer` are documented below for full auditability:
+
+| Target | Operation | Target ACL `sys_id` | Role Binding `sys_id` | Plugin / Scope | Condition / Behavior |
+|:---|:---:|:---|:---|:---|:---|
+| `incident` | `write` | `24baff9a9d330210f877faf15ee3ec47` | `2429f72847df4310c148497f316d4362` | Global / ITSM Core | Grants record-level write permission on active incidents, enabling scoped field updates. |
+| `incident` | `read` | `a4dee42c47170310c148497f316d4336` | `68632db4475f8310c148497f316d43f4` | Global / ITSM Core | Grants record-level read permission for incident retrieval (`PERM-01`). |
+| `incident.work_notes` | `write` | `d785ac2847d30310c148497f316d439e` | `a4636db4475f8310c148497f316d430d` | Global / Incident | Grants write permission to append internal journal entries (`PERM-02`). |
+| `incident.work_notes` | `read` | `a231390b870033000e56d61e36cb0bf3` | `e8636db4475f8310c148497f316d432f` | Global / Incident | Grants read access to incident work notes journal history. |
+| `incident.work_notes` | `create` | `491482f053422010ad3cddeeff7b1245` | `28636db4475f8310c148497f316d4325` | Global / Incident | Permits creation of new work notes records in the journal. |
+| `task.work_notes` | `write` | `9d5e2504a52143108bb220b7a4d212e1` | `74d97fe847df4310c148497f316d43a4` | Global / Task Core | Task-level inherited write permission across the `task` hierarchy. |
+| `task.work_notes` | `read` | `5d5e2504a52143108bb220b7a4d212df` | `64636db4475f8310c148497f316d4346` | Global / Task Core | Task-level inherited read permission across the `task` hierarchy. |
+| `sys_journal_field` | `read` | `e7c3abccffa76210f65cffffffffffae` | `a90525b8475f8310c148497f316d4383` | Global / System Security | Enables read-after-write verification queries on journal field records. |
+
+> [!NOTE]
+> **Integration Identity & OAuth Secrets Handling**:
+> In accordance with ServiceNow security guidelines and credential cleanliness principles, local user accounts (`sys_user`), role assignments (`sys_user_has_role`), and OAuth Application Registry credentials (`oauth_entity`) represent instance-specific data and secrets. They are intentionally **excluded** from public Git update sets and are provisioned directly on the target instance via the automated runbook in Section 7.
 
 ---
 
@@ -270,10 +297,10 @@ The test harness [`scripts/verify_permissions.py`](../../../scripts/verify_permi
 | Test ID | Category | Target / Operation | Expected Behavior | Observed Result | Status |
 |:---|:---|:---|:---|:---|:---:|
 | **AUTH-01** | Authentication | `POST /oauth_token.do` | 200 OK + Bearer access token issued | HTTP 200 (Lifespan: 1799s) | **PASS** |
-| **AUTH-02** | Authentication | `GET /api/now/table/sys_user` | Authenticated identity matches service account | `user_name=ai_orchestrator_svc` | **PASS** |
+| **AUTH-02** | Authentication | `GET /api/now/table/sys_user` (`gs.getUserID()`) | Authenticated session token belongs to expected service account | `user_name=ai_orchestrator_svc` | **PASS** |
 | **AUTH-03** | Authentication | `GET /api/now/table/sys_user_has_role` | Non-admin verification (403 Forbidden) | HTTP 403 (No `security_admin`) | **PASS** |
 | **AUTH-04** | Authentication | `GET /api/now/table/incident` (Invalid token) | Invalid/expired token rejected | HTTP 401 Unauthorized | **PASS** |
-| **TOKEN-01**| Token Lifecycle | Mid-run expiry detection | Harness detects 401 and re-authenticates | HTTP 401 caught & handled | **PASS** |
+| **TOKEN-01**| Token Lifecycle | Mid-run expiry detection & recovery | Harness catches 401 on stale token, re-authenticates, and recovers | Re-auth recovery HTTP 200 | **PASS** |
 | **PERM-01** | Permitted | `GET /api/now/table/incident/{id}` | Read incident record | HTTP 200 (`INC0010003`) | **PASS** |
 | **PERM-02** | Permitted | `PATCH incident.work_notes` | Persisted in `sys_journal_field` | HTTP 200 (Count = 1) | **PASS** |
 | **PERM-03** | Permitted | `PATCH incident.ai_classification` | Write scoped AI classification field | HTTP 200 (Value: `software`) | **PASS** |
@@ -282,7 +309,7 @@ The test harness [`scripts/verify_permissions.py`](../../../scripts/verify_permi
 | **LOG-02**  | Execution Log | `POST x_..._ai_execution_log` (`failed`) | Status `failed` audit record created | HTTP 201 Created | **PASS** |
 | **LOG-03**  | Execution Log | `POST x_..._ai_execution_log` (`blocked`) | Status `blocked` audit record created | HTTP 201 Created | **PASS** |
 | **LOG-06**  | Execution Log | `POST x_..._ai_execution_log` (`abandoned`) | Status `abandoned` audit record created | HTTP 201 Created | **PASS** |
-| **LOG-04**  | Execution Log | `GET x_..._ai_execution_log?execution_id=` | Indexed query returns exactly 1 record | HTTP 200 (1 record returned) | **PASS** |
+| **LOG-04**  | Execution Log | `GET x_..._ai_execution_log?execution_id=` | Indexed lookup resolves trace records (non-unique index; uniqueness via `sys_id`) | HTTP 200 (1 record returned) | **PASS** |
 | **LOG-05**  | Execution Log | `DELETE x_..._ai_execution_log/{id}` | Append-only: Delete blocked with 403 | HTTP 403 (Record exists) | **PASS** |
 | **DENY-01** | Forbidden | `PATCH incident.state` | State modification rejected | HTTP 200 (State unchanged `1`) | **PASS** |
 | **DENY-02** | Forbidden | `PATCH incident.assigned_to` | Assignment modification rejected | HTTP 200 (Value unchanged) | **PASS** |
