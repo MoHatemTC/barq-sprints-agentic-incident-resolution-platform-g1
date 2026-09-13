@@ -20,9 +20,13 @@ from app.models.execution_log import (
 from app.models.incident import AIProcessingState, IncidentUpdatePayload
 
 pytestmark = pytest.mark.skipif(
-    not os.environ.get("SERVICENOW_TEST_INCIDENT_SYS_ID")
+    os.environ.get("SERVICENOW_LIVE_TESTS") != "1"
+    or not os.environ.get("SERVICENOW_TEST_INCIDENT_SYS_ID")
     or not os.environ.get("SERVICENOW_PASSWORD"),
-    reason="Live PDI credentials and test incident not configured",
+    reason=(
+        "Live PDI test — set SERVICENOW_LIVE_TESTS=1, SERVICENOW_TEST_INCIDENT_SYS_ID, "
+        "and real ServiceNow OAuth credentials (env or .env) to run"
+    ),
 )
 
 
