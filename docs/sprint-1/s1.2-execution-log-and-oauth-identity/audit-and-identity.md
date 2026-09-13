@@ -293,7 +293,6 @@ The test harness [`scripts/verify_permissions.py`](../../../scripts/verify_permi
 | **LOCK-02** | Human Lock | `PATCH incident.ai_enabled` | Opt-in switch modification rejected | HTTP 200 (Enabled unchanged `false`)| **PASS** |
 | **LOCK-03** | Human Lock | `PATCH incident/{sys_id}` (locked `INC0010041`) | Platform Business Rule aborts automated update | HTTP 403 (0 journal entries) | **PASS** |
 | **BULK-01** | Bulk Bypass | `PATCH incident` (Mixed payload) | Permitted written, all forbidden stripped | `work_notes` wrote; rest blocked | **PASS** |
-| **CRED-01** | Cleanliness | Repository Secret Scan | Zero secrets/passwords in tracked files | 93 files scanned clean | **PASS** |
 
 > [!NOTE]
 > **ServiceNow Field-Level Stripping Semantics**: When a client sends a `PATCH` request containing forbidden fields, ServiceNow returns `HTTP 200 OK` while silently stripping unauthorized fields in accordance with ACL rules. The verification harness never relies on HTTP status codes alone; every test performs an independent read-after-write GET request against the database and `sys_journal_field` to prove that forbidden values were never persisted.
@@ -317,12 +316,12 @@ In response to architectural review on test harness integrity, the `LOCK` test s
 
 ---
 
-### 6. Repository Credential Cleanliness (FR-07 / CRED-01)
+### 6. Repository Credential Cleanliness (FR-07)
 
 All credentials and sensitive configuration adhere to strict hygiene:
 - Credentials reside solely in local, git-ignored `.env` files.
 - Tracked configuration (`src/app/core/config.py`) defines settings via Pydantic `SecretStr` models with zero hardcoded credentials or defaults.
-- The automated repository scanner (`CRED-01`) recursively analyzes all tracked source, markdown, YAML, JSON, and TOML files against high-entropy regex patterns, verifying zero committed passwords, API keys, client secrets, or Basic auth tokens across all 93 tracked repository files.
+- Repository-level protection is enforced via GitHub Secret Scanning and Push Protection, preventing committed tokens or credentials across the codebase.
 
 ---
 

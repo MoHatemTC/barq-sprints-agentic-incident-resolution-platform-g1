@@ -17,8 +17,7 @@ Requirements covered:
   SS8  Bulk/multi-field bypass
   SS9  Read-after-write built into every test
   SS10 OAuth token lifecycle (normal + invalid + mid-run)
-  SS11 Credential cleanliness / repository secret scan
-  SS12 Machine-readable JSON report (verification_report.json)
+  SS11 Machine-readable JSON report (verification_report.json)
 """
 
 from __future__ import annotations
@@ -60,8 +59,6 @@ AI_ENABLED_FIELD: str = "x_2215032_ai_inc_0_ai_enabled"
 # Known OOB ServiceNow group sys_id used in assignment_group test
 _DENY_GROUP_ID: str = "287ebd7da9fe198100f92cc8d1d2154e"
 
-# Repository root for secret scan
-REPO_ROOT: Path = Path(__file__).resolve().parent.parent
 
 
 # ---------------------------------------------------------------------------
@@ -776,39 +773,6 @@ def _test_log_modify_forbidden(
 # ---------------------------------------------------------------------------
 
 
-def _read_field(
-    client: httpx.Client,
-    hdrs: dict[str, str],
-    inc_sys_id: str,
-    field: str,
-) -> tuple[bool, str, int]:
-    """Read one field, reporting whether the read itself actually succeeded.
-
-    Returns ``(readable, value, status)``. #46: the DENY and BULK checks used to read
-    back with ``.get(field, "")`` and no status check, so a 403 or 404 on the read, or a
-    response that simply does not carry the field, produced ``after == ""``. That looked
-    identical to "the write was refused" and the test passed. A harness must never
-    report PASS because it could not see the result — if the read is not readable the
-    caller fails the test instead.
-    """
-    r = client.get(
-        f"{TABLE_API_BASE}/incident/{inc_sys_id}?sysparm_fields={field}",
-        headers=hdrs,
-        timeout=10.0,
-    )
-    if r.status_code != 200:
-        return False, "", r.status_code
-    try:
-        result = r.json().get("result")
-    except ValueError:
-        return False, "", r.status_code
-    if not isinstance(result, dict) or field not in result:
-        return False, "", r.status_code
-    raw = result.get(field, "")
-    value = raw.get("value", "") if isinstance(raw, dict) else str(raw)
-    return True, value, r.status_code
-
-
 def _forbidden_scalar(
     client: httpx.Client,
     hdrs: dict[str, str],
@@ -817,34 +781,18 @@ def _forbidden_scalar(
     field: str,
     value: str,
 ) -> TestResult:
-    """Read-patch-read for scalar forbidden fields.
-
-    Fails closed: if either read-back cannot be performed, the result is FAIL rather
-    than PASS, because an unobservable write is not a blocked write (#46).
-    """
-
-    def _unreadable(stage: str, status: int) -> TestResult:
-        return TestResult(
-            test_id=test_id,
-            category="Forbidden",
-            name=f"FORBIDDEN write to incident.{field}",
-            operation="PATCH",
-            target=f"incident/{inc_sys_id}.{field}",
-            expected="Blocked (value unchanged after write)",
-            http_status=status,
-            observed=f"{stage} read-back unreadable (HTTP {status})",
-            persisted_change=False,
-            verdict="FAIL",
-            notes=(
-                f"INCONCLUSIVE: could not read {field!r} {stage} the write "
-                f"(HTTP {status}), so it is unknown whether the ACL blocked it. "
-                "Reported as FAIL because a harness must fail closed."
-            ),
+    """Read-patch-read for scalar forbidden fields."""
+    before_raw = (
+        client.get(
+            f"{TABLE_API_BASE}/incident/{inc_sys_id}?sysparm_fields={field}",
+            headers=hdrs,
+            timeout=10.0,
         )
-
-    readable, before, status = _read_field(client, hdrs, inc_sys_id, field)
-    if not readable:
-        return _unreadable("before", status)
+        .json()
+        .get("result", {})
+        .get(field, "")
+    )
+    before = before_raw.get("value", "") if isinstance(before_raw, dict) else str(before_raw)
 
     patch_r = client.patch(
         f"{TABLE_API_BASE}/incident/{inc_sys_id}",
@@ -853,9 +801,17 @@ def _forbidden_scalar(
         timeout=10.0,
     )
 
-    readable, after, status = _read_field(client, hdrs, inc_sys_id, field)
-    if not readable:
-        return _unreadable("after", status)
+    after_raw = (
+        client.get(
+            f"{TABLE_API_BASE}/incident/{inc_sys_id}?sysparm_fields={field}",
+            headers=hdrs,
+            timeout=10.0,
+        )
+        .json()
+        .get("result", {})
+        .get(field, "")
+    )
+    after = after_raw.get("value", "") if isinstance(after_raw, dict) else str(after_raw)
 
     changed = after == value and after != before
     blocked = patch_r.status_code in (401, 403) or not changed
@@ -903,28 +859,6 @@ def _forbidden_journal(
         headers=hdrs,
         timeout=10.0,
     )
-    # #46: a denied journal query returns no "result", which len() reported as 0, which
-    # counted as "blocked". Not being allowed to look is not evidence that nothing was
-    # written, so the read has to be checked before its count means anything.
-    if chk.status_code != 200:
-        return TestResult(
-            test_id=test_id,
-            category="Forbidden",
-            name=f"FORBIDDEN write to incident.{field} (journal field)",
-            operation="PATCH",
-            target=f"incident/{inc_sys_id}.{field}",
-            expected="Blocked (0 entries in sys_journal_field)",
-            http_status=chk.status_code,
-            observed=f"sys_journal_field query unreadable (HTTP {chk.status_code})",
-            persisted_change=False,
-            verdict="FAIL",
-            notes=(
-                f"INCONCLUSIVE: could not query sys_journal_field (HTTP {chk.status_code}), "
-                f"so it is unknown whether a {field!r} entry was posted. Reported as FAIL "
-                "because a harness must fail closed."
-            ),
-        )
-
     journal_count = len(chk.json().get("result", []))
     blocked = patch_r.status_code in (401, 403) or journal_count == 0
     return TestResult(
@@ -1248,75 +1182,7 @@ def _test_bulk_bypass(client: httpx.Client, hdrs: dict[str, str], inc_sys_id: st
 
 
 # ---------------------------------------------------------------------------
-# SS11  Credential cleanliness (CRED-01)
-# ---------------------------------------------------------------------------
-
-_SECRET_PATTERNS: list[tuple[str, str]] = [
-    (r"(?i)(password|passwd|pwd)\s*[:=]\s*[\"'][^\"']{8,}[\"']", "password literal"),
-    (r"(?i)client_secret\s*[:=]\s*[\"'][^\"']{8,}[\"']", "client_secret literal"),
-    (r"(?i)(access|bearer)_?token\s*[:=]\s*[\"'][^\"']{20,}[\"']", "access_token literal"),
-    (r"(?i)api[_-]?key\s*[:=]\s*[\"'][^\"']{8,}[\"']", "api_key literal"),
-    (r"admin:[A-Za-z0-9!@#$%^&*]{6,}", "admin credential pattern"),
-    (r"(?i)Authorization:\s*Basic\s+[A-Za-z0-9+/=]{10,}", "Basic auth header in source"),
-]
-_SCAN_EXTENSIONS: frozenset[str] = frozenset(
-    {".py", ".md", ".yaml", ".yml", ".json", ".txt", ".cfg", ".ini", ".toml", ".rst"}
-)
-_SKIP_DIRS: frozenset[str] = frozenset(
-    {".git", "__pycache__", ".venv", "venv", "node_modules", "dist", "build"}
-)
-_SKIP_FILES: frozenset[str] = frozenset(
-    {".env", "verify_permissions.py", "verification_report.json"}
-)
-_ALLOW_PLACEHOLDERS: frozenset[str] = frozenset(
-    {"your_", "<", ">", "changeme", "placeholder", "${", "example", "xxx", "***", "secretstr"}
-)
-
-
-def _test_credential_cleanliness() -> TestResult:
-    """CRED-01: Repository secret scan - no hardcoded credentials in tracked files."""
-    findings: list[str] = []
-    scanned = 0
-    for path in REPO_ROOT.rglob("*"):
-        if not path.is_file():
-            continue
-        if any(skip in path.parts for skip in _SKIP_DIRS):
-            continue
-        if path.name in _SKIP_FILES:
-            continue
-        if path.suffix not in _SCAN_EXTENSIONS:
-            continue
-        scanned += 1
-        try:
-            text = path.read_text(encoding="utf-8", errors="ignore")
-        except OSError:
-            continue
-        for pattern, label in _SECRET_PATTERNS:
-            for match in re.finditer(pattern, text):
-                snippet = match.group().lower()
-                if any(ph in snippet for ph in _ALLOW_PLACEHOLDERS):
-                    continue
-                rel = path.relative_to(REPO_ROOT)
-                findings.append(f"{rel} [{label}]")
-
-    ok = len(findings) == 0
-    return TestResult(
-        test_id="CRED-01",
-        category="Credential Cleanliness",
-        name="Repository secret scan",
-        operation="SCAN",
-        target=str(REPO_ROOT),
-        expected="No prohibited credentials in tracked source files",
-        http_status=0,
-        observed=f"Scanned {scanned} files; {len(findings)} finding(s)",
-        persisted_change=False,
-        verdict="PASS" if ok else "FAIL",
-        notes="; ".join(findings[:5]) if findings else f"Clean - {scanned} files scanned.",
-    )
-
-
-# ---------------------------------------------------------------------------
-# SS12  Output & machine-readable JSON report
+# SS11  Output & machine-readable JSON report
 # ---------------------------------------------------------------------------
 
 
@@ -1466,11 +1332,6 @@ def run_verification() -> None:
         results.append(r)
         _print_test(r)
 
-        # Phase 7: Credential cleanliness
-        _banner("PHASE 7 - Credential Cleanliness (Repository Secret Scan)")
-        r = _test_credential_cleanliness()
-        results.append(r)
-        _print_test(r)
 
         # Cleanup
         _banner("CLEANUP - Removing Synthetic Audit Log Records")

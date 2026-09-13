@@ -1,11 +1,11 @@
 {
   "sprint": "S1.2",
-  "generated_at": "2026-09-13T18:43:05.920166+00:00",
+  "generated_at": "2026-09-13T19:03:58.950672+00:00",
   "instance": "https://dev407364.service-now.com",
   "service_account": "ai_orchestrator_svc",
   "summary": {
-    "total": 26,
-    "passed": 26,
+    "total": 25,
+    "passed": 25,
     "failed": 0
   },
   "tests": [
@@ -134,10 +134,10 @@
       "target": "x_2215032_ai_inc_0_ai_execution_log",
       "expected": "201 Created + all required fields persisted",
       "http_status": 201,
-      "observed": "HTTP 201 (sys_id=fa2d057d4753cb10c148497f316d4347)",
+      "observed": "HTTP 201 (sys_id=89f1d5f54793cb10c148497f316d43f6)",
       "persisted_change": true,
       "verdict": "PASS",
-      "notes": "exec_id=exec_verify_a3e66b929e39 | sys_id=fa2d057d4753cb10c148497f316d4347"
+      "notes": "exec_id=exec_verify_8078e14007bb | sys_id=89f1d5f54793cb10c148497f316d43f6"
     },
     {
       "test_id": "LOG-02",
@@ -147,10 +147,10 @@
       "target": "x_2215032_ai_inc_0_ai_execution_log",
       "expected": "201 Created + all required fields persisted",
       "http_status": 201,
-      "observed": "HTTP 201 (sys_id=032d057d4753cb10c148497f316d434d)",
+      "observed": "HTTP 201 (sys_id=d9f1d5f54793cb10c148497f316d43fb)",
       "persisted_change": true,
       "verdict": "PASS",
-      "notes": "exec_id=exec_verify_8f92fecdcccb | sys_id=032d057d4753cb10c148497f316d434d"
+      "notes": "exec_id=exec_verify_2768884129bb | sys_id=d9f1d5f54793cb10c148497f316d43fb"
     },
     {
       "test_id": "LOG-03",
@@ -160,10 +160,10 @@
       "target": "x_2215032_ai_inc_0_ai_execution_log",
       "expected": "201 Created + all required fields persisted",
       "http_status": 201,
-      "observed": "HTTP 201 (sys_id=cb2d057d4753cb10c148497f316d439c)",
+      "observed": "HTTP 201 (sys_id=99f119f54793cb10c148497f316d4319)",
       "persisted_change": true,
       "verdict": "PASS",
-      "notes": "exec_id=exec_verify_7c99d3718bbd | sys_id=cb2d057d4753cb10c148497f316d439c"
+      "notes": "exec_id=exec_verify_2d28c6a636cd | sys_id=99f119f54793cb10c148497f316d4319"
     },
     {
       "test_id": "LOG-06",
@@ -173,10 +173,10 @@
       "target": "x_2215032_ai_inc_0_ai_execution_log",
       "expected": "201 Created + all required fields persisted",
       "http_status": 201,
-      "observed": "HTTP 201 (sys_id=132d057d4753cb10c148497f316d43a4)",
+      "observed": "HTTP 201 (sys_id=d9f119f54793cb10c148497f316d431e)",
       "persisted_change": true,
       "verdict": "PASS",
-      "notes": "exec_id=exec_verify_a0d2ffb6759e | sys_id=132d057d4753cb10c148497f316d43a4"
+      "notes": "exec_id=exec_verify_960e2c8ee782 | sys_id=d9f119f54793cb10c148497f316d431e"
     },
     {
       "test_id": "LOG-04",
@@ -189,14 +189,14 @@
       "observed": "HTTP 200 (1 record(s) found)",
       "persisted_change": false,
       "verdict": "PASS",
-      "notes": "exec_id='exec_idx_c0e91bda75c14f6d' -> sys_id=df2d057d4753cb10c148497f316d43c1"
+      "notes": "exec_id='exec_idx_ddba2503daa74647' -> sys_id=a5f119f54793cb10c148497f316d436e"
     },
     {
       "test_id": "LOG-05",
       "category": "Execution Log",
       "name": "Cannot delete execution log records (append-only)",
       "operation": "DELETE",
-      "target": "x_2215032_ai_inc_0_ai_execution_log/a32d057d4753cb10c148497f316d43c7",
+      "target": "x_2215032_ai_inc_0_ai_execution_log/e9f195f54793cb10c148497f316d43da",
       "expected": "403 or 404 (delete blocked)",
       "http_status": 403,
       "observed": "HTTP 403 (record_exists=True)",
@@ -209,7 +209,7 @@
       "category": "Execution Log",
       "name": "Cannot modify execution log records (append-only)",
       "operation": "PATCH",
-      "target": "x_2215032_ai_inc_0_ai_execution_log/f72d057d4753cb10c148497f316d43e7",
+      "target": "x_2215032_ai_inc_0_ai_execution_log/f5f119f54793cb10c148497f316d437c",
       "expected": "401/403 or write ignored (record immutable)",
       "http_status": 403,
       "observed": "HTTP 403 (modified=False)",
@@ -333,19 +333,6 @@
       "persisted_change": false,
       "verdict": "PASS",
       "notes": "work_notes persisted=yes | comments leaked=NO - blocked | state changed=NO - blocked | priority changed=NO - blocked"
-    },
-    {
-      "test_id": "CRED-01",
-      "category": "Credential Cleanliness",
-      "name": "Repository secret scan",
-      "operation": "SCAN",
-      "target": "D:\\spritns\\barq-sprints-agentic-incident-resolution-platform-g1",
-      "expected": "No prohibited credentials in tracked source files",
-      "http_status": 0,
-      "observed": "Scanned 119 files; 0 finding(s)",
-      "persisted_change": false,
-      "verdict": "PASS",
-      "notes": "Clean - 119 files scanned."
     }
   ]
 }
