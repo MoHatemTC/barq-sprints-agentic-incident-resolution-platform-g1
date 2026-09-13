@@ -43,12 +43,15 @@ KB_NAMESPACE = uuid.uuid5(uuid.NAMESPACE_DNS, "barq-g1-kb")
 
 
 def _get_default_collection_name() -> str:
-    try:
-        from app.core.config import get_retrieval_settings
+    """Resolve the configured collection name.
 
-        return get_retrieval_settings().qdrant_collection_name
-    except Exception:
-        return DEFAULT_COLLECTION_NAME
+    Settings errors propagate. This used to swallow any exception and fall back to
+    DEFAULT_COLLECTION_NAME, so a broken config silently ingested into a different
+    collection than the one configured. See #45.
+    """
+    from app.core.config import get_retrieval_settings
+
+    return get_retrieval_settings().qdrant_collection_name
 
 
 def build_point_id(article_id: str, chunk_index: int) -> str:
