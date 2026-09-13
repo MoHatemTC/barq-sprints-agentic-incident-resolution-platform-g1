@@ -39,6 +39,7 @@ def _incident_result(**overrides: object) -> dict:
         "category": "hardware",
         "subcategory": "disk",
         "active": "true",
+        f"{_SCOPE}_ai_human_lock": "false",
     }
     base.update(overrides)
     return base
@@ -863,6 +864,53 @@ class TestAPICredentialSafety:
 
         body_in_details = exc_info.value.details.get("body", "")
         assert len(body_in_details) <= 500
+
+
+class TestHumanLockFailsClosed:
+    async def test_missing_lock_field_blocks_update(self) -> None:
+        data = _incident_result()
+        del data[f"{_SCOPE}_ai_human_lock"]
+        resp = _api_response(result=data)
+        client, http, _ = _build_client(responses=[resp])
+
+        with pytest.raises(ServiceNowHumanLockError):
+            await client.update_incident("abc123", IncidentUpdatePayload(ai_confidence=0.9))
+        assert http.request.call_count == 1  # GET only, no PATCH
+
+    async def test_blank_lock_field_blocks_update(self) -> None:
+        resp = _api_response(result=_incident_result(**{f"{_SCOPE}_ai_human_lock": ""}))
+        client, http, _ = _build_client(responses=[resp])
+
+        with pytest.raises(ServiceNowHumanLockError):
+            await client.update_incident("abc123", IncidentUpdatePayload(ai_confidence=0.9))
+        assert http.request.call_count == 1
+
+    async def test_missing_lock_field_blocks_work_note(self) -> None:
+        data = _incident_result()
+        del data[f"{_SCOPE}_ai_human_lock"]
+        resp = _api_response(result=data)
+        client, http, _ = _build_client(responses=[resp])
+
+        with pytest.raises(ServiceNowHumanLockError):
+            await client.add_work_note("abc123", "note")
+        assert http.request.call_count == 1
+
+    async def test_unrecognised_lock_string_blocks_update(self) -> None:
+        for bad_value in ("garbage", "null", "undefined"):
+            resp = _api_response(result=_incident_result(**{f"{_SCOPE}_ai_human_lock": bad_value}))
+            client, http, _ = _build_client(responses=[resp])
+
+            with pytest.raises(ServiceNowHumanLockError):
+                await client.update_incident("abc123", IncidentUpdatePayload(ai_confidence=0.9))
+            assert http.request.call_count == 1
+
+    async def test_blank_lock_field_blocks_work_note(self) -> None:
+        resp = _api_response(result=_incident_result(**{f"{_SCOPE}_ai_human_lock": ""}))
+        client, http, _ = _build_client(responses=[resp])
+
+        with pytest.raises(ServiceNowHumanLockError):
+            await client.add_work_note("abc123", "note")
+        assert http.request.call_count == 1
 
 
 class TestHumanLockSafety:

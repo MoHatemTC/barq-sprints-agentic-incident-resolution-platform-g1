@@ -91,10 +91,16 @@ class ServiceNowClient:
     ) -> Incident:
         current_incident = await self.get_incident(sys_id)
 
-        if current_incident.ai_human_lock:
+        if current_incident.ai_human_lock is not False:
+            state = current_incident.ai_human_lock
+            reason = (
+                "is locked for human review"
+                if state is True
+                else "has an unknown/unconfirmed lock state"
+            )
             raise ServiceNowHumanLockError(
-                f"Incident {sys_id} is locked for human review and cannot be updated by the agent",
-                details={"sys_id": sys_id},
+                f"Incident {sys_id} {reason} and cannot be updated by the agent",
+                details={"sys_id": sys_id, "ai_human_lock": state},
             )
 
         body = payload.to_table_api_body()
@@ -117,10 +123,16 @@ class ServiceNowClient:
 
     async def add_work_note(self, sys_id: str, note: str) -> Incident:
         current_incident = await self.get_incident(sys_id)
-        if current_incident.ai_human_lock:
+        if current_incident.ai_human_lock is not False:
+            state = current_incident.ai_human_lock
+            reason = (
+                "is locked for human review"
+                if state is True
+                else "has an unknown/unconfirmed lock state"
+            )
             raise ServiceNowHumanLockError(
-                f"Incident {sys_id} is locked for human review and cannot be updated by the agent",
-                details={"sys_id": sys_id},
+                f"Incident {sys_id} {reason} and cannot be updated by the agent",
+                details={"sys_id": sys_id, "ai_human_lock": state},
             )
 
         body = WorkNoteUpdate(note=note).to_table_api_body()

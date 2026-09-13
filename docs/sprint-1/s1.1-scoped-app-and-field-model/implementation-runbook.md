@@ -33,9 +33,12 @@ The schema is source-controlled under `servicenow/ai_incident_orchestrator/sdk-a
 1. Install Node.js 20 or newer.
 2. From `servicenow/ai_incident_orchestrator/sdk-app/`, run `npm ci`.
 3. Add a local SDK credential alias with `npx now-sdk auth --add <instance-url> --alias barq-pdi`. Credentials stay in the operating-system credential manager and must never be committed.
-4. Run `npm run build`.
-5. Run `npm run deploy -- --auth barq-pdi`.
-6. Verify the fields on Incident and confirm their `sys_scope` and `sys_package` both reference AI Incident Orchestrator.
+4. Run `npx now-sdk build --frozenKeys` — not a bare `npm run build`. `--frozenKeys` makes the SDK refuse to rewrite `src/fluent/generated/keys.ts`, which is the file that binds this source to the record sys_ids already live on the PDIs.
+5. Confirm the build changed nothing before deploying: `git status --porcelain` must be empty. If `keys.ts` is modified, **stop** — the build has re-minted sys_ids and step 6 would replace the Processing State choices on the target instance instead of updating them. That is what `@servicenow/sdk` 4.11.2 does; the pin at 4.8.0 is deliberate. See #54.
+
+   **If the build reports `Keys file is out-of-date`, stop — do not follow the SDK's advice to rebuild without `--frozenKeys`.** That is precisely the step that re-mints the sys_ids. On Windows the usual cause is line endings: Git for Windows defaults to `core.autocrlf=true`, and a CRLF checkout changes the bytes the SDK hashes. `.gitattributes` marks `servicenow/**` as `-text` to prevent that, so first confirm you have it and that `git status` is clean; re-clone if the file was already converted.
+6. Run `npm run deploy -- --auth barq-pdi`.
+7. Verify the fields on Incident and confirm their `sys_scope` and `sys_package` both reference AI Incident Orchestrator.
 
 The source of truth is split into three files:
 
@@ -107,11 +110,12 @@ Store screenshots under `docs/sprint-1/s1.1-scoped-app-and-field-model/screensho
 
 1. Review the working update set's Customer Updates.
 2. Check that the dictionary entries, choices, form/view records, validation rule, and application metadata are present.
-3. Publish **AI Incident Orchestrator** to an update set if the PDI provides that action; this captures the complete current application version.
-4. Set the final update set to Complete.
-5. Use **Export to XML**.
-6. Save it as `servicenow/ai_incident_orchestrator/ai_incident_orchestrator_s1_1.xml`.
-7. Never hand-edit the exported XML.
+3. **Check for `Cross scope privilege` records, and treat every one as a defect until justified.** With `runtime_access_tracking=permissive` the platform grants access to Global APIs and tables automatically and records a `sys_scope_privilege` instead of refusing, so these accumulate silently from anything run in the scope — including background scripts used while testing. For each one, name the shipped script that needs it in `field-model.md`; if no shipped script needs it, delete it and re-export. See #56.
+4. Publish **AI Incident Orchestrator** to an update set if the PDI provides that action; this captures the complete current application version.
+5. Set the final update set to Complete.
+6. Use **Export to XML**.
+7. Save it as `servicenow/ai_incident_orchestrator/ai_incident_orchestrator_s1_1.xml`.
+8. Never hand-edit the exported XML.
 
 ## 9. Verify on a secondary PDI
 
