@@ -42,6 +42,44 @@ class SecurityLevel(StrEnum):
     RESTRICTED = "restricted"
 
 
+class Classification(StrEnum):
+    """AI Classification labels from the S1.1 field contract (`field-model.md`).
+
+    These are the values the classifier may write to
+    ``x_2215032_ai_inc_0_ai_classification``. The field is a String(100) rather than a
+    choice list precisely so S1.4 could refine the taxonomy — but the refinement has to
+    be recorded somewhere, which is what this enum and the mapping below are for (#70).
+    """
+
+    HARDWARE = "hardware"
+    SOFTWARE = "software"
+    NETWORK = "network"
+    ACCESS = "access"
+    SECURITY = "security"
+    OTHER = "other"
+
+
+#: The corpus uses its own category words. Without an explicit mapping, Sprint 2
+#: filtering of retrieval by classification would silently return nothing for any
+#: incident the classifier labelled `access` — the corpus calls those `inquiry`.
+#: Keyed by corpus category, valued by the classification label it satisfies.
+CORPUS_CATEGORY_TO_CLASSIFICATION: dict[str, Classification] = {
+    "hardware": Classification.HARDWARE,
+    "software": Classification.SOFTWARE,
+    "network": Classification.NETWORK,
+    # KB0005 (account lockout) and KB0006 (MFA after a lost device) are both `identity`
+    # service articles. A classifier seeing those incidents would label them `access`.
+    "inquiry": Classification.ACCESS,
+}
+
+#: Labels with no corpus article behind them today. Listing them is deliberate: a
+#: classifier may still emit them, and retrieval will return nothing, which is a gap to
+#: close with corpus content rather than a bug in the mapping.
+CLASSIFICATIONS_WITHOUT_CORPUS_COVERAGE: frozenset[Classification] = frozenset(
+    {Classification.SECURITY, Classification.OTHER}
+)
+
+
 class Article(BaseModel):
     """Canonical model for extracted knowledge base articles.
 

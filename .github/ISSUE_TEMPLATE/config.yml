@@ -1,5 +1,8 @@
 blank_issues_enabled: true
 contact_links:
+  - name: Report a vulnerability privately
+    url: https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/security/advisories/new
+    about: Exposed credentials or exploitable issues. Do not open a public issue.
   - name: Sprint deliverables and technical questions
     url: https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/blob/main/docs/README.md
     about: Field dictionary, verification records and sprint documentation

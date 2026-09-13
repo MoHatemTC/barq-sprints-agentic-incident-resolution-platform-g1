@@ -15,12 +15,12 @@ The ``sys_choice_set`` *container* record is deliberately not compared: the buil
 its own id for it and the export carries the one the instance created. Only the five
 ``sys_choice`` rows ship the values scripts depend on.
 
-The 13 ``sys_dictionary`` records are compared on ``internal_type``, ``max_length`` and
-``default_value`` rather than on sys_id, because the build mints its own dictionary ids
-while the export carries the instance's. Attributes are what matters: at 4.11.2 the
-build blanks ``max_length`` on 7 of the 13 fields without touching ``keys.ts`` or the
-choices, so a future SDK could regress field definitions while passing every other
-check here.
+The 14 ``sys_dictionary`` records across the S1.1 and S1.3 exports are compared on
+``internal_type``, ``max_length`` and ``default_value`` rather than on sys_id, because
+the build mints its own dictionary ids while the exports carry the instance's.
+Attributes are what matters: at 4.11.2 the build blanks ``max_length`` on 7 of the
+original 13 fields without touching ``keys.ts`` or the choices, so a future SDK could
+regress field definitions while passing every other check here.
 """
 
 from __future__ import annotations
@@ -42,7 +42,12 @@ BUILT_CANDIDATES = (
     SDK_APP / "dist" / "app" / "update" / CHOICE_FILE,
     SDK_APP / "dist" / "app" / "author_elective_update" / CHOICE_FILE,
 )
-EXPORT = REPO / "servicenow" / "ai_incident_orchestrator" / "ai_incident_orchestrator_s1_1.xml"
+EXPORT_DIR = REPO / "servicenow" / "ai_incident_orchestrator"
+CHOICE_EXPORT = EXPORT_DIR / "ai_incident_orchestrator_s1_1.xml"
+FIELD_EXPORTS = (
+    CHOICE_EXPORT,
+    EXPORT_DIR / "ai_incident_orchestrator_s1_3.xml",
+)
 
 
 def _choices(root: ET.Element) -> dict[str, str]:
@@ -95,21 +100,22 @@ def _built_fields() -> dict[str, tuple[str, ...]]:
     return found
 
 
-def _exported_fields(path: Path) -> dict[str, tuple[str, ...]]:
+def _exported_fields(paths: tuple[Path, ...]) -> dict[str, tuple[str, ...]]:
     found: dict[str, tuple[str, ...]] = {}
-    for update in ET.parse(path).getroot().findall("sys_update_xml"):
-        if (update.findtext("type") or "") != "Dictionary":
-            continue
-        found.update(_fields(ET.fromstring(update.findtext("payload") or "")))
+    for path in paths:
+        for update in ET.parse(path).getroot().findall("sys_update_xml"):
+            if (update.findtext("type") or "") != "Dictionary":
+                continue
+            found.update(_fields(ET.fromstring(update.findtext("payload") or "")))
     return found
 
 
 def _check_fields() -> int:
     built = _built_fields()
-    exported = _exported_fields(EXPORT)
+    exported = _exported_fields(FIELD_EXPORTS)
 
     if not exported:
-        print("::error::no sys_dictionary records found in the exported update set")
+        print("::error::no sys_dictionary records found in the exported update sets")
         return 1
     if built == exported:
         print(f"\n{len(built)} field definitions match the exported update set:")
@@ -141,10 +147,10 @@ def main() -> int:
 
     print(f"built file: {built_path.relative_to(REPO)}")
     built = _choices(ET.parse(built_path).getroot())
-    exported = _from_export(EXPORT)
+    exported = _from_export(CHOICE_EXPORT)
 
     if not exported:
-        print(f"::error::no choice records for {ELEMENT} found in {EXPORT.name}")
+        print(f"::error::no choice records for {ELEMENT} found in {CHOICE_EXPORT.name}")
         return 1
 
     if built == exported:

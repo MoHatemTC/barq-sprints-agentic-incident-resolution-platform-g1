@@ -12,31 +12,56 @@ import structlog
 from pydantic import BaseModel, ConfigDict, ValidationError
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
+    Condition,
     FieldCondition,
     Filter,
     Fusion,
     FusionQuery,
+    MatchAny,
     MatchValue,
     Prefetch,
     SparseVector,
 )
 
 from app.clients.qdrant import DENSE_VECTOR_NAME, SPARSE_VECTOR_NAME
-from app.models.knowledge import KnowledgePayload
+from app.models.knowledge import KnowledgePayload, SecurityLevel
 from app.retrieval.embedding import EmbeddingEngine, FastEmbedEngine
 
 logger = structlog.get_logger(__name__)
 
 DEFAULT_COLLECTION_NAME = "incident_knowledge_base"
 
+#: Increasing sensitivity. An audience cleared for a level may read every level at or
+#: below it.
+SECURITY_LEVEL_ORDER: tuple[SecurityLevel, ...] = (
+    SecurityLevel.PUBLIC,
+    SecurityLevel.INTERNAL,
+    SecurityLevel.RESTRICTED,
+)
+
+#: Safe default: callers get non-restricted content unless they ask for more. 5 of the
+#: 11 corpus records are ``restricted``, and before #45 every one of them was returned
+#: to every caller.
+DEFAULT_MAX_SECURITY_LEVEL = SecurityLevel.INTERNAL
+
 
 def _get_default_collection_name() -> str:
-    try:
-        from app.core.config import get_retrieval_settings
+    """Resolve the configured collection name.
 
-        return get_retrieval_settings().qdrant_collection_name
-    except Exception:
-        return DEFAULT_COLLECTION_NAME
+    Settings errors propagate. This used to fall back to DEFAULT_COLLECTION_NAME on any
+    exception, so an unrelated bad setting (an invalid QDRANT_HTTP_PORT, say) silently
+    redirected retrieval from the configured collection to ``incident_knowledge_base``.
+    A broken config must stop the run, not quietly search somewhere else. See #45.
+    """
+    from app.core.config import get_retrieval_settings
+
+    return get_retrieval_settings().qdrant_collection_name
+
+
+def _allowed_security_levels(max_level: SecurityLevel) -> list[str]:
+    """Every level at or below ``max_level``, as payload strings."""
+    cutoff = SECURITY_LEVEL_ORDER.index(max_level)
+    return [level.value for level in SECURITY_LEVEL_ORDER[: cutoff + 1]]
 
 
 class RetrievalHit(BaseModel):
@@ -61,27 +86,43 @@ class RetrievalHit(BaseModel):
     chunk_index: int  # 0-indexed position within article
     chunk_text: str  # Chunk content text
     workflow_state: str  # Always "published" for hits returned by retrieve_knowledge
+    security_level: str  # Audience tier: "public", "internal" or "restricted"
     category: str  # Knowledge category, e.g. "database", "network"
     service: str | None = None  # Affected service name, e.g. "postgres", "redis"
 
 
-def _build_filter(extra: Filter | None = None) -> Filter:
-    """Build the retrieval filter, unconditionally requiring published workflow_state.
+def _build_filter(
+    extra: Filter | None = None,
+    max_security_level: SecurityLevel = DEFAULT_MAX_SECURITY_LEVEL,
+) -> Filter:
+    """Build the retrieval filter, requiring published state and an allowed audience.
 
-    `workflow_state == 'published'` is non-negotiable and enforced at the entry point.
-    Callers may only supply additional narrowing criteria (via `extra`).
-    If `extra` is provided, it is wrapped within a parent `must` list:
-        Filter(must=[published_condition, extra])
-    This preserves any caller-specified `should` or `must_not` clauses, and guarantees
-    that a caller demanding an incompatible state (e.g. `retired`) safely returns 0 hits.
+    Two conditions are non-negotiable and enforced at the entry point:
+
+    - `workflow_state == 'published'` — retired and draft articles never returned.
+    - `security_level` within `max_security_level` — restricted content is excluded
+      unless the caller explicitly asks for it (#45).
+
+    Callers may only supply additional narrowing criteria (via `extra`). If `extra` is
+    provided, it is wrapped within a parent `must` list, which preserves any
+    caller-specified `should` or `must_not` clauses and guarantees that a caller
+    demanding an incompatible value (e.g. `retired`) safely returns 0 hits.
     """
-    published_condition = FieldCondition(
-        key="workflow_state",
-        match=MatchValue(value="published"),
-    )
+    # Typed as the union Filter accepts: `must` is invariant, so a bare
+    # list[FieldCondition] is rejected once `extra` (a Filter) joins the list.
+    mandatory: list[Condition] = [
+        FieldCondition(
+            key="workflow_state",
+            match=MatchValue(value="published"),
+        ),
+        FieldCondition(
+            key="security_level",
+            match=MatchAny(any=_allowed_security_levels(max_security_level)),
+        ),
+    ]
     if extra is None:
-        return Filter(must=[published_condition])
-    return Filter(must=[published_condition, extra])
+        return Filter(must=mandatory)
+    return Filter(must=[*mandatory, extra])
 
 
 def retrieve_knowledge(
@@ -91,6 +132,7 @@ def retrieve_knowledge(
     collection_name: str | None = None,
     limit: int = 5,
     extra_filter: Filter | None = None,
+    max_security_level: SecurityLevel = DEFAULT_MAX_SECURITY_LEVEL,
     engine: EmbeddingEngine | None = None,
 ) -> list[RetrievalHit]:
     """Retrieve top knowledge chunks using hybrid dense+sparse search and RRF fusion.
@@ -103,8 +145,12 @@ def retrieve_knowledge(
         collection_name: Target collection. If None, resolves from RetrievalSettings.
             Production callers should leave this as None to use the configured collection.
         limit: Maximum number of final fused hits to return (top_k).
-        extra_filter: Optional Qdrant Filter to further narrow results (e.g. by service,
-            category, or security level). Cannot bypass the mandatory published filter.
+        extra_filter: Optional Qdrant Filter to further narrow results (e.g. by service
+            or category). Cannot bypass the mandatory published or security filters.
+        max_security_level: Highest audience tier the caller is cleared for. Defaults to
+            `SecurityLevel.INTERNAL`, so `restricted` articles are excluded unless a
+            caller explicitly opts in. Pass `SecurityLevel.RESTRICTED` only for callers
+            actually cleared for it.
         engine: Embedding engine used to vectorize the query into dense and sparse vectors.
             If None, instantiates a new FastEmbedEngine. NOTE: Initializing FastEmbedEngine
             loads model weights from disk and is expensive; production callers should
@@ -125,7 +171,7 @@ def retrieve_knowledge(
     if engine is None:
         engine = FastEmbedEngine()
 
-    search_filter = _build_filter(extra_filter)
+    search_filter = _build_filter(extra_filter, max_security_level)
     prefetch_limit = max(limit * 4, 20)
 
     embedded = engine.embed_query(query)
@@ -182,6 +228,7 @@ def retrieve_knowledge(
                 chunk_index=validated.chunk_index,
                 chunk_text=validated.chunk_text,
                 workflow_state=validated.workflow_state.value,
+                security_level=validated.security_level.value,
                 category=validated.category,
                 service=validated.service,
             )

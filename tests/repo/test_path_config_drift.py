@@ -26,11 +26,6 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 #: Patterns that intentionally match nothing yet, with the reason.
 #: Remove the entry in the PR that creates the path.
 PLANNED: dict[str, str] = {
-    # Arrive with open pull requests. Drop the entry in the PR that lands the path.
-    "scripts/verification_report.json": "lands with the S1.2 rework, PR #32",
-    "servicenow/ai_incident_orchestrator/ai_incident_orchestrator_s1_3.xml": (
-        "lands with S1.3, PR #30"
-    ),
     # Dead rule; removed in PR #61. Drop this entry once that merges.
     "/servicenow/ai_incident_orchestrator/business_rules/": (
         "dead CODEOWNERS rule, removed in PR #61"
@@ -64,20 +59,36 @@ def _matches(pattern: str, files: list[str]) -> bool:
     return any(f == p or f.startswith(p.rstrip("/") + "/") for f in files)
 
 
+def _planned_reason(pattern: str) -> str | None:
+    """Look up a PLANNED entry, ignoring a leading slash.
+
+    CODEOWNERS anchors with a leading slash (``/servicenow/...``) while labeler globs and
+    the PLANNED keys do not. Matching the raw strings meant an exemption written one way
+    silently failed to cover the same path written the other, which is how #61's
+    CODEOWNERS entry for the S1.3 update set slipped past its own exemption.
+    """
+    key = pattern.strip().lstrip("/")
+    for planned, reason in PLANNED.items():
+        if planned.strip().lstrip("/") == key:
+            return reason
+    return None
+
+
 def _resolve_planned(pattern: str, files: list[str]) -> None:
     """Skip a still-pending exemption; fail once the path it waited for exists.
 
     This is what makes the exemption temporary. A ``PLANNED`` entry that outlives the
     PR it names would silently exempt a live path forever.
     """
-    if pattern not in PLANNED:
+    reason = _planned_reason(pattern)
+    if reason is None:
         return
     if _matches(pattern, files):
         pytest.fail(
             f"{pattern!r} now matches a tracked file, so its PLANNED exemption is stale "
-            f"({PLANNED[pattern]}). Delete the entry from PLANNED in this test."
+            f"({reason}). Delete the entry from PLANNED in this test."
         )
-    pytest.skip(f"planned path: {PLANNED[pattern]}")
+    pytest.skip(f"planned path: {reason}")
 
 
 def _labeler_patterns() -> list[tuple[str, str]]:
