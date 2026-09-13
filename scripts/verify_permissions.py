@@ -59,7 +59,6 @@ AI_ENABLED_FIELD: str = "x_2215032_ai_inc_0_ai_enabled"
 _DENY_GROUP_ID: str = "287ebd7da9fe198100f92cc8d1d2154e"
 
 
-
 # ---------------------------------------------------------------------------
 # Data model
 # ---------------------------------------------------------------------------
@@ -772,6 +771,39 @@ def _test_log_modify_forbidden(
 # ---------------------------------------------------------------------------
 
 
+def _read_field(
+    client: httpx.Client,
+    hdrs: dict[str, str],
+    inc_sys_id: str,
+    field: str,
+) -> tuple[bool, str, int]:
+    """Read one field, reporting whether the read itself actually succeeded.
+
+    Returns ``(readable, value, status)``. #46: the DENY and BULK checks used to read
+    back with ``.get(field, "")`` and no status check, so a 403 or 404 on the read, or a
+    response that simply does not carry the field, produced ``after == ""``. That looked
+    identical to "the write was refused" and the test passed. A harness must never
+    report PASS because it could not see the result — if the read is not readable the
+    caller fails the test instead.
+    """
+    r = client.get(
+        f"{TABLE_API_BASE}/incident/{inc_sys_id}?sysparm_fields={field}",
+        headers=hdrs,
+        timeout=10.0,
+    )
+    if r.status_code != 200:
+        return False, "", r.status_code
+    try:
+        result = r.json().get("result")
+    except ValueError:
+        return False, "", r.status_code
+    if not isinstance(result, dict) or field not in result:
+        return False, "", r.status_code
+    raw = result.get(field, "")
+    value = raw.get("value", "") if isinstance(raw, dict) else str(raw)
+    return True, value, r.status_code
+
+
 def _forbidden_scalar(
     client: httpx.Client,
     hdrs: dict[str, str],
@@ -780,18 +812,34 @@ def _forbidden_scalar(
     field: str,
     value: str,
 ) -> TestResult:
-    """Read-patch-read for scalar forbidden fields."""
-    before_raw = (
-        client.get(
-            f"{TABLE_API_BASE}/incident/{inc_sys_id}?sysparm_fields={field}",
-            headers=hdrs,
-            timeout=10.0,
+    """Read-patch-read for scalar forbidden fields.
+
+    Fails closed: if either read-back cannot be performed, the result is FAIL rather
+    than PASS, because an unobservable write is not a blocked write (#46).
+    """
+
+    def _unreadable(stage: str, status: int) -> TestResult:
+        return TestResult(
+            test_id=test_id,
+            category="Forbidden",
+            name=f"FORBIDDEN write to incident.{field}",
+            operation="PATCH",
+            target=f"incident/{inc_sys_id}.{field}",
+            expected="Blocked (value unchanged after write)",
+            http_status=status,
+            observed=f"{stage} read-back unreadable (HTTP {status})",
+            persisted_change=False,
+            verdict="FAIL",
+            notes=(
+                f"INCONCLUSIVE: could not read {field!r} {stage} the write "
+                f"(HTTP {status}), so it is unknown whether the ACL blocked it. "
+                "Reported as FAIL because a harness must fail closed."
+            ),
         )
-        .json()
-        .get("result", {})
-        .get(field, "")
-    )
-    before = before_raw.get("value", "") if isinstance(before_raw, dict) else str(before_raw)
+
+    readable, before, status = _read_field(client, hdrs, inc_sys_id, field)
+    if not readable:
+        return _unreadable("before", status)
 
     patch_r = client.patch(
         f"{TABLE_API_BASE}/incident/{inc_sys_id}",
@@ -800,17 +848,9 @@ def _forbidden_scalar(
         timeout=10.0,
     )
 
-    after_raw = (
-        client.get(
-            f"{TABLE_API_BASE}/incident/{inc_sys_id}?sysparm_fields={field}",
-            headers=hdrs,
-            timeout=10.0,
-        )
-        .json()
-        .get("result", {})
-        .get(field, "")
-    )
-    after = after_raw.get("value", "") if isinstance(after_raw, dict) else str(after_raw)
+    readable, after, status = _read_field(client, hdrs, inc_sys_id, field)
+    if not readable:
+        return _unreadable("after", status)
 
     changed = after == value and after != before
     blocked = patch_r.status_code in (401, 403) or not changed
@@ -858,6 +898,28 @@ def _forbidden_journal(
         headers=hdrs,
         timeout=10.0,
     )
+    # #46: a denied journal query returns no "result", which len() reported as 0, which
+    # counted as "blocked". Not being allowed to look is not evidence that nothing was
+    # written, so the read has to be checked before its count means anything.
+    if chk.status_code != 200:
+        return TestResult(
+            test_id=test_id,
+            category="Forbidden",
+            name=f"FORBIDDEN write to incident.{field} (journal field)",
+            operation="PATCH",
+            target=f"incident/{inc_sys_id}.{field}",
+            expected="Blocked (0 entries in sys_journal_field)",
+            http_status=chk.status_code,
+            observed=f"sys_journal_field query unreadable (HTTP {chk.status_code})",
+            persisted_change=False,
+            verdict="FAIL",
+            notes=(
+                f"INCONCLUSIVE: could not query sys_journal_field (HTTP {chk.status_code}), "
+                f"so it is unknown whether a {field!r} entry was posted. Reported as FAIL "
+                "because a harness must fail closed."
+            ),
+        )
+
     journal_count = len(chk.json().get("result", []))
     blocked = patch_r.status_code in (401, 403) or journal_count == 0
     return TestResult(
@@ -1330,7 +1392,6 @@ def run_verification() -> None:
         r = _test_bulk_bypass(client, hdrs, inc_sys_id)
         results.append(r)
         _print_test(r)
-
 
         # Cleanup
         _banner("CLEANUP - Removing Synthetic Audit Log Records")
