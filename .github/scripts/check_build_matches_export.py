@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check the SDK build still reproduces the exported update set's choice records.
+"""Check the SDK build still reproduces the exported update set.
 
 Issue #54. ``ai_incident_orchestrator_s1_1.xml`` is the authoritative artifact: it is
 what was imported and committed on dev434590 and dev204871 (39 records, 0 collisions).
@@ -14,6 +14,13 @@ in step, whatever the pinned version happens to be.
 The ``sys_choice_set`` *container* record is deliberately not compared: the build emits
 its own id for it and the export carries the one the instance created. Only the five
 ``sys_choice`` rows ship the values scripts depend on.
+
+The 13 ``sys_dictionary`` records are compared on ``internal_type``, ``max_length`` and
+``default_value`` rather than on sys_id, because the build mints its own dictionary ids
+while the export carries the instance's. Attributes are what matters: at 4.11.2 the
+build blanks ``max_length`` on 7 of the 13 fields without touching ``keys.ts`` or the
+choices, so a future SDK could regress field definitions while passing every other
+check here.
 """
 
 from __future__ import annotations
@@ -64,6 +71,67 @@ def _from_export(path: Path) -> dict[str, str]:
     return {}
 
 
+# Field attributes that change what the column actually is. sys_id is deliberately
+# excluded: the build mints its own, the export carries the instance's.
+DICT_ATTRS = ("internal_type", "max_length", "default_value")
+
+
+def _fields(root: ET.Element) -> dict[str, tuple[str, ...]]:
+    """Map element name -> the attributes of its sys_dictionary record."""
+    found: dict[str, tuple[str, ...]] = {}
+    for node in root.iter("sys_dictionary"):
+        element = node.findtext("element") or node.get("element") or ""
+        if not element.startswith("x_2215032_ai_inc_0_ai_"):
+            continue
+        found[element] = tuple((node.findtext(a) or "").strip() for a in DICT_ATTRS)
+    return found
+
+
+def _built_fields() -> dict[str, tuple[str, ...]]:
+    found: dict[str, tuple[str, ...]] = {}
+    for parent in {p.parent for p in BUILT_CANDIDATES}:
+        for path in sorted(parent.glob(f"sys_dictionary_{TABLE}_*.xml")):
+            found.update(_fields(ET.parse(path).getroot()))
+    return found
+
+
+def _exported_fields(path: Path) -> dict[str, tuple[str, ...]]:
+    found: dict[str, tuple[str, ...]] = {}
+    for update in ET.parse(path).getroot().findall("sys_update_xml"):
+        if (update.findtext("type") or "") != "Dictionary":
+            continue
+        found.update(_fields(ET.fromstring(update.findtext("payload") or "")))
+    return found
+
+
+def _check_fields() -> int:
+    built = _built_fields()
+    exported = _exported_fields(EXPORT)
+
+    if not exported:
+        print("::error::no sys_dictionary records found in the exported update set")
+        return 1
+    if built == exported:
+        print(f"\n{len(built)} field definitions match the exported update set:")
+        for element in sorted(built):
+            kind, length, default = built[element]
+            shown = f"default={default!r}" if default else ""
+            print(f"  ok  {element:<45} {kind:<16} max_length={length:<5} {shown}")
+        return 0
+
+    print("::error::the built field definitions no longer match the exported update set")
+    for element in sorted(exported.keys() - built.keys()):
+        print(f"  missing from build : {element}")
+    for element in sorted(built.keys() - exported.keys()):
+        print(f"  extra in build     : {element}")
+    for element in sorted(built.keys() & exported.keys()):
+        if built[element] != exported[element]:
+            for attr, was, now in zip(DICT_ATTRS, exported[element], built[element], strict=True):
+                if was != now:
+                    print(f"  {element} {attr}: {was!r} -> {now!r}")
+    return 1
+
+
 def main() -> int:
     built_path = next((p for p in BUILT_CANDIDATES if p.exists()), None)
     if built_path is None:
@@ -83,7 +151,7 @@ def main() -> int:
         print(f"{len(built)} choice records match the exported update set:")
         for sys_id, value in sorted(built.items(), key=lambda kv: kv[1]):
             print(f"  ok  {value:<18} {sys_id}")
-        return 0
+        return _check_fields()
 
     print("::error::the SDK build no longer reproduces the exported update set")
     for sys_id in sorted(exported.keys() - built.keys()):

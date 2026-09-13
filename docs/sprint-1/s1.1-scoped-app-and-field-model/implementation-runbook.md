@@ -35,6 +35,8 @@ The schema is source-controlled under `servicenow/ai_incident_orchestrator/sdk-a
 3. Add a local SDK credential alias with `npx now-sdk auth --add <instance-url> --alias barq-pdi`. Credentials stay in the operating-system credential manager and must never be committed.
 4. Run `npx now-sdk build --frozenKeys` — not a bare `npm run build`. `--frozenKeys` makes the SDK refuse to rewrite `src/fluent/generated/keys.ts`, which is the file that binds this source to the record sys_ids already live on the PDIs.
 5. Confirm the build changed nothing before deploying: `git status --porcelain` must be empty. If `keys.ts` is modified, **stop** — the build has re-minted sys_ids and step 6 would replace the Processing State choices on the target instance instead of updating them. That is what `@servicenow/sdk` 4.11.2 does; the pin at 4.8.0 is deliberate. See #54.
+
+   **If the build reports `Keys file is out-of-date`, stop — do not follow the SDK's advice to rebuild without `--frozenKeys`.** That is precisely the step that re-mints the sys_ids. On Windows the usual cause is line endings: Git for Windows defaults to `core.autocrlf=true`, and a CRLF checkout changes the bytes the SDK hashes. `.gitattributes` marks `servicenow/**` as `-text` to prevent that, so first confirm you have it and that `git status` is clean; re-clone if the file was already converted.
 6. Run `npm run deploy -- --auth barq-pdi`.
 7. Verify the fields on Incident and confirm their `sys_scope` and `sys_package` both reference AI Incident Orchestrator.
 
