@@ -189,20 +189,11 @@ class ServiceNowKBClient:
 
     def sync_version(self, kb_version_sys_id: str, version_str: str) -> None:
         """Synchronize the linked kb_version record to match the canonical version."""
-        try:
-            self.request(
-                "PATCH",
-                f"/api/now/table/kb_version/{kb_version_sys_id}",
-                json={"version": version_str},
-            )
-        except (ServiceNowAuthError, ServiceNowAccessError):
-            raise
-        except Exception as exc:
-            logger.warning(
-                "sync_version_failed",
-                kb_version_sys_id=kb_version_sys_id,
-                error=str(exc),
-            )
+        self.request(
+            "PATCH",
+            f"/api/now/table/kb_version/{kb_version_sys_id}",
+            json={"version": version_str},
+        )
 
     # -------------------------------------------------------------------------
     # Provisioning & Preflight Delegations
