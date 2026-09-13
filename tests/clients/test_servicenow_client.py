@@ -329,6 +329,43 @@ class TestFindIncidentByNumber:
         assert params["sysparm_query"] == "number=INC0010001"
         assert params["sysparm_limit"] == 2
 
+    async def test_rejects_injection_attempt_no_request_sent(self) -> None:
+        client, http, _ = _build_client()
+
+        with pytest.raises(ValueError, match="Invalid incident number format"):
+            await client.find_incident_by_number("INC_NOPE^NQsys_id=abc123")
+
+        http.request.assert_not_called()
+
+    async def test_rejects_new_or_query_injection(self) -> None:
+        client, http, _ = _build_client()
+
+        with pytest.raises(ValueError):
+            await client.find_incident_by_number("INC0010001^NQactive=true")
+
+        http.request.assert_not_called()
+
+    async def test_rejects_lowercase(self) -> None:
+        client, http, _ = _build_client()
+        with pytest.raises(ValueError):
+            await client.find_incident_by_number("inc0010001")
+        http.request.assert_not_called()
+
+    async def test_rejects_empty_string(self) -> None:
+        client, http, _ = _build_client()
+        with pytest.raises(ValueError):
+            await client.find_incident_by_number("")
+        http.request.assert_not_called()
+
+    async def test_accepts_valid_number_format(self) -> None:
+        """Regression guard: legitimate numbers still work."""
+        resp = _api_response(result=[_incident_result()])
+        client, http, _ = _build_client(responses=[resp])
+
+        incident = await client.find_incident_by_number("INC0010001")
+        assert incident is not None
+        http.request.assert_called_once()
+
 
 class TestUpdateIncident:
     async def test_update_sends_patch(self) -> None:

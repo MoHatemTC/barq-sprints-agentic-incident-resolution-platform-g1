@@ -16,11 +16,11 @@ from typing import Any
 from app.models.knowledge import Article
 from app.publishing.html import markdown_to_html
 
-U_SOURCE_ID_FIELD = "x_2215032_ai_inc_0_source_id"
-U_SERVICE_FIELD = "x_2215032_ai_inc_0_service"
-U_VERSION_FIELD = "x_2215032_ai_inc_0_version"
-U_SECURITY_LEVEL_FIELD = "x_2215032_ai_inc_0_security_level"
-U_ARTICLE_NUMBER_FIELD = "x_2215032_ai_inc_0_article_number"
+U_SOURCE_ID_FIELD = "u_source_id"
+U_SERVICE_FIELD = "u_service"
+U_VERSION_FIELD = "u_version"
+U_SECURITY_LEVEL_FIELD = "u_security_level"
+U_ARTICLE_NUMBER_FIELD = "u_article_number"
 
 
 def build_kb_payload(
