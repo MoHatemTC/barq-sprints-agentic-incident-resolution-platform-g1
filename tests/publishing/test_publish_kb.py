@@ -94,7 +94,11 @@ def test_empty_corpus_fails_loud(monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 
 def test_missing_corpus_file_fails(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     exit_code = _run(
-        monkeypatch, "--corpus", str(tmp_path / "nope.json"), "--report", str(tmp_path / "r.json")
+        monkeypatch,
+        "--corpus",
+        str(tmp_path / "nope.json"),
+        "--report",
+        str(tmp_path / "r.json"),
     )
     assert exit_code == 1
 

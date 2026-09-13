@@ -17,6 +17,7 @@ class RetrievalSettings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
+        hide_input_in_errors=True,
     )
 
     # Qdrant
@@ -32,6 +33,13 @@ class RetrievalSettings(BaseSettings):
 
 
 class Settings(RetrievalSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+        hide_input_in_errors=True,
+    )
+
     app_name: str = "incident-resolution-platform"
     app_version: str = Field(default_factory=_get_version)
     log_level: str = "INFO"
