@@ -1,0 +1,82 @@
+name: ServiceNow SDK
+
+# Issue #54: nothing in CI ever built the scoped app, so the 4.8.0 -> 4.11.2 bump in
+# #24 merged on a Python-only run. That build rewrites the committed
+# src/fluent/generated/keys.ts, marks every choice sys_id in the exported
+# ai_incident_orchestrator_s1_1.xml as deleted, and mints replacements that differ on
+# each fresh build. This job makes that class of change fail loudly instead of silently.
+
+on:
+  pull_request:
+    paths:
+      - "servicenow/**"
+      - ".github/workflows/servicenow-sdk.yml"
+  push:
+    branches: [main]
+    paths:
+      - "servicenow/**"
+      - ".github/workflows/servicenow-sdk.yml"
+
+concurrency:
+  group: servicenow-sdk-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: servicenow/ai_incident_orchestrator/sdk-app
+
+jobs:
+  build:
+    name: Build the scoped app and check the tree is clean
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # The SDK declares node >=20.18.0. Pinned to the LTS major so a runner image
+      # change cannot alter what the build produces.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: servicenow/ai_incident_orchestrator/sdk-app/package-lock.json
+
+      # ci, not install: the lockfile is the pin. If package.json and the lockfile
+      # disagree this fails here rather than resolving to something else.
+      - name: Install
+        run: npm ci
+
+      - name: Record the SDK version actually installed
+        run: |
+          node -p "'@servicenow/sdk ' + require('@servicenow/sdk/package.json').version" \
+            >> "$GITHUB_STEP_SUMMARY"
+
+      # --frozenKeys makes the SDK itself reject a build that would rewrite the key
+      # registry. It exits 0 on 4.8.0 against the committed keys.ts.
+      - name: Build with frozen keys
+        run: npx now-sdk build --frozenKeys
+
+      # dist/, node_modules/, .now/ and target/ are gitignored, so a reproducible build
+      # leaves nothing behind. Anything modified or untracked here is the build editing
+      # its own source — exactly what #54 describes.
+      - name: Fail if the build modified tracked files
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error::The SDK build modified the working tree. A build must not edit its own source."
+            git status --porcelain
+            git diff
+            exit 1
+          fi
+          echo "Working tree clean after build."
+
+      # The exported XML is the authoritative artifact: it is what was imported and
+      # committed on dev434590 and dev204871. A clean tree alone would not catch a build
+      # that regenerated keys.ts and then had its output committed, so compare the
+      # records themselves.
+      - name: Check the built choice sys_ids still match the exported update set
+        working-directory: .
+        run: python3 .github/scripts/check_choice_sys_ids.py
