@@ -858,6 +858,23 @@ class TestHumanLockFailsClosed:
             await client.add_work_note("abc123", "note")
         assert http.request.call_count == 1
 
+    async def test_unrecognised_lock_string_blocks_update(self) -> None:
+        for bad_value in ("garbage", "null", "undefined"):
+            resp = _api_response(result=_incident_result(**{f"{_SCOPE}_ai_human_lock": bad_value}))
+            client, http, _ = _build_client(responses=[resp])
+
+            with pytest.raises(ServiceNowHumanLockError):
+                await client.update_incident("abc123", IncidentUpdatePayload(ai_confidence=0.9))
+            assert http.request.call_count == 1
+
+    async def test_blank_lock_field_blocks_work_note(self) -> None:
+        resp = _api_response(result=_incident_result(**{f"{_SCOPE}_ai_human_lock": ""}))
+        client, http, _ = _build_client(responses=[resp])
+
+        with pytest.raises(ServiceNowHumanLockError):
+            await client.add_work_note("abc123", "note")
+        assert http.request.call_count == 1
+
 
 class TestHumanLockSafety:
     async def test_human_lock_field_mapping_and_write_protection(self) -> None:

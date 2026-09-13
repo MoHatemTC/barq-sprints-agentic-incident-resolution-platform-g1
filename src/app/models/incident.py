@@ -74,7 +74,14 @@ class Incident(BaseModel):
                 if value == "":
                     cleaned[key] = None
                 elif isinstance(value, str):
-                    cleaned[key] = value.lower() in ("true", "1", "t", "yes")
+                    normalized = value.strip().lower()
+                    if normalized in ("true", "1"):
+                        cleaned[key] = True
+                    elif normalized in ("false", "0"):
+                        cleaned[key] = False
+                    else:
+                        cleaned[key] = None
+
                 continue
             if value == "":
                 if key in bool_fields:
