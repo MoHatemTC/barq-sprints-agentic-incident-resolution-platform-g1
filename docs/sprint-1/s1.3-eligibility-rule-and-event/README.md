@@ -1,12 +1,20 @@
 # S1.3 — Eligibility Business Rule, identifier-only outbound event
 
-**Owner:** [@ahmedtamer101](https://github.com/ahmedtamer101) · **Tracking:** [#10](../../../../issues/10)
+**Owner:** [@ahmedtamer101](https://github.com/ahmedtamer101) · **Tracking:** [#10](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/issues/10)
 
 ## Status
 
-S1.3 eligibility and asynchronous event delivery are implemented. The
-canonical documents below record the event contract, verification evidence,
-and current Sprint 1 transport status.
+S1.3 eligibility and asynchronous event delivery are implemented and have been
+verified on the shared PDI. The canonical documents below record the event
+contract, verification evidence, and current Sprint 1 transport status.
+
+PR #30 includes the eligibility Business Rule, relevant-update filtering,
+asynchronous event queue, Script Action and RESTMessageV2 transport, retry
+handling, and escalation to human review.
+
+Sprint 1 proves outbound delivery against a request-inspection endpoint. Outbound
+OAuth remains pending mentor confirmation and is still tracked as an unresolved
+acceptance item in #10.
 
 ## Canonical deliverables
 
