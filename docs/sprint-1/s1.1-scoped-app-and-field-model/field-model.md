@@ -100,6 +100,18 @@ Permission rules:
 
 ServiceNow does not permit a scripted before Business Rule in a private scope to abort writes on the Global-scope Incident table. Creating such a rule in Global would violate the explicit zero-Global-artifacts acceptance criterion. S1.1 therefore uses scoped form validation and defines the server/API invariant as part of the integration writer contract; S1.2 ACLs and downstream writers must preserve that boundary.
 
+### Cross-scope privileges (open — #56)
+
+The application is exported with `runtime_access_tracking=permissive` on `sys_app`, so the platform grants access to Global APIs automatically and records a `sys_scope_privilege` rather than refusing. The S1.1 export carries exactly one:
+
+| Record | Target | Operation | Status |
+|---|---|---|---|
+| `sys_scope_privilege_15358c08731fc7502aedfed25ab8b7c8` | `GlideRecordSecure.getValue` | `execute` | `allowed` |
+
+**No shipped S1.1 artifact requires it.** The export contains no server-side script: the only two scripts are the onChange and onSubmit Client Scripts in `confidence-validation.now.ts`, both of which use `g_form` exclusively and never touch `GlideRecordSecure`. The grant was therefore recorded by something run in the scope during authoring or testing, not by the deliverable.
+
+It should be deleted and the app re-exported, and tracking moved from Permissive to Enforcing. Both are changes on `dev434590` and are not yet done — this note records the finding, not a fix. The six further privileges on the S1.2 update set are @MohamedAbdelaiem's, tracked on the same issue.
+
 ## Confirmed project decisions
 
 1. S1.1 includes AI Enabled because S1.3 eligibility depends on it.
