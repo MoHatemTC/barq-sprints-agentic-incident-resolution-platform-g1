@@ -3,6 +3,7 @@ import {
     ChoiceColumn,
     DateTimeColumn,
     DecimalColumn,
+    IntegerColumn,
     StringColumn,
     Table,
 } from '@servicenow/sdk/core'
@@ -93,6 +94,12 @@ export const incident = Table({
             default: false,
             active: true,
             hint: 'Hard human-controlled override that stops automated AI processing.',
+        }),
+        x_2215032_ai_inc_0_ai_retry_count: IntegerColumn({
+            label: 'AI Retry Count',
+            default: 0,
+            active: true,
+            hint: 'Number of retries already attempted after the original processing attempt.',
         }),
         x_2215032_ai_inc_0_ai_failure_reason: StringColumn({
             label: 'AI Failure Reason',
