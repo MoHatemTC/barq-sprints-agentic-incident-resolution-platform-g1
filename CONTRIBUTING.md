@@ -45,6 +45,24 @@ ones.
 
 ## Reviews
 
+**Nothing reaches `main` without an approving review from someone other than the author.**
+`main` is protected and enforces this, including for admins. Open a pull request and wait
+for a human — even for a one-line change, even close to a deadline.
+
+**Never self-merge a change to security or governance.** That means anything under
+`.github/`, `SECURITY.md`, `CONTRIBUTING.md`, `CODEOWNERS`, or any ServiceNow ACL or role
+in an update set. These define how the repository and the platform protect themselves, so
+a second person reads them by rule, not by preference.
+
+Open pull requests with the checklist intact:
+
+```
+gh pr create --template .github/pull_request_template.md
+```
+
+A body passed with `--body` or `--body-file` replaces the template, so if you use one,
+paste the checklist into it. The template pre-fills automatically only in the web UI.
+
 Copilot reviews every pull request automatically. Address its findings or say why you
 disagree — do not merge over an unaddressed one. Requirement-level review belongs to
 the workstream owner listed in [CODEOWNERS](.github/CODEOWNERS).

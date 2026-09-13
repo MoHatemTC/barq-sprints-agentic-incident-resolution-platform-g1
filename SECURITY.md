@@ -37,5 +37,26 @@ work may have been queued before the lock was set.
 
 ## Reporting
 
-Open an issue using the **Security concern** template. If a real credential has been
-committed, treat it as exposed: rotate it first, then remove it from history.
+**Route depends on what you found.**
+
+### A vulnerability, or a credential that is actually exposed
+
+Use **private reporting**: the repository's Security tab → *Report a vulnerability*. If
+that is unavailable, message a repository admin (@MoHatemTC) directly. Do **not** open a
+public issue.
+
+This repository is public. A public issue asking for proof means publishing a working
+exploit, a leaked token, or executed permission attempts against the team's ServiceNow
+instance — which creates the exposure it is reporting.
+
+If a real credential has been committed or posted anywhere, treat it as exposed:
+**rotate it first**, then remove it from history, then report.
+
+### A hardening proposal
+
+Open an issue using the **Security concern** template — for example "this ACL should be
+narrower", "this role grant is broader than the contract requires", "this check fails
+open". These are design discussions and belong in the open.
+
+**Never paste credentials, tokens, session cookies or exploit details into a public
+issue**, whichever template you use.
