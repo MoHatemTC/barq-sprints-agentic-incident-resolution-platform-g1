@@ -77,7 +77,7 @@ class ExecutionLogCreatePayload(BaseModel):
             "incident_reference": self.incident_sys_id,
             "execution_id": self.execution_id,
             "agent": self.agent,
-            "action": self.action,
+            "action": self.action.value,
             "status": self.status.value,
             "timestamp": self.timestamp.astimezone(UTC).strftime("%Y-%m-%d %H:%M:%S"),
         }

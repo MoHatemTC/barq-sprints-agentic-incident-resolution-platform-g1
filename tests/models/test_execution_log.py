@@ -3,7 +3,12 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import ValidationError
 
-from app.models.execution_log import ExecutionLogCreatePayload, ExecutionLogEntry, ExecutionStatus
+from app.models.execution_log import (
+    ExecutionAction,
+    ExecutionLogCreatePayload,
+    ExecutionLogEntry,
+    ExecutionStatus,
+)
 
 
 def test_execution_log_entry_assume_utc():
@@ -14,7 +19,7 @@ def test_execution_log_entry_assume_utc():
         execution_id="exec1",
         incident_reference="inc1",
         agent="agent1",
-        action="action1",
+        action=ExecutionAction.EXECUTE,
         status=ExecutionStatus.STARTED,
         timestamp=dt_naive,
     )
@@ -29,7 +34,7 @@ def test_execution_log_entry_assume_utc():
         execution_id="exec2",
         incident_reference="inc2",
         agent="agent2",
-        action="action2",
+        action=ExecutionAction.EXECUTE,
         status=ExecutionStatus.STARTED,
         timestamp=dt_aware,
     )
@@ -43,7 +48,7 @@ def test_execution_log_create_payload_validation():
             incident_sys_id="inc1",
             execution_id="  ",
             agent="agent1",
-            action="action1",
+            action=ExecutionAction.EXECUTE,
             status=ExecutionStatus.STARTED,
         )
 
@@ -53,7 +58,7 @@ def test_execution_log_create_payload_validation():
             incident_sys_id="inc1",
             execution_id="exec1",
             agent="agent1",
-            action="action1",
+            action=ExecutionAction.EXECUTE,
             status=ExecutionStatus.STARTED,
             timestamp=datetime(2023, 1, 1, 12, 0, 0),  # naive
         )
@@ -65,7 +70,7 @@ def test_execution_log_create_payload_to_table_api_body():
         incident_sys_id="inc1",
         execution_id="exec1",
         agent="agent1",
-        action="action1",
+        action=ExecutionAction.EXECUTE,
         status=ExecutionStatus.STARTED,
         timestamp=dt_utc,
         result="success",
@@ -77,7 +82,7 @@ def test_execution_log_create_payload_to_table_api_body():
         "incident_reference": "inc1",
         "execution_id": "exec1",
         "agent": "agent1",
-        "action": "action1",
+        "action": "execute",
         "status": "started",
         "timestamp": "2023-01-01 12:00:00",
         "result": "success",
