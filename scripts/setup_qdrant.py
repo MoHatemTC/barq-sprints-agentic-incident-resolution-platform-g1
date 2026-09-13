@@ -13,7 +13,11 @@ import structlog
 from qdrant_client import QdrantClient
 
 from app.clients.qdrant import ensure_collection
-from app.core.config import get_retrieval_settings
+from app.core.config import Settings, get_retrieval_settings
+from app.core.logging import configure_logging
+
+settings = Settings()
+configure_logging(environment=settings.environment, log_level=settings.log_level)
 
 # stdlib logging still governs third-party library output (qdrant-client, httpx);
 # our own messages go through structlog.
