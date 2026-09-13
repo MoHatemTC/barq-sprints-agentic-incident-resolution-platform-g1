@@ -6,6 +6,11 @@ security-sensitive file ends up with no owner. These tests make that loud.
 
 A pattern is allowed to match nothing only if it is listed in ``PLANNED``, which
 records why and keeps the exemption visible in review.
+
+``PLANNED`` entries expire by themselves: the moment the path they are waiting for
+exists, the test *fails* until the entry is deleted. Without that, an exemption added
+to cover an open PR would keep skipping after that PR merged, and the check would
+quietly stop checking the paths it was written to protect.
 """
 
 from __future__ import annotations
@@ -62,6 +67,22 @@ def _matches(pattern: str, files: list[str]) -> bool:
     return any(f == p or f.startswith(p.rstrip("/") + "/") for f in files)
 
 
+def _resolve_planned(pattern: str, files: list[str]) -> None:
+    """Skip a still-pending exemption; fail once the path it waited for exists.
+
+    This is what makes the exemption temporary. A ``PLANNED`` entry that outlives the
+    PR it names would silently exempt a live path forever.
+    """
+    if pattern not in PLANNED:
+        return
+    if _matches(pattern, files):
+        pytest.fail(
+            f"{pattern!r} now matches a tracked file, so its PLANNED exemption is stale "
+            f"({PLANNED[pattern]}). Delete the entry from PLANNED in this test."
+        )
+    pytest.skip(f"planned path: {PLANNED[pattern]}")
+
+
 def _labeler_patterns() -> list[tuple[str, str]]:
     cfg = yaml.safe_load((REPO_ROOT / ".github" / "labeler.yml").read_text())
     found: list[tuple[str, str]] = []
@@ -93,9 +114,9 @@ def _codeowners_patterns() -> list[str]:
     ids=lambda v: str(v).replace("/", "_"),
 )
 def test_labeler_glob_matches_a_tracked_file(label: str, pattern: str) -> None:
-    if pattern in PLANNED:
-        pytest.skip(f"planned path: {PLANNED[pattern]}")
-    assert _matches(pattern, _tracked_files()), (
+    files = _tracked_files()
+    _resolve_planned(pattern, files)
+    assert _matches(pattern, files), (
         f"labeler.yml: {label!r} glob {pattern!r} matches no tracked file. "
         "Point it at where the code actually lives, remove it, or add it to "
         "PLANNED in this test with a reason."
@@ -104,9 +125,9 @@ def test_labeler_glob_matches_a_tracked_file(label: str, pattern: str) -> None:
 
 @pytest.mark.parametrize("pattern", _codeowners_patterns(), ids=lambda v: str(v).replace("/", "_"))
 def test_codeowners_path_matches_a_tracked_file(pattern: str) -> None:
-    if pattern in PLANNED:
-        pytest.skip(f"planned path: {PLANNED[pattern]}")
-    assert _matches(pattern, _tracked_files()), (
+    files = _tracked_files()
+    _resolve_planned(pattern, files)
+    assert _matches(pattern, files), (
         f"CODEOWNERS: {pattern!r} matches no tracked file, so the rule owns nothing. "
         "Correct it, remove it, or add it to PLANNED in this test with a reason."
     )
