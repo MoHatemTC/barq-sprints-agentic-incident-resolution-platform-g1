@@ -17,6 +17,7 @@ from app.publishing.servicenow_kb import (
     ServiceNowKBClient,
     ServiceNowKBError,
     ServiceNowKBSchemaError,
+    ServiceNowRequestError,
     ServiceNowWriteRejectedError,
     publish_article,
 )
@@ -156,4 +157,22 @@ def test_sync_version_raises_on_auth_error(fake: Any) -> None:
     client = fake.build_client()
     with pytest.raises(ServiceNowAuthError):
         client.sync_version("ver-123", "2.0")
+    client.close()
+
+
+def test_sync_version_raises_on_server_error(fake: Any) -> None:
+    fake.kb_version_returns_error = True
+    client = fake.build_client()
+    with pytest.raises(ServiceNowRequestError):
+        client.sync_version("ver-123", "2.0")
+    client.close()
+
+
+def test_publish_article_fails_loud_when_version_sync_fails(
+    sample_articles: list[Article], fake: Any
+) -> None:
+    fake.kb_version_returns_error = True
+    client = fake.build_client()
+    with pytest.raises(ServiceNowRequestError):
+        publish_article(client, sample_articles[0], KB_SYS_ID)
     client.close()
