@@ -24,6 +24,7 @@ class FakeServiceNow:
         self.reject_auth = False
         self.dict_returns_error = False
         self.cat_returns_error = False
+        self.kb_version_returns_error = False
         self.tamper_next_readback: tuple[str, str] | None = None
 
     def handler(self, request: httpx.Request) -> httpx.Response:
@@ -49,7 +50,11 @@ class FakeServiceNow:
             import json as _json
 
             body = _json.loads(request.read())
-            row = {"sys_id": f"sys{self.next_sys_id:011d}", **body}
+            row = {
+                "sys_id": f"sys{self.next_sys_id:011d}",
+                "version": {"value": f"ver{self.next_sys_id:011d}"},
+                **body,
+            }
             self.next_sys_id += 1
             self.rows.append(row)
             return httpx.Response(201, json={"result": row})
@@ -105,6 +110,8 @@ class FakeServiceNow:
                 )
 
         if path.startswith("/api/now/table/kb_version"):
+            if self.kb_version_returns_error:
+                return httpx.Response(500, json={"error": "kb_version update failed"})
             return httpx.Response(200, json={"result": {"version": "1.0"}})
 
         if path.startswith("/api/now/table/sys_ui_list"):
