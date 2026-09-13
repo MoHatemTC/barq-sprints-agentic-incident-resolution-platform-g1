@@ -73,8 +73,7 @@ def _md_headings(markdown: str) -> list[str]:
 
 def _md_steps(markdown: str) -> list[str]:
     return [
-        m.group(1).strip()
-        for m in re.finditer(r"^\d+\.\s+(.*)$", markdown, flags=re.MULTILINE)
+        m.group(1).strip() for m in re.finditer(r"^\d+\.\s+(.*)$", markdown, flags=re.MULTILINE)
     ]
 
 
@@ -93,12 +92,8 @@ def test_corpus_round_trip_preserves_structure_for_all_articles() -> None:
         assert _md_headings(back) == _md_headings(article.body), article.article_id
         assert _md_steps(back) == _md_steps(article.body), article.article_id
         # html side carries the same headings and step count
-        assert html_out.count("<h2>") == len(
-            _md_headings(article.body)
-        ), article.article_id
-        assert len(_html_steps(html_out)) == len(
-            _md_steps(article.body)
-        ), article.article_id
+        assert html_out.count("<h2>") == len(_md_headings(article.body)), article.article_id
+        assert len(_html_steps(html_out)) == len(_md_steps(article.body)), article.article_id
 
 
 def test_fixture_round_trip_preserves_code_blocks() -> None:

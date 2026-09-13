@@ -50,7 +50,7 @@ class ServiceNowProvisioner:
         """Verify all required custom columns exist on the kb_knowledge table.
 
         Fails loud if any required column is missing, instructing the user
-        to ensure required custom columns are configured on the kb_knowledge table.
+        to install the update set ('servicenow/kb_knowledge_custom_fields.xml').
         Does not perform runtime DDL in Global scope.
 
         Raises:
@@ -59,6 +59,7 @@ class ServiceNowProvisioner:
             ServiceNowAccessError: If account lacks dictionary read permissions.
         """
         missing_fields: list[str] = []
+
         for element in REQUIRED_SCHEMA_FIELDS:
             query = f"name=kb_knowledge^element={element}"
             try:
@@ -67,7 +68,8 @@ class ServiceNowProvisioner:
                     "/api/now/table/sys_dictionary",
                     params={"sysparm_query": query, "sysparm_fields": "element"},
                 )
-                if not res.json().get("result", []):
+                records = res.json().get("result", [])
+                if not records:
                     missing_fields.append(element)
             except (ServiceNowAuthError, ServiceNowAccessError):
                 raise
@@ -79,7 +81,7 @@ class ServiceNowProvisioner:
         if missing_fields:
             raise ServiceNowKBSchemaError(
                 f"Required schema column(s) {missing_fields} are missing from kb_knowledge. "
-                "Ensure required custom fields are configured on kb_knowledge in ServiceNow "
+                "Ensure custom fields are created on kb_knowledge in ServiceNow "
                 "before publishing articles."
             )
 

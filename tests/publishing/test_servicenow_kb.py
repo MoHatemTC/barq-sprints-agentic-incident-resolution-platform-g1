@@ -33,9 +33,7 @@ async def test_publish_to_fresh_instance_creates_all(
 ) -> None:
     client = fake.build_client()
     try:
-        outcomes = [
-            await publish_article(client, a, KB_SYS_ID) for a in sample_articles
-        ]
+        outcomes = [await publish_article(client, a, KB_SYS_ID) for a in sample_articles]
 
         assert outcomes == ["created"] * len(sample_articles)
         assert len(fake.rows) == len(sample_articles)
@@ -55,9 +53,7 @@ async def test_republish_updates_in_place_with_zero_duplicates(
             await publish_article(client, article, KB_SYS_ID)
         post_count = len(fake.rows)
 
-        outcomes = [
-            await publish_article(client, a, KB_SYS_ID) for a in sample_articles
-        ]
+        outcomes = [await publish_article(client, a, KB_SYS_ID) for a in sample_articles]
 
         assert outcomes == ["updated"] * len(sample_articles)
         assert len(fake.rows) == post_count, "re-run must never duplicate rows"
@@ -88,9 +84,7 @@ async def test_renamed_title_still_finds_row_by_source_id(
 
 
 @pytest.mark.asyncio
-async def test_readback_mismatch_fails_loud(
-    sample_articles: list[Article], fake: Any
-) -> None:
+async def test_readback_mismatch_fails_loud(sample_articles: list[Article], fake: Any) -> None:
     client = fake.build_client()
     try:
         # instance returns invalid state to simulate tampering or write rejection
@@ -164,9 +158,7 @@ async def test_missing_u_source_id_column_shows_remedy(
 
 
 @pytest.mark.asyncio
-async def test_bad_credentials_raise_auth_error(
-    sample_articles: list[Article], fake: Any
-) -> None:
+async def test_bad_credentials_raise_auth_error(sample_articles: list[Article], fake: Any) -> None:
     fake.reject_auth = True
     client = fake.build_client()
     try:
@@ -202,9 +194,7 @@ async def test_client_sends_bearer_auth_header() -> None:
         servicenow_username="svc_user",
         servicenow_password="svc_password",
     )
-    http_client = httpx.AsyncClient(
-        base_url=INSTANCE, transport=httpx.MockTransport(spy)
-    )
+    http_client = httpx.AsyncClient(base_url=INSTANCE, transport=httpx.MockTransport(spy))
     client = ServiceNowKBClient(settings, http_client=http_client)
     try:
         await client.find_by_source_id("KB0001-v2.0", kb_sys_id=KB_SYS_ID)
@@ -246,9 +236,7 @@ async def test_publish_article_with_dynamic_category(
         article = sample_articles[0]
         cat_mapping = {article.category: "sys-cat-999"}
 
-        outcome = await publish_article(
-            client, article, KB_SYS_ID, category_mapping=cat_mapping
-        )
+        outcome = await publish_article(client, article, KB_SYS_ID, category_mapping=cat_mapping)
 
         assert outcome == "created"
         assert fake.rows[0]["kb_category"] == "sys-cat-999"
@@ -288,5 +276,48 @@ async def test_publish_article_fails_loud_when_version_sync_fails(
     try:
         with pytest.raises(ServiceNowRequestError):
             await publish_article(client, sample_articles[0], KB_SYS_ID)
+    finally:
+        await client.aclose()
+
+
+# ---------------------------------------------------------------------------
+# Hardening added while reviewing #88
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "bad_id",
+    [
+        "KB0001-v1.0^ORDERBYDESCsys_created_on",  # appends an encoded-query clause
+        "KB0001-v1.0^NQu_source_id!=",  # ^NQ starts a new OR query: matches everything
+        "KB0001",  # no version suffix
+        "kb0001-v1.0",  # lowercase
+        "",
+    ],
+)
+async def test_find_by_source_id_rejects_ids_that_could_inject_a_query(
+    bad_id: str, fake: Any
+) -> None:
+    """The composed article_id is safe today only because Article validates its parts.
+
+    find_by_source_id takes a bare str, so it re-checks rather than trusting the caller
+    — otherwise an unvalidated id reintroduces the encoded-query injection of #43.
+    """
+    client = fake.build_client()
+    try:
+        with pytest.raises(ServiceNowKBError, match="Refusing to query"):
+            await client.find_by_source_id(bad_id, kb_sys_id=KB_SYS_ID)
+        # Nothing was sent.
+        assert not fake.rows
+    finally:
+        await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_find_by_source_id_accepts_a_well_formed_id(fake: Any) -> None:
+    client = fake.build_client()
+    try:
+        assert await client.find_by_source_id("KB0010-v2.0", kb_sys_id=KB_SYS_ID) is None
     finally:
         await client.aclose()

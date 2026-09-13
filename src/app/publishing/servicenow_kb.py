@@ -8,6 +8,7 @@ and synchronizes version display records.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 import httpx
@@ -42,6 +43,12 @@ from app.publishing.provisioning import ServiceNowProvisioner
 logger = structlog.get_logger(__name__)
 
 KB_TABLE = "kb_knowledge"
+
+#: article_id is composed as f"{article_number}-v{version}", so the only shape that can
+#: reach a sysparm_query is KB####-vN.N. Re-checked here rather than relied on from the
+#: Article model: find_by_source_id takes a bare str, and an unvalidated caller would
+#: otherwise be able to inject encoded-query clauses with `^` — the same defect as #43.
+_ARTICLE_ID_PATTERN = re.compile(r"^KB\d{4}-v\d+\.\d+$")
 
 # Fields requested on find_by_source_id
 _LIST_FIELDS: tuple[str, ...] = (
@@ -116,27 +123,19 @@ class ServiceNowKBClient:
             if response.status_code == 401 and token:
                 # Token may have expired prematurely; force-refresh and retry once
                 try:
-                    token = await self._tokens.get_token(
-                        force_refresh=True, failed_token=token
-                    )
+                    token = await self._tokens.get_token(force_refresh=True, failed_token=token)
                 except ServiceNowAuthenticationError as exc:
                     raise ServiceNowAuthError(
                         f"ServiceNow rejected OAuth credentials (401) on refresh: {exc}"
                     ) from exc
                 except (ServiceNowTimeoutError, ServiceNowConnectionError) as exc:
-                    raise ServiceNowRequestError(
-                        f"OAuth token refresh failed: {exc}"
-                    ) from exc
+                    raise ServiceNowRequestError(f"OAuth token refresh failed: {exc}") from exc
 
                 if token:
                     headers["Authorization"] = f"Bearer {token}"
-                response = await self._http.request(
-                    method, path, headers=headers, **kwargs
-                )
+                response = await self._http.request(method, path, headers=headers, **kwargs)
         except httpx.TimeoutException as exc:
-            raise ServiceNowRequestError(
-                f"HTTP timeout for {method} {path}: {exc}"
-            ) from exc
+            raise ServiceNowRequestError(f"HTTP timeout for {method} {path}: {exc}") from exc
         except httpx.TransportError as exc:
             raise ServiceNowRequestError(
                 f"HTTP transport error for {method} {path}: {exc}"
@@ -185,6 +184,13 @@ class ServiceNowKBClient:
             ServiceNowKBError: If duplicate records exist for the same source ID,
                 or if a row with the source ID belongs to a different Knowledge Base.
         """
+        if not _ARTICLE_ID_PATTERN.match(article_id):
+            raise ServiceNowKBError(
+                f"Refusing to query with article_id={article_id!r}: it must match "
+                f"{_ARTICLE_ID_PATTERN.pattern}. Unvalidated values can inject encoded-query "
+                "clauses into sysparm_query."
+            )
+
         # First query scoped to the target Knowledge Base
         query = f"{U_SOURCE_ID_FIELD}={article_id}"
         if kb_sys_id:
@@ -193,16 +199,19 @@ class ServiceNowKBClient:
         params = {
             "sysparm_query": query,
             "sysparm_fields": ",".join(_LIST_FIELDS),
-            "sysparm_limit": "2",
+            # 11 keeps the message honest about how many duplicates exist without
+            # pulling an unbounded result set: "10" reads as "10", ">10" as "at least 10".
+            "sysparm_limit": "11",
         }
         res = await self.request("GET", f"/api/now/table/{KB_TABLE}", params=params)
         records = res.json().get("result", [])
 
         if len(records) > 1:
             sys_ids = [r.get("sys_id") for r in records]
+            count = f"at least {len(sys_ids)}" if len(sys_ids) > 10 else str(len(sys_ids))
             raise ServiceNowKBError(
-                f"Duplicate kb_knowledge rows carry u_source_id={article_id!r} "
-                f"(sys_ids: {sys_ids}). Clean up duplicates before publishing."
+                f"Duplicate kb_knowledge rows carry u_source_id={article_id!r}: "
+                f"found {count} (sys_ids: {sys_ids}). Clean up duplicates before publishing."
             )
 
         if records:
@@ -231,9 +240,7 @@ class ServiceNowKBClient:
 
     async def create(self, payload: dict[str, Any]) -> str:
         """POST a new kb_knowledge record; returns its sys_id."""
-        response = await self.request(
-            "POST", f"/api/now/table/{KB_TABLE}", json=payload
-        )
+        response = await self.request("POST", f"/api/now/table/{KB_TABLE}", json=payload)
         sys_id = response.json().get("result", {}).get("sys_id")
         if not sys_id:
             raise ServiceNowRequestError(
@@ -266,15 +273,11 @@ class ServiceNowKBClient:
         """Ensure custom fields exist on the target instance."""
         await self._provisioner.ensure_schema()
 
-    async def ensure_categories(
-        self, kb_sys_id: str, categories: list[str]
-    ) -> dict[str, str]:
+    async def ensure_categories(self, kb_sys_id: str, categories: list[str]) -> dict[str, str]:
         """Resolve or dynamically create categories under the target Knowledge Base."""
         return await self._provisioner.ensure_categories(kb_sys_id, categories)
 
-    async def run_preflight(
-        self, kb_sys_id: str, categories: list[str]
-    ) -> dict[str, str]:
+    async def run_preflight(self, kb_sys_id: str, categories: list[str]) -> dict[str, str]:
         """Execute all preflight configuration checks."""
         return await self._provisioner.run_preflight(kb_sys_id, categories)
 
@@ -310,7 +313,21 @@ async def publish_article(
         ):
             outcome = "updated"
         else:
-            await client.update(sys_id, payload)
+            try:
+                await client.update(sys_id, payload)
+            except (ServiceNowRequestError, ServiceNowAccessError) as err:
+                # In ServiceNow, direct PATCH on published articles raises 403 ACL Exception
+                # for standard integration users without admin checkout.
+                # If the record is already published, let read-back verification confirm
+                # whether stored fields match the expected payload.
+                if (
+                    "403" in str(err)
+                    and existing.get("workflow_state") == "published"
+                    and article.workflow_state.value == "published"
+                ):
+                    pass
+                else:
+                    raise
             outcome = "updated"
 
     stored = await client.get(sys_id)
@@ -336,6 +353,14 @@ def _verify_stored(
     article_id: str,
 ) -> None:
     """Validate stored row against sent payload, failing loud on any mismatch."""
+    missing = [field for field in _VERIFIED_FIELDS if field not in sent]
+    if missing:
+        raise ServiceNowKBError(
+            f"Cannot verify the write for {article_id!r}: the payload is missing "
+            f"{missing}, which _VERIFIED_FIELDS requires. This is a payload-builder bug, "
+            "not an instance problem."
+        )
+
     for field in _VERIFIED_FIELDS:
         stored_value = stored.get(field)
         if isinstance(stored_value, dict) and "value" in stored_value:

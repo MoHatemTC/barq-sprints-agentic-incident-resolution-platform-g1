@@ -106,9 +106,7 @@ class FakeServiceNow:
 
         if path == "/api/now/table/sys_dictionary":
             if self.dict_returns_error:
-                return httpx.Response(
-                    500, json={"error": "dictionary table unavailable"}
-                )
+                return httpx.Response(500, json={"error": "dictionary table unavailable"})
             if request.method == "GET":
                 query = params.get("sysparm_query", "")
                 if self.missing_schema_columns:
@@ -119,9 +117,7 @@ class FakeServiceNow:
 
         if path.startswith("/api/now/table/sys_properties"):
             if request.method == "GET":
-                return httpx.Response(
-                    200, json={"result": [{"sys_id": "prop1", "value": "true"}]}
-                )
+                return httpx.Response(200, json={"result": [{"sys_id": "prop1", "value": "true"}]})
             if request.method in ("PATCH", "POST"):
                 return httpx.Response(200, json={"result": {"sys_id": "prop1"}})
 
