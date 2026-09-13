@@ -1,3 +1,4 @@
+import re
 import time
 from typing import Any
 
@@ -33,6 +34,8 @@ from app.utils.servicenow import parse_retry_after, values_equal
 
 logger = structlog.getLogger(__name__)
 
+_INCIDENT_NUMBER_RE = re.compile(r"^[A-Z]+[0-9]+$")
+
 
 class ServiceNowClient:
     def __init__(
@@ -62,6 +65,9 @@ class ServiceNowClient:
         return Incident.model_validate(result)
 
     async def find_incident_by_number(self, number: str) -> Incident | None:
+        if not _INCIDENT_NUMBER_RE.match(number):
+            raise ValueError(f"Invalid incident number format: {number!r}")
+
         result = await self._request(
             "GET",
             "/api/now/table/incident",
