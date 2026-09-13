@@ -24,6 +24,10 @@ dev = [
     "hatchling>=1.32.0",
     "mypy>=2.3.1",
     "pre-commit>=4.6.2",
+    # tests/repo/test_path_config_drift.py parses .github/labeler.yml. It only arrived
+    # transitively through pre-commit before, so the drift check could break on an
+    # unrelated dependency change.
+    "pyyaml>=6.0.2",
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
     "pytest-cov>=7.1.0",

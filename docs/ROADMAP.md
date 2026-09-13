@@ -17,7 +17,7 @@ Definition of done: the application exports cleanly as an update set; an executi
 record can be written through the API by the integration user; no admin credential
 exists anywhere in the repository or configuration.
 
-Tracked in the [Sprint 1 milestone](../../milestone/1). See [TEAM.md](../TEAM.md) for
+Tracked in the [Sprint 1 milestone](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/milestone/1). See [TEAM.md](../TEAM.md) for
 task ownership.
 
 ## Sprint 2 — Event Integration
