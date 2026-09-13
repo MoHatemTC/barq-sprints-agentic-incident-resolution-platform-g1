@@ -1,26 +1,27 @@
 # S1.3 — Eligibility Business Rule, identifier-only outbound event
 
-**Owner:** [@ahmedtamer101](https://github.com/ahmedtamer101) · **Tracking:** [#10](../../../../issues/10)
+**Owner:** [@ahmedtamer101](https://github.com/ahmedtamer101) · **Tracking:** [#10](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/issues/10)
 
 ## Status
 
-Not started by the owner. [`eligibility-and-event-contract.md`](eligibility-and-event-contract.md)
-and the Business Rule script are a **draft scaffold** from
-[PR #18](../../../../pull/18) — six eligibility conditions and the
-identifier-only payload — unverified on a PDI and explicitly a starting
-point, not a deliverable. @ahmedtamer101 owns changing, replacing, or
-verifying it.
+In review in [#30](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pull/30): the eligibility Business Rule with all six
+conditions and relevant-update filtering, an asynchronous event queue, a Script
+Action and RESTMessageV2 transport, and retry with escalation to human review.
 
-## What's here
+Sprint 1 proves emission against a request-inspection endpoint, since the receiving
+webhook is Sprint 2, so outbound OAuth is not exercised. Whether that satisfies the
+acceptance criterion is **still open** — it remains listed in [#10](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/issues/10) and a
+deferral has not been granted. The decision will be recorded there.
 
-- [`eligibility-and-event-contract.md`](eligibility-and-event-contract.md) —
-  the six conditions mapped to field names, the payload shape, and the
-  rationale for sending identifiers only
-- `../../../servicenow/ai_incident_orchestrator/business_rules/s1_3_eligibility_event.js` —
-  the draft Business Rule script
+[PR #18](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pull/18) remains open as an unverified reference scaffold at the owner's
+request; it is not the deliverable.
 
-Still needed: verification against a request-inspection endpoint, since the
-receiving webhook is Sprint 2.
+## What lands in this folder once merged
+
+- `eligibility-and-event-contract.md` — the six conditions mapped to field
+  names, the payload shape, and the rationale for sending identifiers only
+- The Business Rule script, verified against a request-inspection endpoint
+  since the receiving webhook is Sprint 2
 
 ## Requirements
 
