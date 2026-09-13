@@ -26,8 +26,6 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 #: Patterns that intentionally match nothing yet, with the reason.
 #: Remove the entry in the PR that creates the path.
 PLANNED: dict[str, str] = {
-    # Arrive with open pull requests. Drop the entry in the PR that lands the path.
-    "scripts/verification_report.json": "lands with the S1.2 rework, PR #32",
     # Dead rule; removed in PR #61. Drop this entry once that merges.
     "/servicenow/ai_incident_orchestrator/business_rules/": (
         "dead CODEOWNERS rule, removed in PR #61"
