@@ -94,99 +94,98 @@ class TestTokenAcquisition:
         assert "svc_pass" not in msg
         assert "test-cid" not in msg
 
-    class TestTokenRefresh:
-        async def test_uses_refresh_token_when_available(self) -> None:
-            http = AsyncMock(spec=httpx.AsyncClient)
-            # First call: password grant → stores refresh_token
-            http.post.return_value = _mock_response(json_body=_token_json(refresh_token="rt_first"))
-            mgr = ServiceNowTokenManager(mock_settings(), http)
-            await mgr.get_token()
 
-            # Simulate expiry
-            mgr._expires_at = datetime.now(UTC) - timedelta(seconds=60)
+class TestTokenRefresh:
+    async def test_uses_refresh_token_when_available(self) -> None:
+        http = AsyncMock(spec=httpx.AsyncClient)
+        # First call: password grant → stores refresh_token
+        http.post.return_value = _mock_response(json_body=_token_json(refresh_token="rt_first"))
+        mgr = ServiceNowTokenManager(mock_settings(), http)
+        await mgr.get_token()
 
-            # Second call: should use refresh_token grant
-            http.post.return_value = _mock_response(
-                json_body=_token_json(access_token="tok_refreshed", refresh_token="rt_second")
+        # Simulate expiry
+        mgr._expires_at = datetime.now(UTC) - timedelta(seconds=60)
+
+        # Second call: should use refresh_token grant
+        http.post.return_value = _mock_response(
+            json_body=_token_json(access_token="tok_refreshed", refresh_token="rt_second")
+        )
+        token = await mgr.get_token()
+
+        assert token == "tok_refreshed"
+        second_call_data = http.post.call_args.kwargs["data"]
+        assert second_call_data["grant_type"] == "refresh_token"
+        assert second_call_data["refresh_token"] == "rt_first"
+
+    async def test_force_refresh_triggers_new_fetch(self) -> None:
+        http = AsyncMock(spec=httpx.AsyncClient)
+        http.post.return_value = _mock_response(json_body=_token_json(refresh_token="rt_x"))
+        mgr = ServiceNowTokenManager(mock_settings(), http)
+        await mgr.get_token()
+
+        http.post.return_value = _mock_response(json_body=_token_json(access_token="tok_forced"))
+        token = await mgr.get_token(force_refresh=True)
+
+        assert token == "tok_forced"
+        assert http.post.call_count == 2
+
+    async def test_refresh_failure_falls_back_to_password_grant(self) -> None:
+        http = AsyncMock(spec=httpx.AsyncClient)
+
+        # First call: password grant obtains the initial token
+        http.post.return_value = _mock_response(
+            json_body=_token_json(
+                access_token="tok_initial",
+                refresh_token="rt_old",
             )
-            token = await mgr.get_token()
+        )
 
-            assert token == "tok_refreshed"
-            second_call_data = http.post.call_args.kwargs["data"]
-            assert second_call_data["grant_type"] == "refresh_token"
-            assert second_call_data["refresh_token"] == "rt_first"
+        mgr = ServiceNowTokenManager(mock_settings(), http)
+        await mgr.get_token()
 
-        async def test_force_refresh_triggers_new_fetch(self) -> None:
-            http = AsyncMock(spec=httpx.AsyncClient)
-            http.post.return_value = _mock_response(json_body=_token_json(refresh_token="rt_x"))
-            mgr = ServiceNowTokenManager(mock_settings(), http)
-            await mgr.get_token()
+        # Expire the access token so the next call attempts refresh.
+        mgr._expires_at = datetime.now(UTC) - timedelta(seconds=60)
 
-            http.post.return_value = _mock_response(
-                json_body=_token_json(access_token="tok_forced")
-            )
-            token = await mgr.get_token(force_refresh=True)
-
-            assert token == "tok_forced"
-            assert http.post.call_count == 2
-
-        async def test_refresh_failure_falls_back_to_password_grant(self) -> None:
-            http = AsyncMock(spec=httpx.AsyncClient)
-
-            # First call: password grant obtains the initial token
-            http.post.return_value = _mock_response(
+        # Refresh token is revoked, but password grant still works.
+        http.post.side_effect = [
+            _mock_response(status_code=401, json_body={}),
+            _mock_response(
                 json_body=_token_json(
-                    access_token="tok_initial",
-                    refresh_token="rt_old",
+                    access_token="tok_fallback",
+                    refresh_token="rt_new",
                 )
-            )
+            ),
+        ]
 
-            mgr = ServiceNowTokenManager(mock_settings(), http)
-            await mgr.get_token()
+        token = await mgr.get_token()
 
-            # Expire the access token so the next call attempts refresh.
-            mgr._expires_at = datetime.now(UTC) - timedelta(seconds=60)
+        assert token == "tok_fallback"
+        assert http.post.call_count == 3
 
-            # Refresh token is revoked, but password grant still works.
-            http.post.side_effect = [
-                _mock_response(status_code=401, json_body={}),
-                _mock_response(
-                    json_body=_token_json(
-                        access_token="tok_fallback",
-                        refresh_token="rt_new",
-                    )
-                ),
-            ]
+        refresh_call = http.post.call_args_list[1]
+        assert refresh_call.kwargs["data"]["grant_type"] == "refresh_token"
 
-            token = await mgr.get_token()
+        password_call = http.post.call_args_list[2]
+        assert password_call.kwargs["data"]["grant_type"] == "password"
 
-            assert token == "tok_fallback"
-            assert http.post.call_count == 3
+    async def test_failed_token_prevents_duplicate_refresh(self) -> None:
+        """When multiple coroutines race, only one refresh should happen."""
+        http = AsyncMock(spec=httpx.AsyncClient)
+        http.post.return_value = _mock_response(
+            json_body=_token_json(access_token="tok_initial", refresh_token="rt_init")
+        )
+        mgr = ServiceNowTokenManager(mock_settings(), http)
+        old_token = await mgr.get_token()
 
-            refresh_call = http.post.call_args_list[1]
-            assert refresh_call.kwargs["data"]["grant_type"] == "refresh_token"
+        # Simulate: another coroutine already refreshed
+        mgr._token = "tok_already_refreshed"
+        mgr._expires_at = datetime.now(UTC) + timedelta(hours=1)
 
-            password_call = http.post.call_args_list[2]
-            assert password_call.kwargs["data"]["grant_type"] == "password"
-
-        async def test_failed_token_prevents_duplicate_refresh(self) -> None:
-            """When multiple coroutines race, only one refresh should happen."""
-            http = AsyncMock(spec=httpx.AsyncClient)
-            http.post.return_value = _mock_response(
-                json_body=_token_json(access_token="tok_initial", refresh_token="rt_init")
-            )
-            mgr = ServiceNowTokenManager(mock_settings(), http)
-            old_token = await mgr.get_token()
-
-            # Simulate: another coroutine already refreshed
-            mgr._token = "tok_already_refreshed"
-            mgr._expires_at = datetime.now(UTC) + timedelta(hours=1)
-
-            # This call with failed_token=old should see the new token and skip refresh
-            result = await mgr.get_token(force_refresh=True, failed_token=old_token)
-            assert result == "tok_already_refreshed"
-            # Only the initial fetch, no extra refresh call
-            assert http.post.call_count == 1
+        # This call with failed_token=old should see the new token and skip refresh
+        result = await mgr.get_token(force_refresh=True, failed_token=old_token)
+        assert result == "tok_already_refreshed"
+        # Only the initial fetch, no extra refresh call
+        assert http.post.call_count == 1
 
 
 class TestTokenExpiryBuffer:
@@ -274,6 +273,25 @@ class TestCredentialSafety:
                 call_str = str(call)
                 assert "test-secret" not in call_str
                 assert "svc_pass" not in call_str
+
+    async def test_forced_timeout_does_not_leak_secrets_in_traceback(self) -> None:
+        def _raise_timeout(request: httpx.Request) -> httpx.Response:
+            raise httpx.TimeoutException("forced timeout")
+
+        transport = httpx.MockTransport(_raise_timeout)
+        real_http = httpx.AsyncClient(transport=transport)
+        settings = mock_settings()  # client_secret="test-secret", password="svc_pass"
+        mgr = ServiceNowTokenManager(settings, real_http)
+
+        try:
+            with pytest.raises(ServiceNowTimeoutError) as excinfo:
+                await mgr.get_token()
+
+            rendered = str(excinfo.getrepr(style="long", funcargs=True))
+            assert "test-secret" not in rendered
+            assert "svc_pass" not in rendered
+        finally:
+            await real_http.aclose()
 
     async def test_error_log_excludes_response_body(self) -> None:
         """On auth failure, the log entry must not contain the response body."""
