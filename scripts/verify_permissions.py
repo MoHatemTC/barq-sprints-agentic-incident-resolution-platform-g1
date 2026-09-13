@@ -630,6 +630,7 @@ def _test_log_status(
         exec_ok = str(rec_exec) == exec_id
         agent_ok = bool(rec_ag)
 
+        fields_ok = status_ok and action_ok and exec_ok and agent_ok
         if not fields_ok:
             details = (
                 f"Field mismatch: expected status={status}, action=execute; "
