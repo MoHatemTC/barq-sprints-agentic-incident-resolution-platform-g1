@@ -46,9 +46,9 @@ jobs:
       matrix:
         language: [python, javascript-typescript]
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: github/codeql-action/init@v3
+      - uses: github/codeql-action/init@faaca9a8f6edddba5725ffe5adefdab6669a2eca # v3.38.0
         with:
           languages: ${{ matrix.language }}
           # Generated Fluent/SDK output is machine-written and would be noise.
@@ -59,6 +59,6 @@ jobs:
               - "**/node_modules/**"
               - "**/*.min.js"
 
-      - uses: github/codeql-action/analyze@v3
+      - uses: github/codeql-action/analyze@faaca9a8f6edddba5725ffe5adefdab6669a2eca # v3.38.0
         with:
           category: "/language:${{ matrix.language }}"

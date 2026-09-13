@@ -4,7 +4,7 @@ default:
     @just --list
 
 install:
-    uv sync
+    uv sync --locked
 
 run:
     uv run uvicorn app.main:app --reload
@@ -33,6 +33,7 @@ precommit:
 
 # Everything CI runs, in the same order.
 check:
+    uv lock --check
     just lint
     uv run ruff format --check .
     just typecheck
