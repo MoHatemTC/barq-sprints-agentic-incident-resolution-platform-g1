@@ -1,19 +1,25 @@
-"""ServiceNow Table API client and publishing service for the Knowledge Base.
+"""Async ServiceNow kb_knowledge Table API client and idempotent article publisher.
 
-Follows Clean Architecture:
-- Core Table API CRUD operations are isolated in ``ServiceNowKBClient``.
-- Infrastructure preflight / provisioning is delegated to ``ServiceNowProvisioner``.
-- Idempotent upsert and read-back verification are encapsulated in ``publish_article``.
+Authenticates via OAuth 2.0 using ServiceNowTokenManager as a dedicated
+non-admin integration user (FR-06), scopes article lookups to the target
+Knowledge Base, verifies every write with fail-closed read-back checks,
+and synchronizes version display records.
 """
 
 from __future__ import annotations
 
-import base64
 from typing import Any
 
 import httpx
 import structlog
 
+from app.auth.token_manager import ServiceNowTokenManager
+from app.core.config import Settings
+from app.exceptions.servicenow import (
+    ServiceNowAuthenticationError,
+    ServiceNowConnectionError,
+    ServiceNowTimeoutError,
+)
 from app.models.knowledge import Article
 from app.publishing.exceptions import (
     ServiceNowAccessError,
@@ -33,26 +39,20 @@ from app.publishing.payload import (
 )
 from app.publishing.provisioning import ServiceNowProvisioner
 
-__all__ = [
-    "KB_TABLE",
-    "ServiceNowAccessError",
-    "ServiceNowAuthError",
-    "ServiceNowKBClient",
-    "ServiceNowKBError",
-    "ServiceNowKBSchemaError",
-    "ServiceNowProvisioner",
-    "ServiceNowRequestError",
-    "ServiceNowWriteRejectedError",
-    "publish_article",
-]
-
 logger = structlog.get_logger(__name__)
 
 KB_TABLE = "kb_knowledge"
 
-# Fields compared exactly on read-back verification;
-# The article body is checked for the provenance marker instead of raw byte
-# equality because ServiceNow sanitizes and reformats incoming HTML.
+# Fields requested on find_by_source_id
+_LIST_FIELDS: tuple[str, ...] = (
+    "sys_id",
+    "number",
+    "workflow_state",
+    "kb_knowledge_base",
+    U_SOURCE_ID_FIELD,
+)
+
+# Fields that MUST match what was sent
 _VERIFIED_FIELDS: tuple[str, ...] = (
     "short_description",
     "kb_knowledge_base",
@@ -63,53 +63,80 @@ _VERIFIED_FIELDS: tuple[str, ...] = (
     U_ARTICLE_NUMBER_FIELD,
 )
 
-_LIST_FIELDS: tuple[str, ...] = (
-    "sys_id",
-    "short_description",
-    "workflow_state",
-    "kb_knowledge_base",
-    "text",
-    U_SOURCE_ID_FIELD,
-    U_SERVICE_FIELD,
-    U_VERSION_FIELD,
-    U_SECURITY_LEVEL_FIELD,
-    U_ARTICLE_NUMBER_FIELD,
-)
-
-
-def _basic_auth_header(username: str, password: str) -> str:
-    token = base64.b64encode(f"{username}:{password}".encode()).decode()
-    return f"Basic {token}"
-
 
 class ServiceNowKBClient:
-    """HTTP client for the ServiceNow kb_knowledge Table API."""
+    """Async HTTP client for the ServiceNow kb_knowledge Table API using OAuth 2.0."""
 
     def __init__(
         self,
-        instance_url: str,
-        username: str,
-        password: str,
+        settings: Settings,
         *,
-        timeout_seconds: float = 30.0,
-        transport: httpx.BaseTransport | None = None,
+        http_client: httpx.AsyncClient | None = None,
+        token_manager: ServiceNowTokenManager | None = None,
     ) -> None:
-        self._client = httpx.Client(
-            base_url=instance_url.rstrip("/"),
-            headers={"Authorization": _basic_auth_header(username, password)},
-            timeout=timeout_seconds,
-            transport=transport,
+        self._settings = settings
+        self._http = http_client or httpx.AsyncClient(
+            base_url=str(settings.servicenow_instance_url).rstrip("/"),
+            timeout=settings.servicenow_timeout_seconds,
         )
+        self._owns_http_client = http_client is None
+        self._tokens = token_manager or ServiceNowTokenManager(settings, self._http)
         self._provisioner = ServiceNowProvisioner(self)
 
-    def close(self) -> None:
-        """Close the underlying HTTP client session."""
-        self._client.close()
+    async def aclose(self) -> None:
+        """Close the underlying HTTP client session if owned."""
+        if self._owns_http_client:
+            await self._http.aclose()
 
-    def request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
-        """Execute an HTTP request against the Table API with normalized error handling."""
+    async def __aenter__(self) -> ServiceNowKBClient:
+        return self
+
+    async def __aexit__(self, *exc_info: object) -> None:
+        await self.aclose()
+
+    async def request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
+        """Execute an HTTP request against the Table API with OAuth Bearer authentication."""
         try:
-            response = self._client.request(method, path, **kwargs)
+            token = await self._tokens.get_token()
+        except ServiceNowAuthenticationError as exc:
+            raise ServiceNowAuthError(
+                f"ServiceNow rejected OAuth credentials (401): {exc}"
+            ) from exc
+        except (ServiceNowTimeoutError, ServiceNowConnectionError) as exc:
+            raise ServiceNowRequestError(f"OAuth token request failed: {exc}") from exc
+
+        headers = dict(kwargs.pop("headers", {}))
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        headers.setdefault("Accept", "application/json")
+        headers.setdefault("Content-Type", "application/json")
+
+        try:
+            response = await self._http.request(method, path, headers=headers, **kwargs)
+            if response.status_code == 401 and token:
+                # Token may have expired prematurely; force-refresh and retry once
+                try:
+                    token = await self._tokens.get_token(
+                        force_refresh=True, failed_token=token
+                    )
+                except ServiceNowAuthenticationError as exc:
+                    raise ServiceNowAuthError(
+                        f"ServiceNow rejected OAuth credentials (401) on refresh: {exc}"
+                    ) from exc
+                except (ServiceNowTimeoutError, ServiceNowConnectionError) as exc:
+                    raise ServiceNowRequestError(
+                        f"OAuth token refresh failed: {exc}"
+                    ) from exc
+
+                if token:
+                    headers["Authorization"] = f"Bearer {token}"
+                response = await self._http.request(
+                    method, path, headers=headers, **kwargs
+                )
+        except httpx.TimeoutException as exc:
+            raise ServiceNowRequestError(
+                f"HTTP timeout for {method} {path}: {exc}"
+            ) from exc
         except httpx.TransportError as exc:
             raise ServiceNowRequestError(
                 f"HTTP transport error for {method} {path}: {exc}"
@@ -117,19 +144,20 @@ class ServiceNowKBClient:
 
         if response.status_code == 401:
             raise ServiceNowAuthError(
-                f"ServiceNow rejected credentials (401) for {method} {path}. "
-                "Check SERVICENOW_USERNAME / SERVICENOW_PASSWORD."
+                f"ServiceNow rejected OAuth credentials (401) for {method} {path}. "
+                "Verify SERVICENOW_CLIENT_ID, SERVICENOW_CLIENT_SECRET, "
+                "SERVICENOW_USERNAME, and SERVICENOW_PASSWORD."
             )
         if response.status_code == 403:
             raise ServiceNowAccessError(
                 f"Account lacks permission for {method} {path} (403). "
-                "Admin or Knowledge Admin credentials are required on the target instance."
+                "Knowledge Base permissions are required on the target instance."
             )
         if response.status_code == 400:
             raise ServiceNowKBSchemaError(
                 f"ServiceNow rejected request as invalid (400) for {method} {path}: "
-                f"{response.text[:300]}. If the query mentions u_source_id, "
-                "the kb_knowledge table is missing the u_source_id column."
+                f"{response.text[:300]}. If the query mentions custom fields, "
+                "the kb_knowledge table may be missing required schema columns."
             )
         if response.status_code >= 400:
             raise ServiceNowRequestError(
@@ -145,7 +173,7 @@ class ServiceNowKBClient:
     # Knowledge Article CRUD
     # -------------------------------------------------------------------------
 
-    def find_by_source_id(self, article_id: str) -> dict[str, Any] | None:
+    async def find_by_source_id(self, article_id: str) -> dict[str, Any] | None:
         """Find the kb_knowledge row stamped with our article ID, if any.
 
         Raises:
@@ -156,9 +184,8 @@ class ServiceNowKBClient:
             "sysparm_fields": ",".join(_LIST_FIELDS),
             "sysparm_limit": "2",
         }
-        records = self.request(
-            "GET", f"/api/now/table/{KB_TABLE}", params=params
-        ).json()["result"]
+        res = await self.request("GET", f"/api/now/table/{KB_TABLE}", params=params)
+        records = res.json().get("result", [])
         if len(records) > 1:
             sys_ids = [r.get("sys_id") for r in records]
             raise ServiceNowKBError(
@@ -167,29 +194,30 @@ class ServiceNowKBClient:
             )
         return records[0] if records else None
 
-    def create(self, payload: dict[str, Any]) -> str:
+    async def create(self, payload: dict[str, Any]) -> str:
         """POST a new kb_knowledge record; returns its sys_id."""
-        response = self.request("POST", f"/api/now/table/{KB_TABLE}", json=payload)
-        sys_id = response.json()["result"].get("sys_id")
+        response = await self.request(
+            "POST", f"/api/now/table/{KB_TABLE}", json=payload
+        )
+        sys_id = response.json().get("result", {}).get("sys_id")
         if not sys_id:
             raise ServiceNowRequestError(
                 f"Create succeeded but ServiceNow returned no sys_id: {response.text[:300]}"
             )
         return str(sys_id)
 
-    def update(self, sys_id: str, payload: dict[str, Any]) -> None:
+    async def update(self, sys_id: str, payload: dict[str, Any]) -> None:
         """PATCH an existing kb_knowledge record in place."""
-        self.request("PATCH", f"/api/now/table/{KB_TABLE}/{sys_id}", json=payload)
+        await self.request("PATCH", f"/api/now/table/{KB_TABLE}/{sys_id}", json=payload)
 
-    def get(self, sys_id: str) -> dict[str, Any]:
+    async def get(self, sys_id: str) -> dict[str, Any]:
         """Fetch the full stored record for read-back verification."""
-        return self.request("GET", f"/api/now/table/{KB_TABLE}/{sys_id}").json()[
-            "result"
-        ]
+        res = await self.request("GET", f"/api/now/table/{KB_TABLE}/{sys_id}")
+        return res.json().get("result", {})
 
-    def sync_version(self, kb_version_sys_id: str, version_str: str) -> None:
+    async def sync_version(self, kb_version_sys_id: str, version_str: str) -> None:
         """Synchronize the linked kb_version record to match the canonical version."""
-        self.request(
+        await self.request(
             "PATCH",
             f"/api/now/table/kb_version/{kb_version_sys_id}",
             json={"version": version_str},
@@ -199,22 +227,24 @@ class ServiceNowKBClient:
     # Provisioning & Preflight Delegations
     # -------------------------------------------------------------------------
 
-    def ensure_schema(self) -> None:
-        """Ensure custom fields and list views exist on the target instance."""
-        self._provisioner.ensure_schema()
+    async def ensure_schema(self) -> None:
+        """Ensure custom fields exist on the target instance."""
+        await self._provisioner.ensure_schema()
 
-    def ensure_categories(
+    async def ensure_categories(
         self, kb_sys_id: str, categories: list[str]
     ) -> dict[str, str]:
         """Resolve or dynamically create categories under the target Knowledge Base."""
-        return self._provisioner.ensure_categories(kb_sys_id, categories)
+        return await self._provisioner.ensure_categories(kb_sys_id, categories)
 
-    def run_preflight(self, kb_sys_id: str, categories: list[str]) -> dict[str, str]:
+    async def run_preflight(
+        self, kb_sys_id: str, categories: list[str]
+    ) -> dict[str, str]:
         """Execute all preflight configuration checks."""
-        return self._provisioner.run_preflight(kb_sys_id, categories)
+        return await self._provisioner.run_preflight(kb_sys_id, categories)
 
 
-def publish_article(
+async def publish_article(
     client: ServiceNowKBClient,
     article: Article,
     kb_sys_id: str,
@@ -224,16 +254,16 @@ def publish_article(
 
     Workflow:
     1. Constructs the Table API payload with metadata and converted HTML.
-    2. Queries by stable `u_source_id` key.
+    2. Queries by stable `u_source_id` key scoped to target KB.
     3. Creates new row or updates existing row in place.
-    4. Reads back the row and verifies stored values match sent values.
+    4. Reads back the row and verifies stored values match sent values (fail-closed).
     5. Synchronizes the linked `kb_version` record so ServiceNow displays the true version.
     """
     payload = build_kb_payload(article, kb_sys_id, category_mapping=category_mapping)
 
-    existing = client.find_by_source_id(article.article_id)
+    existing = await client.find_by_source_id(article.article_id)
     if existing is None:
-        sys_id = client.create(payload)
+        sys_id = await client.create(payload)
         outcome = "created"
     else:
         sys_id = str(existing["sys_id"])
@@ -245,16 +275,16 @@ def publish_article(
         ):
             outcome = "updated"
         else:
-            client.update(sys_id, payload)
+            await client.update(sys_id, payload)
             outcome = "updated"
 
-    stored = client.get(sys_id)
+    stored = await client.get(sys_id)
     _verify_stored(stored, payload, article.article_id)
 
     # Sync ServiceNow's version display so UI list view and forms show the exact version
     version_ref = stored.get("version")
     if isinstance(version_ref, dict) and "value" in version_ref:
-        client.sync_version(version_ref["value"], article.version)
+        await client.sync_version(version_ref["value"], article.version)
 
     logger.info(
         "article_published",
