@@ -6,8 +6,9 @@
 
 Merged in [#29](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pull/29): the execution log table, a dedicated non-admin
 service account, field-level ACLs and an automated verification harness, rebuilt
-inside scope `x_2215032_ai_inc_0` after the first submission was built entirely in
-the ServiceNow Global scope.
+mostly inside scope `x_2215032_ai_inc_0` after the first submission was built entirely
+in the ServiceNow Global scope. Four Global-scope ACLs remain in the merged update
+set — tracked in [#48](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/issues/48).
 
 A rework is in review in [#32](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pull/32), covering the execution-log status
 taxonomy, a write ACL for `ai_human_review_required`, and a platform-side human-lock

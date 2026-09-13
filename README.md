@@ -48,7 +48,7 @@ Retrieval and operational state are deliberately separate: Qdrant holds vectors 
 | `src/app/main.py` | FastAPI application entrypoint |
 | `src/app/core/config.py` | Pydantic settings. ServiceNow fields are **required** so the service fails fast rather than booting half-configured |
 | `src/app/api/` | HTTP routes. `webhook.py` is a placeholder — Sprint 2 |
-| `src/app/auth/` | OAuth token handling. Placeholder — lands with the ServiceNow client |
+| `src/app/auth/` | OAuth token handling: `token_manager.py` acquires and refreshes the access token, including mid-run expiry (S1.5) |
 | `src/app/clients/` | Outbound integrations: `servicenow_client.py` (S1.5 Table API client) and `qdrant.py` (S1.4 vector store) |
 | `src/app/models/` | Pydantic domain models: `incident.py`, `execution_log.py`, `oauth.py`, `work_note.py` (S1.5) and `knowledge.py` (S1.4) |
 | `src/app/exceptions/` | Typed ServiceNow errors raised by the client (S1.5) |
@@ -57,7 +57,7 @@ Retrieval and operational state are deliberately separate: Qdrant holds vectors 
 | `src/app/repositories/` | Persistence layer — Sprint 2 |
 | `src/app/services/` | Business logic and orchestration — Sprint 2 |
 | `src/app/core/constants.py`, `core/logging.py` | Placeholders, not yet imported anywhere |
-| `scripts/` | Operational entry points: `verify_permissions.py` (S1.2 permission harness), `extract_barq_kb.py`, `validate_corpus.py`, `setup_qdrant.py`, `seed_qdrant.py` (S1.4) |
+| `scripts/` | Operational entry points: `verify_permissions.py` (S1.2 permission harness), `extract_barq_kb.py`, `validate_corpus.py`, `setup_qdrant.py`, `seed_qdrant.py` (S1.4); `test_client.py` (S1.5 client exercise) |
 | `data/` | `corpus/` — the knowledge articles and ingestion report; `coverage_matrix.csv` — the incident-to-article ground truth (S1.4) |
 | `tests/` | pytest suite. `conftest.py` injects fake ServiceNow settings so tests never depend on a local `.env` |
 | `servicenow/ai_incident_orchestrator/` | Scoped ServiceNow application: exported update-set XML plus the SDK source it was built from |

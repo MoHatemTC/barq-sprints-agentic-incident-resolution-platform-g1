@@ -23,7 +23,6 @@ S1.3:
   - changed-files:
       - any-glob-to-any-file:
           - "servicenow/ai_incident_orchestrator/ai_incident_orchestrator_s1_3.xml"
-          - "servicenow/scaffolds/**"
           - "docs/sprint-1/s1.3-eligibility-rule-and-event/**"
 
 S1.4:
