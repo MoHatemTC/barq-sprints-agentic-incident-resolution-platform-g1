@@ -61,6 +61,11 @@ async def async_main(args: argparse.Namespace) -> int:
     logger.info("articles_loaded", count=len(articles))
 
     if args.dry_run:
+        if not args.allow_writes:
+            logger.info(
+                "read_only_by_default",
+                remedy="Re-run with --allow-writes to publish to ServiceNow.",
+            )
         for article in articles:
             payload = build_kb_payload(article, settings.servicenow_kb_id)
             logger.info(
@@ -161,9 +166,20 @@ def main() -> int:
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Build and validate payloads without any HTTP traffic.",
+        help="Build and validate payloads without any HTTP traffic. This is the default; "
+        "the flag is kept so existing invocations and docs keep working.",
+    )
+    # Read-only by default, matching scripts/test_client.py after #76 (issue #41).
+    # This script writes kb_knowledge articles and can create kb_category records on a
+    # shared PDI, so the destructive path is the one that has to be asked for.
+    parser.add_argument(
+        "--allow-writes",
+        action="store_true",
+        help="Actually publish to ServiceNow. Without this the run is a dry run.",
     )
     args = parser.parse_args()
+    if not args.allow_writes:
+        args.dry_run = True
     return asyncio.run(async_main(args))
 
 

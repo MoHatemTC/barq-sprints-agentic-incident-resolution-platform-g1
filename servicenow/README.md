@@ -57,8 +57,17 @@ The publishing pipeline authenticates via OAuth 2.0 Client Credentials / Passwor
 Once imported, run preflight validation and publishing:
 
 ```bash
+# Read-only: builds and validates every payload, makes zero HTTP calls.
 uv run python scripts/publish_kb.py --dry-run
+
+# Publish for real. Required — without it the run is a dry run.
+uv run python scripts/publish_kb.py --allow-writes
 ```
+
+`--allow-writes` is deliberately opt-in, matching `scripts/test_client.py` after #76:
+this script writes `kb_knowledge` articles **and can create `kb_category` records** on
+whichever instance `.env` points at, which on a shared PDI is not something to do by
+accident.
 
 If schema columns are present, `ServiceNowProvisioner` will pass schema verification and report:
 `schema_verified verified_columns=['u_source_id', 'u_service', 'u_version', 'u_security_level', 'u_article_number']`

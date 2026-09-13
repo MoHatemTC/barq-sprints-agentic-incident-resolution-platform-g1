@@ -97,3 +97,28 @@ def test_missing_corpus_file_fails(monkeypatch: pytest.MonkeyPatch, tmp_path: Pa
         monkeypatch, "--corpus", str(tmp_path / "nope.json"), "--report", str(tmp_path / "r.json")
     )
     assert exit_code == 1
+
+
+def test_without_allow_writes_the_run_is_read_only(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    corpus_file: Path,
+) -> None:
+    """No flags at all must not publish to a live instance.
+
+    Added while reviewing #88. The script previously wrote unless --dry-run was passed,
+    which is the opposite of scripts/test_client.py after #76 (issue #41) — and this one
+    also creates kb_category records on the shared PDI. The destructive path is the one
+    that has to be asked for.
+    """
+    _with_kb_id(monkeypatch)
+    report = tmp_path / "report.json"
+
+    # No --dry-run and no --allow-writes. If this ever makes HTTP calls the test suite
+    # has no network fake mounted, so it would fail rather than reach an instance.
+    exit_code = _run(monkeypatch, "--corpus", str(corpus_file), "--report", str(report))
+
+    assert exit_code == 0
+    data = json.loads(report.read_text())
+    assert data["dry_run"] is True, "a run without --allow-writes must be a dry run"
+    assert data["created"] == 0 and data["updated"] == 0

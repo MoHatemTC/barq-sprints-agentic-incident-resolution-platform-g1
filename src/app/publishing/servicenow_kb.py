@@ -8,6 +8,7 @@ and synchronizes version display records.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 import httpx
@@ -42,6 +43,12 @@ from app.publishing.provisioning import ServiceNowProvisioner
 logger = structlog.get_logger(__name__)
 
 KB_TABLE = "kb_knowledge"
+
+#: article_id is composed as f"{article_number}-v{version}", so the only shape that can
+#: reach a sysparm_query is KB####-vN.N. Re-checked here rather than relied on from the
+#: Article model: find_by_source_id takes a bare str, and an unvalidated caller would
+#: otherwise be able to inject encoded-query clauses with `^` — the same defect as #43.
+_ARTICLE_ID_PATTERN = re.compile(r"^KB\d{4}-v\d+\.\d+$")
 
 # Fields requested on find_by_source_id
 _LIST_FIELDS: tuple[str, ...] = (
@@ -177,6 +184,13 @@ class ServiceNowKBClient:
             ServiceNowKBError: If duplicate records exist for the same source ID,
                 or if a row with the source ID belongs to a different Knowledge Base.
         """
+        if not _ARTICLE_ID_PATTERN.match(article_id):
+            raise ServiceNowKBError(
+                f"Refusing to query with article_id={article_id!r}: it must match "
+                f"{_ARTICLE_ID_PATTERN.pattern}. Unvalidated values can inject encoded-query "
+                "clauses into sysparm_query."
+            )
+
         # First query scoped to the target Knowledge Base
         query = f"{U_SOURCE_ID_FIELD}={article_id}"
         if kb_sys_id:
@@ -185,16 +199,19 @@ class ServiceNowKBClient:
         params = {
             "sysparm_query": query,
             "sysparm_fields": ",".join(_LIST_FIELDS),
-            "sysparm_limit": "2",
+            # 11 keeps the message honest about how many duplicates exist without
+            # pulling an unbounded result set: "10" reads as "10", ">10" as "at least 10".
+            "sysparm_limit": "11",
         }
         res = await self.request("GET", f"/api/now/table/{KB_TABLE}", params=params)
         records = res.json().get("result", [])
 
         if len(records) > 1:
             sys_ids = [r.get("sys_id") for r in records]
+            count = f"at least {len(sys_ids)}" if len(sys_ids) > 10 else str(len(sys_ids))
             raise ServiceNowKBError(
-                f"Duplicate kb_knowledge rows carry u_source_id={article_id!r} "
-                f"(sys_ids: {sys_ids}). Clean up duplicates before publishing."
+                f"Duplicate kb_knowledge rows carry u_source_id={article_id!r}: "
+                f"found {count} (sys_ids: {sys_ids}). Clean up duplicates before publishing."
             )
 
         if records:
@@ -336,6 +353,14 @@ def _verify_stored(
     article_id: str,
 ) -> None:
     """Validate stored row against sent payload, failing loud on any mismatch."""
+    missing = [field for field in _VERIFIED_FIELDS if field not in sent]
+    if missing:
+        raise ServiceNowKBError(
+            f"Cannot verify the write for {article_id!r}: the payload is missing "
+            f"{missing}, which _VERIFIED_FIELDS requires. This is a payload-builder bug, "
+            "not an instance problem."
+        )
+
     for field in _VERIFIED_FIELDS:
         stored_value = stored.get(field)
         if isinstance(stored_value, dict) and "value" in stored_value:
