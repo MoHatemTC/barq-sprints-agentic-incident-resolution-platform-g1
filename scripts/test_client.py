@@ -8,7 +8,11 @@ import structlog
 from app.clients.servicenow_client import ServiceNowClient
 from app.core.config import Settings
 from app.exceptions.servicenow import ServiceNowError
-from app.models.execution_log import ExecutionLogCreatePayload, ExecutionStatus
+from app.models.execution_log import (
+    ExecutionAction,
+    ExecutionLogCreatePayload,
+    ExecutionStatus,
+)
 from app.models.incident import AIProcessingState, IncidentUpdatePayload
 
 logger = structlog.get_logger(__name__)
@@ -91,8 +95,8 @@ async def test_servicenow_client() -> None:
                 resolution=final_incident.ai_resolution,
             )
 
-            # 6. Test Creating AI Execution Log
-            logger.info("Testing write_execution_log()")
+            # 6. Test Creating AI Execution Log (Succeeded)
+            logger.info("Testing write_execution_log() (Succeeded)")
             log_payload = ExecutionLogCreatePayload(
                 incident_sys_id=sys_id,
                 execution_id=f"exec_test_{int(datetime.now(UTC).timestamp())}",
@@ -105,15 +109,38 @@ async def test_servicenow_client() -> None:
             log_entry = await client.write_execution_log(log_payload)
             if log_entry:
                 logger.info(
-                    "Successfully created execution log entry",
+                    "Successfully created successful execution log entry",
                     sys_id=log_entry.sys_id,
                     execution_id=log_entry.execution_id,
+                    status=log_entry.status,
                 )
             else:
                 logger.error(
-                    "Failed to create execution log entry. "
+                    "Failed to create successful execution log entry. "
                     "Verify that table x_2215032_ai_inc_0_ai_execution_log exists in ServiceNow."
                 )
+
+            # 7. Test Creating AI Execution Log (Abandoned)
+            logger.info("Testing write_execution_log() (Abandoned)")
+            abandoned_payload = ExecutionLogCreatePayload(
+                incident_sys_id=sys_id,
+                execution_id=f"exec_abandoned_{int(datetime.now(UTC).timestamp())}",
+                agent="test_client_script",
+                action=ExecutionAction.PROPOSE,
+                status=ExecutionStatus.ABANDONED,
+                timestamp=datetime.now(UTC),
+                result="Agent abandoned execution due to lack of response context.",
+            )
+            abandoned_entry = await client.write_execution_log(abandoned_payload)
+            if abandoned_entry:
+                logger.info(
+                    "Successfully created abandoned execution log entry",
+                    sys_id=abandoned_entry.sys_id,
+                    execution_id=abandoned_entry.execution_id,
+                    status=abandoned_entry.status,
+                )
+            else:
+                logger.error("Failed to create abandoned execution log entry.")
 
         except ServiceNowError as exc:
             logger.error(

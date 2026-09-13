@@ -20,6 +20,13 @@ class ExecutionStatus(StrEnum):
     ABANDONED = "abandoned"
 
 
+class ExecutionAction(StrEnum):
+    READ = "read"
+    EXECUTE = "execute"
+    PROPOSE = "propose"
+    ESCALATE = "escalate"
+
+
 class ExecutionLogEntry(BaseModel):
     """Read model: represents a record returned by ServiceNow after POST/GET."""
 
@@ -28,7 +35,7 @@ class ExecutionLogEntry(BaseModel):
     execution_id: str
     incident_reference: str  # sys_id of the parent incident
     agent: str
-    action: str
+    action: ExecutionAction
     status: ExecutionStatus
     timestamp: datetime | None = None
     result: str | None = None
@@ -46,13 +53,13 @@ class ExecutionLogCreatePayload(BaseModel):
     incident_sys_id: str = Field(..., description="sys_id of the parent incident")
     execution_id: str = Field(..., max_length=40)
     agent: str = Field(..., max_length=100)
-    action: str = Field(..., max_length=100)
+    action: ExecutionAction
     status: ExecutionStatus
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
     result: str | None = Field(default=None, max_length=4000)
     error: str | None = Field(default=None, max_length=4000)
 
-    @field_validator("execution_id", "agent", "action")
+    @field_validator("execution_id", "agent")
     @classmethod
     def _not_blank(cls, v: str) -> str:
         if not v.strip():
