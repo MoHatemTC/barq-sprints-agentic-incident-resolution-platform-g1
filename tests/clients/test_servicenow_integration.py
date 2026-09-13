@@ -10,7 +10,9 @@ from app.core.config import Settings
 from app.exceptions.servicenow import (
     ServiceNowAuthorizationError,
     ServiceNowError,
+    ServiceNowHumanLockError,
     ServiceNowValidationError,
+    ServiceNowWriteRejectedError,
 )
 from app.models.execution_log import (
     ExecutionAction,
@@ -40,6 +42,14 @@ async def client(settings: Settings) -> ServiceNowClient:
 @pytest.fixture
 def test_sys_id() -> str:
     return os.environ["SERVICENOW_TEST_INCIDENT_SYS_ID"]
+
+
+@pytest.fixture
+def locked_test_sys_id() -> str:
+    sys_id = os.environ.get("SERVICENOW_TEST_LOCKED_INCIDENT_SYS_ID")
+    if not sys_id:
+        pytest.skip("SERVICENOW_TEST_LOCKED_INCIDENT_SYS_ID not set")
+    return sys_id
 
 
 @pytest.mark.asyncio
@@ -138,3 +148,46 @@ async def test_live_execution_log_write_failure_safely_handled(
         # This should return None and not raise an exception
         log_entry = await client.write_execution_log(payload)
         assert log_entry is None
+
+
+@pytest.mark.asyncio
+async def test_live_forbidden_field_write_is_rejected(
+    client: ServiceNowClient, test_sys_id: str
+) -> None:
+    before = await client.get_incident(test_sys_id)
+
+    forbidden_body = {"priority": "1"}
+    changed_value = "1" if before.priority != "1" else "2"
+    forbidden_body["priority"] = changed_value
+
+    with pytest.raises(ServiceNowWriteRejectedError):
+        result = await client._request(
+            "PATCH",
+            f"/api/now/table/incident/{test_sys_id}",
+            json=forbidden_body,
+        )
+        client._verify_write_persisted(
+            requested=forbidden_body, persisted=result, sys_id=test_sys_id
+        )
+
+    after = await client.get_incident(test_sys_id)
+    assert after.priority == before.priority
+
+
+@pytest.mark.asyncio
+async def test_live_human_lock_blocks_update(
+    client: ServiceNowClient, locked_test_sys_id: str
+) -> None:
+    """SECURITY.md: a locked incident must refuse both update_incident and
+    add_work_note, and must never reach the PATCH."""
+    payload = IncidentUpdatePayload(ai_confidence=0.5)
+    with pytest.raises(ServiceNowHumanLockError):
+        await client.update_incident(locked_test_sys_id, payload)
+
+
+@pytest.mark.asyncio
+async def test_live_human_lock_blocks_work_note(
+    client: ServiceNowClient, locked_test_sys_id: str
+) -> None:
+    with pytest.raises(ServiceNowHumanLockError):
+        await client.add_work_note(locked_test_sys_id, "should be refused")
