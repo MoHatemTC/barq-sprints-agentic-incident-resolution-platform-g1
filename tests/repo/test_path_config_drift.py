@@ -27,7 +27,6 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 #: Remove the entry in the PR that creates the path.
 PLANNED: dict[str, str] = {
     # Arrive with open pull requests. Drop the entry in the PR that lands the path.
-    "scripts/verification_report.json": "lands with the S1.2 rework, PR #32",
     "servicenow/ai_incident_orchestrator/ai_incident_orchestrator_s1_3.xml": (
         "lands with S1.3, PR #30"
     ),

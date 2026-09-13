@@ -80,6 +80,30 @@ Downstream code therefore receives:
 
 This keeps ServiceNow-specific response quirks out of the rest of the application.
 
+### The human lock fails closed (#40)
+
+`ai_human_lock` is the hard safety override: when it is set, no automated write may
+touch the incident. Because it is a safety control, **the client only proceeds when the
+lock is explicitly confirmed to be off.** Anything else blocks the write.
+
+| Value returned by ServiceNow | Parsed as | Write |
+|---|---|---|
+| `"true"`, `"1"` (any case, surrounding space ignored) | `True` | **blocked** — locked for human review |
+| `"false"`, `"0"` (any case) | `False` | allowed |
+| `""` (blank) | `None` | **blocked** — unknown lock state |
+| field absent from the response | `None` | **blocked** — unknown lock state |
+| anything else (`"null"`, `"undefined"`, `"garbage"`, `"yes"`, `"t"`) | `None` | **blocked** — unknown lock state |
+
+Both `update_incident` and `add_work_note` enforce this, raising a `ServiceNowError`
+subclass with the observed state in `details` and sending no PATCH.
+
+The decision to treat blank and unrecognised values as *locked* rather than *unlocked*
+is deliberate. ServiceNow returns booleans as `"true"`/`"false"`, so any other value
+means the client does not understand the record — and a safety override that fails open
+when it cannot read itself is worse than no override, because it reports success.
+`"yes"` and `"t"` are not accepted precisely because the Table API never returns them:
+accepting them would widen the unlocked set on a guess.
+
 ## Requirements Covered
 
 * **FR-02:** Every processing attempt is logged, including successful, failed, blocked, and approval-waiting attempts. The execution log acts as an audit trail, while logging failures do not bring down the processing pipeline.
