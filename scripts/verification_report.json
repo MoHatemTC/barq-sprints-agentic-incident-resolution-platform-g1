@@ -1,6 +1,6 @@
 {
   "sprint": "S1.2",
-  "generated_at": "2026-09-13T19:03:58.950672+00:00",
+  "generated_at": "2026-09-13T19:36:45.447018+00:00",
   "instance": "https://dev407364.service-now.com",
   "service_account": "ai_orchestrator_svc",
   "summary": {
@@ -27,13 +27,13 @@
       "category": "Authentication",
       "name": "Identity is expected service account (ai_orchestrator_svc)",
       "operation": "GET",
-      "target": "/api/now/table/sys_user",
-      "expected": "user_name=ai_orchestrator_svc",
+      "target": "/api/now/table/sys_user?sysparm_query=sys_id=javascript:gs.getUserID()",
+      "expected": "Token owner user_name=ai_orchestrator_svc",
       "http_status": 200,
       "observed": "user_name=ai_orchestrator_svc",
       "persisted_change": false,
       "verdict": "PASS",
-      "notes": "Account display name: AI Orchestrator Service Account"
+      "notes": "Token owner: AI Orchestrator Service Account (ai_orchestrator_svc)"
     },
     {
       "test_id": "AUTH-03",
@@ -64,15 +64,15 @@
     {
       "test_id": "TOKEN-01",
       "category": "Token Lifecycle",
-      "name": "Mid-run expiry detected (harness does not swallow 401)",
-      "operation": "GET",
+      "name": "Mid-run expiry detected (harness re-authenticates)",
+      "operation": "GET + POST",
       "target": "/api/now/table/incident",
-      "expected": "HTTP 401 or 403",
-      "http_status": 401,
-      "observed": "HTTP 401",
+      "expected": "Stale token returns 401 -> Re-authentication succeeds (HTTP 200)",
+      "http_status": 200,
+      "observed": "Initial: HTTP 401 -> Re-auth: HTTP 200",
       "persisted_change": false,
       "verdict": "PASS",
-      "notes": "Harness must re-authenticate on 401/403 rather than continuing silently."
+      "notes": "Stale token rejected (HTTP 401); re-authenticated successfully (HTTP 200)."
     },
     {
       "test_id": "PERM-01",
@@ -132,12 +132,12 @@
       "name": "Create execution log: status=succeeded (FR-02)",
       "operation": "POST",
       "target": "x_2215032_ai_inc_0_ai_execution_log",
-      "expected": "201 Created + all required fields persisted",
+      "expected": "201 Created + status='succeeded' + action='execute'",
       "http_status": 201,
-      "observed": "HTTP 201 (sys_id=89f1d5f54793cb10c148497f316d43f6)",
+      "observed": "HTTP 201 (sys_id=4d79ddb547d3cb10c148497f316d439a)",
       "persisted_change": true,
       "verdict": "PASS",
-      "notes": "exec_id=exec_verify_8078e14007bb | sys_id=89f1d5f54793cb10c148497f316d43f6"
+      "notes": "exec_id=exec_verify_15d299e9f992 | sys_id=4d79ddb547d3cb10c148497f316d439a | status=succeeded confirmed"
     },
     {
       "test_id": "LOG-02",
@@ -145,12 +145,12 @@
       "name": "Create execution log: status=failed (FR-02)",
       "operation": "POST",
       "target": "x_2215032_ai_inc_0_ai_execution_log",
-      "expected": "201 Created + all required fields persisted",
+      "expected": "201 Created + status='failed' + action='execute'",
       "http_status": 201,
-      "observed": "HTTP 201 (sys_id=d9f1d5f54793cb10c148497f316d43fb)",
+      "observed": "HTTP 201 (sys_id=9d79ddb547d3cb10c148497f316d439f)",
       "persisted_change": true,
       "verdict": "PASS",
-      "notes": "exec_id=exec_verify_2768884129bb | sys_id=d9f1d5f54793cb10c148497f316d43fb"
+      "notes": "exec_id=exec_verify_4a4d61e0cc2a | sys_id=9d79ddb547d3cb10c148497f316d439f | status=failed confirmed"
     },
     {
       "test_id": "LOG-03",
@@ -158,12 +158,12 @@
       "name": "Create execution log: status=blocked (FR-02)",
       "operation": "POST",
       "target": "x_2215032_ai_inc_0_ai_execution_log",
-      "expected": "201 Created + all required fields persisted",
+      "expected": "201 Created + status='blocked' + action='execute'",
       "http_status": 201,
-      "observed": "HTTP 201 (sys_id=99f119f54793cb10c148497f316d4319)",
+      "observed": "HTTP 201 (sys_id=dd79ddb547d3cb10c148497f316d43a4)",
       "persisted_change": true,
       "verdict": "PASS",
-      "notes": "exec_id=exec_verify_2d28c6a636cd | sys_id=99f119f54793cb10c148497f316d4319"
+      "notes": "exec_id=exec_verify_30fc05be7926 | sys_id=dd79ddb547d3cb10c148497f316d43a4 | status=blocked confirmed"
     },
     {
       "test_id": "LOG-06",
@@ -171,12 +171,12 @@
       "name": "Create execution log: status=abandoned (FR-02)",
       "operation": "POST",
       "target": "x_2215032_ai_inc_0_ai_execution_log",
-      "expected": "201 Created + all required fields persisted",
+      "expected": "201 Created + status='abandoned' + action='execute'",
       "http_status": 201,
-      "observed": "HTTP 201 (sys_id=d9f119f54793cb10c148497f316d431e)",
+      "observed": "HTTP 201 (sys_id=a179d53547d3cb10c148497f316d4330)",
       "persisted_change": true,
       "verdict": "PASS",
-      "notes": "exec_id=exec_verify_960e2c8ee782 | sys_id=d9f119f54793cb10c148497f316d431e"
+      "notes": "exec_id=exec_verify_fdd892132354 | sys_id=a179d53547d3cb10c148497f316d4330 | status=abandoned confirmed"
     },
     {
       "test_id": "LOG-04",
@@ -189,14 +189,14 @@
       "observed": "HTTP 200 (1 record(s) found)",
       "persisted_change": false,
       "verdict": "PASS",
-      "notes": "exec_id='exec_idx_ddba2503daa74647' -> sys_id=a5f119f54793cb10c148497f316d436e"
+      "notes": "exec_id='exec_idx_45e8e844d5bf404b' -> sys_id=a1791d7d4793cb10c148497f316d4325"
     },
     {
       "test_id": "LOG-05",
       "category": "Execution Log",
       "name": "Cannot delete execution log records (append-only)",
       "operation": "DELETE",
-      "target": "x_2215032_ai_inc_0_ai_execution_log/e9f195f54793cb10c148497f316d43da",
+      "target": "x_2215032_ai_inc_0_ai_execution_log/b179557d4793cb10c148497f316d4399",
       "expected": "403 or 404 (delete blocked)",
       "http_status": 403,
       "observed": "HTTP 403 (record_exists=True)",
@@ -209,7 +209,7 @@
       "category": "Execution Log",
       "name": "Cannot modify execution log records (append-only)",
       "operation": "PATCH",
-      "target": "x_2215032_ai_inc_0_ai_execution_log/f5f119f54793cb10c148497f316d437c",
+      "target": "x_2215032_ai_inc_0_ai_execution_log/f17911f547d3cb10c148497f316d43a5",
       "expected": "401/403 or write ignored (record immutable)",
       "http_status": 403,
       "observed": "HTTP 403 (modified=False)",

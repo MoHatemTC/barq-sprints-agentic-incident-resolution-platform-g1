@@ -93,6 +93,10 @@ The relationship between execution log rows and pipeline runs is formally define
 - **Distributed Trace Grouping**: Retaining a non-unique index on `execution_id` enables distributed tracing across multi-node or multi-event runs, allowing multiple audit entries (such as individual agent node actions or safe retry sequences) to correlate under a single parent execution trace without triggering database collision errors.
 - **Lookup Invariant**: Single-event lookups can resolve individual rows, while trace queries by `execution_id` return the complete chronological trail of events for that pipeline execution.
 
+> [!IMPORTANT]
+> **Non-Unique `execution_id` by Architectural Design**:
+> The `execution_id` field is intentionally **not unique** at the database schema level (`<unique_index>false</unique_index>`). It serves as an indexed correlation and distributed tracing key, enabling multi-step pipeline nodes, sub-agent tasks, and retry attempts for a single incident execution context to share the same trace ID. Record-level uniqueness is guaranteed exclusively by ServiceNow's native primary key (`sys_id`).
+
 #### Append-Only Protection (SS7 / LOG-05)
 To prevent rogue actors or automation bugs from tampering with audit records, the table enforces a strict **append-only policy**:
 - **Delete ACL Rule**: `x_2215032_ai_inc_0_ai_execution_log` (operation: `delete`, sys_id: `7c036368471f4310c148497f316d433f`).
@@ -293,10 +297,10 @@ The test harness [`scripts/verify_permissions.py`](../../../scripts/verify_permi
 | Test ID | Category | Target / Operation | Expected Behavior | Observed Result | Status |
 |:---|:---|:---|:---|:---|:---:|
 | **AUTH-01** | Authentication | `POST /oauth_token.do` | 200 OK + Bearer access token issued | HTTP 200 (Lifespan: 1799s) | **PASS** |
-| **AUTH-02** | Authentication | `GET /api/now/table/sys_user` | Authenticated identity matches service account | `user_name=ai_orchestrator_svc` | **PASS** |
+| **AUTH-02** | Authentication | `GET /api/now/table/sys_user` (`gs.getUserID()`) | Authenticated session token belongs to expected service account | `user_name=ai_orchestrator_svc` | **PASS** |
 | **AUTH-03** | Authentication | `GET /api/now/table/sys_user_has_role` | Non-admin verification (403 Forbidden) | HTTP 403 (No `security_admin`) | **PASS** |
 | **AUTH-04** | Authentication | `GET /api/now/table/incident` (Invalid token) | Invalid/expired token rejected | HTTP 401 Unauthorized | **PASS** |
-| **TOKEN-01**| Token Lifecycle | Mid-run expiry detection | Harness detects 401 and re-authenticates | HTTP 401 caught & handled | **PASS** |
+| **TOKEN-01**| Token Lifecycle | Mid-run expiry detection & recovery | Harness catches 401 on stale token, re-authenticates, and recovers | Re-auth recovery HTTP 200 | **PASS** |
 | **PERM-01** | Permitted | `GET /api/now/table/incident/{id}` | Read incident record | HTTP 200 (`INC0010003`) | **PASS** |
 | **PERM-02** | Permitted | `PATCH incident.work_notes` | Persisted in `sys_journal_field` | HTTP 200 (Count = 1) | **PASS** |
 | **PERM-03** | Permitted | `PATCH incident.ai_classification` | Write scoped AI classification field | HTTP 200 (Value: `software`) | **PASS** |
@@ -305,7 +309,7 @@ The test harness [`scripts/verify_permissions.py`](../../../scripts/verify_permi
 | **LOG-02**  | Execution Log | `POST x_..._ai_execution_log` (`failed`) | Status `failed` audit record created | HTTP 201 Created | **PASS** |
 | **LOG-03**  | Execution Log | `POST x_..._ai_execution_log` (`blocked`) | Status `blocked` audit record created | HTTP 201 Created | **PASS** |
 | **LOG-06**  | Execution Log | `POST x_..._ai_execution_log` (`abandoned`) | Status `abandoned` audit record created | HTTP 201 Created | **PASS** |
-| **LOG-04**  | Execution Log | `GET x_..._ai_execution_log?execution_id=` | Indexed query returns exactly 1 record | HTTP 200 (1 record returned) | **PASS** |
+| **LOG-04**  | Execution Log | `GET x_..._ai_execution_log?execution_id=` | Indexed lookup resolves trace records (non-unique index; uniqueness via `sys_id`) | HTTP 200 (1 record returned) | **PASS** |
 | **LOG-05**  | Execution Log | `DELETE x_..._ai_execution_log/{id}` | Append-only: Delete blocked with 403 | HTTP 403 (Record exists) | **PASS** |
 | **DENY-01** | Forbidden | `PATCH incident.state` | State modification rejected | HTTP 200 (State unchanged `1`) | **PASS** |
 | **DENY-02** | Forbidden | `PATCH incident.assigned_to` | Assignment modification rejected | HTTP 200 (Value unchanged) | **PASS** |
