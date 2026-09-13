@@ -14,9 +14,11 @@ Branch naming follows the type of change: `feat/`, `fix/`, `chore/`, `docs/`.
 just check   # lint, format check, type-check, tests — the same commands CI runs
 ```
 
-Tests must pass on a clean clone with no `.env`. `tests/conftest.py` injects fake
-ServiceNow settings so the suite never depends on local developer state; if you add a
-required setting, add it there too or you will break everyone else's checkout.
+Tests must pass on a clean clone with no `.env`, **and must also pass with an
+arbitrary `.env` present** — unit tests run with `.env` loading disabled
+(`app/core/config.py`), so nothing in a developer's local `.env` can leak into or
+break the suite. `tests/conftest.py` backfills fake ServiceNow settings for ordinary
+runs only; if you add a required setting, add it there too or you will break everyone else's checkout.
 
 ## Commit messages
 
