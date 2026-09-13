@@ -1,6 +1,6 @@
 {
   "sprint": "S1.2",
-  "generated_at": "2026-09-12T14:24:03.328166+00:00",
+  "generated_at": "2026-09-13T07:43:27.160460+00:00",
   "instance": "https://dev407364.service-now.com",
   "service_account": "ai_orchestrator_svc",
   "summary": {
@@ -111,7 +111,7 @@
       "observed": "HTTP 200 (value='software')",
       "persisted_change": true,
       "verdict": "PASS",
-      "notes": "'' -> 'software' (restored after test)."
+      "notes": "'software_issue' -> 'software' (restored after test)."
     },
     {
       "test_id": "PERM-04",
@@ -134,10 +134,10 @@
       "target": "x_2215032_ai_inc_0_ai_execution_log",
       "expected": "201 Created + all required fields persisted",
       "http_status": 201,
-      "observed": "HTTP 201 (sys_id=154843d9475fc710c148497f316d437e)",
+      "observed": "HTTP 201 (sys_id=ce26ba65475f4b10c148497f316d43a1)",
       "persisted_change": true,
       "verdict": "PASS",
-      "notes": "exec_id=exec_verify_6cf1a718ada0 | sys_id=154843d9475fc710c148497f316d437e"
+      "notes": "exec_id=exec_verify_8f5a0eefc500 | sys_id=ce26ba65475f4b10c148497f316d43a1"
     },
     {
       "test_id": "LOG-02",
@@ -147,10 +147,10 @@
       "target": "x_2215032_ai_inc_0_ai_execution_log",
       "expected": "201 Created + all required fields persisted",
       "http_status": 201,
-      "observed": "HTTP 201 (sys_id=1d4843d9475fc710c148497f316d438f)",
+      "observed": "HTTP 201 (sys_id=5626fe65475f4b10c148497f316d4384)",
       "persisted_change": true,
       "verdict": "PASS",
-      "notes": "exec_id=exec_verify_b0964ea60a2a | sys_id=1d4843d9475fc710c148497f316d438f"
+      "notes": "exec_id=exec_verify_6a970ba4ee64 | sys_id=5626fe65475f4b10c148497f316d4384"
     },
     {
       "test_id": "LOG-03",
@@ -160,10 +160,10 @@
       "target": "x_2215032_ai_inc_0_ai_execution_log",
       "expected": "201 Created + all required fields persisted",
       "http_status": 201,
-      "observed": "HTTP 201 (sys_id=5d4843d9475fc710c148497f316d4394)",
+      "observed": "HTTP 201 (sys_id=9626fe65475f4b10c148497f316d4389)",
       "persisted_change": true,
       "verdict": "PASS",
-      "notes": "exec_id=exec_verify_07ccc0fc0be0 | sys_id=5d4843d9475fc710c148497f316d4394"
+      "notes": "exec_id=exec_verify_d3613314bf93 | sys_id=9626fe65475f4b10c148497f316d4389"
     },
     {
       "test_id": "LOG-06",
@@ -173,10 +173,10 @@
       "target": "x_2215032_ai_inc_0_ai_execution_log",
       "expected": "201 Created + all required fields persisted",
       "http_status": 201,
-      "observed": "HTTP 201 (sys_id=ad4843d9475fc710c148497f316d4399)",
+      "observed": "HTTP 201 (sys_id=d62632a5475f4b10c148497f316d4355)",
       "persisted_change": true,
       "verdict": "PASS",
-      "notes": "exec_id=exec_verify_e9d81340d4f6 | sys_id=ad4843d9475fc710c148497f316d4399"
+      "notes": "exec_id=exec_verify_3f310b2c9ac2 | sys_id=d62632a5475f4b10c148497f316d4355"
     },
     {
       "test_id": "LOG-04",
@@ -189,14 +189,14 @@
       "observed": "HTTP 200 (1 record(s) found)",
       "persisted_change": false,
       "verdict": "PASS",
-      "notes": "exec_id='exec_idx_cb421ec7e65a42d6' -> sys_id=254843d9475fc710c148497f316d43c4"
+      "notes": "exec_id='exec_idx_a2ff67dec8f34ca6' -> sys_id=2a2632a5475f4b10c148497f316d435a"
     },
     {
       "test_id": "LOG-05",
       "category": "Execution Log",
       "name": "Cannot delete execution log records (append-only)",
       "operation": "DELETE",
-      "target": "x_2215032_ai_inc_0_ai_execution_log/f54843d9475fc710c148497f316d43c9",
+      "target": "x_2215032_ai_inc_0_ai_execution_log/aa2632a5475f4b10c148497f316d43e8",
       "expected": "403 or 404 (delete blocked)",
       "http_status": 403,
       "observed": "HTTP 403 (record_exists=True)",
@@ -300,13 +300,13 @@
       "category": "Human Lock",
       "name": "Platform Business Rule enforces safety stop on locked incident",
       "operation": "PATCH",
-      "target": "incident (x_2215032_ai_inc_0_ai_human_lock=true)",
-      "expected": "Update aborted when lock is active",
-      "http_status": 200,
-      "observed": "No incident currently has human_lock=true on instance",
+      "target": "incident/0db9760f47870b10c148497f316d4320",
+      "expected": "HTTP 400/403 abort + 0 journal entries",
+      "http_status": 403,
+      "observed": "HTTP 403 | journal_count=0",
       "persisted_change": false,
       "verdict": "PASS",
-      "notes": "Defense-in-depth rule ready: set ai_human_lock=true on an incident to verify live abort."
+      "notes": "Locked incident INC0010041: Business rule aborted automated update."
     },
     {
       "test_id": "BULK-01",

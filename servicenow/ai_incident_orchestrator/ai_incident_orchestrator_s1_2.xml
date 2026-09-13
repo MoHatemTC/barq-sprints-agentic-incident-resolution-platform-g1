@@ -82,38 +82,6 @@
 <view/>
 </sys_update_xml>
 <sys_update_xml action="INSERT_OR_UPDATE">
-<action>DELETE</action>
-<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
-<category>customer</category>
-<comments/>
-<name>sys_script_3776697c475f8310c148497f316d4322</name>
-<payload>&lt;?xml version="1.0" encoding="UTF-8"?&gt;&lt;record_update sys_domain="global" table="sys_script"&gt;&lt;sys_script action="DELETE"&gt;&lt;abort_action&gt;false&lt;/abort_action&gt;&lt;access&gt;package_private&lt;/access&gt;&lt;action_delete&gt;false&lt;/action_delete&gt;&lt;action_insert&gt;true&lt;/action_insert&gt;&lt;action_query&gt;false&lt;/action_query&gt;&lt;action_update&gt;true&lt;/action_update&gt;&lt;active&gt;false&lt;/active&gt;&lt;add_message&gt;false&lt;/add_message&gt;&lt;advanced&gt;true&lt;/advanced&gt;&lt;change_fields&gt;false&lt;/change_fields&gt;&lt;client_callable&gt;false&lt;/client_callable&gt;&lt;collection&gt;incident&lt;/collection&gt;&lt;condition/&gt;&lt;description/&gt;&lt;execute_function&gt;false&lt;/execute_function&gt;&lt;filter_condition/&gt;&lt;is_rest&gt;false&lt;/is_rest&gt;&lt;message/&gt;&lt;name&gt;AI Prevent Customer Comments&lt;/name&gt;&lt;order&gt;50&lt;/order&gt;&lt;priority&gt;100&lt;/priority&gt;&lt;rest_method/&gt;&lt;rest_method_text/&gt;&lt;rest_service/&gt;&lt;rest_service_text/&gt;&lt;rest_variables/&gt;&lt;role_conditions/&gt;&lt;script&gt;&lt;![CDATA[(function executeRule(current, previous /*null when async*/) {
-    if (gs.hasRole('x_2215032_ai_inc_0.integration_writer') || gs.getUserName() == 'ai_orchestrator_svc') {
-        if (current.comments.changes()) {
-            current.comments = '';
-        }
-    }
-})(current, previous);]]&gt;&lt;/script&gt;&lt;sys_class_name&gt;sys_script&lt;/sys_class_name&gt;&lt;sys_created_by&gt;admin&lt;/sys_created_by&gt;&lt;sys_created_on&gt;2026-09-10 17:59:36&lt;/sys_created_on&gt;&lt;sys_domain&gt;global&lt;/sys_domain&gt;&lt;sys_domain_path&gt;/&lt;/sys_domain_path&gt;&lt;sys_id&gt;3776697c475f8310c148497f316d4322&lt;/sys_id&gt;&lt;sys_mod_count&gt;1&lt;/sys_mod_count&gt;&lt;sys_name&gt;AI Prevent Customer Comments&lt;/sys_name&gt;&lt;sys_overrides/&gt;&lt;sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0"&gt;51a63bbf738bc7502aedfed25ab8b789&lt;/sys_package&gt;&lt;sys_policy/&gt;&lt;sys_scope display_value="AI Incident Orchestrator"&gt;51a63bbf738bc7502aedfed25ab8b789&lt;/sys_scope&gt;&lt;sys_update_name&gt;sys_script_3776697c475f8310c148497f316d4322&lt;/sys_update_name&gt;&lt;sys_updated_by&gt;admin&lt;/sys_updated_by&gt;&lt;sys_updated_on&gt;2026-09-10 18:14:00&lt;/sys_updated_on&gt;&lt;template/&gt;&lt;when&gt;before&lt;/when&gt;&lt;/sys_script&gt;&lt;sys_translated_text action="delete_multiple" query="documentkey=3776697c475f8310c148497f316d4322"/&gt;&lt;/record_update&gt;</payload>
-<payload_hash>-973533833</payload_hash>
-<remote_update_set display_value="AI Incident Orchestrator - S1.2 Execution Log and ACLs">f8b389cd479b0710c148497f316d4384</remote_update_set>
-<replace_on_upgrade>false</replace_on_upgrade>
-<sys_created_by>admin</sys_created_by>
-<sys_created_on>2026-09-11 10:06:03</sys_created_on>
-<sys_id>30b389cd479b0710c148497f316d438f</sys_id>
-<sys_mod_count>0</sys_mod_count>
-<sys_recorded_at>1a08c9041af0000001</sys_recorded_at>
-<sys_updated_by>admin</sys_updated_by>
-<sys_updated_on>2026-09-11 10:06:03</sys_updated_on>
-<table>incident</table>
-<target_name>AI Prevent Customer Comments</target_name>
-<type>Business Rule</type>
-<update_domain>global</update_domain>
-<update_guid>752c6d78aa9f8310964f7c15958cc1ad</update_guid>
-<update_guid_history>752c6d78aa9f8310964f7c15958cc1ad:-973533833,fec9ed343c9f831046a2d469c5957508:-2084084885,ff76697c4a5f831094ebf3c6fd67f426:2006493432</update_guid_history>
-<update_set display_value=""/>
-<view/>
-</sys_update_xml>
-<sys_update_xml action="INSERT_OR_UPDATE">
 <action>INSERT_OR_UPDATE</action>
 <application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
 <category>customer</category>
@@ -401,39 +369,6 @@
 <update_domain>global</update_domain>
 <update_guid>9899f849dd5b07102f777daf9b338228</update_guid>
 <update_guid_history>9899f849dd5b07102f777daf9b338228:634766561</update_guid_history>
-<update_set display_value=""/>
-<view/>
-</sys_update_xml>
-<sys_update_xml action="INSERT_OR_UPDATE">
-<action>DELETE</action>
-<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
-<category>customer</category>
-<comments/>
-<name>sys_script_86c9ad34479f8310c148497f316d433a</name>
-<payload>&lt;?xml version="1.0" encoding="UTF-8"?&gt;&lt;record_update sys_domain="global" table="sys_script"&gt;&lt;sys_script action="DELETE"&gt;&lt;abort_action&gt;false&lt;/abort_action&gt;&lt;access&gt;package_private&lt;/access&gt;&lt;action_delete&gt;false&lt;/action_delete&gt;&lt;action_insert&gt;true&lt;/action_insert&gt;&lt;action_query&gt;false&lt;/action_query&gt;&lt;action_update&gt;false&lt;/action_update&gt;&lt;active&gt;true&lt;/active&gt;&lt;add_message&gt;false&lt;/add_message&gt;&lt;advanced&gt;true&lt;/advanced&gt;&lt;change_fields&gt;false&lt;/change_fields&gt;&lt;client_callable&gt;false&lt;/client_callable&gt;&lt;collection&gt;sys_journal_field&lt;/collection&gt;&lt;condition/&gt;&lt;description/&gt;&lt;execute_function&gt;false&lt;/execute_function&gt;&lt;filter_condition/&gt;&lt;is_rest&gt;false&lt;/is_rest&gt;&lt;message/&gt;&lt;name&gt;AI Block Comments Journal Entry&lt;/name&gt;&lt;order&gt;50&lt;/order&gt;&lt;priority&gt;100&lt;/priority&gt;&lt;rest_method/&gt;&lt;rest_method_text/&gt;&lt;rest_service/&gt;&lt;rest_service_text/&gt;&lt;rest_variables/&gt;&lt;role_conditions/&gt;&lt;script&gt;&lt;![CDATA[(function executeRule(current, previous /*null when async*/) {
-    if (current.element == 'comments' &amp;&amp; current.name == 'incident') {
-        if (current.sys_created_by == 'ai_orchestrator_svc') {
-            gs.info('AI_BLOCK_COMMENTS: Prevented ai_orchestrator_svc from writing customer comment on ' + current.element_id);
-            current.setAbortAction(true);
-        }
-    }
-})(current, previous);]]&gt;&lt;/script&gt;&lt;sys_class_name&gt;sys_script&lt;/sys_class_name&gt;&lt;sys_created_by&gt;admin&lt;/sys_created_by&gt;&lt;sys_created_on&gt;2026-09-10 18:13:58&lt;/sys_created_on&gt;&lt;sys_domain&gt;global&lt;/sys_domain&gt;&lt;sys_domain_path&gt;/&lt;/sys_domain_path&gt;&lt;sys_id&gt;86c9ad34479f8310c148497f316d433a&lt;/sys_id&gt;&lt;sys_mod_count&gt;0&lt;/sys_mod_count&gt;&lt;sys_name&gt;AI Block Comments Journal Entry&lt;/sys_name&gt;&lt;sys_overrides/&gt;&lt;sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0"&gt;51a63bbf738bc7502aedfed25ab8b789&lt;/sys_package&gt;&lt;sys_policy/&gt;&lt;sys_scope display_value="AI Incident Orchestrator"&gt;51a63bbf738bc7502aedfed25ab8b789&lt;/sys_scope&gt;&lt;sys_update_name&gt;sys_script_86c9ad34479f8310c148497f316d433a&lt;/sys_update_name&gt;&lt;sys_updated_by&gt;admin&lt;/sys_updated_by&gt;&lt;sys_updated_on&gt;2026-09-10 18:13:58&lt;/sys_updated_on&gt;&lt;template/&gt;&lt;when&gt;before&lt;/when&gt;&lt;/sys_script&gt;&lt;sys_translated_text action="delete_multiple" query="documentkey=86c9ad34479f8310c148497f316d433a"/&gt;&lt;/record_update&gt;</payload>
-<payload_hash>847957353</payload_hash>
-<remote_update_set display_value="AI Incident Orchestrator - S1.2 Execution Log and ACLs">f8b389cd479b0710c148497f316d4384</remote_update_set>
-<replace_on_upgrade>false</replace_on_upgrade>
-<sys_created_by>admin</sys_created_by>
-<sys_created_on>2026-09-11 10:06:03</sys_created_on>
-<sys_id>38b389cd479b0710c148497f316d43a8</sys_id>
-<sys_mod_count>0</sys_mod_count>
-<sys_recorded_at>1a08c904e350000001</sys_recorded_at>
-<sys_updated_by>admin</sys_updated_by>
-<sys_updated_on>2026-09-11 10:06:03</sys_updated_on>
-<table>sys_journal_field</table>
-<target_name>AI Block Comments Journal Entry</target_name>
-<type>Business Rule</type>
-<update_domain>global</update_domain>
-<update_guid>e22cad78a29f8310e26cbae72ddfac4c</update_guid>
-<update_guid_history>e22cad78a29f8310e26cbae72ddfac4c:847957353,42c9ad34849f83103670f3f50241503f:-1911382947</update_guid_history>
 <update_set display_value=""/>
 <view/>
 </sys_update_xml>
@@ -942,39 +877,6 @@
 <view/>
 </sys_update_xml>
 <sys_update_xml action="INSERT_OR_UPDATE">
-<action>DELETE</action>
-<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
-<category>customer</category>
-<comments/>
-<name>sys_script_52a8a5b0479f8310c148497f316d438d</name>
-<payload>&lt;?xml version="1.0" encoding="UTF-8"?&gt;&lt;record_update sys_domain="global" table="sys_script"&gt;&lt;sys_script action="DELETE"&gt;&lt;abort_action&gt;false&lt;/abort_action&gt;&lt;access&gt;package_private&lt;/access&gt;&lt;action_delete&gt;false&lt;/action_delete&gt;&lt;action_insert&gt;true&lt;/action_insert&gt;&lt;action_query&gt;false&lt;/action_query&gt;&lt;action_update&gt;true&lt;/action_update&gt;&lt;active&gt;true&lt;/active&gt;&lt;add_message&gt;false&lt;/add_message&gt;&lt;advanced&gt;true&lt;/advanced&gt;&lt;change_fields&gt;false&lt;/change_fields&gt;&lt;client_callable&gt;false&lt;/client_callable&gt;&lt;collection&gt;incident&lt;/collection&gt;&lt;condition/&gt;&lt;description/&gt;&lt;execute_function&gt;false&lt;/execute_function&gt;&lt;filter_condition/&gt;&lt;is_rest&gt;false&lt;/is_rest&gt;&lt;message/&gt;&lt;name&gt;AI Block Customer Comments&lt;/name&gt;&lt;order&gt;1&lt;/order&gt;&lt;priority&gt;100&lt;/priority&gt;&lt;rest_method/&gt;&lt;rest_method_text/&gt;&lt;rest_service/&gt;&lt;rest_service_text/&gt;&lt;rest_variables/&gt;&lt;role_conditions/&gt;&lt;script&gt;&lt;![CDATA[(function executeRule(current, previous /*null when async*/) {
-    if (current.comments.changes()) {
-        if (gs.getUserName() == 'ai_orchestrator_svc' || gs.hasRole('x_2215032_ai_inc_0.integration_writer')) {
-            gs.addErrorMessage("Security Policy: AI integrations are restricted to internal work notes only.");
-            current.setAbortAction(true);
-        }
-    }
-})(current, previous);]]&gt;&lt;/script&gt;&lt;sys_class_name&gt;sys_script&lt;/sys_class_name&gt;&lt;sys_created_by&gt;admin&lt;/sys_created_by&gt;&lt;sys_created_on&gt;2026-09-10 18:09:42&lt;/sys_created_on&gt;&lt;sys_domain&gt;global&lt;/sys_domain&gt;&lt;sys_domain_path&gt;/&lt;/sys_domain_path&gt;&lt;sys_id&gt;52a8a5b0479f8310c148497f316d438d&lt;/sys_id&gt;&lt;sys_mod_count&gt;3&lt;/sys_mod_count&gt;&lt;sys_name&gt;AI Block Customer Comments&lt;/sys_name&gt;&lt;sys_overrides/&gt;&lt;sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0"&gt;51a63bbf738bc7502aedfed25ab8b789&lt;/sys_package&gt;&lt;sys_policy/&gt;&lt;sys_scope display_value="AI Incident Orchestrator"&gt;51a63bbf738bc7502aedfed25ab8b789&lt;/sys_scope&gt;&lt;sys_update_name&gt;sys_script_52a8a5b0479f8310c148497f316d438d&lt;/sys_update_name&gt;&lt;sys_updated_by&gt;admin&lt;/sys_updated_by&gt;&lt;sys_updated_on&gt;2026-09-10 18:18:47&lt;/sys_updated_on&gt;&lt;template/&gt;&lt;when&gt;before&lt;/when&gt;&lt;/sys_script&gt;&lt;sys_translated_text action="delete_multiple" query="documentkey=52a8a5b0479f8310c148497f316d438d"/&gt;&lt;/record_update&gt;</payload>
-<payload_hash>-931459760</payload_hash>
-<remote_update_set display_value="AI Incident Orchestrator - S1.2 Execution Log and ACLs">f8b389cd479b0710c148497f316d4384</remote_update_set>
-<replace_on_upgrade>false</replace_on_upgrade>
-<sys_created_by>admin</sys_created_by>
-<sys_created_on>2026-09-11 10:06:03</sys_created_on>
-<sys_id>74b389cd479b0710c148497f316d438f</sys_id>
-<sys_mod_count>0</sys_mod_count>
-<sys_recorded_at>1a08c90437d0000001</sys_recorded_at>
-<sys_updated_by>admin</sys_updated_by>
-<sys_updated_on>2026-09-11 10:06:03</sys_updated_on>
-<table>incident</table>
-<target_name>AI Block Customer Comments</target_name>
-<type>Business Rule</type>
-<update_domain>global</update_domain>
-<update_guid>792c6d78179f8310834c0702ae2f70c1</update_guid>
-<update_guid_history>792c6d78179f8310834c0702ae2f70c1:-931459760,fcea25f4349f8310f6b00fdc8b12272b:-771928612,36c9ed34b99f83107f7744623a7b0a19:1816670095,e059adf0149f83108e11c53cd94cec9d:1489204194,7bc8e9b0a09f8310a3c61c70db7385e8:1711821919</update_guid_history>
-<update_set display_value=""/>
-<view/>
-</sys_update_xml>
-<sys_update_xml action="INSERT_OR_UPDATE">
 <action>INSERT_OR_UPDATE</action>
 <application display_value="Global">global</application>
 <category>customer</category>
@@ -1135,7 +1037,6 @@
 <update_set display_value=""/>
 <view/>
 </sys_update_xml>
-
 <sys_update_xml action="INSERT_OR_UPDATE">
 <action>INSERT_OR_UPDATE</action>
 <application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
@@ -1162,7 +1063,6 @@
 <update_set display_value=""/>
 <view/>
 </sys_update_xml>
-
 <sys_update_xml action="INSERT_OR_UPDATE">
 <action>INSERT_OR_UPDATE</action>
 <application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
@@ -1217,44 +1117,6 @@
 <update_domain>global</update_domain>
 <update_guid>1c99f849575b07105291dfccfd2be923</update_guid>
 <update_guid_history>1c99f849575b07105291dfccfd2be923:978652257</update_guid_history>
-<update_set display_value=""/>
-<view/>
-</sys_update_xml>
-<sys_update_xml action="INSERT_OR_UPDATE">
-<action>DELETE</action>
-<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
-<category>customer</category>
-<comments/>
-<name>sys_script_8e17edbc475f8310c148497f316d4306</name>
-<payload>&lt;?xml version="1.0" encoding="UTF-8"?&gt;&lt;record_update sys_domain="global" table="sys_script"&gt;&lt;sys_script action="DELETE"&gt;&lt;abort_action&gt;false&lt;/abort_action&gt;&lt;access&gt;package_private&lt;/access&gt;&lt;action_delete&gt;false&lt;/action_delete&gt;&lt;action_insert&gt;true&lt;/action_insert&gt;&lt;action_query&gt;false&lt;/action_query&gt;&lt;action_update&gt;true&lt;/action_update&gt;&lt;active&gt;false&lt;/active&gt;&lt;add_message&gt;false&lt;/add_message&gt;&lt;advanced&gt;true&lt;/advanced&gt;&lt;change_fields&gt;false&lt;/change_fields&gt;&lt;client_callable&gt;false&lt;/client_callable&gt;&lt;collection&gt;incident&lt;/collection&gt;&lt;condition/&gt;&lt;description/&gt;&lt;execute_function&gt;false&lt;/execute_function&gt;&lt;filter_condition/&gt;&lt;is_rest&gt;false&lt;/is_rest&gt;&lt;message/&gt;&lt;name&gt;AI Strip Unauthorized Comments&lt;/name&gt;&lt;order&gt;100&lt;/order&gt;&lt;priority&gt;100&lt;/priority&gt;&lt;rest_method/&gt;&lt;rest_method_text/&gt;&lt;rest_service/&gt;&lt;rest_service_text/&gt;&lt;rest_variables/&gt;&lt;role_conditions/&gt;&lt;script&gt;&lt;![CDATA[(function executeRule(current, previous /*null when async*/) {
-    if (gs.hasRole('x_2215032_ai_inc_0.integration_writer') || gs.getUserName() == 'ai_orchestrator_svc') {
-        var jf = new GlideRecord('sys_journal_field');
-        jf.addQuery('element_id', current.sys_id);
-        jf.addQuery('element', 'comments');
-        jf.addQuery('sys_created_by', 'IN', 'ai_orchestrator_svc,' + gs.getUserName());
-        jf.query();
-        while (jf.next()) {
-            gs.info('AI Strip Unauthorized Comments: removed journal ' + jf.sys_id);
-            jf.deleteRecord();
-        }
-    }
-})(current, previous);]]&gt;&lt;/script&gt;&lt;sys_class_name&gt;sys_script&lt;/sys_class_name&gt;&lt;sys_created_by&gt;admin&lt;/sys_created_by&gt;&lt;sys_created_on&gt;2026-09-10 18:02:13&lt;/sys_created_on&gt;&lt;sys_domain&gt;global&lt;/sys_domain&gt;&lt;sys_domain_path&gt;/&lt;/sys_domain_path&gt;&lt;sys_id&gt;8e17edbc475f8310c148497f316d4306&lt;/sys_id&gt;&lt;sys_mod_count&gt;1&lt;/sys_mod_count&gt;&lt;sys_name&gt;AI Strip Unauthorized Comments&lt;/sys_name&gt;&lt;sys_overrides/&gt;&lt;sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0"&gt;51a63bbf738bc7502aedfed25ab8b789&lt;/sys_package&gt;&lt;sys_policy/&gt;&lt;sys_scope display_value="AI Incident Orchestrator"&gt;51a63bbf738bc7502aedfed25ab8b789&lt;/sys_scope&gt;&lt;sys_update_name&gt;sys_script_8e17edbc475f8310c148497f316d4306&lt;/sys_update_name&gt;&lt;sys_updated_by&gt;admin&lt;/sys_updated_by&gt;&lt;sys_updated_on&gt;2026-09-10 18:14:00&lt;/sys_updated_on&gt;&lt;template/&gt;&lt;when&gt;after&lt;/when&gt;&lt;/sys_script&gt;&lt;sys_translated_text action="delete_multiple" query="documentkey=8e17edbc475f8310c148497f316d4306"/&gt;&lt;/record_update&gt;</payload>
-<payload_hash>-546419473</payload_hash>
-<remote_update_set display_value="AI Incident Orchestrator - S1.2 Execution Log and ACLs">f8b389cd479b0710c148497f316d4384</remote_update_set>
-<replace_on_upgrade>false</replace_on_upgrade>
-<sys_created_by>admin</sys_created_by>
-<sys_created_on>2026-09-11 10:06:03</sys_created_on>
-<sys_id>7cb389cd479b0710c148497f316d43a8</sys_id>
-<sys_mod_count>0</sys_mod_count>
-<sys_recorded_at>1a08c90459e0000001</sys_recorded_at>
-<sys_updated_by>admin</sys_updated_by>
-<sys_updated_on>2026-09-11 10:06:03</sys_updated_on>
-<table>incident</table>
-<target_name>AI Strip Unauthorized Comments</target_name>
-<type>Business Rule</type>
-<update_domain>global</update_domain>
-<update_guid>8a2c6d78fa9f831052723707756f54ed</update_guid>
-<update_guid_history>8a2c6d78fa9f831052723707756f54ed:-546419473,22c9ad34569f831078bcff711167c9d3:-988051077,4a17edbc065f8310b58303e879e25c0b:-2063549810</update_guid_history>
 <update_set display_value=""/>
 <view/>
 </sys_update_xml>
@@ -1520,39 +1382,6 @@
 <update_domain>global</update_domain>
 <update_guid>28a32fa8e81f43106ede1b5c649dcecc</update_guid>
 <update_guid_history>28a32fa8e81f43106ede1b5c649dcecc:518363647</update_guid_history>
-<update_set display_value=""/>
-<view/>
-</sys_update_xml>
-<sys_update_xml action="INSERT_OR_UPDATE">
-<action>DELETE</action>
-<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
-<category>customer</category>
-<comments/>
-<name>sys_script_10a62534475f8310c148497f316d43f7</name>
-<payload>&lt;?xml version="1.0" encoding="UTF-8"?&gt;&lt;record_update sys_domain="global" table="sys_script"&gt;&lt;sys_script action="DELETE"&gt;&lt;abort_action&gt;false&lt;/abort_action&gt;&lt;access&gt;package_private&lt;/access&gt;&lt;action_delete&gt;false&lt;/action_delete&gt;&lt;action_insert&gt;true&lt;/action_insert&gt;&lt;action_query&gt;false&lt;/action_query&gt;&lt;action_update&gt;false&lt;/action_update&gt;&lt;active&gt;false&lt;/active&gt;&lt;add_message&gt;false&lt;/add_message&gt;&lt;advanced&gt;true&lt;/advanced&gt;&lt;change_fields&gt;false&lt;/change_fields&gt;&lt;client_callable&gt;false&lt;/client_callable&gt;&lt;collection&gt;sys_journal_field&lt;/collection&gt;&lt;condition/&gt;&lt;description/&gt;&lt;execute_function&gt;false&lt;/execute_function&gt;&lt;filter_condition/&gt;&lt;is_rest&gt;false&lt;/is_rest&gt;&lt;message/&gt;&lt;name&gt;AI Block Customer Comments Journal&lt;/name&gt;&lt;order&gt;50&lt;/order&gt;&lt;priority&gt;100&lt;/priority&gt;&lt;rest_method/&gt;&lt;rest_method_text/&gt;&lt;rest_service/&gt;&lt;rest_service_text/&gt;&lt;rest_variables/&gt;&lt;role_conditions/&gt;&lt;script&gt;&lt;![CDATA[(function executeRule(current, previous /*null when async*/) {
-    if (current.element == 'comments') {
-        if (gs.hasRole('x_2215032_ai_inc_0.integration_writer') || gs.getUserName() == 'ai_orchestrator_svc') {
-            gs.info('BLOCKED: Prevented AI service account from writing customer comments');
-            current.setAbortAction(true);
-        }
-    }
-})(current, previous);]]&gt;&lt;/script&gt;&lt;sys_class_name&gt;sys_script&lt;/sys_class_name&gt;&lt;sys_created_by&gt;admin&lt;/sys_created_by&gt;&lt;sys_created_on&gt;2026-09-10 18:00:11&lt;/sys_created_on&gt;&lt;sys_domain&gt;global&lt;/sys_domain&gt;&lt;sys_domain_path&gt;/&lt;/sys_domain_path&gt;&lt;sys_id&gt;10a62534475f8310c148497f316d43f7&lt;/sys_id&gt;&lt;sys_mod_count&gt;1&lt;/sys_mod_count&gt;&lt;sys_name&gt;AI Block Customer Comments Journal&lt;/sys_name&gt;&lt;sys_overrides/&gt;&lt;sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0"&gt;51a63bbf738bc7502aedfed25ab8b789&lt;/sys_package&gt;&lt;sys_policy/&gt;&lt;sys_scope display_value="AI Incident Orchestrator"&gt;51a63bbf738bc7502aedfed25ab8b789&lt;/sys_scope&gt;&lt;sys_update_name&gt;sys_script_10a62534475f8310c148497f316d43f7&lt;/sys_update_name&gt;&lt;sys_updated_by&gt;admin&lt;/sys_updated_by&gt;&lt;sys_updated_on&gt;2026-09-10 18:13:58&lt;/sys_updated_on&gt;&lt;template/&gt;&lt;when&gt;before&lt;/when&gt;&lt;/sys_script&gt;&lt;sys_translated_text action="delete_multiple" query="documentkey=10a62534475f8310c148497f316d43f7"/&gt;&lt;/record_update&gt;</payload>
-<payload_hash>-244559435</payload_hash>
-<remote_update_set display_value="AI Incident Orchestrator - S1.2 Execution Log and ACLs">f8b389cd479b0710c148497f316d4384</remote_update_set>
-<replace_on_upgrade>false</replace_on_upgrade>
-<sys_created_by>admin</sys_created_by>
-<sys_created_on>2026-09-11 10:06:03</sys_created_on>
-<sys_id>b4b389cd479b0710c148497f316d438e</sys_id>
-<sys_mod_count>0</sys_mod_count>
-<sys_recorded_at>1a08c9048d00000001</sys_recorded_at>
-<sys_updated_by>admin</sys_updated_by>
-<sys_updated_on>2026-09-11 10:06:03</sys_updated_on>
-<table>sys_journal_field</table>
-<target_name>AI Block Customer Comments Journal</target_name>
-<type>Business Rule</type>
-<update_domain>global</update_domain>
-<update_guid>8a2cad78599f8310750993d04d821200</update_guid>
-<update_guid_history>8a2cad78599f8310750993d04d821200:-244559435,1ec9ad347e9f8310729f02b2e2f29280:-113893311,58a6ad7c5f5f8310fe84f1fed986e437:2113995952</update_guid_history>
 <update_set display_value=""/>
 <view/>
 </sys_update_xml>
@@ -2300,42 +2129,6 @@
 <view/>
 </sys_update_xml>
 <sys_update_xml action="INSERT_OR_UPDATE">
-<action>DELETE</action>
-<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
-<category>customer</category>
-<comments/>
-<name>sys_script_17776dfc475f8310c148497f316d43cc</name>
-<payload>&lt;?xml version="1.0" encoding="UTF-8"?&gt;&lt;record_update sys_domain="global" table="sys_script"&gt;&lt;sys_script action="DELETE"&gt;&lt;abort_action&gt;false&lt;/abort_action&gt;&lt;access&gt;package_private&lt;/access&gt;&lt;action_delete&gt;false&lt;/action_delete&gt;&lt;action_insert&gt;true&lt;/action_insert&gt;&lt;action_query&gt;false&lt;/action_query&gt;&lt;action_update&gt;false&lt;/action_update&gt;&lt;active&gt;false&lt;/active&gt;&lt;add_message&gt;false&lt;/add_message&gt;&lt;advanced&gt;true&lt;/advanced&gt;&lt;change_fields&gt;false&lt;/change_fields&gt;&lt;client_callable&gt;false&lt;/client_callable&gt;&lt;collection&gt;sys_journal_field&lt;/collection&gt;&lt;condition/&gt;&lt;description/&gt;&lt;execute_function&gt;false&lt;/execute_function&gt;&lt;filter_condition/&gt;&lt;is_rest&gt;false&lt;/is_rest&gt;&lt;message/&gt;&lt;name&gt;AI Auto Remove Comment Journal&lt;/name&gt;&lt;order&gt;100&lt;/order&gt;&lt;priority&gt;100&lt;/priority&gt;&lt;rest_method/&gt;&lt;rest_method_text/&gt;&lt;rest_service/&gt;&lt;rest_service_text/&gt;&lt;rest_variables/&gt;&lt;role_conditions/&gt;&lt;script&gt;&lt;![CDATA[(function executeRule(current, previous /*null when async*/) {
-    if (current.element == 'comments') {
-        if (current.sys_created_by == 'ai_orchestrator_svc' || gs.hasRole('x_2215032_ai_inc_0.integration_writer')) {
-            gs.info('AI Auto Remove Comment Journal: deleting ' + current.sys_id);
-            var gr = new GlideRecord('sys_journal_field');
-            if (gr.get(current.sys_id)) {
-                gr.deleteRecord();
-            }
-        }
-    }
-})(current, previous);]]&gt;&lt;/script&gt;&lt;sys_class_name&gt;sys_script&lt;/sys_class_name&gt;&lt;sys_created_by&gt;admin&lt;/sys_created_by&gt;&lt;sys_created_on&gt;2026-09-10 18:03:57&lt;/sys_created_on&gt;&lt;sys_domain&gt;global&lt;/sys_domain&gt;&lt;sys_domain_path&gt;/&lt;/sys_domain_path&gt;&lt;sys_id&gt;17776dfc475f8310c148497f316d43cc&lt;/sys_id&gt;&lt;sys_mod_count&gt;1&lt;/sys_mod_count&gt;&lt;sys_name&gt;AI Auto Remove Comment Journal&lt;/sys_name&gt;&lt;sys_overrides/&gt;&lt;sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0"&gt;51a63bbf738bc7502aedfed25ab8b789&lt;/sys_package&gt;&lt;sys_policy/&gt;&lt;sys_scope display_value="AI Incident Orchestrator"&gt;51a63bbf738bc7502aedfed25ab8b789&lt;/sys_scope&gt;&lt;sys_update_name&gt;sys_script_17776dfc475f8310c148497f316d43cc&lt;/sys_update_name&gt;&lt;sys_updated_by&gt;admin&lt;/sys_updated_by&gt;&lt;sys_updated_on&gt;2026-09-10 18:13:59&lt;/sys_updated_on&gt;&lt;template/&gt;&lt;when&gt;after&lt;/when&gt;&lt;/sys_script&gt;&lt;sys_translated_text action="delete_multiple" query="documentkey=17776dfc475f8310c148497f316d43cc"/&gt;&lt;/record_update&gt;</payload>
-<payload_hash>-766989130</payload_hash>
-<remote_update_set display_value="AI Incident Orchestrator - S1.2 Execution Log and ACLs">f8b389cd479b0710c148497f316d4384</remote_update_set>
-<replace_on_upgrade>false</replace_on_upgrade>
-<sys_created_by>admin</sys_created_by>
-<sys_created_on>2026-09-11 10:06:03</sys_created_on>
-<sys_id>f8b389cd479b0710c148497f316d438e</sys_id>
-<sys_mod_count>0</sys_mod_count>
-<sys_recorded_at>1a08c904ccb0000001</sys_recorded_at>
-<sys_updated_by>admin</sys_updated_by>
-<sys_updated_on>2026-09-11 10:06:03</sys_updated_on>
-<table>sys_journal_field</table>
-<target_name>AI Auto Remove Comment Journal</target_name>
-<type>Business Rule</type>
-<update_domain>global</update_domain>
-<update_guid>de2cad78a29f83108f629269d29ffd38</update_guid>
-<update_guid_history>de2cad78a29f83108f629269d29ffd38:-766989130,d2c9ad348d9f8310a8d83d2ed5866eb6:840624962,df776dfcbc5f8310ce1c666487fdc4d0:-1717216335</update_guid_history>
-<update_set display_value=""/>
-<view/>
-</sys_update_xml>
-<sys_update_xml action="INSERT_OR_UPDATE">
 <action>INSERT_OR_UPDATE</action>
 <application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
 <category>customer</category>
@@ -2730,37 +2523,72 @@
 <application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
 <category>customer</category>
 <comments/>
-<name>sys_script_58a74e41c3054f128be48e02d41b539c</name>
-<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update sys_domain="global" table="sys_script"><sys_script action="INSERT_OR_UPDATE"><abort_action>false</abort_action><access>package_private</access><action_delete>false</action_delete><action_insert>false</action_insert><action_query>false</action_query><action_update>true</action_update><active>true</active><add_message>false</add_message><advanced>true</advanced><change_fields>false</change_fields><client_callable>false</client_callable><collection>incident</collection><condition/><description>Enforces server-side human lock safety stop rejecting automated AI updates when incident is locked by a human operator.</description><execute_function>false</execute_function><filter_condition/><is_rest>false</is_rest><message/><name>AI Enforce Human Lock Safety Stop</name><order>50</order><priority>100</priority><rest_method/><rest_method_text/><rest_service/><rest_service_text/><rest_variables/><role_conditions/><script><![CDATA[(function executeRule(current, previous /*null when async*/) {
-    // Enforce safety stop if human lock is active
-    if (current.x_2215032_ai_inc_0_ai_human_lock == true) {
-        // Check if modification is initiated by the AI service account or role
-        var isAiCaller = gs.hasRole('x_2215032_ai_inc_0.integration_writer') || 
-                         gs.getUserName() == 'ai_orchestrator_svc';
-        
-        if (isAiCaller) {
-            // If previous was not locked, but this update is trying to set something, or if it was already locked
-            gs.addErrorMessage('Incident is locked by a human operator (AI Human Lock). Automated AI updates are rejected.');
-            current.setAbortAction(true);
+<name>sys_script_46107b1147d30b10c148497f316d4395</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update sys_domain="global" table="sys_script"><sys_script action="INSERT_OR_UPDATE"><abort_action>false</abort_action><access>package_private</access><action_delete>false</action_delete><action_insert>false</action_insert><action_query>false</action_query><action_update>true</action_update><active>true</active><add_message>false</add_message><advanced>true</advanced><change_fields>false</change_fields><client_callable>false</client_callable><collection>incident</collection><condition/><description/><execute_function>false</execute_function><filter_condition table="incident"/><is_rest>false</is_rest><message/><name>AI Enforce Human Lock Safety Stop</name><order>50</order><priority>100</priority><rest_method/><rest_method_text/><rest_service/><rest_service_text/><rest_variables/><role_conditions/><script><![CDATA[(function executeRule(current, previous /*null when async*/) {
+
+    // 1. Check if human lock is active
+    var lockVal = '' + current.getValue('x_2215032_ai_inc_0_ai_human_lock');
+    if (lockVal !== '1' && lockVal !== 'true') {
+        return;
+    }
+
+    // 2. Only enforce for the AI integration identity
+    var isAiCaller = (gs.getUserName() == 'ai_orchestrator_svc') ||
+                     gs.hasRole('x_2215032_ai_inc_0.integration_writer');
+
+    if (!isAiCaller) {
+        return;
+    }
+
+    // 3. The permitted AI write fields (including work_notes)
+    var aiFields = [
+        'work_notes',
+        'x_2215032_ai_inc_0_ai_classification',
+        'x_2215032_ai_inc_0_ai_confidence',
+        'x_2215032_ai_inc_0_ai_suggestion',
+        'x_2215032_ai_inc_0_ai_resolution',
+        'x_2215032_ai_inc_0_ai_human_review_required',
+        'x_2215032_ai_inc_0_ai_failure_reason',
+        'x_2215032_ai_inc_0_ai_processing_state',
+        'x_2215032_ai_inc_0_ai_processing_start',
+        'x_2215032_ai_inc_0_ai_processing_end',
+        'x_2215032_ai_inc_0_ai_agent_version',
+        'x_2215032_ai_inc_0_ai_model_name'
+    ];
+
+    // 4. Reject if any AI field was modified in this update
+    for (var i = 0; i < aiFields.length; i++) {
+        var field = aiFields[i];
+        if (current.isValidField(field)) {
+            var elem = current.getElement(field);
+            if (elem != null && elem.changes()) {
+                gs.addErrorMessage(
+                    'Incident is locked by a human operator (AI Human Lock). Automated AI update to ' + field + ' rejected.'
+                );
+                current.setAbortAction(true);
+                return;
+            }
         }
     }
-})(current, previous);]]]]><![CDATA[></script><sys_class_name>sys_script</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-12 13:00:00</sys_created_on><sys_domain>global</sys_domain><sys_domain_path>/</sys_domain_path><sys_id>58a74e41c3054f128be48e02d41b539c</sys_id><sys_mod_count>0</sys_mod_count><sys_name>AI Enforce Human Lock Safety Stop</sys_name><sys_overrides/><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_update_name>sys_script_58a74e41c3054f128be48e02d41b539c</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-12 13:00:00</sys_updated_on><template/><when>before</when></sys_script><sys_translated_text action="delete_multiple" query="documentkey=58a74e41c3054f128be48e02d41b539c"/></record_update>]]></payload>
-<payload_hash>-179102185</payload_hash>
+
+})(current, previous);
+]]]]><![CDATA[></script><sys_class_name>sys_script</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-12 17:18:17</sys_created_on><sys_domain>global</sys_domain><sys_domain_path>/</sys_domain_path><sys_id>46107b1147d30b10c148497f316d4395</sys_id><sys_mod_count>4</sys_mod_count><sys_name>AI Enforce Human Lock Safety Stop</sys_name><sys_overrides/><sys_package display_value="Global" source="global">global</sys_package><sys_policy/><sys_scope display_value="Global">global</sys_scope><sys_update_name>sys_script_46107b1147d30b10c148497f316d4395</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-13 06:10:24</sys_updated_on><template/><when>before</when></sys_script><sys_translated_text action="delete_multiple" query="documentkey=46107b1147d30b10c148497f316d4395"/></record_update>]]></payload>
+<payload_hash>-63450355</payload_hash>
 <remote_update_set display_value="AI Incident Orchestrator - S1.2 Execution Log and ACLs">f8b389cd479b0710c148497f316d4384</remote_update_set>
 <replace_on_upgrade>false</replace_on_upgrade>
 <sys_created_by>admin</sys_created_by>
-<sys_created_on>2026-09-12 13:00:00</sys_created_on>
-<sys_id>8f3e2b10a95c4788b5d194c728e93f12</sys_id>
+<sys_created_on>2026-09-13 06:10:24</sys_created_on>
+<sys_id>46107b1147d30b10c148497f316d4395</sys_id>
 <sys_mod_count>0</sys_mod_count>
-<sys_recorded_at>1a08fc901bb0000001</sys_recorded_at>
+<sys_recorded_at>1a099632ef00000001</sys_recorded_at>
 <sys_updated_by>admin</sys_updated_by>
-<sys_updated_on>2026-09-12 13:00:00</sys_updated_on>
+<sys_updated_on>2026-09-13 06:10:24</sys_updated_on>
 <table>incident</table>
 <target_name>AI Enforce Human Lock Safety Stop</target_name>
 <type>Business Rule</type>
 <update_domain>global</update_domain>
-<update_guid>752c6d78aa9f8310964f7c15958cc1ae</update_guid>
-<update_guid_history>752c6d78aa9f8310964f7c15958cc1ae:-179102185</update_guid_history>
+<update_guid>20e0aa65549b4b10a65c9a4048c13864</update_guid>
+<update_guid_history>20e0aa65549b4b10a65c9a4048c13864:-63450355</update_guid_history>
 <update_set display_value=""/>
 <view/>
 </sys_update_xml>

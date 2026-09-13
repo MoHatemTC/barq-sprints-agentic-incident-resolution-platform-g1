@@ -832,16 +832,26 @@ def _forbidden_journal(
 
 def _test_human_lock(client: httpx.Client, hdrs: dict[str, str], inc_sys_id: str) -> TestResult:
     """LOCK-01: Integration account cannot modify the human-lock flag."""
-    before = str(
-        client.get(
-            f"{TABLE_API_BASE}/incident/{inc_sys_id}?sysparm_fields={HUMAN_LOCK_FIELD}",
-            headers=hdrs,
-            timeout=10.0,
-        )
-        .json()
-        .get("result", {})
-        .get(HUMAN_LOCK_FIELD, "false")
+    get_before = client.get(
+        f"{TABLE_API_BASE}/incident/{inc_sys_id}?sysparm_fields={HUMAN_LOCK_FIELD}",
+        headers=hdrs,
+        timeout=10.0,
     )
+    if get_before.status_code != 200:
+        return TestResult(
+            test_id="LOCK-01",
+            category="Human Lock",
+            name="Integration CANNOT modify human-lock (circuit breaker)",
+            operation="GET",
+            target=f"incident/{inc_sys_id}.{HUMAN_LOCK_FIELD}",
+            expected="HTTP 200 baseline check",
+            http_status=get_before.status_code,
+            observed=f"Initial GET failed with HTTP {get_before.status_code}",
+            persisted_change=False,
+            verdict="FAIL",
+            notes="Failed to retrieve baseline state before test.",
+        )
+    before = str(get_before.json().get("result", {}).get(HUMAN_LOCK_FIELD, "false"))
     attempt = "true" if before == "false" else "false"
 
     patch_r = client.patch(
@@ -850,17 +860,29 @@ def _test_human_lock(client: httpx.Client, hdrs: dict[str, str], inc_sys_id: str
         json={HUMAN_LOCK_FIELD: attempt},
         timeout=10.0,
     )
-    after = str(
-        client.get(
-            f"{TABLE_API_BASE}/incident/{inc_sys_id}?sysparm_fields={HUMAN_LOCK_FIELD}",
-            headers=hdrs,
-            timeout=10.0,
-        )
-        .json()
-        .get("result", {})
-        .get(HUMAN_LOCK_FIELD, "false")
+
+    get_after = client.get(
+        f"{TABLE_API_BASE}/incident/{inc_sys_id}?sysparm_fields={HUMAN_LOCK_FIELD}",
+        headers=hdrs,
+        timeout=10.0,
     )
-    blocked = patch_r.status_code in (401, 403) or after == before
+    if get_after.status_code != 200:
+        return TestResult(
+            test_id="LOCK-01",
+            category="Human Lock",
+            name="Integration CANNOT modify human-lock (circuit breaker)",
+            operation="GET",
+            target=f"incident/{inc_sys_id}.{HUMAN_LOCK_FIELD}",
+            expected="HTTP 200 post-patch check",
+            http_status=get_after.status_code,
+            observed=f"Post-patch GET failed with HTTP {get_after.status_code}",
+            persisted_change=False,
+            verdict="FAIL",
+            notes="Failed to retrieve post-patch state.",
+        )
+    after = str(get_after.json().get("result", {}).get(HUMAN_LOCK_FIELD, "false"))
+
+    blocked = (patch_r.status_code in (401, 403) or after == before) and (after != attempt)
     return TestResult(
         test_id="LOCK-01",
         category="Human Lock",
@@ -880,16 +902,26 @@ def _test_human_lock(client: httpx.Client, hdrs: dict[str, str], inc_sys_id: str
 
 def _test_ai_enabled(client: httpx.Client, hdrs: dict[str, str], inc_sys_id: str) -> TestResult:
     """LOCK-02: Integration account cannot modify the AI-enabled flag (human opt-in switch)."""
-    before = str(
-        client.get(
-            f"{TABLE_API_BASE}/incident/{inc_sys_id}?sysparm_fields={AI_ENABLED_FIELD}",
-            headers=hdrs,
-            timeout=10.0,
-        )
-        .json()
-        .get("result", {})
-        .get(AI_ENABLED_FIELD, "false")
+    get_before = client.get(
+        f"{TABLE_API_BASE}/incident/{inc_sys_id}?sysparm_fields={AI_ENABLED_FIELD}",
+        headers=hdrs,
+        timeout=10.0,
     )
+    if get_before.status_code != 200:
+        return TestResult(
+            test_id="LOCK-02",
+            category="Human Lock",
+            name="Integration CANNOT modify AI-enabled (opt-in switch)",
+            operation="GET",
+            target=f"incident/{inc_sys_id}.{AI_ENABLED_FIELD}",
+            expected="HTTP 200 baseline check",
+            http_status=get_before.status_code,
+            observed=f"Initial GET failed with HTTP {get_before.status_code}",
+            persisted_change=False,
+            verdict="FAIL",
+            notes="Failed to retrieve baseline state before test.",
+        )
+    before = str(get_before.json().get("result", {}).get(AI_ENABLED_FIELD, "false"))
     attempt = "true" if before == "false" else "false"
 
     patch_r = client.patch(
@@ -898,17 +930,29 @@ def _test_ai_enabled(client: httpx.Client, hdrs: dict[str, str], inc_sys_id: str
         json={AI_ENABLED_FIELD: attempt},
         timeout=10.0,
     )
-    after = str(
-        client.get(
-            f"{TABLE_API_BASE}/incident/{inc_sys_id}?sysparm_fields={AI_ENABLED_FIELD}",
-            headers=hdrs,
-            timeout=10.0,
-        )
-        .json()
-        .get("result", {})
-        .get(AI_ENABLED_FIELD, "false")
+
+    get_after = client.get(
+        f"{TABLE_API_BASE}/incident/{inc_sys_id}?sysparm_fields={AI_ENABLED_FIELD}",
+        headers=hdrs,
+        timeout=10.0,
     )
-    blocked = patch_r.status_code in (401, 403) or after == before
+    if get_after.status_code != 200:
+        return TestResult(
+            test_id="LOCK-02",
+            category="Human Lock",
+            name="Integration CANNOT modify AI-enabled (opt-in switch)",
+            operation="GET",
+            target=f"incident/{inc_sys_id}.{AI_ENABLED_FIELD}",
+            expected="HTTP 200 post-patch check",
+            http_status=get_after.status_code,
+            observed=f"Post-patch GET failed with HTTP {get_after.status_code}",
+            persisted_change=False,
+            verdict="FAIL",
+            notes="Failed to retrieve post-patch state.",
+        )
+    after = str(get_after.json().get("result", {}).get(AI_ENABLED_FIELD, "false"))
+
+    blocked = (patch_r.status_code in (401, 403) or after == before) and (after != attempt)
     return TestResult(
         test_id="LOCK-02",
         category="Human Lock",
@@ -932,7 +976,7 @@ def _test_human_lock_safety_stop(
     """LOCK-03: When ai_human_lock is true, automated AI updates are aborted by Business Rule."""
     # Look for any incident where human lock is active
     locked_res = client.get(
-        f"{TABLE_API_BASE}/incident?sysparm_query={HUMAN_LOCK_FIELD}=true^active=true&sysparm_limit=1",
+        f"{TABLE_API_BASE}/incident?sysparm_query={HUMAN_LOCK_FIELD}=true&sysparm_limit=1",
         headers=hdrs,
         timeout=10.0,
     )
@@ -955,8 +999,15 @@ def _test_human_lock_safety_stop(
             headers=hdrs,
             timeout=10.0,
         )
-        journal_count = len(chk.json().get("result", []))
-        aborted = patch_r.status_code in (400, 403) or journal_count == 0
+        if chk.status_code != 200:
+            journal_query_ok = False
+            journal_count = -1
+        else:
+            journal_query_ok = True
+            journal_count = len(chk.json().get("result", []))
+
+        # Tightened validation: requires HTTP abort status (400/403), verified journal query, and 0 journal entries
+        aborted = patch_r.status_code in (400, 403) and journal_query_ok and journal_count == 0
 
         return TestResult(
             test_id="LOCK-03",
@@ -964,7 +1015,7 @@ def _test_human_lock_safety_stop(
             name="Platform Business Rule enforces safety stop on locked incident",
             operation="PATCH",
             target=f"incident/{target_id}",
-            expected="Update aborted (setAbortAction(true))",
+            expected="HTTP 400/403 abort + 0 journal entries",
             http_status=patch_r.status_code,
             observed=f"HTTP {patch_r.status_code} | journal_count={journal_count}",
             persisted_change=(journal_count > 0),
@@ -980,14 +1031,14 @@ def _test_human_lock_safety_stop(
             name="Platform Business Rule enforces safety stop on locked incident",
             operation="PATCH",
             target=f"incident ({HUMAN_LOCK_FIELD}=true)",
-            expected="Update aborted when lock is active",
-            http_status=200,
+            expected="Active locked incident tested and aborted",
+            http_status=0,
             observed="No incident currently has human_lock=true on instance",
             persisted_change=False,
-            verdict="PASS",
+            verdict="FAIL",
             notes=(
-                "Defense-in-depth rule ready: set ai_human_lock=true on an "
-                "incident to verify live abort."
+                "TEST SKIPPED / FAILED: Set ai_human_lock=true on a test incident "
+                "to verify the platform safety stop live abort."
             ),
         )
 

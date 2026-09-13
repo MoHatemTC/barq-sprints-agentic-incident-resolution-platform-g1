@@ -14,7 +14,7 @@
 - **Target Instance**: `dev407364.service-now.com`
 - **Verification Harness**: [`scripts/verify_permissions.py`](../../../scripts/verify_permissions.py)
 - **Machine-Readable Report**: [`scripts/verification_report.json`](../../../scripts/verification_report.json)
-- **Verification Status**: **23 / 23 PASS (100% Verified Empirical Compliance)**
+- **Verification Status**: **25 / 25 PASS (100% Verified Empirical Compliance)**
 
 ---
 
@@ -88,10 +88,11 @@ Per **FR-02**, every AI processing attempt—including successes, handled failur
 > The table collection dictionary entry includes `enforce_dot_walk_cross_scope_access=true`, meaning cross-scope script dot-walking into this table's fields is explicitly enforced rather than relying on default scope isolation.
 
 #### Append-Only Protection (SS7 / LOG-05)
-To prevent rogue actors or automation bugs from tampering with audit records, the table enforces an **append-only policy**:
-- **Delete ACL Rule**: `x_2215032_ai_inc_0_ai_execution_log` (operation: `delete`).
-- **Policy**: `Deny Unless` role `admin` (or delete role strictly restricted from `integration_writer` and `ai_execution_log_user`).
-- **Observed Behavior**: When `ai_orchestrator_svc` executes `DELETE /api/now/table/x_2215032_ai_inc_0_ai_execution_log/{sys_id}`, ServiceNow responds with `HTTP 403 Forbidden` and preserves the record unaltered.
+To prevent rogue actors or automation bugs from tampering with audit records, the table enforces a strict **append-only policy**:
+- **Delete ACL Rule**: `x_2215032_ai_inc_0_ai_execution_log` (operation: `delete`, sys_id: `7c036368471f4310c148497f316d433f`).
+- **Role Binding**: Mapped exclusively to role **`admin`** (`sys_security_acl_role_20707445471b0710c148497f316d4371`). The table user role (`ai_execution_log_user`) and integration role (`integration_writer`) are completely excluded from delete access.
+- **Artifact Alignment**: The exported update set (`ai_incident_orchestrator_s1_2.xml`) contains solely the `admin` role mapping for this delete ACL, eliminating artifact drift between the shipped XML and live instance behavior.
+- **Observed Behavior**: When `ai_orchestrator_svc` executes `DELETE /api/now/table/x_2215032_ai_inc_0_ai_execution_log/{sys_id}`, ServiceNow responds with `HTTP 403 Forbidden` and preserves the record unaltered (`LOG-05` verified).
 
 ---
 
@@ -161,7 +162,12 @@ Permissions are bounded strictly to the minimal operational surface required for
 > **`incident.*` Wildcard ACL**: The Global-scope `incident.*` write ACL (from the ITSM Roles plugin, `sys_id: 91b7ec2cc3313010a282a539e540dd37`) allows `itil`/`admin` users to write any incident field if `caller_id = currentUser OR opened_by = currentUser AND incident_state != 7`. The 12 dedicated `integration_writer` field ACLs exist because `integration_writer` is **not** included in this wildcard — explicit field-by-field grants are required.
 
 > [!NOTE]
-> **Comments Protection — Business Rule History**: Early iterations of this sprint included two Business Rules (`AI Block Customer Comments Journal` on `sys_journal_field`, `AI Strip Unauthorized Comments` on `incident`) as belt-and-suspenders comment blocking. Both were subsequently **deleted** from the update set. The final enforcement mechanism relies solely on the existing Global-scope `incident.comments` write ACL (condition: caller/opener only, state not closed/canceled) which naturally excludes the service account. No additional Business Rule is required or active.
+> **Comments Protection — 100% ACL-Driven (Zero Business Rules Shipped)**:
+> Customer comment protection is enforced strictly and exclusively by ServiceNow's native Access Control List (`incident.comments` write ACL, which restricts customer comments to `caller_id` or `opened_by` and excludes the service identity).
+> 
+> Under standard ServiceNow field-level ACL stripping semantics, incoming `PATCH` requests containing unauthorized fields (such as `comments`) return `HTTP 200 OK` while silently stripping the forbidden field (verified by `DENY-05` and `BULK-01`, confirming 0 journal entries created).
+> 
+> All experimental, inactive, or historical comment-intercepting Business Rules (such as `AI Block Customer Comments`, `AI Block Comments Journal Entry`, and destructive rules calling `deleteRecord()`) have been **completely purged** from the shipped update set artifact (`ai_incident_orchestrator_s1_2.xml`). No comment-blocking Business Rules exist or ship in this release, eliminating any risk of journal corruption or unexpected transaction aborts.
 
 ---
 
@@ -175,30 +181,70 @@ The external AI orchestrator performs client-side inspection (`if incident.ai_hu
 4. Without server-side enforcement, ServiceNow commits the patch, overwriting data despite active human lock.
 
 #### Platform Enforcement Specification
-To guarantee defense-in-depth, a platform-side `before-update` Business Rule is deployed on the `incident` table inside the scoped application:
+To guarantee defense-in-depth, a platform-side `before-update` Business Rule is deployed on the `incident` table:
 
 * **Business Rule Name**: `AI Enforce Human Lock Safety Stop`
-* **Table**: `incident`
+* **Table**: `Incident [incident]`
 * **When**: `before`
 * **Operation**: `action_update = true`
 * **Order**: `50` (executes prior to default business rules)
-* **Application Scope**: `AI Incident Orchestrator` (`x_2215032_ai_inc_0`)
+* **Application Scope**: `Global` (or `AI Incident Orchestrator` with cross-scope privilege)
 * **Enforcement Logic**:
   ```javascript
   (function executeRule(current, previous /*null when async*/) {
-      // Enforce safety stop if human lock is active
-      if (current.x_2215032_ai_inc_0_ai_human_lock == true) {
-          // Check if modification is initiated by the AI service account or role
-          var isAiCaller = gs.hasRole('x_2215032_ai_inc_0.integration_writer') || 
-                           gs.getUserName() == 'ai_orchestrator_svc';
-          
-          if (isAiCaller) {
-              gs.addErrorMessage('Incident is locked by a human operator (AI Human Lock). Automated AI updates are rejected.');
-              current.setAbortAction(true);
+
+      // 1. Check if human lock is active
+      var lockVal = '' + current.getValue('x_2215032_ai_inc_0_ai_human_lock');
+      if (lockVal !== '1' && lockVal !== 'true') {
+          return;
+      }
+
+      // 2. Only enforce for the AI integration identity
+      var isAiCaller = (gs.getUserName() == 'ai_orchestrator_svc') ||
+                       gs.hasRole('x_2215032_ai_inc_0.integration_writer');
+
+      if (!isAiCaller) {
+          return;
+      }
+
+      // 3. The permitted AI write fields (including work_notes)
+      var aiFields = [
+          'work_notes',
+          'x_2215032_ai_inc_0_ai_classification',
+          'x_2215032_ai_inc_0_ai_confidence',
+          'x_2215032_ai_inc_0_ai_suggestion',
+          'x_2215032_ai_inc_0_ai_resolution',
+          'x_2215032_ai_inc_0_ai_human_review_required',
+          'x_2215032_ai_inc_0_ai_failure_reason',
+          'x_2215032_ai_inc_0_ai_processing_state',
+          'x_2215032_ai_inc_0_ai_processing_start',
+          'x_2215032_ai_inc_0_ai_processing_end',
+          'x_2215032_ai_inc_0_ai_agent_version',
+          'x_2215032_ai_inc_0_ai_model_name'
+      ];
+
+      // 4. Reject if any AI field was modified in this update
+      for (var i = 0; i < aiFields.length; i++) {
+          var field = aiFields[i];
+          if (current.isValidField(field)) {
+              var elem = current.getElement(field);
+              if (elem != null && elem.changes()) {
+                  gs.addErrorMessage(
+                      'Incident is locked by a human operator (AI Human Lock). Automated AI update to ' + field + ' rejected.'
+                  );
+                  current.setAbortAction(true);
+                  return;
+              }
           }
       }
+
   })(current, previous);
   ```
+
+> [!NOTE]
+> **Scope & Platform Architecture Rationale**:
+> - **Scoped Application Boundary**: All custom data assets—including the 13 `x_2215032_ai_inc_0_*` fields, the `x_2215032_ai_inc_0_ai_execution_log` table, the `integration_writer` role, and all field ACLs—reside strictly inside the scoped application `AI Incident Orchestrator` (`x_2215032_ai_inc_0`). No custom tables or custom fields reside in Global scope.
+> - **Global Table Context for `incident` Business Rule**: The `incident` table is an out-of-the-box (OOB) platform table living natively in the `Global` scope. When external orchestrators submit updates via the ServiceNow REST Table API (`PATCH /api/now/table/incident/{sys_id}`), the request pipeline executes in the Global transaction context. Under ServiceNow's Application Isolation architecture, scoped Business Rules attached to Global tables are restricted from aborting incoming Global Table API transactions unless deployed with native Global execution rights. Placing this specific safety stop Business Rule on the `incident` table ensures that `current.setAbortAction(true)` immediately halts the REST transaction (returning HTTP 403) and prevents automated overwrite of locked incidents.
 
 #### Defense-in-Depth Layering
 | Layer | Control Mechanism | Protection Provided |
@@ -239,12 +285,29 @@ The test harness [`scripts/verify_permissions.py`](../../../scripts/verify_permi
 | **DENY-05** | Forbidden | `PATCH incident.comments` | Customer comments stripped from journal | HTTP 200 (0 journal entries) | **PASS** |
 | **LOCK-01** | Human Lock | `PATCH incident.ai_human_lock` | Circuit breaker modification rejected | HTTP 200 (Lock unchanged `false`)| **PASS** |
 | **LOCK-02** | Human Lock | `PATCH incident.ai_enabled` | Opt-in switch modification rejected | HTTP 200 (Enabled unchanged `false`)| **PASS** |
-| **LOCK-03** | Human Lock | Platform Business Rule safety stop | Automated update aborted when lock is active | Update aborted / Defense-in-depth | **PASS** |
+| **LOCK-03** | Human Lock | `PATCH incident/{sys_id}` (locked `INC0010041`) | Platform Business Rule aborts automated update | HTTP 403 (0 journal entries) | **PASS** |
 | **BULK-01** | Bulk Bypass | `PATCH incident` (Mixed payload) | Permitted written, all forbidden stripped | `work_notes` wrote; rest blocked | **PASS** |
 | **CRED-01** | Cleanliness | Repository Secret Scan | Zero secrets/passwords in tracked files | 93 files scanned clean | **PASS** |
 
 > [!NOTE]
 > **ServiceNow Field-Level Stripping Semantics**: When a client sends a `PATCH` request containing forbidden fields, ServiceNow returns `HTTP 200 OK` while silently stripping unauthorized fields in accordance with ACL rules. The verification harness never relies on HTTP status codes alone; every test performs an independent read-after-write GET request against the database and `sys_journal_field` to prove that forbidden values were never persisted.
+
+#### 5.1 Safety Stop Live Verification & Anti-Fail-Open Harness Hardening
+
+In response to architectural review on test harness integrity, the `LOCK` test suite was hardened against false-positive / fail-open vulnerabilities:
+
+1. **Elimination of Fail-Open Fallback (`LOCK-03`)**:
+   - In earlier iterations, if no incident had `ai_human_lock=true`, the harness returned a provisional `PASS`. This fail-open shape meant the test suite could report 25/25 without actually exercising the server-side Business Rule.
+   - **Fix**: The fallback branch now explicitly returns `verdict="FAIL"`. The test strictly requires an active, locked incident on the target instance.
+   - **Live Evidence**: Incident `INC0010041` (`sys_id: 0db9760f47870b10c148497f316d4320`) was locked via `ai_human_lock=true` by the administrator on `dev407364`. When `ai_orchestrator_svc` attempted an automated patch with `work_notes`, the `AI Enforce Human Lock Safety Stop` Business Rule immediately aborted the transaction with `HTTP 403 Forbidden` and 0 entries in `sys_journal_field`.
+
+2. **Hardened Invariant Checks for Baseline and Post-Patch GET Queries (`LOCK-01`, `LOCK-02`)**:
+   - Previously, baseline and post-update state checks defaulted `before` and `after` to `"false"` on missing keys or failed queries, meaning an HTTP error on GET could evaluate `after == before` and produce an accidental `PASS`.
+   - **Fix**: Pre-patch and post-patch GET requests now enforce `status_code == 200`. Any network, authorization, or schema failure on read immediately fails the test with explicit diagnostic context. Furthermore, the test validates `after != attempt` to guarantee the requested change did not land.
+
+3. **Tightened Journal Verification Query (`LOCK-03`)**:
+   - If the verification query to `sys_journal_field` returned an error or was denied, an unhardened check could interpret an empty result list as zero journal entries (`journal_count == 0`), falsely satisfying the abort criteria.
+   - **Fix**: The query now explicitly enforces `chk.status_code == 200` alongside `patch_r.status_code in (400, 403)` and `journal_count == 0`. All conditions must hold simultaneously for `LOCK-03` to pass.
 
 ---
 
@@ -273,3 +336,27 @@ Upon completion, the harness generates:
 1. Terminal stdout detailing the empirical proof for each test case.
 2. Machine-readable audit artifact: [`scripts/verification_report.json`](../../../scripts/verification_report.json).
 3. Exit code `0` on 100% pass rate; exit code `1` if any violation or leak occurs.
+
+---
+
+### 8. ServiceNow Artifact Package & Unified Import
+
+All S1.2 deliverables are packaged into a single, comprehensive Update Set XML file:
+
+| Deliverable | Artifact File | Type | Target Scope | Contents & Invariants |
+|---|---|---|---|---|
+| **Sprint 1.1 Foundation** | [`ai_incident_orchestrator_s1_1.xml`](../../../servicenow/ai_incident_orchestrator/ai_incident_orchestrator_s1_1.xml) | Remote Update Set | Scoped (`x_2215032_ai_inc_0`) | Scoped application container and the **13 custom fields** on `incident` (including `ai_human_lock`, `ai_enabled`, `ai_classification`). |
+| **Sprint 1.2 Unified Deliverable** | [`ai_incident_orchestrator_s1_2.xml`](../../../servicenow/ai_incident_orchestrator/ai_incident_orchestrator_s1_2.xml) | Remote Update Set | Scoped (`x_2215032_ai_inc_0`) | **All-in-one package** containing:<br>1. **`ai_execution_log`** table & 8 dictionary fields<br>2. **`integration_writer`** & `ai_execution_log_user` roles<br>3. **Field-level write ACLs** for 12 scoped fields + `work_notes`<br>4. **Append-only delete ACL** mapped strictly to `admin`<br>5. **`AI Enforce Human Lock Safety Stop`** Business Rule on `incident` |
+
+#### Step-by-Step Import Instructions
+1. **Import S1.1**:
+   - In ServiceNow, navigate to **System Update Sets** > **Retrieved Update Sets**.
+   - Click **Import Update Set from XML**, upload `ai_incident_orchestrator_s1_1.xml`.
+   - Open the retrieved update set, click **Preview Update Set**, then click **Commit Update Set**.
+2. **Import S1.2**:
+   - Return to **Retrieved Update Sets**, click **Import Update Set from XML**, upload `ai_incident_orchestrator_s1_2.xml`.
+   - Open the retrieved update set, click **Preview Update Set**, then click **Commit Update Set**.
+   - This single action installs the table, all security boundaries, and the live safety stop Business Rule.
+3. **Verify**:
+   - Run `uv run python scripts/verify_permissions.py` → **25 / 25 PASS**.
+
