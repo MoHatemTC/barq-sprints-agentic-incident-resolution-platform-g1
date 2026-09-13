@@ -4,9 +4,7 @@ const RELEVANT_FIELDS = [
     'active',
     'category',
     'x_2215032_ai_inc_0_ai_enabled',
-    'x_2215032_ai_inc_0_ai_processing_state',
     'x_2215032_ai_inc_0_ai_human_lock',
-    'x_2215032_ai_inc_0_ai_retry_count',
 ]
 
 const SUPPORTED_CATEGORIES_PROPERTY = 'x_2215032_ai_inc_0.s1_3_supported_categories'
@@ -54,6 +52,12 @@ function suppress(current: any, reason: string): void {
 
 export function evaluateIncidentEligibility(current: any, previous: any): void {
     const operation = current.operation()
+    const processingState = current.getValue('x_2215032_ai_inc_0_ai_processing_state')
+    const isNewFailedTransition =
+        operation === 'update' &&
+        processingState === 'failed' &&
+        previous &&
+        previous.getValue('x_2215032_ai_inc_0_ai_processing_state') !== 'failed'
 
     if (operation === 'update') {
         if (!previous) {
@@ -61,12 +65,11 @@ export function evaluateIncidentEligibility(current: any, previous: any): void {
             return
         }
 
-        if (!hasRelevantUpdate(current, previous)) {
+        if (!hasRelevantUpdate(current, previous) && !isNewFailedTransition) {
             return
         }
     }
 
-    const processingState = current.getValue('x_2215032_ai_inc_0_ai_processing_state')
     const category = current.getValue('category')
     const humanLock = current.getValue('x_2215032_ai_inc_0_ai_human_lock')
     const retryValue = current.getValue('x_2215032_ai_inc_0_ai_retry_count')
@@ -115,7 +118,7 @@ export function evaluateIncidentEligibility(current: any, previous: any): void {
     let retryCount = currentRetryCount
 
     if (processingState === 'failed' && operation === 'update') {
-        if (previous.getValue('x_2215032_ai_inc_0_ai_processing_state') === 'failed') {
+        if (!isNewFailedTransition) {
             return
         }
 
@@ -128,11 +131,9 @@ export function evaluateIncidentEligibility(current: any, previous: any): void {
         }
     }
 
-    if (processingState === 'failed') {
-        if (retryCount >= 2) {
-            suppress(current, 'retry_limit_exhausted')
-            return
-        }
+    if (retryCount >= 2) {
+        suppress(current, 'retry_limit_exhausted')
+        return
     }
 
     if (humanLock === '1') {

@@ -6,6 +6,7 @@ export const s13EventEndpoint = Property({
     name: 'x_2215032_ai_inc_0.s1_3_event_endpoint',
     type: 'string',
     value: '',
+    ignoreCache: true,
     description: 'Endpoint URL for outbound S1.3 incident events. Configure this separately in each instance.',
 })
 
@@ -25,22 +26,28 @@ export const outboundEventRegistration = Record({
 export const s13RestMessage = RestMessage({
     $id: Now.ID['s1_3_outbound_rest_message'],
     name: 'AI Incident Orchestrator S1.3 Event',
-    endpoint: '',
+    endpoint: 'https://example.invalid',
     description: 'Runtime-configured transport for the minimal S1.3 event.',
     access: 'packagePrivate',
     authenticationType: 'noAuthentication',
-    headers: [
-        {
-            $id: Now.ID['s1_3_content_type_header'],
-            name: 'Content-Type',
-            value: 'application/json',
-        },
-    ],
     functions: [
+        {
+            name: 'Default GET',
+            httpMethod: 'GET',
+            endpoint: 'https://example.invalid',
+            authenticationType: 'inheritFromParent',
+        },
         {
             name: 'post',
             httpMethod: 'POST',
             authenticationType: 'inheritFromParent',
+            headers: [
+                {
+                    $id: Now.ID['s1_3_content_type_header'],
+                    name: 'Content-Type',
+                    value: 'application/json',
+                },
+            ],
         },
     ],
 })

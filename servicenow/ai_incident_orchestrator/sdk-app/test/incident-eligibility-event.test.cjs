@@ -127,14 +127,12 @@ test('each eligible emission receives a unique event id', () => {
     assert.notEqual(queued[0].parm1, queued[1].parm1)
 })
 
-test('all six approved relevant update fields can trigger an event', () => {
+test('all four user-controlled relevant update fields can trigger an event', () => {
     const changes = {
         active: ['0', '1'],
         category: ['network', 'hardware'],
         x_2215032_ai_inc_0_ai_enabled: ['0', '1'],
-        x_2215032_ai_inc_0_ai_processing_state: ['failed', 'pending'],
         x_2215032_ai_inc_0_ai_human_lock: ['1', '0'],
-        x_2215032_ai_inc_0_ai_retry_count: ['1', '0'],
     }
 
     for (const [field, [before, after]] of Object.entries(changes)) {
@@ -152,6 +150,42 @@ test('irrelevant update queues no event and consumes no event id', () => {
 
     assert.equal(queued.length, 1)
     assert.equal(queued[0].parm1, 'event-1')
+})
+
+test('orchestrator write-back changing only AI processing fields queues no event', () => {
+    const { evaluate, queued } = eligibilityHarness()
+
+    evaluate(
+        record('update', {
+            x_2215032_ai_inc_0_ai_processing_state: 'pending',
+            x_2215032_ai_inc_0_ai_retry_count: '1',
+            x_2215032_ai_inc_0_ai_classification: 'software',
+            x_2215032_ai_inc_0_ai_confidence: '0.98',
+        }),
+        record('update', {
+            x_2215032_ai_inc_0_ai_processing_state: 'in_progress',
+            x_2215032_ai_inc_0_ai_retry_count: '0',
+            x_2215032_ai_inc_0_ai_classification: '',
+            x_2215032_ai_inc_0_ai_confidence: '',
+        })
+    )
+
+    assert.equal(queued.length, 0)
+})
+
+test('pending to in_progress orchestrator write-back queues no event', () => {
+    const { evaluate, queued } = eligibilityHarness()
+
+    evaluate(
+        record('update', {
+            x_2215032_ai_inc_0_ai_processing_state: 'in_progress',
+        }),
+        record('update', {
+            x_2215032_ai_inc_0_ai_processing_state: 'pending',
+        })
+    )
+
+    assert.equal(queued.length, 0)
 })
 
 for (const [previousRetryCount, advancedRetryCount] of [['0', '1'], ['1', '2']]) {
@@ -182,15 +216,26 @@ for (const [previousRetryCount, advancedRetryCount] of [['0', '1'], ['1', '2']])
     })
 }
 
-test('pending remains eligible regardless of an exhausted retry counter', () => {
-    const { evaluate, queued } = eligibilityHarness()
+test('exhausted retry count cannot emit through a transition to pending', () => {
+    const { evaluate, logs, queued } = eligibilityHarness()
 
-    evaluate(record('insert', {
-        x_2215032_ai_inc_0_ai_processing_state: 'pending',
-        x_2215032_ai_inc_0_ai_retry_count: '2',
-    }), null)
+    evaluate(
+        record('update', {
+            category: 'hardware',
+            x_2215032_ai_inc_0_ai_processing_state: 'pending',
+            x_2215032_ai_inc_0_ai_retry_count: '2',
+        }),
+        record('update', {
+            category: 'software',
+            x_2215032_ai_inc_0_ai_processing_state: 'failed',
+            x_2215032_ai_inc_0_ai_retry_count: '2',
+        })
+    )
 
-    assert.equal(queued.length, 1)
+    assert.equal(queued.length, 0)
+    assert.deepEqual(logs, [
+        'S1.3 eligibility suppressed: retry_limit_exhausted number=INC0012345 sys_id=0123456789abcdef0123456789abcdef',
+    ])
 })
 
 test('new failed transition at retry_count 2 emits nothing and requires human review', () => {
@@ -497,7 +542,7 @@ test('Script Action logs an error and makes no HTTP call when the endpoint prope
 
     assert.equal(requestCount, 0)
     assert.deepEqual(errors, [
-        'S1.3 outbound event endpoint is not configured: x_2215032_ai_inc_0.s1_3_event_endpoint',
+        'S1.3 outbound event error: endpoint property not set',
     ])
 })
 

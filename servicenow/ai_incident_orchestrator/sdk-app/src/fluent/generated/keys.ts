@@ -22,8 +22,8 @@ declare global {
                         id: '0b32ef5a5de84641a11117f69d00d545'
                     }
                     s1_3_content_type_header: {
-                        table: 'sys_rest_message_headers'
-                        id: 'c192f5bc5ee54e2f9196a66a2dc0ded2'
+                        table: 'sys_rest_message_fn_headers'
+                        id: '74e7d0ddaeda4ac2b0067b0338bb7245'
                     }
                     s1_3_event_endpoint: {
                         table: 'sys_properties'
@@ -91,6 +91,14 @@ declare global {
                             name: 'incident'
                             element: 'x_2215032_ai_inc_0_ai_agent_version'
                             language: 'en'
+                        }
+                    },
+                    {
+                        table: 'sys_rest_message_fn'
+                        id: '0f17e3125d534fd58919fe33a326eb07'
+                        key: {
+                            rest_message: '5992d74202fb43fbbb9f1bcf6cb20a4e'
+                            function_name: 'Default GET'
                         }
                     },
                     {
