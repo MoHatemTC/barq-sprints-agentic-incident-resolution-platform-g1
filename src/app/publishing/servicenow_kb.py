@@ -313,11 +313,11 @@ def _verify_stored(
             )
 
     stored_state = stored.get("workflow_state")
-    if stored_state not in (sent["workflow_state"], "draft"):
+    if stored_state != sent["workflow_state"]:
         raise ServiceNowWriteRejectedError(
             f"Read-back mismatch for {article_id!r}: field 'workflow_state' sent as "
             f"{sent['workflow_state']!r} but stored as {stored_state!r} "
-            f"(sys_id={stored.get('sys_id')})."
+            f"(sys_id={stored.get('sys_id')}). The article did not reach the target workflow state."
         )
 
     body = stored.get("text") or ""

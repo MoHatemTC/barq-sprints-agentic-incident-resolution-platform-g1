@@ -103,6 +103,24 @@ async def test_readback_mismatch_fails_loud(
 
 
 @pytest.mark.asyncio
+async def test_verify_stored_fails_when_article_stuck_in_draft(
+    sample_articles: list[Article], fake: Any
+) -> None:
+    """Fail-closed: if an article was published but ends up stuck in draft, fail loud."""
+    client = fake.build_client()
+    try:
+        article = sample_articles[0]
+        assert article.workflow_state.value == "published"
+        fake.tamper_next_readback = ("workflow_state", "draft")
+
+        with pytest.raises(ServiceNowWriteRejectedError, match="target workflow state"):
+            await publish_article(client, article, KB_SYS_ID)
+    finally:
+        await client.aclose()
+
+
+
+@pytest.mark.asyncio
 async def test_duplicate_source_id_rows_fail_loud(
     sample_articles: list[Article], fake: Any
 ) -> None:
