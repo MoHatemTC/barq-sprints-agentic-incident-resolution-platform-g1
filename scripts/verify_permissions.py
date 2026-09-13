@@ -715,6 +715,62 @@ def _test_log_delete_forbidden(
     )
 
 
+def _test_log_modify_forbidden(
+    client: httpx.Client, hdrs: dict[str, str], inc_sys_id: str
+) -> TestResult:
+    """LOG-07: Integration CANNOT modify execution log records (append-only audit trail)."""
+    http_status, result, _ = _post_log(client, hdrs, inc_sys_id, "succeeded")
+    temp_id = result.get("sys_id", "")
+    if not temp_id:
+        return TestResult(
+            test_id="LOG-07",
+            category="Execution Log",
+            name="Cannot modify execution log records (append-only)",
+            operation="PATCH",
+            target=SCOPED_LOG_TABLE,
+            expected="401 or 403 (write blocked)",
+            http_status=0,
+            observed="Could not create temp record to test modification.",
+            persisted_change=False,
+            verdict="FAIL",
+        )
+
+    tamper_value = "TAMPERED_AUDIT_ENTRY"
+    patch_resp = client.patch(
+        f"{TABLE_API_BASE}/{SCOPED_LOG_TABLE}/{temp_id}",
+        headers=hdrs,
+        json={"result": tamper_value},
+        timeout=10.0,
+    )
+    verify = client.get(
+        f"{TABLE_API_BASE}/{SCOPED_LOG_TABLE}/{temp_id}?sysparm_fields=result",
+        headers=hdrs,
+        timeout=10.0,
+    )
+    observed_result = ""
+    if verify.status_code == 200:
+        observed_result = str(verify.json().get("result", {}).get("result", ""))
+
+    modified = observed_result == tamper_value
+    blocked = patch_resp.status_code in (401, 403) or (verify.status_code == 200 and not modified)
+
+    return TestResult(
+        test_id="LOG-07",
+        category="Execution Log",
+        name="Cannot modify execution log records (append-only)",
+        operation="PATCH",
+        target=f"{SCOPED_LOG_TABLE}/{temp_id}",
+        expected="401/403 or write ignored (record immutable)",
+        http_status=patch_resp.status_code,
+        observed=f"HTTP {patch_resp.status_code} (modified={modified})",
+        persisted_change=modified,
+        verdict="PASS" if (blocked and not modified) else "FAIL",
+        notes="Record immutable - write blocked."
+        if (blocked and not modified)
+        else "SECURITY FAILURE: execution log modified after creation!",
+    )
+
+
 # ---------------------------------------------------------------------------
 # SS3  Forbidden incident fields (DENY-01 .. DENY-05)
 # ---------------------------------------------------------------------------
@@ -1306,6 +1362,7 @@ def run_verification() -> None:
         for fn in (
             lambda: _test_execution_id_lookup(client, hdrs, inc_sys_id, created_log_ids),
             lambda: _test_log_delete_forbidden(client, hdrs, inc_sys_id),
+            lambda: _test_log_modify_forbidden(client, hdrs, inc_sys_id),
         ):
             r = fn()
             results.append(r)
