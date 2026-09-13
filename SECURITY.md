@@ -35,6 +35,18 @@ automated processing. The integration identity may read it and must never write 
 clear it. Check it at eligibility time **and** immediately before any write, since
 work may have been queued before the lock was set.
 
+## What automated scanning does and does not cover
+
+CodeQL scans the Python under `src/`, `scripts/` and `tests/`, and the hand-written
+ServiceNow TypeScript under `servicenow/`. Generated Fluent/SDK output is excluded as
+noise.
+
+**It cannot scan scripts embedded inside exported update-set XML.** ACL condition
+scripts, Business Rule bodies and Client Scripts ship inside `<script>` elements in the
+`ai_incident_orchestrator_s1_*.xml` files, and no static analyser reads them there. Those
+are reviewed by a human — that is what the `CODEOWNERS` entry on each update set is for.
+Treat a change to an ACL or a Business Rule in an update set as unscanned by definition.
+
 ## Reporting
 
 Open an issue using the **Security concern** template. If a real credential has been

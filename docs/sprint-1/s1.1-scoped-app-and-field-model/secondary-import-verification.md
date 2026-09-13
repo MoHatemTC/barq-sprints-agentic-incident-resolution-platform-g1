@@ -16,7 +16,7 @@ The final `ai_incident_orchestrator_s1_1.xml` package was imported into authoriz
 | Commit state | Committed |
 | Commit timestamp | 2026-09-08 05:34:49 on the secondary PDI |
 | Post-import form test | Passed |
-| Post-import confidence validation | Passed; out-of-range `1.1` was removed and the expected error displayed |
+| Post-import confidence validation | Passed; entering out-of-range `1.1` displayed the expected range error. The onChange script sets the field back to its previous value and shows the range error; screenshot `09` shows the error with `1.1` still displayed, so the restore itself is not captured |
 
 ## Evidence
 
@@ -34,6 +34,6 @@ The committed record shows state **Committed**, the commit timestamp, 39 inserte
 
 ### Post-import functional verification
 
-An existing Incident on `dev204871` displayed the imported AI Incident Orchestrator section and fields. The imported Client Script displayed the expected range error and automatically removed the invalid confidence value.
+An existing Incident on `dev204871` displayed the imported AI Incident Orchestrator section and fields. The imported Client Script displayed the expected range error for an out-of-range confidence value. The onChange script restores the field to its previous value (blank only if it was blank before) and onSubmit blocks the save without altering the field. The captured screenshot shows the error while `1.1` is still displayed, so the restore itself is not captured.
 
 ![Imported Incident form and confidence validation](screenshots/09-secondary-import-verification.png)
