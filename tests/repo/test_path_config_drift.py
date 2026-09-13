@@ -28,12 +28,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 PLANNED: dict[str, str] = {
     # Arrive with open pull requests. Drop the entry in the PR that lands the path.
     "scripts/verification_report.json": "lands with the S1.2 rework, PR #32",
-
     "src/app/publishing/**": "lands with S1.4 KB publishing, PR #39",
     "scripts/publish_kb.py": "lands with S1.4 KB publishing, PR #39",
     "tests/publishing/**": "lands with S1.4 KB publishing, PR #39",
-
-
     # Dead rule; removed in PR #61. Drop this entry once that merges.
     "/servicenow/ai_incident_orchestrator/business_rules/": (
         "dead CODEOWNERS rule, removed in PR #61"
