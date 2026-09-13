@@ -18,9 +18,10 @@ naming the owner, the tracking issues, and what belongs there. See
 | [S1.4 — Knowledge and Qdrant](sprint-1/s1.4-knowledge-and-qdrant/) | [@kerolos-mohsen](https://github.com/kerolos-mohsen) |
 | [S1.5 — ServiceNow client](sprint-1/s1.5-servicenow-client/) | [@Tasneemmohammed0](https://github.com/Tasneemmohammed0) |
 
-The S1.1 folder is the one with real content today — field dictionary,
-implementation runbook, acceptance matrix, PDI verification records,
-submission checklist and screenshots. The other four hold a `README.md`
+S1.1 holds the field dictionary, implementation runbook, acceptance matrix, PDI
+verification records, submission checklist and screenshots. S1.2 holds the audit
+and identity design with its verified permission matrix. S1.4 holds the corpus
+design and index specification. S1.3 and S1.5 currently hold a `README.md`
 recording status and ownership until their pull requests land.
 
 ## Conventions

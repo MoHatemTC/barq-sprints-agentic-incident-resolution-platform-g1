@@ -1,13 +1,20 @@
 # S1.3 — Eligibility Business Rule, identifier-only outbound event
 
-**Owner:** [@ahmedtamer101](https://github.com/ahmedtamer101) · **Tracking:** [#10](../../../../issues/10)
+**Owner:** [@ahmedtamer101](https://github.com/ahmedtamer101) · **Tracking:** [#10](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/issues/10)
 
 ## Status
 
-Not started by the owner. A draft scaffold exists in
-[PR #18](../../../../pull/18) — six eligibility conditions and the
-identifier-only payload — but it is unverified on a PDI and explicitly a
-starting point, not a deliverable.
+In review in [#30](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pull/30): the eligibility Business Rule with all six
+conditions and relevant-update filtering, an asynchronous event queue, a Script
+Action and RESTMessageV2 transport, and retry with escalation to human review.
+
+Sprint 1 proves emission against a request-inspection endpoint, since the receiving
+webhook is Sprint 2, so outbound OAuth is not exercised. Whether that satisfies the
+acceptance criterion is **still open** — it remains listed in [#10](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/issues/10) and a
+deferral has not been granted. The decision will be recorded there.
+
+[PR #18](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pull/18) remains open as an unverified reference scaffold at the owner's
+request; it is not the deliverable.
 
 ## What lands in this folder once merged
 
