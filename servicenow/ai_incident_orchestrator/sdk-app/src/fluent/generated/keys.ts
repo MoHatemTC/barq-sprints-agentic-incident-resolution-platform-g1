@@ -96,6 +96,7 @@ declare global {
                     {
                         table: 'sys_rest_message_fn'
                         id: '0f17e3125d534fd58919fe33a326eb07'
+                        deleted: true
                         key: {
                             rest_message: '5992d74202fb43fbbb9f1bcf6cb20a4e'
                             function_name: 'Default GET'

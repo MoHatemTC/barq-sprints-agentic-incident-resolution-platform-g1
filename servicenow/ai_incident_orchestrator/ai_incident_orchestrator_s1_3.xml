@@ -576,32 +576,6 @@
 <application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
 <category>customer</category>
 <comments/>
-<name>sys_rest_message_fn_0eb55b8d83970710b5309e80ceaad385</name>
-<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_rest_message_fn"><sys_rest_message_fn action="INSERT_OR_UPDATE"><authentication_type>inherit_from_parent</authentication_type><basic_auth_password/><basic_auth_profile/><basic_auth_user/><content/><function_name>Default GET</function_name><http_method>get</http_method><lock>false</lock><oauth2_profile/><protocol_name/><qualified_name>AI Incident Orchestrator S1.3 Event [ Default GET ]</qualified_name><rest_endpoint>https://example.invalid</rest_endpoint><rest_message display_value="AI Incident Orchestrator S1.3 Event">04b4db0d83970710b5309e80ceaad35a</rest_message><sys_class_name>sys_rest_message_fn</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-11 20:44:02</sys_created_on><sys_id>0eb55b8d83970710b5309e80ceaad385</sys_id><sys_mod_count>3</sys_mod_count><sys_name>Default GET</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_update_name>sys_rest_message_fn_0eb55b8d83970710b5309e80ceaad385</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-13 16:37:34</sys_updated_on><use_auth_mid_server/><use_basic_auth>false</use_basic_auth><use_mid_server/><use_mutual_auth>false</use_mutual_auth></sys_rest_message_fn></record_update>]]></payload>
-<payload_hash>-2003787776</payload_hash>
-<remote_update_set display_value="BARQ G1 - S1.3 - Eligibility Business Rule &amp; Minimal Outbound Event Contract">77d0bc3983534b10b5309e80ceaad3e1</remote_update_set>
-<replace_on_upgrade>false</replace_on_upgrade>
-<sys_created_by>admin</sys_created_by>
-<sys_created_on>2026-09-13 16:39:14</sys_created_on>
-<sys_id>7fd0bc3983534b10b5309e80ceaad3e3</sys_id>
-<sys_mod_count>0</sys_mod_count>
-<sys_recorded_at>1a09ba19b830000001</sys_recorded_at>
-<sys_updated_by>admin</sys_updated_by>
-<sys_updated_on>2026-09-13 16:39:14</sys_updated_on>
-<table/>
-<target_name>Default GET</target_name>
-<type>HTTP Method</type>
-<update_domain>global</update_domain>
-<update_guid>d770307966534b10f9c5cbf6112803ae</update_guid>
-<update_guid_history>d770307966534b10f9c5cbf6112803ae:-2003787776,a6607c75ff534b10273872e48018a3c5:947218661,7a0de0b19b534b105c6cac98e8b24601:-2003787776,8eb55b8d81970710156ae9f9d676768a:-2051194555</update_guid_history>
-<update_set display_value=""/>
-<view/>
-</sys_update_xml>
-<sys_update_xml action="INSERT_OR_UPDATE">
-<action>INSERT_OR_UPDATE</action>
-<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
-<category>customer</category>
-<comments/>
 <name>sys_rest_message_fn_bed513cd83970710b5309e80ceaad3b4</name>
 <payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_rest_message_fn"><sys_rest_message_fn action="INSERT_OR_UPDATE"><authentication_type>inherit_from_parent</authentication_type><basic_auth_password/><basic_auth_profile/><basic_auth_user/><content/><function_name>post</function_name><http_method>post</http_method><lock>false</lock><oauth2_profile/><protocol_name/><qualified_name>AI Incident Orchestrator S1.3 Event [ post ]</qualified_name><rest_endpoint/><rest_message display_value="AI Incident Orchestrator S1.3 Event">04b4db0d83970710b5309e80ceaad35a</rest_message><sys_class_name>sys_rest_message_fn</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-11 20:47:56</sys_created_on><sys_id>bed513cd83970710b5309e80ceaad3b4</sys_id><sys_mod_count>0</sys_mod_count><sys_name>post</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_update_name>sys_rest_message_fn_bed513cd83970710b5309e80ceaad3b4</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-11 20:47:56</sys_updated_on><use_auth_mid_server/><use_basic_auth>false</use_basic_auth><use_mid_server/><use_mutual_auth>false</use_mutual_auth></sys_rest_message_fn></record_update>]]></payload>
 <payload_hash>-1242877849</payload_hash>
@@ -990,11 +964,12 @@
                     ENDPOINT_PROPERTY,
                     ''
                 ) || ''
-            );
+            ).trim();
 
         if (!endpoint) {
             gs.error(
-                'S1.3 outbound event error: endpoint property not set'
+                'S1.3 outbound event error: endpoint property not set: ' +
+                ENDPOINT_PROPERTY
             );
             return;
         }

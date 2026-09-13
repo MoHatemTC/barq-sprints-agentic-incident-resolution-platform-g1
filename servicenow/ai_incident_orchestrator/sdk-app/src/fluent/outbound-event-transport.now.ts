@@ -26,17 +26,14 @@ export const outboundEventRegistration = Record({
 export const s13RestMessage = RestMessage({
     $id: Now.ID['s1_3_outbound_rest_message'],
     name: 'AI Incident Orchestrator S1.3 Event',
+    // The SDK requires a non-empty parent endpoint. The real target is read at runtime
+    // from the s1_3_event_endpoint property and set via setEndpoint(), so this value is
+    // an unroutable placeholder and is never called.
     endpoint: 'https://example.invalid',
     description: 'Runtime-configured transport for the minimal S1.3 event.',
     access: 'packagePrivate',
     authenticationType: 'noAuthentication',
     functions: [
-        {
-            name: 'Default GET',
-            httpMethod: 'GET',
-            endpoint: 'https://example.invalid',
-            authenticationType: 'inheritFromParent',
-        },
         {
             name: 'post',
             httpMethod: 'POST',

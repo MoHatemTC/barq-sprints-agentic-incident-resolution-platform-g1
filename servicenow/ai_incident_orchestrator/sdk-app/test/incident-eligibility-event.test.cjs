@@ -542,7 +542,30 @@ test('Script Action logs an error and makes no HTTP call when the endpoint prope
 
     assert.equal(requestCount, 0)
     assert.deepEqual(errors, [
-        'S1.3 outbound event error: endpoint property not set',
+        'S1.3 outbound event error: endpoint property not set: x_2215032_ai_inc_0.s1_3_event_endpoint',
+    ])
+})
+
+test('Script Action treats a whitespace-only endpoint property as unset and makes no HTTP call', () => {
+    let requestCount = 0
+    class FakeRESTMessageV2 {
+        constructor() {
+            requestCount += 1
+        }
+    }
+    const errors = []
+    const gs = {
+        getProperty: () => '   ',
+        info: () => {},
+        error: (message) => errors.push(message),
+    }
+    const send = loadFunction('sendS13Event', { gs, sn_ws: { RESTMessageV2: FakeRESTMessageV2 } })
+
+    send(record('insert'), { parm1: 'event-from-parm1', parm2: 'incident.created' })
+
+    assert.equal(requestCount, 0)
+    assert.deepEqual(errors, [
+        'S1.3 outbound event error: endpoint property not set: x_2215032_ai_inc_0.s1_3_event_endpoint',
     ])
 })
 

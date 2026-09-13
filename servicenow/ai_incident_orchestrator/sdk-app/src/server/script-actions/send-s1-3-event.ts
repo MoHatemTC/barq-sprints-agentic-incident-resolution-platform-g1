@@ -11,10 +11,10 @@ declare const sn_ws: {
 export function sendS13Event(current: any, event: any): void {
     try {
         const endpointProperty = 'x_2215032_ai_inc_0.s1_3_event_endpoint'
-        const endpoint = String(gs.getProperty(endpointProperty, '') || '')
+        const endpoint = String(gs.getProperty(endpointProperty, '') || '').trim()
 
         if (!endpoint) {
-            gs.error('S1.3 outbound event error: endpoint property not set')
+            gs.error('S1.3 outbound event error: endpoint property not set: ' + endpointProperty)
             return
         }
 
