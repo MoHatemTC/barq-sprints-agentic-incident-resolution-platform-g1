@@ -1,12 +1,13 @@
 # S1.3 Eligibility and Outbound Event Verification
 
-Status: **LIVE PDI BEHAVIOR VERIFIED; PERFORMANCE EVIDENCE PENDING**
+Status: **LIVE PDI BEHAVIOR VERIFIED; PERFORMANCE MEASURED, 20 SAMPLES PER ARM**
 
 ## Evidence boundary
 
 The results below reflect the confirmed live PDI execution supplied for S1.3.
-No raw screenshots, timestamps, Incident identifiers, request-capture links, or
-performance measurements were supplied for this repository update, so none are
+Incident-save performance was measured directly and is reported in full under
+PERF-01 below. No raw screenshots, timestamps, Incident identifiers or
+request-capture links were supplied for this repository update, so none are
 invented here. The exported update set is configuration evidence, not a
 substitute for runtime evidence.
 
