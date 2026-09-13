@@ -1,30 +1,40 @@
-# ServiceNow Configuration & Setup
+# ServiceNow Configuration & Update Sets
 
-This directory contains configuration documentation and application artifacts supporting the BARQ Knowledge Base integration on ServiceNow.
+This directory contains the official ServiceNow export artifacts required to bootstrap and support the BARQ Knowledge Base integration on any ServiceNow Personal Developer Instance (PDI) or production sub-production instance.
 
 ---
 
-## 1. Custom Metadata Fields on `kb_knowledge`
+## 1. Custom Fields Update Set (`kb_knowledge_custom_fields.xml`)
 
-To support idempotent publishing, semantic versioning, and provenance tracking, the following custom fields are configured on the `kb_knowledge` table under the **AI Incident Orchestrator** scoped application (`x_2215032_ai_inc_0`):
+### Purpose
+To avoid hazardous runtime schema alterations (`POST /api/now/table/sys_dictionary`) in ServiceNow's Global scope, the required custom fields on the `kb_knowledge` table are provisioned via this official ServiceNow Update Set.
 
-| Column Name | Element | Type | Max Length | Purpose |
+The update set defines the following custom dictionary columns and their documentation labels on `kb_knowledge`:
+
+| Column Name | Type | Max Length | Mandatory | Purpose |
 |---|---|---|---|---|
-| **Source ID** | `x_2215032_ai_inc_0_source_id` | String | 40 | Deterministic lookup key (e.g. `KB0001-v2.0`) for idempotency |
-| **Service** | `x_2215032_ai_inc_0_service` | String | 50 | Associated BARQ microservice or technical domain |
-| **Corpus Version** | `x_2215032_ai_inc_0_version` | String | 20 | Semantic version tracking (`1.0`, `2.0`, etc.) |
-| **Security Level** | `x_2215032_ai_inc_0_security_level` | String | 50 | Access classification (`internal`, `restricted`, `public`) |
-| **Article Number** | `x_2215032_ai_inc_0_article_number` | String | 20 | Canonical BARQ article numbering (e.g. `KB0001`) |
+| `u_source_id` | String | 40 | Yes | Deterministic source identifier (e.g. `barq-kb-001`) for idempotency |
+| `u_service` | String | 100 | No | Associated BARQ service name |
+| `u_version` | String | 40 | No | Document version tracking |
+| `u_security_level` | String | 40 | No | Access classification (e.g. `internal`, `public`) |
+| `u_article_number` | String | 40 | No | Canonical BARQ article numbering |
 
 ---
 
-## 2. Setup in a New Instance
+## 2. How to Import into a New PDI (10-Second Setup)
 
-When deploying to a fresh ServiceNow instance:
+When moving to a fresh or new ServiceNow PDI, import this update set **before** running the knowledge publishing pipeline:
 
-1. Configure the 5 custom columns on `kb_knowledge` under the **AI Incident Orchestrator** application scope.
-2. In **Form Designer**, add a **BARQ Metadata** section containing these 5 fields.
-3. In **List Layout**, add `Corpus Version` to the visible list columns.
+1. **Log in** to your ServiceNow instance as an administrator (`admin`).
+2. In the filter navigator (top left), type **Retrieved Update Sets** (or navigate to `sys_remote_update_set.list`).
+3. Under **Related Links** at the bottom of the list, click **Import Update Set from XML**.
+4. Click **Browse...**, select `servicenow/kb_knowledge_custom_fields.xml`, and click **Upload**.
+5. Click on the imported update set row: **`BARQ KB Knowledge Custom Fields`** (State will show `Loaded`).
+6. In the upper right corner, click **Preview Update Set**.
+   - ServiceNow will validate all 10 update records.
+   - If any minor collision warning appears, click **Accept Remote Update**.
+7. In the upper right corner, click **Commit Update Set**.
+8. Once committed, the state changes to `Committed`. All 5 custom columns and labels are now live on `kb_knowledge`!
 
 ---
 
