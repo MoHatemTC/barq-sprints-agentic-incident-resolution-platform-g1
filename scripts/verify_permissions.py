@@ -1006,7 +1006,8 @@ def _test_human_lock_safety_stop(
             journal_query_ok = True
             journal_count = len(chk.json().get("result", []))
 
-        # Tightened validation: requires HTTP abort status (400/403), verified journal query, and 0 journal entries
+        # Tightened validation: requires HTTP abort status (400/403),
+        # verified journal query, and 0 journal entries
         aborted = patch_r.status_code in (400, 403) and journal_query_ok and journal_count == 0
 
         return TestResult(
