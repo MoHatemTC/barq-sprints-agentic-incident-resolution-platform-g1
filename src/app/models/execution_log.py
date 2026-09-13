@@ -51,13 +51,13 @@ class ExecutionLogCreatePayload(BaseModel):
     """Write model: the body we POST to create a new execution log record."""
 
     incident_sys_id: str = Field(..., description="sys_id of the parent incident")
-    execution_id: str = Field(..., max_length=40)
-    agent: str = Field(..., max_length=100)
+    execution_id: str = Field(..., max_length=100)
+    agent: str = Field(..., max_length=150)
     action: ExecutionAction
     status: ExecutionStatus
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
-    result: str | None = Field(default=None, max_length=4000)
-    error: str | None = Field(default=None, max_length=4000)
+    result: str | None = Field(default=None, max_length=5000)
+    error: str | None = Field(default=None, max_length=5000)
 
     @field_validator("execution_id", "agent")
     @classmethod
