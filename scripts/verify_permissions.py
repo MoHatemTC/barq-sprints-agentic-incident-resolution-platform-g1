@@ -378,6 +378,7 @@ def _test_mid_run_expiry(client: httpx.Client) -> TestResult:
         http_status=recovered_status or resp.status_code,
         observed=f"Initial: HTTP {resp.status_code} -> Re-auth: HTTP {recovered_status}",
         persisted_change=False,
+        verdict="PASS" if ok else "FAIL",
         notes=(
             f"Stale token rejected (HTTP {resp.status_code}); "
             f"re-authenticated successfully (HTTP {recovered_status})."

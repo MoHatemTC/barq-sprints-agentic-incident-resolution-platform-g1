@@ -1,6 +1,6 @@
 {
   "sprint": "S1.2",
-  "generated_at": "2026-09-13T19:36:45.447018+00:00",
+  "generated_at": "2026-09-13T19:54:14.243436+00:00",
   "instance": "https://dev407364.service-now.com",
   "service_account": "ai_orchestrator_svc",
   "summary": {
@@ -134,10 +134,10 @@
       "target": "x_2215032_ai_inc_0_ai_execution_log",
       "expected": "201 Created + status='succeeded' + action='execute'",
       "http_status": 201,
-      "observed": "HTTP 201 (sys_id=4d79ddb547d3cb10c148497f316d439a)",
+      "observed": "HTTP 201 (sys_id=197d19fd47d3cb10c148497f316d438f)",
       "persisted_change": true,
       "verdict": "PASS",
-      "notes": "exec_id=exec_verify_15d299e9f992 | sys_id=4d79ddb547d3cb10c148497f316d439a | status=succeeded confirmed"
+      "notes": "exec_id=exec_verify_5644c405c27c | sys_id=197d19fd47d3cb10c148497f316d438f | status=succeeded confirmed"
     },
     {
       "test_id": "LOG-02",
@@ -147,10 +147,10 @@
       "target": "x_2215032_ai_inc_0_ai_execution_log",
       "expected": "201 Created + status='failed' + action='execute'",
       "http_status": 201,
-      "observed": "HTTP 201 (sys_id=9d79ddb547d3cb10c148497f316d439f)",
+      "observed": "HTTP 201 (sys_id=597d19fd47d3cb10c148497f316d4394)",
       "persisted_change": true,
       "verdict": "PASS",
-      "notes": "exec_id=exec_verify_4a4d61e0cc2a | sys_id=9d79ddb547d3cb10c148497f316d439f | status=failed confirmed"
+      "notes": "exec_id=exec_verify_9484ac05cde7 | sys_id=597d19fd47d3cb10c148497f316d4394 | status=failed confirmed"
     },
     {
       "test_id": "LOG-03",
@@ -160,10 +160,10 @@
       "target": "x_2215032_ai_inc_0_ai_execution_log",
       "expected": "201 Created + status='blocked' + action='execute'",
       "http_status": 201,
-      "observed": "HTTP 201 (sys_id=dd79ddb547d3cb10c148497f316d43a4)",
+      "observed": "HTTP 201 (sys_id=a97d19fd47d3cb10c148497f316d4399)",
       "persisted_change": true,
       "verdict": "PASS",
-      "notes": "exec_id=exec_verify_30fc05be7926 | sys_id=dd79ddb547d3cb10c148497f316d43a4 | status=blocked confirmed"
+      "notes": "exec_id=exec_verify_4f23d74e683d | sys_id=a97d19fd47d3cb10c148497f316d4399 | status=blocked confirmed"
     },
     {
       "test_id": "LOG-06",
@@ -173,15 +173,15 @@
       "target": "x_2215032_ai_inc_0_ai_execution_log",
       "expected": "201 Created + status='abandoned' + action='execute'",
       "http_status": 201,
-      "observed": "HTTP 201 (sys_id=a179d53547d3cb10c148497f316d4330)",
+      "observed": "HTTP 201 (sys_id=e97d19fd47d3cb10c148497f316d439e)",
       "persisted_change": true,
       "verdict": "PASS",
-      "notes": "exec_id=exec_verify_fdd892132354 | sys_id=a179d53547d3cb10c148497f316d4330 | status=abandoned confirmed"
+      "notes": "exec_id=exec_verify_433a3a46a1a6 | sys_id=e97d19fd47d3cb10c148497f316d439e | status=abandoned confirmed"
     },
     {
       "test_id": "LOG-04",
       "category": "Execution Log",
-      "name": "Execution ID indexed lookup (unique key)",
+      "name": "Execution ID indexed lookup (correlation trace key)",
       "operation": "GET",
       "target": "x_2215032_ai_inc_0_ai_execution_log?execution_id=<unique>",
       "expected": "Exactly 1 record matching execution_id",
@@ -189,14 +189,14 @@
       "observed": "HTTP 200 (1 record(s) found)",
       "persisted_change": false,
       "verdict": "PASS",
-      "notes": "exec_id='exec_idx_45e8e844d5bf404b' -> sys_id=a1791d7d4793cb10c148497f316d4325"
+      "notes": "exec_id='exec_idx_4f67047568ab4ba7' -> sys_id=fd7d19fd47d3cb10c148497f316d43e1"
     },
     {
       "test_id": "LOG-05",
       "category": "Execution Log",
       "name": "Cannot delete execution log records (append-only)",
       "operation": "DELETE",
-      "target": "x_2215032_ai_inc_0_ai_execution_log/b179557d4793cb10c148497f316d4399",
+      "target": "x_2215032_ai_inc_0_ai_execution_log/b17d19fd47d3cb10c148497f316d43e7",
       "expected": "403 or 404 (delete blocked)",
       "http_status": 403,
       "observed": "HTTP 403 (record_exists=True)",
@@ -209,7 +209,7 @@
       "category": "Execution Log",
       "name": "Cannot modify execution log records (append-only)",
       "operation": "PATCH",
-      "target": "x_2215032_ai_inc_0_ai_execution_log/f17911f547d3cb10c148497f316d43a5",
+      "target": "x_2215032_ai_inc_0_ai_execution_log/027d19fd47d3cb10c148497f316d43fb",
       "expected": "401/403 or write ignored (record immutable)",
       "http_status": 403,
       "observed": "HTTP 403 (modified=False)",
