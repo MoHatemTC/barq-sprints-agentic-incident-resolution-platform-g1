@@ -19,6 +19,7 @@ from app.retrieval.embedding import EmbeddedText, FastEmbedEngine
 from app.retrieval.ingest import ingest_articles
 from app.retrieval.search import (
     RetrievalHit,
+    _allowed_security_levels,
     _build_filter,
     retrieve_knowledge,
 )
@@ -49,14 +50,20 @@ def _dummy_mock_engine() -> MagicMock:
 
 
 def test_published_filter_present_without_extra_filter() -> None:
-    """When extra_filter=None, _build_filter produces must=[workflow_state == 'published']."""
+    """With extra_filter=None, both mandatory conditions are present and nothing else."""
     filt = _build_filter(None)
     assert filt.must is not None
-    assert len(filt.must) == 1
-    cond = filt.must[0]
-    assert isinstance(cond, FieldCondition)
-    assert cond.key == "workflow_state"
-    assert getattr(cond.match, "value", None) == "published"
+    assert len(filt.must) == 2
+
+    published, security = filt.must
+    assert isinstance(published, FieldCondition)
+    assert published.key == "workflow_state"
+    assert getattr(published.match, "value", None) == "published"
+
+    # #45: restricted content is excluded unless the caller opts in.
+    assert isinstance(security, FieldCondition)
+    assert security.key == "security_level"
+    assert getattr(security.match, "any", None) == ["public", "internal"]
 
 
 def test_published_filter_merged_with_extra_filter() -> None:
@@ -67,7 +74,7 @@ def test_published_filter_merged_with_extra_filter() -> None:
     )
     merged = _build_filter(extra)
     assert merged.must is not None
-    assert len(merged.must) == 2
+    assert len(merged.must) == 3
 
     # First clause is the non-negotiable published condition
     published_cond = merged.must[0]
@@ -75,8 +82,13 @@ def test_published_filter_merged_with_extra_filter() -> None:
     assert published_cond.key == "workflow_state"
     assert getattr(published_cond.match, "value", None) == "published"
 
-    # Second clause is the caller's extra filter intact
-    assert merged.must[1] == extra
+    # Second is the equally non-negotiable audience condition (#45)
+    security_cond = merged.must[1]
+    assert isinstance(security_cond, FieldCondition)
+    assert security_cond.key == "security_level"
+
+    # Third clause is the caller's extra filter intact
+    assert merged.must[2] == extra
 
 
 def test_extra_filter_cannot_override_published(memory_qdrant: QdrantClient) -> None:
@@ -348,7 +360,11 @@ def test_all_hits_are_published(
 def test_p3_kb0010_v2_present(
     seeded_acceptance_qdrant: tuple[QdrantClient, FastEmbedEngine, str],
 ) -> None:
-    """P3 Acceptance Test: Current KB0010-v2.0 MUST be returned for pool exhaustion."""
+    """P3 Acceptance Test: Current KB0010-v2.0 MUST be returned for pool exhaustion.
+
+    KB0010 is a ``restricted`` article, so this asks for that tier explicitly. Before
+    #45 no caller had to: every restricted article was returned to everyone.
+    """
     client, engine, collection_name = seeded_acceptance_qdrant
     query = "the order service is returning errors and the pool is exhausted"
 
@@ -357,6 +373,7 @@ def test_p3_kb0010_v2_present(
         query,
         collection_name=collection_name,
         limit=5,
+        max_security_level=SecurityLevel.RESTRICTED,
         engine=engine,
     )
 
@@ -382,3 +399,93 @@ def test_corpus_max_one_published_per_article_number() -> None:
     counts = Counter(a.article_number for a in published_articles)
     for art_num, count in counts.items():
         assert count <= 1, f"Corpus invariant violated: {art_num} has {count} published versions!"
+
+
+# ---------------------------------------------------------------------------
+# #45 — restricted knowledge must not reach callers that did not ask for it
+# ---------------------------------------------------------------------------
+
+
+def test_allowed_security_levels_is_cumulative() -> None:
+    """A caller cleared for a level may read every level at or below it."""
+    assert _allowed_security_levels(SecurityLevel.PUBLIC) == ["public"]
+    assert _allowed_security_levels(SecurityLevel.INTERNAL) == ["public", "internal"]
+    assert _allowed_security_levels(SecurityLevel.RESTRICTED) == [
+        "public",
+        "internal",
+        "restricted",
+    ]
+
+
+@pytest.mark.skipif(
+    not CORPUS_PATH.exists(),
+    reason="real corpus barq_articles.json not found",
+)
+def test_restricted_articles_are_excluded_by_default(
+    seeded_acceptance_qdrant: tuple[QdrantClient, FastEmbedEngine, str],
+) -> None:
+    """The default audience never sees restricted content.
+
+    5 of the 11 corpus articles are ``restricted``. Before #45 every one of them was
+    returned to every caller, and ``RetrievalHit`` did not even carry the level, so a
+    caller could not have filtered afterwards.
+    """
+    client, engine, collection_name = seeded_acceptance_qdrant
+    query = "the order service is returning errors and the pool is exhausted"
+
+    hits = retrieve_knowledge(
+        client,
+        query,
+        collection_name=collection_name,
+        limit=10,
+        engine=engine,
+    )
+
+    assert hits, "expected the default audience to still get results"
+    assert all(h.security_level != "restricted" for h in hits), (
+        f"restricted content leaked: {[(h.article_id, h.security_level) for h in hits]}"
+    )
+
+
+@pytest.mark.skipif(
+    not CORPUS_PATH.exists(),
+    reason="real corpus barq_articles.json not found",
+)
+def test_restricted_articles_are_returned_when_explicitly_requested(
+    seeded_acceptance_qdrant: tuple[QdrantClient, FastEmbedEngine, str],
+) -> None:
+    """Opting in is what makes the restricted tier reachable — and it is auditable."""
+    client, engine, collection_name = seeded_acceptance_qdrant
+    query = "the order service is returning errors and the pool is exhausted"
+
+    hits = retrieve_knowledge(
+        client,
+        query,
+        collection_name=collection_name,
+        limit=10,
+        max_security_level=SecurityLevel.RESTRICTED,
+        engine=engine,
+    )
+
+    assert any(h.security_level == "restricted" for h in hits), (
+        "explicitly requesting the restricted tier returned none of it"
+    )
+
+
+def test_settings_errors_stop_retrieval_instead_of_switching_collection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A broken config must fail, not silently search a different collection.
+
+    Previously any exception fell back to ``incident_knowledge_base``, so an unrelated
+    bad setting redirected retrieval away from the configured collection.
+    """
+    import app.core.config as config_module
+
+    def _boom() -> object:
+        raise RuntimeError("QDRANT_HTTP_PORT is not a valid integer")
+
+    monkeypatch.setattr(config_module, "get_retrieval_settings", _boom)
+
+    with pytest.raises(RuntimeError, match="QDRANT_HTTP_PORT"):
+        retrieve_knowledge(MagicMock(), "any query")

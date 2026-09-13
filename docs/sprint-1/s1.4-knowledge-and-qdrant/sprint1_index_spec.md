@@ -36,13 +36,13 @@ The index contains **45 vector points** derived from the 11 real operational run
       "index": {
         "on_disk": false
       },
-      "modifier": null
+      "modifier": "idf"
     }
   }
 }
 ```
 
-HNSW parameters are left at Qdrant defaults (m=16, ef_construct=100) — the collection code does not override them. `modifier: null` means no server-side IDF (see §3).
+HNSW parameters are left at Qdrant defaults (m=16, ef_construct=100) — the collection code does not override them. `modifier: "idf"` means Qdrant applies IDF server-side, which is where it actually happens (see §3).
 
 | Vector Name | Type | Model / Algorithm | Dimensions | Distance | Purpose |
 |---|---|---|---|---|---|
@@ -51,14 +51,55 @@ HNSW parameters are left at Qdrant defaults (m=16, ef_construct=100) — the col
 
 ---
 
-## 3. Sparse BM25 IDF Fitting Protocol
+## 3. Sparse BM25 IDF — applied by Qdrant, not by FastEmbed
 
-FastEmbed computes term weights using standard BM25:
+BM25 weights terms by inverse document frequency:
 
 $$IDF(t) = \ln\left(1 + \frac{N - n(t) + 0.5}{n(t) + 0.5}\right)$$
 
 > [!IMPORTANT]
-> **Corpus Batch Fitting Rule**: In [src/app/retrieval/ingest.py](../../../src/app/retrieval/ingest.py), all article chunk texts are accumulated into a single sequence and passed to `embedding_engine.embed_documents(all_chunk_texts)` in one batch call. This fits document frequency $n(t)$ across the entire corpus rather than per-article or per-chunk. Server-side `Modifier.IDF` is left disabled in Qdrant to prevent double-scaling of IDF weights.
+> **IDF is applied server-side by Qdrant**, through `Modifier.IDF` on the sparse vector.
+> FastEmbed does **not** fit it client-side. In the pinned `fastembed` 0.8.0, `Qdrant/bm25`
+> sets `requires_idf=True` and the library warns that the model "is expected to be used
+> with `modifier='idf'` in the sparse vector index of Qdrant". A document produces
+> identical sparse values whether embedded alone or alongside the whole corpus.
+
+> [!WARNING]
+> **This document previously described a "Corpus Batch Fitting Rule"** — that batching all
+> chunk texts into one `embed_documents` call fitted $n(t)$ across the corpus, and that
+> server-side IDF was therefore disabled to avoid double-scaling. **That was wrong.**
+> Nothing was fitted, so BM25 ran with every term weighted equally: a rare error code
+> scored no higher than a common word, which defeats the purpose of having a sparse leg.
+> Corrected in #44, together with `modifier=None` in `src/app/clients/qdrant.py` and the
+> comment there that asserted the same thing.
+>
+> Batching the corpus into a single `embed_documents` call is still what
+> [src/app/retrieval/ingest.py](../../../src/app/retrieval/ingest.py) does, and it remains
+> sensible for throughput — it just never provided IDF.
+>
+> `ensure_collection` now refuses to reuse a collection whose sparse modifier is not
+> `IDF`, naming `--force-recreate` as the remedy, so collections built before this fix
+> announce themselves instead of silently scoring worse.
+
+### 3.2 Audience filtering is mandatory, like `workflow_state`
+
+`retrieve_knowledge` applies two non-negotiable conditions, not one:
+
+| Condition | Behaviour |
+|---|---|
+| `workflow_state == "published"` | Retired and draft articles are never returned. |
+| `security_level` within `max_security_level` | Defaults to `SecurityLevel.INTERNAL`, so `restricted` articles are excluded unless the caller explicitly passes `SecurityLevel.RESTRICTED`. |
+
+Both are placed in the parent `must` list, so an `extra_filter` can narrow results further but cannot widen them past either boundary.
+
+`RetrievalHit` carries `security_level`, so a caller can see and log the tier of anything it received.
+
+> [!WARNING]
+> Before #45 the tier was documented but never enforced: `retrieve_knowledge` had no
+> audience parameter, and `RetrievalHit` did not carry `security_level`, so **all 5
+> `restricted` articles in the 11-article corpus were returned to every caller** and no
+> caller could have filtered them afterwards. The only workaround was for every call site
+> to remember an `extra_filter`.
 
 ### 3.1 Chunking Parameters
 
@@ -95,7 +136,7 @@ The following 7 fields are indexed as `PayloadSchemaType.KEYWORD` during collect
 | `service` | String | `corporate-vpn`, `sap-erp`, `order-processing` | `keyword` | Configuration item / service filtering |
 | `workflow_state` | String | `published`, `draft`, `retired` | `keyword` | Excludes draft and decommissioned runbooks |
 | `version` | String | `1.0`, `2.0`, `3.0`, `4.0` | `keyword` | Version disambiguation |
-| `security_level` | String | `public`, `internal`, `restricted` | `keyword` | Tiered role-based retrieval (desk cards vs platform) |
+| `security_level` | String | `public`, `internal`, `restricted` | `keyword` | Tiered role-based retrieval (desk cards vs platform). **Enforced** by `retrieve_knowledge`'s `max_security_level`, which defaults to `internal` — see §3.2 |
 
 ### 5.2 Non-Indexed Retrievable Payload Fields
 
