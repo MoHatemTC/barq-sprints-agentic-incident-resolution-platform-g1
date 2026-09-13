@@ -1,8 +1,15 @@
+import pytest
 import structlog
 
 from app.core.logging import REDACTED, configure_logging
 
 SENTINEL_TOKEN = "AT-LIVE-TOKEN-9f3e2c1b4a5d"
+
+
+@pytest.fixture(autouse=True)
+def _reset_structlog():
+    yield
+    structlog.reset_defaults()
 
 
 def test_exception_log_does_not_leak_token(capsys) -> None:
@@ -22,5 +29,3 @@ def test_exception_log_does_not_leak_token(capsys) -> None:
     output = capsys.readouterr().out
     assert SENTINEL_TOKEN not in output
     assert REDACTED in output
-
-    structlog.reset_defaults()

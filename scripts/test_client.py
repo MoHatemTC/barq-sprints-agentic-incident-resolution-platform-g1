@@ -7,6 +7,7 @@ import structlog
 
 from app.clients.servicenow_client import ServiceNowClient
 from app.core.config import Settings
+from app.core.logging import configure_logging
 from app.exceptions.servicenow import ServiceNowError
 from app.models.execution_log import (
     ExecutionAction,
@@ -14,6 +15,9 @@ from app.models.execution_log import (
     ExecutionStatus,
 )
 from app.models.incident import AIProcessingState, IncidentUpdatePayload
+
+settings = Settings()
+configure_logging(environment=settings.environment, log_level=settings.log_level)
 
 logger = structlog.get_logger(__name__)
 
