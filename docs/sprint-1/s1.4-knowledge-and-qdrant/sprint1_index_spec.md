@@ -18,7 +18,7 @@ The index contains **45 vector points** derived from the 11 real operational run
 ## 2. Collection Configuration
 
 - **Collection Name**: `incident_knowledge_base` (configurable via `QDRANT_COLLECTION_NAME` in `.env`)
-- **Docker Persistent Storage**: Persistent volume `barq_qdrant_data:/qdrant/storage` mapped to container `barq-qdrant` on port `6333` (HTTP) and `6334` (gRPC).
+- **Docker Persistent Storage**: the compose service mounts `qdrant_data:/qdrant/storage`; the volume is declared with `name: barq_qdrant_data`, so that is the name Docker shows. Container `barq-qdrant` on port `6333` (HTTP) and `6334` (gRPC).
 - **Client Configuration**: Initialized via [src/app/clients/qdrant.py](../../../src/app/clients/qdrant.py) using `RetrievalSettings`.
 
 ### 2.1 Named Vectors Configuration
@@ -184,10 +184,10 @@ The vector store is hosted in Docker via `docker-compose.yml`:
       - "${QDRANT_BIND_IP:-127.0.0.1}:${QDRANT_PORT:-6333}:6333"
       - "${QDRANT_BIND_IP:-127.0.0.1}:${QDRANT_GRPC_PORT:-6334}:6334"
     volumes:
-      - barq_qdrant_data:/qdrant/storage
+      - qdrant_data:/qdrant/storage
 ```
 
-Because `/qdrant/storage` is mounted to the named Docker volume `barq_qdrant_data`, shutting down the container (`docker compose down`) and restarting it (`docker compose up -d`) preserves all 45 indexed points and their payload indexes without requiring re-indexing.
+Because `/qdrant/storage` is mounted to the `qdrant_data` volume (named `barq_qdrant_data` in Docker), shutting down the container (`docker compose down`) and restarting it (`docker compose up -d`) preserves all 45 indexed points and their payload indexes without requiring re-indexing.
 
 ---
 

@@ -40,11 +40,11 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # The SDK declares node >=20.18.0. Pinned to the LTS major so a runner image
       # change cannot alter what the build produces.
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "22"
           cache: npm
@@ -63,6 +63,15 @@ jobs:
             exit 1
           fi
           echo "All resolved URLs point at registry.npmjs.org."
+
+      # #73: nothing reported known vulnerabilities in the SDK build toolchain, and
+      # Dependabot alerts are off. The four highs that were present at the 4.8.0 pin
+      # (@fastify/static, js-yaml, tmp, undici) are resolved by the "overrides" block
+      # in package.json; npm's own remedy was @servicenow/sdk 4.12.1, which #54 rules
+      # out. This fails the build if a high ever comes back. The remaining moderates
+      # are build-only tooling and are recorded in the servicenow README.
+      - name: Audit the build toolchain
+        run: npm audit --package-lock-only --audit-level=high --registry=https://registry.npmjs.org/
 
       # ci, not install: the lockfile is the pin. If package.json and the lockfile
       # disagree this fails here rather than resolving to something else.
