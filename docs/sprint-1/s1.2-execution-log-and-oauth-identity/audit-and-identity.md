@@ -177,6 +177,29 @@ Permissions are bounded strictly to the minimal operational surface required for
 
 ---
 
+### 3.3 Out-of-the-Box (OOB) Platform ACLs & Role Bindings
+
+In standard ServiceNow application packaging, scoped update sets capture role mappings (`sys_security_acl_role`) that bind the scoped role (`x_2215032_ai_inc_0.integration_writer`) to necessary platform capabilities. Baseline OOB ACLs themselves originate from ServiceNow core plugins (`com.snc.itsm`, `com.glide.task`, `com.snc.system_security`) and exist identically across instances; they are not duplicated inside the scoped update set to avoid schema collision.
+
+The 8 baseline platform ACLs bound to `integration_writer` are documented below for full auditability:
+
+| Target | Operation | Target ACL `sys_id` | Role Binding `sys_id` | Plugin / Scope | Condition / Behavior |
+|:---|:---:|:---|:---|:---|:---|
+| `incident` | `write` | `24baff9a9d330210f877faf15ee3ec47` | `2429f72847df4310c148497f316d4362` | Global / ITSM Core | Grants record-level write permission on active incidents, enabling scoped field updates. |
+| `incident` | `read` | `a4dee42c47170310c148497f316d4336` | `68632db4475f8310c148497f316d43f4` | Global / ITSM Core | Grants record-level read permission for incident retrieval (`PERM-01`). |
+| `incident.work_notes` | `write` | `d785ac2847d30310c148497f316d439e` | `a4636db4475f8310c148497f316d430d` | Global / Incident | Grants write permission to append internal journal entries (`PERM-02`). |
+| `incident.work_notes` | `read` | `a231390b870033000e56d61e36cb0bf3` | `e8636db4475f8310c148497f316d432f` | Global / Incident | Grants read access to incident work notes journal history. |
+| `incident.work_notes` | `create` | `491482f053422010ad3cddeeff7b1245` | `28636db4475f8310c148497f316d4325` | Global / Incident | Permits creation of new work notes records in the journal. |
+| `task.work_notes` | `write` | `9d5e2504a52143108bb220b7a4d212e1` | `74d97fe847df4310c148497f316d43a4` | Global / Task Core | Task-level inherited write permission across the `task` hierarchy. |
+| `task.work_notes` | `read` | `5d5e2504a52143108bb220b7a4d212df` | `64636db4475f8310c148497f316d4346` | Global / Task Core | Task-level inherited read permission across the `task` hierarchy. |
+| `sys_journal_field` | `read` | `e7c3abccffa76210f65cffffffffffae` | `a90525b8475f8310c148497f316d4383` | Global / System Security | Enables read-after-write verification queries on journal field records. |
+
+> [!NOTE]
+> **Integration Identity & OAuth Secrets Handling**:
+> In accordance with ServiceNow security guidelines and credential cleanliness principles, local user accounts (`sys_user`), role assignments (`sys_user_has_role`), and OAuth Application Registry credentials (`oauth_entity`) represent instance-specific data and secrets. They are intentionally **excluded** from public Git update sets and are provisioned directly on the target instance via the automated runbook in Section 7.
+
+---
+
 ### 4.1 Platform-Side Circuit Breaker: Human Lock Safety Stop (Business Rule)
 
 #### The Race Window Problem
