@@ -6,9 +6,9 @@ from copy import deepcopy
 from pathlib import Path
 
 import pytest
-from fixtures.articles import POSTGRES_V1, POSTGRES_V2, REDIS_DRAFT
 
 from app.models.knowledge import Article
+from tests.fixtures.articles import POSTGRES_V1, POSTGRES_V2, REDIS_DRAFT
 
 _REQUIRED_TEST_ENV = {
     "SERVICENOW_INSTANCE_URL": "https://dev00000.service-now.com",

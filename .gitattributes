@@ -1,0 +1,18 @@
+# Keep the ServiceNow artifacts byte-identical on every platform.
+#
+# Everything under servicenow/ is stored with LF. Git for Windows ships with
+# core.autocrlf=true, which rewrites LF to CRLF *on checkout* for anything Git treats as
+# text. That silently changes these files without any edit by the developer.
+#
+# For src/fluent/generated/keys.ts that is not cosmetic. The key registry binds this
+# source to record sys_ids that already exist on dev434590 and dev204871, and the SDK
+# hashes the file: after a CRLF checkout `now-sdk build --frozenKeys` fails with
+# "Keys file is out-of-date", and the SDK's own advice is to rebuild without frozen keys
+# — the exact step that re-mints the choice sys_ids and would replace the Processing
+# State choices on the target instance. Verified: the LF blob is ae0118fa…, the same
+# bytes after a CRLF checkout are 966f3398…, and 4.8.0 rejects the second.
+#
+# The exported update sets are the authoritative deliverables, so they are covered too.
+#
+# See #54.
+servicenow/** -text

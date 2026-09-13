@@ -10,7 +10,7 @@
 - Owner: Ali Ezz
 - Human reviewer: Aya Ashraf
 - Deadline: Sunday, September 13, 2026 at 11:59 PM Cairo time
-- Status: Implemented, exported, and verified on source PDI `dev434590` and secondary PDI `dev204871`
+- Status: Implemented, exported, verified on source PDI `dev434590` and secondary PDI `dev204871`, and merged through PR #1 on September 9, 2026
 
 ## Design contract
 
@@ -100,6 +100,18 @@ Permission rules:
 
 ServiceNow does not permit a scripted before Business Rule in a private scope to abort writes on the Global-scope Incident table. Creating such a rule in Global would violate the explicit zero-Global-artifacts acceptance criterion. S1.1 therefore uses scoped form validation and defines the server/API invariant as part of the integration writer contract; S1.2 ACLs and downstream writers must preserve that boundary.
 
+### Cross-scope privileges (open — #56)
+
+The application is exported with `runtime_access_tracking=permissive` on `sys_app`, so the platform grants access to Global APIs automatically and records a `sys_scope_privilege` rather than refusing. The S1.1 export carries exactly one:
+
+| Record | Target | Operation | Status |
+|---|---|---|---|
+| `sys_scope_privilege_15358c08731fc7502aedfed25ab8b7c8` | `GlideRecordSecure.getValue` | `execute` | `allowed` |
+
+**No shipped S1.1 artifact requires it.** The export contains no server-side script: the only two scripts are the onChange and onSubmit Client Scripts in `confidence-validation.now.ts`, both of which use `g_form` exclusively and never touch `GlideRecordSecure`. The grant was therefore recorded by something run in the scope during authoring or testing, not by the deliverable.
+
+It should be deleted and the app re-exported, and tracking moved from Permissive to Enforcing. Both are changes on `dev434590` and are not yet done — this note records the finding, not a fix. The six further privileges on the S1.2 update set are @MohamedAbdelaiem's, tracked on the same issue.
+
 ## Confirmed project decisions
 
 1. S1.1 includes AI Enabled because S1.3 eligibility depends on it.
@@ -108,8 +120,8 @@ ServiceNow does not permit a scripted before Business Rule in a private scope to
 4. Mohamed owns formal OAuth/ACL implementation in S1.2; S1.1 documents intended access.
 5. The AI Incident Orchestrator section belongs on the Default Incident view.
 6. Clean-import verification will use an authorized teammate's clean PDI on the same release.
-7. Aya Ashraf is the human pull-request reviewer.
-8. S1.1 is due Sunday, September 13, 2026 at 11:59 PM Cairo time; the automated extension notice is disregarded.
+7. S1.1 was merged through repository PR #1 on September 9, 2026. Mentor acceptance remains a separate internship review step.
+8. The authoritative S1.1 deadline is Sunday, September 13, 2026 at 11:59 PM Cairo time; the automated extension notice is disregarded.
 
 The W0.5 CAD notes remain useful for comparison, but their absence does not block implementation using ServiceNow's generated scoped prefix and the confirmed model above.
 
@@ -127,5 +139,6 @@ The W0.5 CAD notes remain useful for comparison, but their absence does not bloc
 - Secondary test PDI: `dev204871` (authorized teammate instance)
 - Secondary preview: Passed with 39 inserts, zero updates, zero deletes, zero collisions, and no unresolved errors.
 - Secondary commit: Completed successfully on `2026-09-08` without manual configuration or repair.
-- Secondary functional verification: Passed on `2026-09-08`; the Incident form displayed the imported section/fields and automatically removed an out-of-range confidence value while showing the expected error.
-- Confidence boundary verification: The form accepted inclusive boundary values `0` and `1` without validation errors.
+- Secondary functional verification: Passed on `2026-09-08`; the Incident form displayed the imported section/fields and showed the expected range error for an out-of-range confidence value.
+- Confidence boundary verification: The scoped Client Script logic accepts inclusive boundary values `0` and `1`. This is established by reading the validation script, not by a captured screenshot.
+- Repository verification: PR #1 merged into `main` on `2026-09-09`; after the team documentation restructure, the final S1.1 documents reside under `docs/sprint-1/s1.1-scoped-app-and-field-model/`.
