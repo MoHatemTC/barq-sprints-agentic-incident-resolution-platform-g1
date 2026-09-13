@@ -34,11 +34,17 @@ from typing import Any
 import httpx
 from dotenv import load_dotenv
 
+from app.core.config import Settings
+from app.core.logging import configure_logging
+
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
 
 load_dotenv()
+settings = Settings()
+configure_logging(environment=settings.environment, log_level=settings.log_level)
+
 
 INSTANCE_URL: str = os.getenv("SERVICENOW_INSTANCE_URL", "").rstrip("/")
 CLIENT_ID: str = os.getenv("SERVICENOW_CLIENT_ID", "")
@@ -275,7 +281,7 @@ def _test_identity(client: httpx.Client, hdrs: dict[str, str]) -> TestResult:
         target="/api/now/table/sys_user?sysparm_query=sys_id=javascript:gs.getUserID()",
         expected=f"Token owner user_name={USERNAME}",
         http_status=resp.status_code,
-        observed=f"user_name={results[0].get('user_name', 'N/A')}" if results else "no result",
+        observed=(f"user_name={results[0].get('user_name', 'N/A')}" if results else "no result"),
         persisted_change=False,
         verdict="PASS" if ok else "FAIL",
         notes=f"Token owner: {results[0].get('name', '')} ({results[0].get('user_name', '')})"
@@ -306,9 +312,11 @@ def _test_non_admin(client: httpx.Client, hdrs: dict[str, str]) -> TestResult:
         observed=f"HTTP {resp.status_code}",
         persisted_change=False,
         verdict="PASS" if is_denied else "FAIL",
-        notes="403 confirms account lacks admin/security_admin."
-        if is_denied
-        else "FAIL: account can read role assignments (elevated privilege detected).",
+        notes=(
+            "403 confirms account lacks admin/security_admin."
+            if is_denied
+            else "FAIL: account can read role assignments (elevated privilege detected)."
+        ),
     )
 
 
@@ -454,7 +462,7 @@ def _test_write_work_notes(
         observed=f"HTTP {patch.status_code} ({count} journal entries)",
         persisted_change=count > 0,
         verdict="PASS" if ok else "FAIL",
-        notes=f"Journal entry confirmed (count={count})." if ok else "NOT persisted in journal!",
+        notes=(f"Journal entry confirmed (count={count})." if ok else "NOT persisted in journal!"),
     )
 
 
@@ -506,9 +514,11 @@ def _test_write_ai_field(client: httpx.Client, hdrs: dict[str, str], inc_sys_id:
         observed=f"HTTP {patch.status_code} (value='{after}')",
         persisted_change=(after == target_value),
         verdict="PASS" if ok else "FAIL",
-        notes=f"'{before}' -> '{after}' (restored after test)."
-        if ok
-        else f"Expected '{target_value}', got '{after}'.",
+        notes=(
+            f"'{before}' -> '{after}' (restored after test)."
+            if ok
+            else f"Expected '{target_value}', got '{after}'."
+        ),
     )
 
 
@@ -699,9 +709,11 @@ def _test_execution_id_lookup(
         observed=f"HTTP {qr.status_code} ({len(found)} record(s) found)",
         persisted_change=False,
         verdict="PASS" if ok else "FAIL",
-        notes=f"exec_id='{unique_exec_id}' -> sys_id={cr_sys_id}"
-        if ok
-        else "Lookup failed or wrong count.",
+        notes=(
+            f"exec_id='{unique_exec_id}' -> sys_id={cr_sys_id}"
+            if ok
+            else "Lookup failed or wrong count."
+        ),
     )
 
 
@@ -909,9 +921,11 @@ def _forbidden_scalar(
         observed=f"HTTP {patch_r.status_code} | before='{before}' after='{after}'",
         persisted_change=changed,
         verdict="PASS" if blocked else "FAIL",
-        notes="ACL blocked: field unchanged."
-        if blocked
-        else f"SECURITY FAILURE: {field} changed from '{before}' to '{after}'!",
+        notes=(
+            "ACL blocked: field unchanged."
+            if blocked
+            else f"SECURITY FAILURE: {field} changed from '{before}' to '{after}'!"
+        ),
     )
 
 
@@ -976,9 +990,11 @@ def _forbidden_journal(
         observed=f"HTTP {patch_r.status_code} | journal_count={journal_count}",
         persisted_change=(journal_count > 0),
         verdict="PASS" if blocked else "FAIL",
-        notes="0 journal entries - ACL blocked."
-        if blocked
-        else f"SECURITY FAILURE: {journal_count} '{field}' entries posted!",
+        notes=(
+            "0 journal entries - ACL blocked."
+            if blocked
+            else f"SECURITY FAILURE: {journal_count} '{field}' entries posted!"
+        ),
     )
 
 
@@ -1051,9 +1067,11 @@ def _test_human_lock(client: httpx.Client, hdrs: dict[str, str], inc_sys_id: str
         observed=f"HTTP {patch_r.status_code} | before='{before}' after='{after}'",
         persisted_change=(after != before),
         verdict="PASS" if blocked else "FAIL",
-        notes="Circuit breaker tamper-proof."
-        if blocked
-        else f"SECURITY FAILURE: human-lock changed '{before}' -> '{after}'!",
+        notes=(
+            "Circuit breaker tamper-proof."
+            if blocked
+            else f"SECURITY FAILURE: human-lock changed '{before}' -> '{after}'!"
+        ),
     )
 
 
@@ -1231,7 +1249,10 @@ def _test_bulk_bypass(client: httpx.Client, hdrs: dict[str, str], inc_sys_id: st
         "state": "6",  # FORBIDDEN
     }
     patch_r = client.patch(
-        f"{TABLE_API_BASE}/incident/{inc_sys_id}", headers=hdrs, json=payload, timeout=10.0
+        f"{TABLE_API_BASE}/incident/{inc_sys_id}",
+        headers=hdrs,
+        json=payload,
+        timeout=10.0,
     )
 
     wn_count = len(
@@ -1385,7 +1406,11 @@ def run_verification() -> None:
         _banner("PHASE 3 - Execution Log (FR-02 Audit Trail)")
         for tid, status, error in [
             ("LOG-01", "succeeded", ""),
-            ("LOG-02", "failed", "Simulated processing failure for audit verification."),
+            (
+                "LOG-02",
+                "failed",
+                "Simulated processing failure for audit verification.",
+            ),
             ("LOG-03", "blocked", ""),
             ("LOG-06", "abandoned", "Simulated run abandoned due to operator cancellation."),
         ]:

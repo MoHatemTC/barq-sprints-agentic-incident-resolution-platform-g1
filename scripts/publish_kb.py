@@ -21,7 +21,8 @@ from pathlib import Path
 
 import structlog
 
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
+from app.core.logging import configure_logging
 from app.publishing.payload import U_SOURCE_ID_FIELD, build_kb_payload
 from app.publishing.servicenow_kb import (
     ServiceNowKBClient,
@@ -29,6 +30,9 @@ from app.publishing.servicenow_kb import (
     publish_article,
 )
 from app.retrieval.sources import LocalJSONSource
+
+settings = Settings()
+configure_logging(environment=settings.environment, log_level=settings.log_level)
 
 logger = structlog.get_logger("publish_kb")
 
