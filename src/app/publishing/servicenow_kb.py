@@ -165,26 +165,61 @@ class ServiceNowKBClient:
     # Knowledge Article CRUD
     # -------------------------------------------------------------------------
 
-    async def find_by_source_id(self, article_id: str) -> dict[str, Any] | None:
-        """Find the kb_knowledge row stamped with our article ID, if any.
+    async def find_by_source_id(
+        self,
+        article_id: str,
+        *,
+        kb_sys_id: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Find the kb_knowledge row stamped with our article ID within target KB.
 
         Raises:
-            ServiceNowKBError: If duplicate records exist for the same source ID.
+            ServiceNowKBError: If duplicate records exist for the same source ID,
+                or if a row with the source ID belongs to a different Knowledge Base.
         """
+        # First query scoped to the target Knowledge Base
+        query = f"{U_SOURCE_ID_FIELD}={article_id}"
+        if kb_sys_id:
+            query = f"{query}^kb_knowledge_base={kb_sys_id}"
+
         params = {
-            "sysparm_query": f"{U_SOURCE_ID_FIELD}={article_id}",
+            "sysparm_query": query,
             "sysparm_fields": ",".join(_LIST_FIELDS),
             "sysparm_limit": "2",
         }
         res = await self.request("GET", f"/api/now/table/{KB_TABLE}", params=params)
         records = res.json().get("result", [])
+
         if len(records) > 1:
             sys_ids = [r.get("sys_id") for r in records]
             raise ServiceNowKBError(
                 f"Duplicate kb_knowledge rows carry u_source_id={article_id!r} "
                 f"(sys_ids: {sys_ids}). Clean up duplicates before publishing."
             )
-        return records[0] if records else None
+
+        if records:
+            return records[0]
+
+        # If scoped search found nothing, verify no match exists in another KB
+        if kb_sys_id:
+            unscoped_params = {
+                "sysparm_query": f"{U_SOURCE_ID_FIELD}={article_id}",
+                "sysparm_fields": ",".join(_LIST_FIELDS),
+                "sysparm_limit": "1",
+            }
+            unscoped_res = await self.request(
+                "GET", f"/api/now/table/{KB_TABLE}", params=unscoped_params
+            )
+            other_records = unscoped_res.json().get("result", [])
+            if other_records:
+                other_kb = other_records[0].get("kb_knowledge_base")
+                raise ServiceNowKBError(
+                    f"Article {article_id!r} already exists in a different Knowledge Base "
+                    f"({other_kb!r}, sys_id={other_records[0].get('sys_id')!r}). "
+                    "Articles cannot be moved between Knowledge Bases automatically."
+                )
+
+        return None
 
     async def create(self, payload: dict[str, Any]) -> str:
         """POST a new kb_knowledge record; returns its sys_id."""
@@ -247,7 +282,7 @@ async def publish_article(
     """
     payload = build_kb_payload(article, kb_sys_id, category_mapping=category_mapping)
 
-    existing = await client.find_by_source_id(article.article_id)
+    existing = await client.find_by_source_id(article.article_id, kb_sys_id=kb_sys_id)
     if existing is None:
         sys_id = await client.create(payload)
         outcome = "created"

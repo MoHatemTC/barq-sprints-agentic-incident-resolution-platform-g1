@@ -113,7 +113,6 @@ async def test_verify_stored_fails_when_article_stuck_in_draft(
         await client.aclose()
 
 
-
 @pytest.mark.asyncio
 async def test_duplicate_source_id_rows_fail_loud(
     sample_articles: list[Article], fake: Any
@@ -126,6 +125,21 @@ async def test_duplicate_source_id_rows_fail_loud(
 
         with pytest.raises(ServiceNowKBError, match="Duplicate"):
             await publish_article(client, sample_articles[0], KB_SYS_ID)
+    finally:
+        await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_find_by_source_id_scoped_to_kb(sample_articles: list[Article], fake: Any) -> None:
+    """Articles in another KB must not be matched or overwritten."""
+    client = fake.build_client()
+    try:
+        article = sample_articles[0]
+        payload = build_kb_payload(article, "other-kb-999999999")
+        fake.rows.append({"sys_id": "row_in_other_kb", **payload})
+
+        with pytest.raises(ServiceNowKBError, match="already exists in a different Knowledge Base"):
+            await client.find_by_source_id(article.article_id, kb_sys_id=KB_SYS_ID)
     finally:
         await client.aclose()
 
@@ -183,7 +197,7 @@ async def test_client_sends_bearer_auth_header() -> None:
     http_client = httpx.AsyncClient(base_url=INSTANCE, transport=httpx.MockTransport(spy))
     client = ServiceNowKBClient(settings, http_client=http_client)
     try:
-        await client.find_by_source_id("KB0001-v2.0")
+        await client.find_by_source_id("KB0001-v2.0", kb_sys_id=KB_SYS_ID)
         assert seen["authorization"] == "Bearer bearer_token_xyz"
     finally:
         await client.aclose()
