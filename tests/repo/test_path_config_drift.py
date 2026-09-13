@@ -34,10 +34,6 @@ PLANNED: dict[str, str] = {
     "src/app/publishing/**": "lands with S1.4 KB publishing, PR #39",
     "scripts/publish_kb.py": "lands with S1.4 KB publishing, PR #39",
     "tests/publishing/**": "lands with S1.4 KB publishing, PR #39",
-    # Dead rule; removed in PR #61. Drop this entry once that merges.
-    "/servicenow/ai_incident_orchestrator/business_rules/": (
-        "dead CODEOWNERS rule, removed in PR #61"
-    ),
 }
 
 
