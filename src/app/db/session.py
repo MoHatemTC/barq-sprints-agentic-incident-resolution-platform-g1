@@ -1,7 +1,12 @@
+"""Async SQLAlchemy engine and session construction without import-time I/O."""
 from __future__ import annotations
 
-import structlog
-from sqlalchemy import URL
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from typing import Protocol
+
+from pydantic import SecretStr
+from sqlalchemy.engine import URL
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -9,16 +14,25 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from app.core.config import Settings
 
-logger = structlog.getLogger(__name__)
+class PostgreSQLSettings(Protocol):
+    """Settings surface needed to construct the PostgreSQL URL."""
+
+    postgres_host: str
+    postgres_port: int
+    postgres_db: str
+    postgres_user: str
+    postgres_password: SecretStr | None
 
 
-def build_postgres_url(settings: Settings) -> URL:
-    """Construct a safe SQLAlchemy async URL for PostgreSQL."""
+SessionFactory = async_sessionmaker[AsyncSession]
+
+
+def build_database_url(settings: PostgreSQLSettings) -> URL:
+    """Build an asyncpg URL while leaving credentials escaped and undisclosed."""
     password = (
         settings.postgres_password.get_secret_value()
-        if settings.postgres_password
+        if settings.postgres_password is not None
         else None
     )
     return URL.create(
@@ -31,23 +45,37 @@ def build_postgres_url(settings: Settings) -> URL:
     )
 
 
-def create_db_engine(settings: Settings) -> AsyncEngine:
-    """Create a production-configured SQLAlchemy async engine."""
-    url = build_postgres_url(settings)
-    return create_async_engine(
-        url,
-        pool_size=10,
-        max_overflow=20,
-        pool_timeout=5.0,
-        pool_pre_ping=True,
-    )
+# Compatibility alias for build_database_url
+build_postgres_url = build_database_url
 
 
-def create_session_factory(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
-    """Create an async sessionmaker bound to the given engine."""
+def create_database_engine(database_url: str | URL, *, echo: bool = False) -> AsyncEngine:
+    """Create a lazy async engine; no connection is opened until first use."""
+    return create_async_engine(database_url, echo=echo, pool_pre_ping=True)
+
+
+def create_db_engine(settings: PostgreSQLSettings) -> AsyncEngine:
+    """Create a production-configured SQLAlchemy async engine from settings."""
+    url = build_database_url(settings)
+    return create_database_engine(url)
+
+
+def create_session_factory(engine: AsyncEngine) -> SessionFactory:
+    """Create sessions whose objects remain usable after transaction commits."""
     return async_sessionmaker(
         bind=engine,
         class_=AsyncSession,
         expire_on_commit=False,
         autoflush=False,
     )
+
+
+@asynccontextmanager
+async def session_scope(factory: SessionFactory) -> AsyncIterator[AsyncSession]:
+    """Yield one session and roll back failed work; callers own commit boundaries."""
+    async with factory() as session:
+        try:
+            yield session
+        except Exception:
+            await session.rollback()
+            raise
