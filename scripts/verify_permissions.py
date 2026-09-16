@@ -60,6 +60,7 @@ HUMAN_LOCK_FIELD: str = "x_2215032_ai_inc_0_ai_human_lock"
 AI_CLASSIFICATION_FIELD: str = "x_2215032_ai_inc_0_ai_classification"
 AI_HUMAN_REVIEW_FIELD: str = "x_2215032_ai_inc_0_ai_human_review_required"
 AI_ENABLED_FIELD: str = "x_2215032_ai_inc_0_ai_enabled"
+AI_RETRY_COUNT_FIELD: str = "x_2215032_ai_inc_0_ai_retry_count"
 
 # Known OOB ServiceNow group sys_id used in assignment_group test
 _DENY_GROUP_ID: str = "287ebd7da9fe198100f92cc8d1d2154e"
@@ -1311,6 +1312,104 @@ def _test_bulk_bypass(client: httpx.Client, hdrs: dict[str, str], inc_sys_id: st
 # ---------------------------------------------------------------------------
 
 
+def _test_duplicate_execution_id(
+    client: httpx.Client,
+    hdrs: dict[str, str],
+    inc_sys_id: str,
+    created_ids: list[str],
+) -> TestResult:
+    """LOG-08: execution_id is a non-unique trace key, so two rows may share one.
+
+    Records what the instance does with a duplicate, as the S1.2 row model requires.
+    """
+    shared = f"exec_dup_{_uid(16)}"
+    statuses: list[int] = []
+    for status in ("started", "succeeded"):
+        r = client.post(
+            f"{TABLE_API_BASE}/{SCOPED_LOG_TABLE}",
+            headers=hdrs,
+            json={
+                "incident_reference": inc_sys_id,
+                "execution_id": shared,
+                "agent": "verification_harness",
+                "action": "execute",
+                "status": status,
+                "timestamp": datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S"),
+            },
+            timeout=15.0,
+        )
+        statuses.append(r.status_code)
+        sys_id = r.json().get("result", {}).get("sys_id", "") if r.status_code == 201 else ""
+        if sys_id:
+            created_ids.append(sys_id)
+
+    qr = client.get(
+        f"{TABLE_API_BASE}/{SCOPED_LOG_TABLE}"
+        f"?sysparm_query=execution_id={shared}&sysparm_fields=sys_id,status",
+        headers=hdrs,
+        timeout=10.0,
+    )
+    found = qr.json().get("result", []) if qr.status_code == 200 else []
+    ok = statuses == [201, 201] and len(found) == 2
+    return TestResult(
+        test_id="LOG-08",
+        category="Execution Log",
+        name="Duplicate execution_id is accepted (non-unique trace key)",
+        operation="POST",
+        target=f"{SCOPED_LOG_TABLE}?execution_id=<shared>",
+        expected="Both rows created; lookup returns 2",
+        http_status=qr.status_code,
+        observed=f"POST {statuses}, lookup returned {len(found)}",
+        persisted_change=ok,
+        verdict="PASS" if ok else "FAIL",
+        notes="Two rows share one execution_id, as the row model specifies."
+        if ok
+        else "The instance does not match the documented non-unique row model.",
+    )
+
+
+def _test_journal_scope(client: httpx.Client, hdrs: dict[str, str]) -> TestResult:
+    """DENY-07: journal read is limited to incident work notes (#50).
+
+    Queries journal rows the integration role must not see: other tables' journals,
+    and incident comments. Any row returned is a leak.
+    """
+    leaks: dict[str, int] = {}
+    statuses: list[int] = []
+    for label, query in (
+        ("other tables", "name!=incident"),
+        ("incident comments", "name=incident^element=comments"),
+    ):
+        r = client.get(
+            f"{TABLE_API_BASE}/sys_journal_field",
+            headers=hdrs,
+            params={"sysparm_query": query, "sysparm_limit": "5", "sysparm_fields": "sys_id"},
+            timeout=10.0,
+        )
+        statuses.append(r.status_code)
+        if r.status_code == 200:
+            leaks[label] = len(r.json().get("result", []))
+        elif r.status_code not in (401, 403):
+            leaks[label] = -1
+
+    ok = all(count == 0 for count in leaks.values()) and all(s in (200, 401, 403) for s in statuses)
+    return TestResult(
+        test_id="DENY-07",
+        category="Forbidden",
+        name="Journal read limited to incident work notes",
+        operation="GET",
+        target="sys_journal_field (other tables, incident comments)",
+        expected="0 rows or 403 for each query",
+        http_status=statuses[-1],
+        observed=f"HTTP {statuses}; rows returned {leaks}",
+        persisted_change=False,
+        verdict="PASS" if ok else "FAIL",
+        notes="No journal rows outside incident work notes are readable."
+        if ok
+        else f"SECURITY FAILURE: journal rows readable outside incident work notes: {leaks}",
+    )
+
+
 def _print_matrix(results: list[TestResult]) -> None:
     print(f"\n{'=' * 72}")
     print(f"  {_BLD}Sprint 1 (S1.2) Security Verification - Final Report{_RST}")
@@ -1421,6 +1520,7 @@ def run_verification() -> None:
             lambda: _test_execution_id_lookup(client, hdrs, inc_sys_id, created_log_ids),
             lambda: _test_log_delete_forbidden(client, hdrs, inc_sys_id),
             lambda: _test_log_modify_forbidden(client, hdrs, inc_sys_id),
+            lambda: _test_duplicate_execution_id(client, hdrs, inc_sys_id, created_log_ids),
         ):
             r = fn()
             results.append(r)
@@ -1438,6 +1538,14 @@ def run_verification() -> None:
             results.append(r)
             _print_test(r)
         r = _forbidden_journal(client, hdrs, inc_sys_id, "DENY-05", "comments")
+        results.append(r)
+        _print_test(r)
+
+        r = _forbidden_scalar(client, hdrs, inc_sys_id, "DENY-06", AI_RETRY_COUNT_FIELD, "7")
+        results.append(r)
+        _print_test(r)
+
+        r = _test_journal_scope(client, hdrs)
         results.append(r)
         _print_test(r)
 
