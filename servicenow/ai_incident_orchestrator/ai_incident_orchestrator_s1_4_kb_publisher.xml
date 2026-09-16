@@ -1,0 +1,474 @@
+<?xml version="1.0" encoding="UTF-8"?><unload unload_date="2026-09-16 21:03:10">
+<sys_remote_update_set action="INSERT_OR_UPDATE">
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<application_name>AI Incident Orchestrator</application_name>
+<application_scope>x_2215032_ai_inc_0</application_scope>
+<application_version>1.0.1</application_version>
+<collisions/>
+<commit_date/>
+<deleted/>
+<description>Least-privilege role for publishing the BARQ corpus into the ServiceNow knowledge base. The user and its password are set per instance.</description>
+<inserted/>
+<name>BARQ G1 - S1.4 - KB publisher identity (#91)</name>
+<origin_sys_id/>
+<parent display_value=""/>
+<release_date/>
+<remote_base_update_set display_value=""/>
+<remote_parent_id/>
+<remote_sys_id>6998417e739b4b102aedfed25ab8b754</remote_sys_id>
+<state>loaded</state>
+<summary/>
+<sys_class_name>sys_remote_update_set</sys_class_name>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-16 21:03:10</sys_created_on>
+<sys_id>cf0a0d7273db4b102aedfed25ab8b794</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-16 21:03:10</sys_updated_on>
+<update_set display_value=""/>
+<update_source display_value=""/>
+<updated/>
+</sys_remote_update_set>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_security_acl_role_2419c9be739b4b102aedfed25ab8b772</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_security_acl_role"><sys_security_acl_role action="INSERT_OR_UPDATE"><sys_class_name>sys_security_acl_role</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-16 20:58:54</sys_created_on><sys_id>2419c9be739b4b102aedfed25ab8b772</sys_id><sys_mod_count>0</sys_mod_count><sys_name>kb_knowledge.workflow_state.x_2215032_ai_inc_0.kb_publisher</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_security_acl display_value="kb_knowledge.workflow_state">2c19c9be739b4b102aedfed25ab8b76a</sys_security_acl><sys_update_name>sys_security_acl_role_2419c9be739b4b102aedfed25ab8b772</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-16 20:58:54</sys_updated_on><sys_user_role display_value="x_2215032_ai_inc_0.kb_publisher" name="x_2215032_ai_inc_0.kb_publisher">2d98417e739b4b102aedfed25ab8b755</sys_user_role></sys_security_acl_role></record_update>]]></payload>
+<payload_hash>599078741</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.4 - KB publisher identity (#91)">cf0a0d7273db4b102aedfed25ab8b794</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-16 21:03:10</sys_created_on>
+<sys_id>030a0d7273db4b102aedfed25ab8b798</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a0ac03f2280000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-16 21:03:10</sys_updated_on>
+<table>kb_knowledge.workflow_state</table>
+<target_name>kb_knowledge.workflow_state.x_2215032_ai_inc_0.kb_publisher</target_name>
+<type>Access Roles</type>
+<update_domain>global</update_domain>
+<update_guid>e819c9be099b4b102b6b19020e37147b</update_guid>
+<update_guid_history>e819c9be099b4b102b6b19020e37147b:599078741</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_security_acl_21d8c97e739b4b102aedfed25ab8b7b3</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_security_acl"><sys_security_acl action="INSERT_OR_UPDATE"><active>true</active><admin_overrides>true</admin_overrides><advanced>false</advanced><applies_to/><condition/><controlled_by_refs/><decision_type>allow</decision_type><description>Lets the KB publisher read the version record of an article it publishes.</description><local_or_existing>Existing</local_or_existing><name>kb_version</name><operation display_value="read">read</operation><script/><security_attribute/><sys_class_name>sys_security_acl</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-16 20:57:53</sys_created_on><sys_id>21d8c97e739b4b102aedfed25ab8b7b3</sys_id><sys_mod_count>0</sys_mod_count><sys_name>kb_version</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_update_name>sys_security_acl_21d8c97e739b4b102aedfed25ab8b7b3</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-16 20:57:53</sys_updated_on><type display_value="record">record</type></sys_security_acl></record_update>]]></payload>
+<payload_hash>1132925982</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.4 - KB publisher identity (#91)">cf0a0d7273db4b102aedfed25ab8b794</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-16 21:03:10</sys_created_on>
+<sys_id>070a0d7273db4b102aedfed25ab8b795</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a0ac0300e20000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-16 21:03:10</sys_updated_on>
+<table>kb_version</table>
+<target_name>kb_version</target_name>
+<type>Access Control</type>
+<update_domain>global</update_domain>
+<update_guid>add8c97e189b4b1088b17ce2490c2dd0</update_guid>
+<update_guid_history>add8c97e189b4b1088b17ce2490c2dd0:1132925982</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_security_acl_role_ccb8457e739b4b102aedfed25ab8b784</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_security_acl_role"><sys_security_acl_role action="INSERT_OR_UPDATE"><sys_class_name>sys_security_acl_role</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-16 20:57:14</sys_created_on><sys_id>ccb8457e739b4b102aedfed25ab8b784</sys_id><sys_mod_count>0</sys_mod_count><sys_name>sys_dictionary.x_2215032_ai_inc_0.kb_publisher</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_security_acl display_value="sys_dictionary">c0b8457e739b4b102aedfed25ab8b724</sys_security_acl><sys_update_name>sys_security_acl_role_ccb8457e739b4b102aedfed25ab8b784</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-16 20:57:14</sys_updated_on><sys_user_role display_value="x_2215032_ai_inc_0.kb_publisher" name="x_2215032_ai_inc_0.kb_publisher">2d98417e739b4b102aedfed25ab8b755</sys_user_role></sys_security_acl_role></record_update>]]></payload>
+<payload_hash>774489340</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.4 - KB publisher identity (#91)">cf0a0d7273db4b102aedfed25ab8b794</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-16 21:03:10</sys_created_on>
+<sys_id>070a0d7273db4b102aedfed25ab8b799</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a0ac0269c40000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-16 21:03:10</sys_updated_on>
+<table>sys_dictionary</table>
+<target_name>sys_dictionary.x_2215032_ai_inc_0.kb_publisher</target_name>
+<type>Access Roles</type>
+<update_domain>global</update_domain>
+<update_guid>0cb8457e589b4b10481c45c626806a90</update_guid>
+<update_guid_history>0cb8457e589b4b10481c45c626806a90:774489340</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_user_role_contains_2598417e739b4b102aedfed25ab8b77e</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_user_role_contains"><sys_user_role_contains action="INSERT_OR_UPDATE"><contains display_value="snc_platform_rest_api_access" name="snc_platform_rest_api_access">408934d18733320025fbd1a936cb0b88</contains><role display_value="x_2215032_ai_inc_0.kb_publisher" name="x_2215032_ai_inc_0.kb_publisher">2d98417e739b4b102aedfed25ab8b755</role><sys_class_name>sys_user_role_contains</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-16 20:56:47</sys_created_on><sys_id>2598417e739b4b102aedfed25ab8b77e</sys_id><sys_mod_count>0</sys_mod_count><sys_name>snc_platform_rest_api_access.x_2215032_ai_inc_0.kb_publisher</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_update_name>sys_user_role_contains_2598417e739b4b102aedfed25ab8b77e</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-16 20:56:47</sys_updated_on></sys_user_role_contains></record_update>]]></payload>
+<payload_hash>2099554102</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.4 - KB publisher identity (#91)">cf0a0d7273db4b102aedfed25ab8b794</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-16 21:03:10</sys_created_on>
+<sys_id>0b0a0d7273db4b102aedfed25ab8b79a</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a0ac0201b40000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-16 21:03:10</sys_updated_on>
+<table/>
+<target_name>snc_platform_rest_api_access.x_2215032_ai_inc_0.kb_publisher</target_name>
+<type>Contained Role</type>
+<update_domain>global</update_domain>
+<update_guid>e598417ea89b4b1024102c626f6fa39d</update_guid>
+<update_guid_history>e598417ea89b4b1024102c626f6fa39d:2099554102</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_security_acl_c0b8457e739b4b102aedfed25ab8b724</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_security_acl"><sys_security_acl action="INSERT_OR_UPDATE"><active>true</active><admin_overrides>true</admin_overrides><advanced>false</advanced><applies_to/><condition table="sys_dictionary">name=kb_knowledge^elementSTARTSWITHx_2215032_ai_inc_0_^EQ<item endquery="false" field="name" goto="false" newquery="false" operator="=" or="false" value="kb_knowledge"/><item endquery="false" field="element" goto="false" newquery="false" operator="STARTSWITH" or="false" value="x_2215032_ai_inc_0_"/><item endquery="true" field="" goto="false" newquery="false" operator="=" or="false" value=""/></condition><controlled_by_refs/><decision_type>allow</decision_type><description>Lets the KB publisher confirm the app columns exist on kb_knowledge before publishing.</description><local_or_existing>Existing</local_or_existing><name>sys_dictionary</name><operation display_value="read">read</operation><script/><security_attribute/><sys_class_name>sys_security_acl</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-16 20:57:14</sys_created_on><sys_id>c0b8457e739b4b102aedfed25ab8b724</sys_id><sys_mod_count>0</sys_mod_count><sys_name>sys_dictionary</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_update_name>sys_security_acl_c0b8457e739b4b102aedfed25ab8b724</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-16 20:57:14</sys_updated_on><type display_value="record">record</type></sys_security_acl></record_update>]]></payload>
+<payload_hash>-2037403908</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.4 - KB publisher identity (#91)">cf0a0d7273db4b102aedfed25ab8b794</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-16 21:03:10</sys_created_on>
+<sys_id>0f0a0d7273db4b102aedfed25ab8b796</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a0ac02692a0000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-16 21:03:10</sys_updated_on>
+<table>sys_dictionary</table>
+<target_name>sys_dictionary</target_name>
+<type>Access Control</type>
+<update_domain>global</update_domain>
+<update_guid>40b8457ebf9b4b1064b2d27cf1da4d82</update_guid>
+<update_guid_history>40b8457ebf9b4b1064b2d27cf1da4d82:-2037403908</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_security_acl_e1d8c97e739b4b102aedfed25ab8b792</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_security_acl"><sys_security_acl action="INSERT_OR_UPDATE"><active>true</active><admin_overrides>true</admin_overrides><advanced>false</advanced><applies_to/><condition/><controlled_by_refs/><decision_type>allow</decision_type><description>Lets the KB publisher create a missing category under the target knowledge base.</description><local_or_existing>Existing</local_or_existing><name>kb_category</name><operation display_value="create">create</operation><script/><security_attribute/><sys_class_name>sys_security_acl</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-16 20:57:52</sys_created_on><sys_id>e1d8c97e739b4b102aedfed25ab8b792</sys_id><sys_mod_count>0</sys_mod_count><sys_name>kb_category</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_update_name>sys_security_acl_e1d8c97e739b4b102aedfed25ab8b792</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-16 20:57:52</sys_updated_on><type display_value="record">record</type></sys_security_acl></record_update>]]></payload>
+<payload_hash>-645424648</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.4 - KB publisher identity (#91)">cf0a0d7273db4b102aedfed25ab8b794</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-16 21:03:10</sys_created_on>
+<sys_id>430a0d7273db4b102aedfed25ab8b797</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a0ac0300140000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-16 21:03:10</sys_updated_on>
+<table>kb_category</table>
+<target_name>kb_category</target_name>
+<type>Access Control</type>
+<update_domain>global</update_domain>
+<update_guid>a9d8c97e7c9b4b10f5d89f5baa134397</update_guid>
+<update_guid_history>a9d8c97e7c9b4b10f5d89f5baa134397:-645424648</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_security_acl_role_2819c9be739b4b102aedfed25ab8b75e</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_security_acl_role"><sys_security_acl_role action="INSERT_OR_UPDATE"><sys_class_name>sys_security_acl_role</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-16 20:58:54</sys_created_on><sys_id>2819c9be739b4b102aedfed25ab8b75e</sys_id><sys_mod_count>0</sys_mod_count><sys_name>kb_knowledge.workflow_state.x_2215032_ai_inc_0.kb_publisher</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_security_acl display_value="kb_knowledge.workflow_state">e41989be739b4b102aedfed25ab8b7e6</sys_security_acl><sys_update_name>sys_security_acl_role_2819c9be739b4b102aedfed25ab8b75e</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-16 20:58:54</sys_updated_on><sys_user_role display_value="x_2215032_ai_inc_0.kb_publisher" name="x_2215032_ai_inc_0.kb_publisher">2d98417e739b4b102aedfed25ab8b755</sys_user_role></sys_security_acl_role></record_update>]]></payload>
+<payload_hash>-1915985626</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.4 - KB publisher identity (#91)">cf0a0d7273db4b102aedfed25ab8b794</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-16 21:03:10</sys_created_on>
+<sys_id>470a0d7273db4b102aedfed25ab8b798</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a0ac03f1a10000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-16 21:03:10</sys_updated_on>
+<table>kb_knowledge.workflow_state</table>
+<target_name>kb_knowledge.workflow_state.x_2215032_ai_inc_0.kb_publisher</target_name>
+<type>Access Roles</type>
+<update_domain>global</update_domain>
+<update_guid>a419c9be9d9b4b1024e679e32904a768</update_guid>
+<update_guid_history>a419c9be9d9b4b1024e679e32904a768:-1915985626</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_security_acl_role_e1d8c97e739b4b102aedfed25ab8b79a</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_security_acl_role"><sys_security_acl_role action="INSERT_OR_UPDATE"><sys_class_name>sys_security_acl_role</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-16 20:57:52</sys_created_on><sys_id>e1d8c97e739b4b102aedfed25ab8b79a</sys_id><sys_mod_count>0</sys_mod_count><sys_name>kb_category.x_2215032_ai_inc_0.kb_publisher</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_security_acl display_value="kb_category">e1d8c97e739b4b102aedfed25ab8b792</sys_security_acl><sys_update_name>sys_security_acl_role_e1d8c97e739b4b102aedfed25ab8b79a</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-16 20:57:52</sys_updated_on><sys_user_role display_value="x_2215032_ai_inc_0.kb_publisher" name="x_2215032_ai_inc_0.kb_publisher">2d98417e739b4b102aedfed25ab8b755</sys_user_role></sys_security_acl_role></record_update>]]></payload>
+<payload_hash>-690377797</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.4 - KB publisher identity (#91)">cf0a0d7273db4b102aedfed25ab8b794</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-16 21:03:10</sys_created_on>
+<sys_id>4b0a0d7273db4b102aedfed25ab8b799</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a0ac0300ab0000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-16 21:03:10</sys_updated_on>
+<table>kb_category</table>
+<target_name>kb_category.x_2215032_ai_inc_0.kb_publisher</target_name>
+<type>Access Roles</type>
+<update_domain>global</update_domain>
+<update_guid>a9d8c97eb59b4b104585961cd7537fb0</update_guid>
+<update_guid_history>a9d8c97eb59b4b104585961cd7537fb0:-690377797</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_user_role_contains_e598417e739b4b102aedfed25ab8b772</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_user_role_contains"><sys_user_role_contains action="INSERT_OR_UPDATE"><contains display_value="knowledge" name="knowledge">1f26da36c0a8016b000c7f06a1ce7e14</contains><role display_value="x_2215032_ai_inc_0.kb_publisher" name="x_2215032_ai_inc_0.kb_publisher">2d98417e739b4b102aedfed25ab8b755</role><sys_class_name>sys_user_role_contains</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-16 20:56:47</sys_created_on><sys_id>e598417e739b4b102aedfed25ab8b772</sys_id><sys_mod_count>0</sys_mod_count><sys_name>knowledge.x_2215032_ai_inc_0.kb_publisher</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_update_name>sys_user_role_contains_e598417e739b4b102aedfed25ab8b772</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-16 20:56:47</sys_updated_on></sys_user_role_contains></record_update>]]></payload>
+<payload_hash>-1917560011</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.4 - KB publisher identity (#91)">cf0a0d7273db4b102aedfed25ab8b794</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-16 21:03:10</sys_created_on>
+<sys_id>4f0a0d7273db4b102aedfed25ab8b79a</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a0ac0201830000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-16 21:03:10</sys_updated_on>
+<table/>
+<target_name>knowledge.x_2215032_ai_inc_0.kb_publisher</target_name>
+<type>Contained Role</type>
+<update_domain>global</update_domain>
+<update_guid>a998417e589b4b10f07fb98d4aaf397b</update_guid>
+<update_guid_history>a998417e589b4b10f07fb98d4aaf397b:-1917560011</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_security_acl_2c19c9be739b4b102aedfed25ab8b76a</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_security_acl"><sys_security_acl action="INSERT_OR_UPDATE"><active>true</active><admin_overrides>true</admin_overrides><advanced>false</advanced><applies_to/><condition table="kb_knowledge.workflow_state">kb_knowledge_base=dfc19531bf2021003f07e2c1ac0739ab^x_2215032_ai_inc_0_source_idISNOTEMPTY^EQ<item endquery="true" field="" goto="false" newquery="false" operator="=" or="false" value=""/></condition><controlled_by_refs/><decision_type>allow</decision_type><description>Same, when the publisher creates a corpus article.</description><local_or_existing>Existing</local_or_existing><name>kb_knowledge.workflow_state</name><operation display_value="create">create</operation><script/><security_attribute/><sys_class_name>sys_security_acl</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-16 20:58:54</sys_created_on><sys_id>2c19c9be739b4b102aedfed25ab8b76a</sys_id><sys_mod_count>0</sys_mod_count><sys_name>kb_knowledge.workflow_state</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_update_name>sys_security_acl_2c19c9be739b4b102aedfed25ab8b76a</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-16 20:58:54</sys_updated_on><type display_value="record">record</type></sys_security_acl></record_update>]]></payload>
+<payload_hash>889315259</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.4 - KB publisher identity (#91)">cf0a0d7273db4b102aedfed25ab8b794</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-16 21:03:10</sys_created_on>
+<sys_id>830a0d7273db4b102aedfed25ab8b796</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a0ac03f1d70000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-16 21:03:10</sys_updated_on>
+<table>kb_knowledge.workflow_state</table>
+<target_name>kb_knowledge.workflow_state</target_name>
+<type>Access Control</type>
+<update_domain>global</update_domain>
+<update_guid>2c19c9be3f9b4b107b7def98dfc5116f</update_guid>
+<update_guid_history>2c19c9be3f9b4b107b7def98dfc5116f:889315259</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_security_acl_e41989be739b4b102aedfed25ab8b7e6</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_security_acl"><sys_security_acl action="INSERT_OR_UPDATE"><active>true</active><admin_overrides>true</admin_overrides><advanced>false</advanced><applies_to/><condition table="kb_knowledge.workflow_state">kb_knowledge_base=dfc19531bf2021003f07e2c1ac0739ab^x_2215032_ai_inc_0_source_idISNOTEMPTY^EQ<item endquery="true" field="" goto="false" newquery="false" operator="=" or="false" value=""/></condition><controlled_by_refs/><decision_type>allow</decision_type><description>Lets the KB publisher set the workflow state of corpus articles (those carrying a source id) in the Knowledge base. The platform ACL allows nobody, and the Table API cannot run the publish flow.</description><local_or_existing>Existing</local_or_existing><name>kb_knowledge.workflow_state</name><operation display_value="write">write</operation><script/><security_attribute/><sys_class_name>sys_security_acl</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-16 20:58:54</sys_created_on><sys_id>e41989be739b4b102aedfed25ab8b7e6</sys_id><sys_mod_count>0</sys_mod_count><sys_name>kb_knowledge.workflow_state</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_update_name>sys_security_acl_e41989be739b4b102aedfed25ab8b7e6</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-16 20:58:54</sys_updated_on><type display_value="record">record</type></sys_security_acl></record_update>]]></payload>
+<payload_hash>-583132427</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.4 - KB publisher identity (#91)">cf0a0d7273db4b102aedfed25ab8b794</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-16 21:03:10</sys_created_on>
+<sys_id>870a0d7273db4b102aedfed25ab8b797</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a0ac03f1320000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-16 21:03:10</sys_updated_on>
+<table>kb_knowledge.workflow_state</table>
+<target_name>kb_knowledge.workflow_state</target_name>
+<type>Access Control</type>
+<update_domain>global</update_domain>
+<update_guid>2019c9bea59b4b10629e09af32a0e75c</update_guid>
+<update_guid_history>2019c9bea59b4b10629e09af32a0e75c:-583132427</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_security_acl_role_84b8457e739b4b102aedfed25ab8b79b</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_security_acl_role"><sys_security_acl_role action="INSERT_OR_UPDATE"><sys_class_name>sys_security_acl_role</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-16 20:57:14</sys_created_on><sys_id>84b8457e739b4b102aedfed25ab8b79b</sys_id><sys_mod_count>0</sys_mod_count><sys_name>sys_dictionary.*.x_2215032_ai_inc_0.kb_publisher</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_security_acl display_value="sys_dictionary.*">84b8457e739b4b102aedfed25ab8b793</sys_security_acl><sys_update_name>sys_security_acl_role_84b8457e739b4b102aedfed25ab8b79b</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-16 20:57:14</sys_updated_on><sys_user_role display_value="x_2215032_ai_inc_0.kb_publisher" name="x_2215032_ai_inc_0.kb_publisher">2d98417e739b4b102aedfed25ab8b755</sys_user_role></sys_security_acl_role></record_update>]]></payload>
+<payload_hash>146273013</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.4 - KB publisher identity (#91)">cf0a0d7273db4b102aedfed25ab8b794</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-16 21:03:10</sys_created_on>
+<sys_id>8b0a0d7273db4b102aedfed25ab8b798</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a0ac026a590000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-16 21:03:10</sys_updated_on>
+<table>sys_dictionary.*</table>
+<target_name>sys_dictionary.*.x_2215032_ai_inc_0.kb_publisher</target_name>
+<type>Access Roles</type>
+<update_domain>global</update_domain>
+<update_guid>4cb8457ed59b4b1053b208afbbb38ba4</update_guid>
+<update_guid_history>4cb8457ed59b4b1053b208afbbb38ba4:146273013</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_security_acl_role_e5d80d7e739b4b102aedfed25ab8b718</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_security_acl_role"><sys_security_acl_role action="INSERT_OR_UPDATE"><sys_class_name>sys_security_acl_role</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-16 20:57:53</sys_created_on><sys_id>e5d80d7e739b4b102aedfed25ab8b718</sys_id><sys_mod_count>0</sys_mod_count><sys_name>kb_version.x_2215032_ai_inc_0.kb_publisher</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_security_acl display_value="kb_version">edd80d7e739b4b102aedfed25ab8b710</sys_security_acl><sys_update_name>sys_security_acl_role_e5d80d7e739b4b102aedfed25ab8b718</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-16 20:57:53</sys_updated_on><sys_user_role display_value="x_2215032_ai_inc_0.kb_publisher" name="x_2215032_ai_inc_0.kb_publisher">2d98417e739b4b102aedfed25ab8b755</sys_user_role></sys_security_acl_role></record_update>]]></payload>
+<payload_hash>-1217773572</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.4 - KB publisher identity (#91)">cf0a0d7273db4b102aedfed25ab8b794</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-16 21:03:10</sys_created_on>
+<sys_id>8f0a0d7273db4b102aedfed25ab8b799</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a0ac0301a20000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-16 21:03:10</sys_updated_on>
+<table>kb_version</table>
+<target_name>kb_version.x_2215032_ai_inc_0.kb_publisher</target_name>
+<type>Access Roles</type>
+<update_domain>global</update_domain>
+<update_guid>add80d7ee19b4b10cfe15e4266882321</update_guid>
+<update_guid_history>add80d7ee19b4b10cfe15e4266882321:-1217773572</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_user_role_2d98417e739b4b102aedfed25ab8b755</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_user_role"><sys_user_role action="INSERT_OR_UPDATE"><assignable_by/><can_delegate>true</can_delegate><description>Publishes the BARQ corpus into the knowledge base. Holds knowledge (the target KB lets that role contribute) and REST API access; nothing on incident.</description><elevated_privilege>false</elevated_privilege><federated_id/><grantable>true</grantable><includes_roles/><name>x_2215032_ai_inc_0.kb_publisher</name><scoped_admin>false</scoped_admin><suffix>kb_publisher</suffix><sys_class_name>sys_user_role</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-16 20:56:47</sys_created_on><sys_id>2d98417e739b4b102aedfed25ab8b755</sys_id><sys_mod_count>0</sys_mod_count><sys_name>x_2215032_ai_inc_0.kb_publisher</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_update_name>sys_user_role_2d98417e739b4b102aedfed25ab8b755</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-16 20:56:47</sys_updated_on></sys_user_role></record_update>]]></payload>
+<payload_hash>-323913107</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.4 - KB publisher identity (#91)">cf0a0d7273db4b102aedfed25ab8b794</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-16 21:03:10</sys_created_on>
+<sys_id>c30a0d7273db4b102aedfed25ab8b79a</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a0ac0201260000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-16 21:03:10</sys_updated_on>
+<table/>
+<target_name>x_2215032_ai_inc_0.kb_publisher</target_name>
+<type>Role</type>
+<update_domain>global</update_domain>
+<update_guid>ad98417ec79b4b10b54f4f87bf99ae6e</update_guid>
+<update_guid_history>ad98417ec79b4b10b54f4f87bf99ae6e:-323913107</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_security_acl_84b8457e739b4b102aedfed25ab8b793</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_security_acl"><sys_security_acl action="INSERT_OR_UPDATE"><active>true</active><admin_overrides>true</admin_overrides><advanced>false</advanced><applies_to/><condition table="sys_dictionary.*">name=kb_knowledge^elementSTARTSWITHx_2215032_ai_inc_0_^EQ<item endquery="true" field="" goto="false" newquery="false" operator="=" or="false" value=""/></condition><controlled_by_refs/><decision_type>allow</decision_type><description>Field read for the same records.</description><local_or_existing>Existing</local_or_existing><name>sys_dictionary.*</name><operation display_value="read">read</operation><script/><security_attribute/><sys_class_name>sys_security_acl</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-16 20:57:14</sys_created_on><sys_id>84b8457e739b4b102aedfed25ab8b793</sys_id><sys_mod_count>0</sys_mod_count><sys_name>sys_dictionary.*</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_update_name>sys_security_acl_84b8457e739b4b102aedfed25ab8b793</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-16 20:57:14</sys_updated_on><type display_value="record">record</type></sys_security_acl></record_update>]]></payload>
+<payload_hash>1711023090</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.4 - KB publisher identity (#91)">cf0a0d7273db4b102aedfed25ab8b794</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-16 21:03:10</sys_created_on>
+<sys_id>c70a0d7273db4b102aedfed25ab8b796</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a0ac026a0b0000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-16 21:03:10</sys_updated_on>
+<table>sys_dictionary.*</table>
+<target_name>sys_dictionary.*</target_name>
+<type>Access Control</type>
+<update_domain>global</update_domain>
+<update_guid>8cb8457e499b4b10ca32ae937309b098</update_guid>
+<update_guid_history>8cb8457e499b4b10ca32ae937309b098:1711023090</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_security_acl_edd80d7e739b4b102aedfed25ab8b710</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_security_acl"><sys_security_acl action="INSERT_OR_UPDATE"><active>true</active><admin_overrides>true</admin_overrides><advanced>false</advanced><applies_to/><condition/><controlled_by_refs/><decision_type>allow</decision_type><description>Lets the KB publisher set the version number shown for an article it publishes.</description><local_or_existing>Existing</local_or_existing><name>kb_version</name><operation display_value="write">write</operation><script/><security_attribute/><sys_class_name>sys_security_acl</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-16 20:57:53</sys_created_on><sys_id>edd80d7e739b4b102aedfed25ab8b710</sys_id><sys_mod_count>0</sys_mod_count><sys_name>kb_version</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_update_name>sys_security_acl_edd80d7e739b4b102aedfed25ab8b710</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-16 20:57:53</sys_updated_on><type display_value="record">record</type></sys_security_acl></record_update>]]></payload>
+<payload_hash>-1095702777</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.4 - KB publisher identity (#91)">cf0a0d7273db4b102aedfed25ab8b794</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-16 21:03:10</sys_created_on>
+<sys_id>cb0a0d7273db4b102aedfed25ab8b797</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a0ac03015a0000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-16 21:03:10</sys_updated_on>
+<table>kb_version</table>
+<target_name>kb_version</target_name>
+<type>Access Control</type>
+<update_domain>global</update_domain>
+<update_guid>edd80d7e569b4b100ebdd37a8a545715</update_guid>
+<update_guid_history>edd80d7e569b4b100ebdd37a8a545715:-1095702777</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_security_acl_role_a5d8c97e739b4b102aedfed25ab8b7d3</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_security_acl_role"><sys_security_acl_role action="INSERT_OR_UPDATE"><sys_class_name>sys_security_acl_role</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-16 20:57:53</sys_created_on><sys_id>a5d8c97e739b4b102aedfed25ab8b7d3</sys_id><sys_mod_count>0</sys_mod_count><sys_name>kb_version.x_2215032_ai_inc_0.kb_publisher</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_security_acl display_value="kb_version">21d8c97e739b4b102aedfed25ab8b7b3</sys_security_acl><sys_update_name>sys_security_acl_role_a5d8c97e739b4b102aedfed25ab8b7d3</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-16 20:57:53</sys_updated_on><sys_user_role display_value="x_2215032_ai_inc_0.kb_publisher" name="x_2215032_ai_inc_0.kb_publisher">2d98417e739b4b102aedfed25ab8b755</sys_user_role></sys_security_acl_role></record_update>]]></payload>
+<payload_hash>311532392</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.4 - KB publisher identity (#91)">cf0a0d7273db4b102aedfed25ab8b794</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-16 21:03:10</sys_created_on>
+<sys_id>cf0a0d7273db4b102aedfed25ab8b798</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a0ac03012c0000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-16 21:03:10</sys_updated_on>
+<table>kb_version</table>
+<target_name>kb_version.x_2215032_ai_inc_0.kb_publisher</target_name>
+<type>Access Roles</type>
+<update_domain>global</update_domain>
+<update_guid>69d80d7e9f9b4b1050c2ba9a3bfd910e</update_guid>
+<update_guid_history>69d80d7e9f9b4b1050c2ba9a3bfd910e:311532392</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+</unload>
