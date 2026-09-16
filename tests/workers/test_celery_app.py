@@ -38,6 +38,7 @@ class TestCeleryTopology:
             worker_soft_time_limit=90,
             worker_time_limit=110,
             worker_max_retries=4,
+            worker_concurrency=7,
         )
 
         app = create_celery_app(settings)
@@ -48,6 +49,9 @@ class TestCeleryTopology:
         assert conf.worker_prefetch_multiplier == settings.worker_prefetch
         assert conf.task_soft_time_limit == settings.worker_soft_time_limit
         assert conf.task_time_limit == settings.worker_time_limit
+        # Flows from Settings so a bare `celery worker` (no --concurrency flag)
+        # does not silently fall back to CPU-count concurrency.
+        assert conf.worker_concurrency == settings.worker_concurrency
         assert conf.task_serializer == "json"
         assert conf.accept_content == ["json"]
         assert conf.task_ignore_result is True

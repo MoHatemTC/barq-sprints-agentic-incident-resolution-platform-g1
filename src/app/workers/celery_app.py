@@ -50,6 +50,9 @@ def create_celery_app(settings: Settings) -> Celery:
         task_reject_on_worker_lost=True,
         # Long-running graph tasks: never hoard jobs.
         worker_prefetch_multiplier=settings.worker_prefetch,
+        # Applied here so a bare `celery worker` (no --concurrency flag) does
+        # not silently spawn CPU-count children; a CLI flag still overrides.
+        worker_concurrency=settings.worker_concurrency,
         # Fault containment: hung jobs cannot hold workers indefinitely.
         task_soft_time_limit=settings.worker_soft_time_limit,
         task_time_limit=settings.worker_time_limit,

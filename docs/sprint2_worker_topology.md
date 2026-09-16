@@ -116,9 +116,9 @@ witnessed the failure is dead — it aborted with the task's transaction).
    Revisit if Sprint 3 graph runs become long enough that re-running them is expensive.
 3. **redis-py is pinned to 5.2.1**: 8.x breaks kombu 5.6 BRPOP parsing
    (`KeyError: 'properties'` on delivery — reproduced live). Revisit when kombu supports 8.x.
-4. **`create_celery_app` currently does not apply `worker_concurrency`** (compose passes
-   `--concurrency` explicitly, so deployment is correct; a bare local `celery worker` would use
-   CPU count). Small follow-up fix queued.
+4. ~~`create_celery_app` currently does not apply `worker_concurrency`~~ **Fixed**: the celery app
+   now applies `worker_concurrency` from Settings (a `--concurrency` CLI flag still overrides), so
+   a bare local `celery worker` no longer spawns CPU-count children.
 
 ## 8. Race guards summary
 
@@ -141,7 +141,7 @@ witnessed the failure is dead — it aborted with the task's transaction).
 | `worker_backoff_jitter` | true | full jitter against thundering-herd retries |
 | `worker_soft_time_limit` / `_time_limit` | 120s / 150s | soft raises inside the task (→ retryable); hard SIGKILLs; hard > soft leaves cleanup room |
 | `worker_prefetch` | 1 | long tasks must not sit behind hoarded jobs |
-| `worker_concurrency` | 4 | compose passes `--concurrency` explicitly (see §7.4) |
+| `worker_concurrency` | 4 | applied in the celery app config; a `--concurrency` CLI flag still overrides |
 | `worker_repo_backend` | postgres | `memory` exists for fast tests only |
 | `worker_max_tasks_per_child` | 1000 | bounds prefork child memory growth |
 
