@@ -78,3 +78,38 @@ paste the checklist into it. The template pre-fills automatically only in the we
 Copilot reviews every pull request automatically. Address its findings or say why you
 disagree — do not merge over an unaddressed one. Requirement-level review belongs to
 the workstream owner listed in [CODEOWNERS](.github/CODEOWNERS).
+
+### Dismissing a change request
+
+**Only the reviewer who requested changes may dismiss their own review.** If someone
+else's review is blocking you, push the fix and re-request review. Do not dismiss it,
+and do not merge around it. A dismissal marks a concern as resolved on the author's
+word, which is the one thing review exists to avoid.
+
+This rule exists because it was broken. On 2026-09-13, under deadline pressure, three
+change requests were dismissed and the pull requests merged within seconds. #61 merged
+nine seconds after its gate was dismissed, closed #35 with its first criterion unmet,
+and turned `main` red for eight minutes. #32 and #30 merged the same way, and between
+them landed twelve issues that are still open. See #101, #102 and #103.
+
+**The one exception, and its conditions.** Some reviews come from an automated reviewer
+that cannot be asked to look again. When that reviewer is blocking and the findings are
+genuinely fixed, a dismissal is the only route forward. It is permitted only when all
+of these hold:
+
+- **Every finding is verified individually, by command, and the output is quoted in the
+  dismissal message.** Not "addressed" — the actual check, so a reader can re-run it.
+- **The dismissal message says who dismissed it and why it was not a re-review.**
+- **If the pull request now contains commits by the person dismissing, the message says
+  so.** Approving a branch you have pushed to is not an independent review, whoever
+  opened it.
+
+A dismissal that cannot meet those conditions is a merge waiting to be reverted.
+
+**This exception was used on 2026-09-16** for #77, #78, #79 and #80. The requesting
+reviewer is an automated account the team was instructed not to re-summon, all thirteen
+findings across the four pull requests were verified by command first, and each
+dismissal records the evidence and the fact that three of the four branches carried
+commits by the person dismissing. Recorded here rather than left in the pull request
+history, so the precedent is visible and the conditions are the reason it was
+acceptable — not the deadline.
