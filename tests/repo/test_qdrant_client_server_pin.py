@@ -1,16 +1,7 @@
 """The Qdrant client specifier must track the server image in docker-compose.
 
-#106. Dependabot proposed qdrant-client 1.19.0 while docker-compose.yml still pins
-the server to v1.14.0, and the full suite passed — because every unit test uses the
-in-memory client and never reaches a real server. Green CI would not have caught the
-skew, and the first symptom in real use is a runtime warning:
-
-    Failed to obtain server version. Unable to check client-server compatibility.
-
-followed, potentially, by request shapes the older server does not implement.
-
-The pin was correct but undocumented, so there was nothing to stop the next bump.
-This test is that something.
+Unit tests use the in-memory client, so a client/server version skew would not
+otherwise fail CI.
 """
 
 from __future__ import annotations

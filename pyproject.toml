@@ -17,14 +17,8 @@ dependencies = [
     "pydantic>=2.13.5",
     "pydantic-settings>=2.15.0",
     "python-dotenv>=1.2.3",
-    # Tracks the Qdrant SERVER image in docker-compose.yml (qdrant/qdrant:v1.14.0).
-    # The two must move together: a newer client against an older server warns
-    # "Failed to obtain server version. Unable to check client-server compatibility"
-    # and can use request shapes the server does not implement. Dependabot proposed
-    # 1.19.0 as #106; the suite passed, because the unit tests use the in-memory
-    # client and never reach a real server, so green CI would not have caught the
-    # skew. tests/repo/test_qdrant_client_server_pin.py enforces the pairing.
-    # To upgrade: bump the compose image and this specifier in the same PR.
+    # Must match the Qdrant server image in docker-compose.yml; bump both together.
+    # Enforced by tests/repo/test_qdrant_client_server_pin.py.
     "qdrant-client>=1.14,<1.15",
     "structlog>=26.1.0",
     "uvicorn[standard]>=0.52.4",
