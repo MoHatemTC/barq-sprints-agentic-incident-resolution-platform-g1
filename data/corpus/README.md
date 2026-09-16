@@ -9,7 +9,7 @@ All articles strictly adhere to the `app.models.knowledge.Article` Pydantic doma
 
 ## Article Schema Specification
 
-Each article in `barq_articles.json` is a JSON object with the following fields:
+Each article in `barq_articles.json` is a JSON object with the following fields:+
 
 | Field | Type | Description | Example |
 |---|---|---|---|
