@@ -12,6 +12,12 @@ class Environment(StrEnum):
     PRODUCTION = "production"
 
 
+class RetrievalMode(StrEnum):
+    DENSE_ONLY = "dense_only"
+    HYBRID = "hybrid"
+    HYBRID_RERANKED = "hybrid_reranked"
+
+
 def _get_version() -> str:
     try:
         return version("barq-sprints-agentic-incident-resolution-platform-g1")
@@ -36,6 +42,21 @@ class RetrievalSettings(BaseSettings):
     # Embedding Models
     dense_embedding_model: str = "BAAI/bge-small-en-v1.5"
     sparse_embedding_model: str = "Qdrant/bm25"
+
+    # Retrieval
+    retrieval_mode: RetrievalMode = RetrievalMode.HYBRID_RERANKED
+    # TODO: choose a better one later
+    rerank_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    rerank_top_k: int = 5
+    rerank_candidate_limit: int = 20  # must be larger than rerank_top_k
+
+    @field_validator("rerank_candidate_limit")
+    @classmethod
+    def validate_candidate_limit(cls, v: int, info) -> int:
+        top_n = info.data.get("rerank_top_n", 5)
+        if v < top_n:
+            raise ValueError(f"rerank_candidate_limit ({v}) must be >= rerank_top_n ({top_n})")
+        return v
 
 
 class Settings(RetrievalSettings):

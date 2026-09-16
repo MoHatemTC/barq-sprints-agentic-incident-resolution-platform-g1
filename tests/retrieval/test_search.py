@@ -16,13 +16,13 @@ from qdrant_client.models import (
 from app.clients.qdrant import ensure_collection
 from app.models.knowledge import Article, SecurityLevel, WorkflowState
 from app.retrieval.embedding import EmbeddedText, FastEmbedEngine
-from app.retrieval.ingest import ingest_articles
-from app.retrieval.search import (
+from app.retrieval.hybrid_search import (
     RetrievalHit,
     _allowed_security_levels,
     _build_filter,
     retrieve_knowledge,
 )
+from app.retrieval.ingest import ingest_articles
 from app.retrieval.sources import LocalJSONSource
 
 CORPUS_PATH = Path("data/corpus/barq_articles.json")
