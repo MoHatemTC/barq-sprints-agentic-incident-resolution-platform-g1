@@ -6,6 +6,8 @@ import structlog
 from fastapi import FastAPI, Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from app.core.correlation import clear_correlation_id, set_correlation_id
+
 CORRELATION_ID_HEADER = "X-Correlation-ID"
 logger = structlog.getLogger("api.access")
 
@@ -27,8 +29,7 @@ class CorrelationIdMiddleware(BaseHTTPMiddleware):
         else:
             correlation_id = correlation_id.strip()
 
-        structlog.contextvars.clear_contextvars()
-        structlog.contextvars.bind_contextvars(correlation_id=correlation_id)
+        set_correlation_id(correlation_id)
         request.state.correlation_id = correlation_id
 
         start_time = time.perf_counter()
@@ -45,7 +46,8 @@ class CorrelationIdMiddleware(BaseHTTPMiddleware):
             )
             raise
         finally:
-            structlog.contextvars.clear_contextvars()
+            clear_correlation_id()
+
 
         duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
         logger.info(
