@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import html as _html
 import json as _json
+import re as _re
 from typing import Any
 
 import httpx
@@ -29,9 +31,16 @@ class FakeServiceNow:
         self.kb_version_returns_error = False
         self.missing_schema_columns = False
         self.tamper_next_readback: tuple[str, str] | None = None
-        # #89: a published article is read-only for the integration user on a
-        # real instance, which answers a direct PATCH with 403.
+        # Simulates the 403 a real instance returns on PATCH of a published article.
         self.refuse_patch = False
+        # Stores article HTML the way ServiceNow's sanitiser does.
+        self.sanitise_html = False
+
+    def _store(self, body: dict[str, Any]) -> dict[str, Any]:
+        if self.sanitise_html and isinstance(body.get("text"), str):
+            text = _re.sub(r">\s+<", "><", _html.unescape(body["text"]))
+            body = {**body, "text": text.replace("=", "&#61;")}
+        return body
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         path = request.url.path
@@ -73,6 +82,10 @@ class FakeServiceNow:
                 if kb_id:
                     matches = [r for r in matches if r.get("kb_knowledge_base") == kb_id]
 
+            fields = params.get("sysparm_fields")
+            if fields:
+                wanted = fields.split(",")
+                matches = [{k: r[k] for k in wanted if k in r} for r in matches]
             return httpx.Response(200, json={"result": matches})
 
         if request.method == "POST" and path == f"/api/now/table/{KB_TABLE}":
@@ -80,7 +93,7 @@ class FakeServiceNow:
             row = {
                 "sys_id": f"sys{self.next_sys_id:011d}",
                 "version": {"value": f"ver{self.next_sys_id:011d}"},
-                **body,
+                **self._store(body),
             }
             self.next_sys_id += 1
             self.rows.append(row)
@@ -93,7 +106,7 @@ class FakeServiceNow:
             body = _json.loads(request.read())
             for row in self.rows:
                 if row["sys_id"] == sys_id:
-                    row.update(body)
+                    row.update(self._store(body))
                     return httpx.Response(200, json={"result": row})
             return httpx.Response(404, json={"error": "not found"})
 

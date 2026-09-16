@@ -8,6 +8,7 @@ and synchronizes version display records.
 
 from __future__ import annotations
 
+import html
 import re
 from typing import Any
 
@@ -81,25 +82,23 @@ def _unwrap(value: Any) -> Any:
     return value
 
 
-def _normalise_html(value: Any) -> Any:
-    """Collapse runs of whitespace so instance-side HTML reformatting is not a diff.
+_BETWEEN_TAGS = re.compile(r">\s+<")
 
-    ServiceNow may re-render stored HTML (indentation, newlines between tags). That is
-    not a content change, and flagging it would refuse an identical re-publish. Actual
-    text differences survive this normalisation.
+
+def _normalise_html(value: Any) -> Any:
+    """Canonicalise HTML so the instance's sanitiser rewrites are not a diff.
+
+    ServiceNow stores article HTML with entities decoded or re-encoded (``&middot;``
+    becomes ``·``, ``=`` becomes ``&#61;``) and whitespace between tags removed.
     """
     if isinstance(value, str):
-        return " ".join(value.split())
+        text = _BETWEEN_TAGS.sub("><", html.unescape(value))
+        return " ".join(text.split())
     return value
 
 
 def _diff_against_stored(stored: dict[str, Any], payload: dict[str, Any]) -> list[str]:
-    """Names of payload fields whose stored value differs from what would be sent.
-
-    Every payload field is compared, including ``text`` and ``kb_category`` — the two
-    the read-back never checked, which is what let a swallowed 403 report success while
-    a stale body stayed live (#89).
-    """
+    """Names of payload fields whose stored value differs from what would be sent."""
     differing: list[str] = []
     for field, sent in payload.items():
         current = _unwrap(stored.get(field))
@@ -328,7 +327,7 @@ async def publish_article(
     kb_sys_id: str,
     category_mapping: dict[str, str] | None = None,
 ) -> str:
-    """Idempotently publish one article into ServiceNow; returns 'created' or 'updated'.
+    """Idempotently publish one article; returns 'created', 'updated' or 'unchanged'.
 
     Workflow:
     1. Constructs the Table API payload with metadata and converted HTML.
@@ -347,23 +346,12 @@ async def publish_article(
         sys_id = str(existing["sys_id"])
         stored_state = existing.get("workflow_state")
         target_state = article.workflow_state.value
+        # The lookup returns only _LIST_FIELDS, so compare against the full record.
+        current = await client.get(sys_id)
 
-        # #89. Two changes from the original handling, both about not inferring
-        # success from a refusal.
-        #
-        # 1. Nothing to write is its own outcome. When the row is already in a state
-        #    KB versioning freezes and every payload field already matches, there is
-        #    no PATCH to make. Skipping it avoids provoking a 403 that carries no
-        #    information, and reports "unchanged" rather than claiming an update.
-        # 2. A refusal is never swallowed. Previously a PATCH failure whose message
-        #    merely contained "403" was treated as success, so a corrected runbook
-        #    step could silently never reach the instance while the report said it
-        #    was published. The read-back could not catch it either: it compared
-        #    neither the body nor kb_category.
-        #
-        # The PATCH is still attempted whenever content differs, because a permitted
-        # account can update a published article. Only the instance decides that.
-        differing = _diff_against_stored(existing, payload)
+        # Nothing to write is reported as "unchanged" with no PATCH. When content
+        # differs the PATCH is attempted, and a refusal is raised, never swallowed.
+        differing = _diff_against_stored(current, payload)
         if not differing and stored_state == target_state:
             outcome = "unchanged"
         else:
@@ -411,8 +399,7 @@ def _verify_stored(
             "not an instance problem."
         )
 
-    # kb_category is verified only when the payload carried one: it is added solely
-    # when a mapping exists for the article's category (#89 — it was never compared).
+    # kb_category is only in the payload when the article's category has a mapping.
     compared = list(_VERIFIED_FIELDS)
     if "kb_category" in sent:
         compared.append("kb_category")

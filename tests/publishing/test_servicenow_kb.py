@@ -55,8 +55,7 @@ async def test_republish_updates_in_place_with_zero_duplicates(
 
         outcomes = [await publish_article(client, a, KB_SYS_ID) for a in sample_articles]
 
-        # #89: an identical re-publish has nothing to write. Reporting it as "updated"
-        # was what made a refused write indistinguishable from a successful one.
+        # An identical re-publish has nothing to write.
         assert outcomes == ["unchanged"] * len(sample_articles)
         assert len(fake.rows) == post_count, "re-run must never duplicate rows"
     finally:
@@ -329,14 +328,7 @@ async def test_find_by_source_id_accepts_a_well_formed_id(fake: Any) -> None:
 async def test_refused_patch_on_changed_published_article_fails_loudly(
     sample_articles: list[Article], fake: Any
 ) -> None:
-    """#89: a 403 on a changed published article must fail, not report 'updated'.
-
-    The old code caught any error whose message contained "403" and, if both the
-    stored and target states were ``published``, treated it as success. The read-back
-    could not catch the lie either: it compared neither ``text`` nor ``kb_category``,
-    so a stale body sailed through. The run reported the article as published while
-    ServiceNow still served the old content.
-    """
+    """A 403 on a changed published article raises instead of reporting 'updated'."""
     client = fake.build_client()
     try:
         article = sample_articles[0]
@@ -354,7 +346,7 @@ async def test_refused_patch_on_changed_published_article_fails_loudly(
         assert "text" in message, "the error must name the field that drifted"
         assert "version" in message, "the error must point at the version-bump remedy"
 
-        # The stored body is unchanged, which is the damage the old code hid.
+        # The stored body is unchanged.
         stored = next(r for r in fake.rows if r[U_SOURCE_ID_FIELD] == article.article_id)
         assert "Restart the service." not in stored["text"]
     finally:
@@ -365,17 +357,32 @@ async def test_refused_patch_on_changed_published_article_fails_loudly(
 async def test_identical_republish_reports_unchanged_without_patching(
     sample_articles: list[Article], fake: Any
 ) -> None:
-    """#89: nothing to write is its own outcome, and provokes no PATCH at all.
-
-    Refusing the pointless PATCH is what makes the 403 path meaningful: a refusal now
-    only ever happens when content genuinely differs.
-    """
+    """An identical re-publish reports 'unchanged' and sends no PATCH."""
     client = fake.build_client()
     try:
         article = sample_articles[0]
         assert await publish_article(client, article, KB_SYS_ID) == "created"
 
         # Every PATCH now 403s. An identical re-publish must not need one.
+        fake.refuse_patch = True
+        assert await publish_article(client, article, KB_SYS_ID) == "unchanged"
+    finally:
+        await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_republish_is_unchanged_after_instance_html_sanitising(
+    sample_articles: list[Article], fake: Any
+) -> None:
+    """Entity and whitespace rewrites by the instance are not a content change."""
+    fake.sanitise_html = True
+    client = fake.build_client()
+    try:
+        article = sample_articles[0]
+        assert await publish_article(client, article, KB_SYS_ID) == "created"
+        stored = next(r for r in fake.rows if r[U_SOURCE_ID_FIELD] == article.article_id)
+        assert "&#61;" in stored["text"], "the fake must actually rewrite the HTML"
+
         fake.refuse_patch = True
         assert await publish_article(client, article, KB_SYS_ID) == "unchanged"
     finally:
