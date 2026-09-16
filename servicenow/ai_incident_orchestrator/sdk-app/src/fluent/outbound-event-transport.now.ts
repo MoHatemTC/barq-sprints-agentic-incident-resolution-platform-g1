@@ -23,6 +23,34 @@ export const outboundEventRegistration = Record({
     },
 })
 
+// OAuth 2.0 client credentials for the outbound event (#93). The token URL and the
+// client secret are instance configuration and deliberately absent here, so a deploy
+// leaves them as configured (docs/sprint-1/s1.3-eligibility-rule-and-event/outbound-oauth.md).
+export const webhookOAuthProvider = Record({
+    $id: Now.ID['s1_3_webhook_oauth_provider'],
+    table: 'oauth_entity',
+    data: {
+        name: 'BARQ Webhook OAuth',
+        type: 'oauth_provider',
+        client_id: 'barq-servicenow',
+        default_grant_type: 'client_credentials',
+        send_client_credentials_as: 'request_body_parameter',
+        access_token_lifespan: 300,
+        active: true,
+    },
+})
+
+export const webhookOAuthProfile = Record({
+    $id: Now.ID['s1_3_webhook_oauth_profile'],
+    table: 'oauth_entity_profile',
+    data: {
+        name: 'BARQ Webhook OAuth default_profile',
+        oauth_entity: webhookOAuthProvider,
+        grant_type: 'client_credentials',
+        default: true,
+    },
+})
+
 export const s13RestMessage = RestMessage({
     $id: Now.ID['s1_3_outbound_rest_message'],
     name: 'AI Incident Orchestrator S1.3 Event',
@@ -32,7 +60,9 @@ export const s13RestMessage = RestMessage({
     endpoint: 'https://example.invalid',
     description: 'Runtime-configured transport for the minimal S1.3 event.',
     access: 'packagePrivate',
-    authenticationType: 'noAuthentication',
+    authenticationType: 'oauth2',
+    // sys_id of webhookOAuthProfile (keys.ts s1_3_webhook_oauth_profile); the SDK takes a plain id here.
+    oauthProfile: '0b758576739b4b102aedfed25ab8b782',
     functions: [
         {
             name: 'post',

@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8"?><unload unload_date="2026-09-16 20:43:37">
+<sys_remote_update_set action="INSERT_OR_UPDATE">
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<application_name>AI Incident Orchestrator</application_name>
+<application_scope>x_2215032_ai_inc_0</application_scope>
+<application_version>1.0.1</application_version>
+<collisions/>
+<commit_date/>
+<deleted/>
+<description>OAuth 2.0 client-credentials authentication for the S1.3 outbound event. The token URL and client secret are set per instance.</description>
+<inserted/>
+<name>BARQ G1 - S1.3 - Outbound OAuth (#93)</name>
+<origin_sys_id/>
+<parent display_value=""/>
+<release_date/>
+<remote_base_update_set display_value=""/>
+<remote_parent_id/>
+<remote_sys_id>0f758576739b4b102aedfed25ab8b77e</remote_sys_id>
+<state>loaded</state>
+<summary/>
+<sys_class_name>sys_remote_update_set</sys_class_name>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-16 20:43:36</sys_created_on>
+<sys_id>6c958976739b4b102aedfed25ab8b720</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-16 20:43:36</sys_updated_on>
+<update_set display_value=""/>
+<update_source display_value=""/>
+<updated/>
+</sys_remote_update_set>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>oauth_entity_profile_0b758576739b4b102aedfed25ab8b782</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="oauth_entity_profile"><oauth_entity_profile action="INSERT_OR_UPDATE"><default>true</default><grant_type>client_credentials</grant_type><jwt_provider/><name>BARQ Webhook OAuth default_profile</name><oauth_entity display_value="BARQ Webhook OAuth">c3758576739b4b102aedfed25ab8b780</oauth_entity><oauth_resources/><saml2_assertion_producer/><sys_class_name>oauth_entity_profile</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-16 20:43:14</sys_created_on><sys_id>0b758576739b4b102aedfed25ab8b782</sys_id><sys_mod_count>0</sys_mod_count><sys_name>BARQ Webhook OAuth default_profile</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_update_name>oauth_entity_profile_0b758576739b4b102aedfed25ab8b782</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-16 20:43:14</sys_updated_on></oauth_entity_profile></record_update>]]></payload>
+<payload_hash>-402150616</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.3 - Outbound OAuth (#93)">6c958976739b4b102aedfed25ab8b720</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-16 20:43:36</sys_created_on>
+<sys_id>2c958976739b4b102aedfed25ab8b753</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a0abf5994d0000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-16 20:43:36</sys_updated_on>
+<table/>
+<target_name>BARQ Webhook OAuth default_profile</target_name>
+<type>OAuth Entity Profile</type>
+<update_domain>global</update_domain>
+<update_guid>03758576c09b4b10f29dfb2547e70489</update_guid>
+<update_guid_history>03758576c09b4b10f29dfb2547e70489:-402150616</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_rest_message_04b4db0d83970710b5309e80ceaad35a</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_rest_message"><sys_rest_message action="INSERT_OR_UPDATE"><access>package_private</access><authentication_type>oauth2</authentication_type><basic_auth_password/><basic_auth_profile/><basic_auth_user/><description>Runtime-configured transport for the minimal S1.3 event.</description><name>AI Incident Orchestrator S1.3 Event</name><oauth2_profile display_value="BARQ Webhook OAuth default_profile">0b758576739b4b102aedfed25ab8b782</oauth2_profile><protocol_name/><rest_endpoint>https://example.invalid</rest_endpoint><sys_class_name>sys_rest_message</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-11 20:44:02</sys_created_on><sys_id>04b4db0d83970710b5309e80ceaad35a</sys_id><sys_mod_count>4</sys_mod_count><sys_name>AI Incident Orchestrator S1.3 Event</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_update_name>sys_rest_message_04b4db0d83970710b5309e80ceaad35a</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-16 20:43:27</sys_updated_on><use_basic_auth>false</use_basic_auth><use_mutual_auth>false</use_mutual_auth></sys_rest_message></record_update>]]></payload>
+<payload_hash>-283977411</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.3 - Outbound OAuth (#93)">6c958976739b4b102aedfed25ab8b720</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-16 20:43:36</sys_created_on>
+<sys_id>60958976739b4b102aedfed25ab8b754</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a0abf5cc590000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-16 20:43:36</sys_updated_on>
+<table/>
+<target_name>AI Incident Orchestrator S1.3 Event</target_name>
+<type>REST Message</type>
+<update_domain>global</update_domain>
+<update_guid>5a854976299b4b10acde17de1ac31d22</update_guid>
+<update_guid_history>5a854976299b4b10acde17de1ac31d22:-283977411,ecda34be511b4b10318ba6adf75c92e6:0,dbdeac7566534b10efd3cfa24ffae00c:-1250675739,85de2c75ac534b10948ce9c6fe6ec981:1885541809,478ce07192534b1074762496323bc284:-1250675739,02b5db8d399707107b0208e8d336b4a5:-1122573782</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>oauth_entity_c3758576739b4b102aedfed25ab8b780</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="oauth_entity"><oauth_entity action="INSERT_OR_UPDATE"><access>public</access><access_token_lifespan>300</access_token_lifespan><active>true</active><allow_snc_user_exchange>false</allow_snc_user_exchange><auth_aig_client>false</auth_aig_client><auth_cimd_client>false</auth_cimd_client><auth_code_lifespan>0</auth_code_lifespan><auth_url/><bff_cookie_exchange_allowed>false</bff_cookie_exchange_allowed><bind_token_to_session>false</bind_token_to_session><certificate_url/><client_id>barq-servicenow</client_id><client_secret/><client_type/><client_uuid>07758576739b4b102aedfed25ab8b780</client_uuid><code_challenge_method>S256</code_challenge_method><comments/><default_grant_type>client_credentials</default_grant_type><extend_refresh_token_expiry>false</extend_refresh_token_expiry><id_token_lifespan>0</id_token_lifespan><inbound_grant_type>not_applicable</inbound_grant_type><jwt_provider/><login_url/><logo_url/><message_signature_lifespan>0</message_signature_lifespan><mobile_client>false</mobile_client><name>BARQ Webhook OAuth</name><oauth_api_script/><only_rest_processor>false</only_rest_processor><protocol_name/><public_client>false</public_client><redirect_url>https://dev434590.service-now.com/oauth_redirect.do</redirect_url><refresh_token_lifespan>8640000</refresh_token_lifespan><refresh_token_url/><restricted_binding>false</restricted_binding><revoke_token_url/><salt>0</salt><scope_restriction_status>unrestricted</scope_restriction_status><send_client_credentials_as>request_body_parameter</send_client_credentials_as><skip_authorize>false</skip_authorize><sub_claim>sys_id</sub_claim><sys_class_name>oauth_entity</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-16 20:43:14</sys_created_on><sys_id>c3758576739b4b102aedfed25ab8b780</sys_id><sys_mod_count>0</sys_mod_count><sys_name>BARQ Webhook OAuth</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_update_name>oauth_entity_c3758576739b4b102aedfed25ab8b780</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-16 20:43:14</sys_updated_on><token_format>opaque</token_format><token_url>https://example.invalid/api/v1/oauth/token</token_url><type>oauth_provider</type><use_mutual_auth>false</use_mutual_auth><use_pkce>false</use_pkce><user/></oauth_entity></record_update>]]></payload>
+<payload_hash>1637835189</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.3 - Outbound OAuth (#93)">6c958976739b4b102aedfed25ab8b720</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-16 20:43:36</sys_created_on>
+<sys_id>a0958976739b4b102aedfed25ab8b721</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a0abf5997d0000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-16 20:43:36</sys_updated_on>
+<table/>
+<target_name>BARQ Webhook OAuth</target_name>
+<type>Application Registries</type>
+<update_domain>global</update_domain>
+<update_guid>877585767c9b4b108c37b647edbf738d</update_guid>
+<update_guid_history>877585767c9b4b108c37b647edbf738d:1637835189</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+</unload>
