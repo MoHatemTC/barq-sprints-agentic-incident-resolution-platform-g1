@@ -1,22 +1,30 @@
 """Incident ingestion webhook router for ServiceNow outbound events."""
-from app.exceptions.app_errors import ServiceUnavailableError
+
 from __future__ import annotations
+
+import secrets
+from typing import Annotated
 
 import structlog
 from fastapi import APIRouter, Depends, Request, status
 from redis.asyncio import Redis
-from sqlalchemy.ext.asyncio import AsyncSession
-import secrets
 
-from app.api.dependencies import get_app_settings, get_db_session, get_redis
+from api.schemas.webhook import IncidentWebhookPayload, WebhookAcceptedResponse
+from app.api.dependencies import (
+    get_app_settings,
+    get_redis,
+    get_session_factory,
+)
 from app.core.config import Settings
 from app.core.correlation import get_correlation_id
-from app.exceptions.app_errors import AuthenticationError
-from api.schemas.webhook import IncidentWebhookPayload, WebhookAcceptedResponse
 from app.db.redis.keys import INCIDENT_EVENTS_QUEUE
-
-from sqlalchemy.exc import IntegrityError
-from app.db.schemas.in_bound_event import InboundEvent
+from app.db.session import SessionFactory
+from app.exceptions.app_errors import AuthenticationError, ServiceUnavailableError
+from app.repositories.idempotency import (
+    EventAcceptanceStatus,
+    InboundEvent,
+    accept_inbound_event,
+)
 
 logger = structlog.getLogger("api.webhook")
 
@@ -28,18 +36,21 @@ router = APIRouter(prefix="/api/v1/webhook", tags=["Webhook"])
     status_code=status.HTTP_202_ACCEPTED,
     response_model=WebhookAcceptedResponse,
     summary="Ingest inbound ServiceNow incident event",
-    description="Validates Outbound Event Contract v1, persists idempotently, and enqueues to Redis.",
+    description=(
+        "Validates Outbound Event Contract v1, persists idempotently, and enqueues to Redis."
+    ),
 )
 async def ingest_incident_webhook(
     payload: IncidentWebhookPayload,
     request: Request,
-    db: AsyncSession = Depends(get_db_session),
-    redis_client: Redis = Depends(get_redis),
-    settings: Settings = Depends(get_app_settings),
+    session_factory: Annotated[SessionFactory, Depends(get_session_factory)],
+    redis_client: Annotated[Redis, Depends(get_redis)],
+    settings: Annotated[Settings, Depends(get_app_settings)],
 ) -> WebhookAcceptedResponse:
     """Ingest, validate, persist, and queue an incoming ServiceNow incident event."""
     correlation_id = get_correlation_id()
 
+    # 1. Bearer Token Authentication
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
         raise AuthenticationError("Missing or invalid Bearer token")
@@ -48,30 +59,49 @@ async def ingest_incident_webhook(
     if not secrets.compare_digest(token, settings.webhook_auth_token):
         raise AuthenticationError("Invalid Bearer token")
 
-
-    event_record = InboundEvent(
+    # 2. Idempotent Database Persistence
+    inbound = InboundEvent(
         event_id=payload.event_id,
         sys_id=payload.sys_id,
         number=payload.number,
         event_type=payload.event_type,
-        payload=payload.model_dump()
     )
 
-    is_duplicate = False
     try:
-        db.add(event_record)
-        await db.commit()
-    except IntegrityError:
-        await db.rollback()
-        is_duplicate = True
-        logger.info("Duplicate event")
+        acceptance = await accept_inbound_event(session_factory, inbound)
     except Exception as exc:
-        await db.rollback()
-        raise ServiceUnavailableError("Database unavailable to persist incoming event.")
-    
-    if not is_duplicate:
-        await redis_client.lpush(INCIDENT_EVENTS_QUEUE, json.dumps(payload.model_dump()))
+        logger.error(
+            "database_persistence_failed",
+            event_id=payload.event_id,
+            error=str(exc),
+        )
+        raise ServiceUnavailableError("Database unavailable to persist incoming event.") from exc
 
+    is_duplicate = acceptance.status == EventAcceptanceStatus.DUPLICATE
+
+    # 3. Redis Enqueue for New Events Only
+    if is_duplicate:
+        logger.info(
+            "duplicate_incident_event_ignored",
+            event_id=payload.event_id,
+        )
+    else:
+        logger.info(
+            "incident_event_accepted",
+            event_id=payload.event_id,
+            execution_id=str(acceptance.execution_id),
+        )
+        try:
+            await redis_client.lpush(INCIDENT_EVENTS_QUEUE, payload.model_dump_json())
+        except Exception as exc:
+            logger.error(
+                "redis_enqueue_failed",
+                event_id=payload.event_id,
+                error=str(exc),
+            )
+            raise ServiceUnavailableError("Event queue unavailable.") from exc
+
+    # 4. Immediate HTTP 202 Response
     return WebhookAcceptedResponse(
         status="accepted",
         event_id=payload.event_id,

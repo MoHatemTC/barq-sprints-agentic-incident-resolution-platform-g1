@@ -1,12 +1,12 @@
 from fastapi import FastAPI
 
-
+from api.routers.health import router as health_router
+from api.routers.webhook import router as webhook_router
 from app.core.config import Settings, get_settings
 from app.core.lifespan import lifespan
 from app.core.logging import configure_logging
 from app.exceptions.handlers import register_exception_handlers
 from app.middlewares.correlation import register_middlewares
-
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -20,7 +20,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app = FastAPI(
         title="BARQ Agentic Incident Resolution Platform",
-        description="Autonomous incident triage, diagnosis, and remediation platform with HITL governance.",
+        description=(
+            "Autonomous incident triage, diagnosis, and remediation platform with HITL governance."
+        ),
         version=app_settings.app_version,
         lifespan=lifespan,
         docs_url="/docs",
@@ -37,6 +39,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # Register global exception handlers (unified JSON envelope)
     register_exception_handlers(app)
 
+    # Register routers
+    app.include_router(health_router)
+    app.include_router(webhook_router)
+
     return app
 
 
@@ -47,4 +53,3 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
-

@@ -5,11 +5,23 @@ from fastapi import HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import Settings, get_settings
+from app.db.session import SessionFactory
 
 
 def get_app_settings(request: Request) -> Settings:
     """Return the application settings instance."""
     return getattr(request.app.state, "settings", None) or get_settings()
+
+
+def get_session_factory(request: Request) -> SessionFactory:
+    """FastAPI dependency providing the SQLAlchemy async sessionmaker."""
+    session_factory: SessionFactory | None = getattr(request.app.state, "session_factory", None)
+    if session_factory is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database session factory is not initialized",
+        )
+    return session_factory
 
 
 async def get_db_session(request: Request) -> AsyncIterator[AsyncSession]:

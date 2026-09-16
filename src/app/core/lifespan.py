@@ -1,6 +1,6 @@
+import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-import sys
 
 import redis.asyncio as aioredis
 import structlog
@@ -15,11 +15,7 @@ logger = structlog.getLogger(__name__)
 
 def create_redis_client(settings: Settings) -> aioredis.Redis:
     """Create an async Redis client instance."""
-    password = (
-        settings.redis_password.get_secret_value()
-        if settings.redis_password
-        else None
-    )
+    password = settings.redis_password.get_secret_value() if settings.redis_password else None
     return aioredis.Redis(
         host=settings.redis_host,
         port=settings.redis_port,

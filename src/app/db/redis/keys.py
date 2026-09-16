@@ -1,4 +1,5 @@
 """Redis key constants and namespace definitions across the platform."""
+
 from __future__ import annotations
 
 # Primary FIFO / LPUSH queue for inbound incident events

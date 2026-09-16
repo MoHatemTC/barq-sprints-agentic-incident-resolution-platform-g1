@@ -188,4 +188,3 @@ async def test_middleware_preserves_incoming_correlation_id() -> None:
         assert resp.status_code == 200
         assert resp.headers.get(CORRELATION_ID_HEADER) == custom_cid
         assert resp.json()["correlation_id"] == custom_cid
-

@@ -1,4 +1,5 @@
 """Application-wide constants and status mappings."""
+
 from __future__ import annotations
 
 from app.exceptions.app_errors import (

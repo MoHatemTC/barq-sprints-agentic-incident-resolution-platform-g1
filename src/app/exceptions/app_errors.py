@@ -1,4 +1,5 @@
 """Global error taxonomy + standardized JSON error envelope."""
+
 from __future__ import annotations
 
 import logging
@@ -8,6 +9,7 @@ from app.core.correlation import get_correlation_id
 from app.utils.datetime import utc_now_iso
 
 logger = logging.getLogger(__name__)
+
 
 # ---------------------------------------------------------------------------
 # Base platform error
@@ -43,9 +45,7 @@ class _PlatformHTTPError(AgenticPlatformError):
 
     def __init__(self, message: str | None = None, **kwargs: Any) -> None:
         kwargs.setdefault("status_code", self.default_status_code)
-        super().__init__(
-            message if message is not None else self.default_message, **kwargs
-        )
+        super().__init__(message if message is not None else self.default_message, **kwargs)
 
     def to_payload(self) -> dict[str, Any]:
         """Render this exception as the standardized envelope."""

@@ -2,6 +2,7 @@
 
 Re-exports from app.exceptions.app_errors and app.exceptions.handlers.
 """
+
 from __future__ import annotations
 
 from app.core.constants import ERROR_STATUS_MAP
@@ -14,7 +15,6 @@ from app.exceptions.app_errors import (
     ResourceNotFoundError,
     ServiceUnavailableError,
     UnknownContractVersionError,
-    _PlatformHTTPError,
     error_envelope,
 )
 from app.exceptions.handlers import (

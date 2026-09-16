@@ -174,6 +174,7 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "python-dotenv" },
     { name = "qdrant-client" },
+    { name = "redis" },
     { name = "sqlalchemy" },
     { name = "structlog" },
     { name = "uvicorn", extra = ["standard"] },
@@ -195,6 +196,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "alembic", specifier = ">=1.14,<2" },
+    { name = "asyncpg", specifier = ">=0.29.0" },
     { name = "asyncpg", specifier = ">=0.30,<1" },
     { name = "beautifulsoup4", specifier = ">=4.12.3" },
     { name = "fastapi", specifier = ">=0.141.1" },
@@ -206,6 +208,7 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.15.0" },
     { name = "python-dotenv", specifier = ">=1.2.3" },
     { name = "qdrant-client", specifier = ">=1.14,<1.15" },
+    { name = "redis", specifier = ">=5.0.0" },
     { name = "sqlalchemy", specifier = ">=2.0,<3" },
     { name = "structlog", specifier = ">=26.1.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.52.4" },
@@ -2023,6 +2026,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/1d/56/3f355f931c239c260b4fe3bd6433ec6c9e6185cd5ae0970fe89d0ca6daee/qdrant_client-1.14.3.tar.gz", hash = "sha256:bb899e3e065b79c04f5e47053d59176150c0a5dabc09d7f476c8ce8e52f4d281", size = 286766, upload-time = "2025-06-16T11:13:47.838Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/35/5e/8174c845707e60b60b65c58f01e40bbc1d8181b5ff6463f25df470509917/qdrant_client-1.14.3-py3-none-any.whl", hash = "sha256:66faaeae00f9b5326946851fe4ca4ddb1ad226490712e2f05142266f68dfc04d", size = 328969, upload-time = "2025-06-16T11:13:46.636Z" },
+]
+
+[[package]]
+name = "redis"
+version = "8.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/a8/99/604f0b666d4c616d891cf77ebb9db6bb21601344c051aebf1b72b9ff915f/redis-8.1.0.tar.gz", hash = "sha256:6e1a19beef9225c83efd689c7e6b7da2d5215b1f42cd13b7fc3714d0a09c7b25", size = 5254356, upload-time = "2026-07-30T08:51:00.269Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/66/9d/c5731f6e3608663d4d3656fd8d3aecee8b509c3082818f5a13eae925baea/redis-8.1.0-py3-none-any.whl", hash = "sha256:a4fe1aac3d3b3cc791d4b3d5931c5a956045dc951ee74d1c913ee3ac4d2ee9fb", size = 560618, upload-time = "2026-07-30T08:50:58.497Z" },
 ]
 
 [[package]]

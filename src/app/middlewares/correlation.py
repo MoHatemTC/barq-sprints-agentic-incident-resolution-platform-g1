@@ -1,6 +1,6 @@
-from collections.abc import Callable
 import time
 import uuid
+from collections.abc import Callable
 
 import structlog
 from fastapi import FastAPI, Request, Response
@@ -47,7 +47,6 @@ class CorrelationIdMiddleware(BaseHTTPMiddleware):
             raise
         finally:
             clear_correlation_id()
-
 
         duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
         logger.info(
