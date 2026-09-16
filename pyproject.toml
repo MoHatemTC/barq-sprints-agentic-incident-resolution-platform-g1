@@ -11,6 +11,8 @@ dependencies = [
     # Imported directly by src/app/retrieval/extraction.py. It arrived only as a
     # markdownify transitive before, so a markdownify change could have broken imports.
     "asyncpg>=0.29.0",
+    # Worker execution substrate (S2.3): task queue over the Redis broker.
+    "celery[redis]>=5.6,<6",
     "beautifulsoup4>=4.12.3",
     "fastapi>=0.141.1",
     "fastembed>=0.8.0",
@@ -19,9 +21,13 @@ dependencies = [
     "markdownify>=1.2.3",
     "pydantic>=2.13.5",
     "pydantic-settings>=2.15.0",
+    # Sync PostgreSQL driver for the Celery worker's session engine (workers/sync_engine.py).
+    "psycopg[binary]>=3.2,<4",
     "python-dotenv>=1.2.3",
     "qdrant-client>=1.14,<1.15",
-    "redis>=5.0.0",
+    # Pinned: redis-py 8.x breaks kombu 5.6 BRPOP parsing (KeyError 'properties' on
+    # delivery). Revisit when kombu supports redis-py 8.
+    "redis==5.2.1",
     "sqlalchemy>=2.0,<3",
     "structlog>=26.1.0",
     "uvicorn[standard]>=0.52.4",
@@ -72,6 +78,9 @@ indent-style = "space"
 testpaths = ["tests"]
 asyncio_mode = "auto"
 pythonpath = ["src"]
+markers = [
+    "integration: requires live docker services (redis, postgres); deselect with -m 'not integration'",
+]
 
 [tool.mypy]
 python_version = "3.12"
