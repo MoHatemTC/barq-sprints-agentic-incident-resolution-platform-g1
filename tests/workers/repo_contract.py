@@ -156,4 +156,21 @@ def assert_repo_contract(
         "only parked events replay: never reset a queued/running execution from under a live worker"
     )
 
+    # ── event lookup (the replay CLI's event_id → execution path) ──────────
+    EVENT_PAYLOAD = {
+        "event_id": "evt-lookup-0001",
+        "sys_id": "SYS0000001",
+        "number": "INC0000001",
+        "event_type": "incident.created",
+        "contract_version": "v1",
+    }
+    lookup_repo = make_repo()
+    lookup_repo.seed_execution(
+        exec_id, status="queued", event_id=EVENT_PAYLOAD["event_id"], payload=EVENT_PAYLOAD
+    )
+    assert lookup_repo.find_execution_id(EVENT_PAYLOAD["event_id"]) == exec_id
+    assert lookup_repo.find_execution_id("evt-unknown") is None
+    assert lookup_repo.get_event_payload(EVENT_PAYLOAD["event_id"]) == EVENT_PAYLOAD
+    assert lookup_repo.get_event_payload("evt-unknown") is None
+
     return repo

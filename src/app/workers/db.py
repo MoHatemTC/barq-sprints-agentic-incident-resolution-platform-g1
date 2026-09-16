@@ -32,7 +32,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from app.db.models import Execution, Failure, RetryState
+from app.db.models import Event, Execution, Failure, RetryState
 from app.workers.sync_engine import (
     SyncPostgreSQLSettings,
     SyncSessionFactory,
@@ -127,6 +127,16 @@ class WorkerRepo(Protocol):
     def reset_for_replay(self, execution_id: UUID, max_attempts: int) -> bool:
         """Unlock a parked (exhausted/cancelled) event for replay. Returns
         False when the event is not parked — never reset an in-flight event."""
+        ...
+
+    def find_execution_id(self, event_id: str) -> UUID | None:
+        """Resolve the one execution accepted for an event (uq_executions_
+        event_record_id guarantees at most one). The replay CLI's entry point."""
+        ...
+
+    def get_event_payload(self, event_id: str) -> dict | None:
+        """Rebuild the contract-v1 webhook payload from the immutable events
+        row — replay re-enqueues the ORIGINAL event, not the DLQ copy."""
         ...
 
 
@@ -361,6 +371,35 @@ class PostgresRepo:
             )
             return True
 
+    def find_execution_id(self, event_id: str) -> UUID | None:
+        stmt = (
+            select(Execution.execution_id)
+            .join(Event, Execution.event_record_id == Event.id)
+            .where(Event.event_id == event_id)
+        )
+        with self._session_factory() as session:
+            return session.scalar(stmt)
+
+    def get_event_payload(self, event_id: str) -> dict | None:
+        stmt = select(
+            Event.event_id,
+            Event.incident_sys_id,
+            Event.incident_number,
+            Event.event_type,
+            Event.contract_version,
+        ).where(Event.event_id == event_id)
+        with self._session_factory() as session:
+            row = session.execute(stmt).first()
+        if row is None:
+            return None
+        return {
+            "event_id": row.event_id,
+            "sys_id": row.incident_sys_id,
+            "number": row.incident_number,
+            "event_type": row.event_type,
+            "contract_version": row.contract_version,
+        }
+
 
 class InMemoryRepo:
     """Unit-test stand-in mirroring the database CHECK constraints."""
@@ -369,14 +408,27 @@ class InMemoryRepo:
         self.executions: dict[UUID, dict] = {}
         self.retry_states: dict[UUID, dict] = {}
         self.failures: list[dict] = []
+        self.event_index: dict[str, UUID] = {}
+        self.event_payloads: dict[str, dict] = {}
 
     # -- test seeding -------------------------------------------------------
-    def seed_execution(self, execution_id: UUID, *, status: str) -> None:
+    def seed_execution(
+        self,
+        execution_id: UUID,
+        *,
+        status: str,
+        event_id: str | None = None,
+        payload: dict | None = None,
+    ) -> None:
         self.executions[execution_id] = {
             "status": status,
             "ended_at": None,
             "termination_cause": None,
         }
+        if event_id is not None:
+            self.event_index[event_id] = execution_id
+            if payload is not None:
+                self.event_payloads[event_id] = payload
 
     def force_state_for_test(self, execution_id: UUID, state: str) -> None:
         self.retry_states[execution_id]["state"] = state
@@ -535,6 +587,12 @@ class InMemoryRepo:
         execution["ended_at"] = None
         execution["termination_cause"] = None
         return True
+
+    def find_execution_id(self, event_id: str) -> UUID | None:
+        return self.event_index.get(event_id)
+
+    def get_event_payload(self, event_id: str) -> dict | None:
+        return self.event_payloads.get(event_id)
 
 
 def build_worker_repo(settings: SyncPostgreSQLSettings | object) -> WorkerRepo:
