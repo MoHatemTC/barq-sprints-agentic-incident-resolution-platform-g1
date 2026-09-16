@@ -48,6 +48,41 @@ def assert_repo_contract(
     repo.ensure_retry_state(exec_id, max_attempts=5)  # idempotent
     assert repo.get_attempt_count(exec_id) == 0
 
+    # ── config drift alignment (replay CLI vs worker budget) ───────────────
+    # A row still untouched — ('ready', no attempts) — aligns to the caller's
+    # budget: e.g. a replay CLI reset it under a different worker_max_retries.
+    # A row that already burned attempts is NEVER rewritten: history stays
+    # exactly what the CHECK constraints recorded it as.
+    drift_repo = make_repo()
+    drift_repo.seed_execution(exec_id, status="queued")
+    drift_repo.ensure_retry_state(exec_id, max_attempts=5)
+    drift_repo.ensure_retry_state(exec_id, max_attempts=3)
+    assert drift_repo.get_retry_state(exec_id)["max_attempts"] == 3
+
+    drifted_history_repo = make_repo()
+    drifted_history_repo.seed_execution(exec_id, status="queued")
+    drifted_history_repo.ensure_retry_state(exec_id, max_attempts=5)
+    drifted_history_repo.claim_for_running(exec_id)
+    history_failure = drifted_history_repo.log_failure(
+        execution_id=exec_id,
+        attempt=1,
+        failure_type="llm_timeout",
+        message="first attempt under the old budget",
+        retryable=True,
+    )
+    drifted_history_repo.schedule_retry(
+        execution_id=exec_id,
+        attempt=1,
+        backoff_seconds=1.0,
+        next_retry_at=datetime.now(UTC) + timedelta(seconds=1),
+        last_failure_id=history_failure,
+    )
+    drifted_history_repo.ensure_retry_state(exec_id, max_attempts=3)
+    snapshot = drifted_history_repo.get_retry_state(exec_id)
+    assert snapshot["max_attempts"] == 5, "burned budget history is never rewritten"
+    assert snapshot["state"] == "scheduled"
+    assert snapshot["attempt_count"] == 1
+
     # ── failure logging ────────────────────────────────────────────────────
     failure_id = repo.log_failure(
         execution_id=exec_id,

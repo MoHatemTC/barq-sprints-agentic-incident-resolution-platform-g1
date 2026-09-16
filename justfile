@@ -75,7 +75,10 @@ psql-retry-state:
 test-workers:
     uv run pytest tests/workers -q
 
+# Integration suite needs EXCLUSIVE consumption: a compose worker running at
+# the same time shares the queue with a different budget and pollutes the run.
 test-integration:
+    docker compose stop celery-worker >/dev/null 2>&1 || true
     uv run pytest -m integration -q
 
 # Full S2.3 live demo (success, duplicate, backoff, DLQ, replay) — the

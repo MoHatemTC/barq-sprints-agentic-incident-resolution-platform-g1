@@ -104,12 +104,18 @@ witnessed the failure is dead — it aborted with the task's transaction).
 
 ## 7. Operational constraints (read before touching config)
 
-1. **`worker_max_retries` must be identical for the replay CLI and the consuming worker.** The
-   database pairs `attempt_count` with `max_attempts` (`ck_retry_state_exhausted_attempt_limit`):
-   if the CLI reset an event with max=5 but the worker's budget is 3, the exhaustion write
-   (count=3, row max=5) violates the CHECK. The walkthrough script exports one configuration for
-   every process it spawns. *Proposed follow-up guard:* `ensure_retry_state` may align
-   `max_attempts` to the worker's config only when the row is `('ready', count=0)`.
+1. **Replay-CLI/worker `worker_max_retries` drift is guarded, with one residual.** The database
+   pairs `attempt_count` with `max_attempts` (`ck_retry_state_exhausted_attempt_limit`): if the
+   CLI reset an event with max=5 but the worker's budget is 3, the exhaustion write (count=3, row
+   max=5) violates the CHECK. `ensure_retry_state` therefore aligns a row that is still untouched
+   (`'ready'`, 0 attempts — exactly what replay produces) to the caller's budget; rows with
+   burned attempts keep their recorded budget (history is never rewritten). Proven necessary
+   live on 2026-09-17: a compose worker (budget 5) resurrected by a Docker engine restart shared
+   the queue with a test worker (budget 3) and produced BOTH violation directions on one event —
+   both landed honestly as `cancelled` via the fail-closed handler, zero corruption. Residual:
+   changing the budget while events are mid-retry-schedule stays unsupported (drain first) —
+   that variant cannot be fixed by alignment without rewriting history. The walkthrough script
+   still exports one configuration for every process it spawns (deterministic demo).
 2. **`stop_grace_period: 30s` < `worker_soft_time_limit: 120s` is intentionally safe**: a task
    killed at grace expiry is recovered by redelivery + the running→running claim, not by grace.
    Grace only shortens the *worst case* container shutdown; correctness comes from acks_late.
@@ -185,4 +191,5 @@ celery 5.6.3 · kombu 5.6.2 · redis 5.2.1 (pinned, §7.3) · psycopg 3.3.5 · S
 2. Redis-loss recovery (re-enqueue sweep from `events WHERE status='queued'`) is documented but
    unimplemented (stretch; AOF is already on in compose).
 3. Saturation p95 for the webhook is a joint run with S2.1 (§11).
-4. `worker_max_retries` drift guard (§7.1) — small follow-up commit.
+4. Two live workers with *different* budgets running concurrently is operator error the drift
+   guard cannot fully absorb (see §7.1 residual) — deployments should keep one budget.

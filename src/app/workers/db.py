@@ -69,7 +69,10 @@ class WorkerRepo(Protocol):
 
     def ensure_retry_state(self, execution_id: UUID, max_attempts: int) -> None:
         """Insert the retry_state row if absent (accept_inbound_event does not
-        create one, and max_attempts has no database default)."""
+        create one, and max_attempts has no database default). If the row
+        exists but is untouched ('ready', no attempts), it aligns to the
+        caller's budget — closing the replay-CLI/worker max_retries drift.
+        Rows with burned attempts keep their recorded budget."""
         ...
 
     def get_attempt_count(self, execution_id: UUID) -> int | None: ...
@@ -171,6 +174,15 @@ class PostgresRepo:
             )
 
     def ensure_retry_state(self, execution_id: UUID, max_attempts: int) -> None:
+        """Insert the retry_state row if absent (accept_inbound_event does not
+        create one, and max_attempts has no database default).
+
+        Config-drift alignment: if the row exists but is still untouched —
+        ``('ready', attempt_count = 0)``, e.g. written by a replay CLI running
+        a different ``worker_max_retries`` — it adopts the caller's budget, so
+        the caller's later exhaustion write can never violate
+        ``ck_retry_state_exhausted_attempt_limit``. Rows with burned attempts
+        keep their recorded budget: history is never rewritten."""
         stmt = (
             pg_insert(RetryState)
             .values(
@@ -179,7 +191,11 @@ class PostgresRepo:
                 attempt_count=0,
                 max_attempts=max_attempts,
             )
-            .on_conflict_do_nothing(index_elements=[RetryState.execution_id])
+            .on_conflict_do_update(
+                index_elements=[RetryState.execution_id],
+                set_={"max_attempts": max_attempts},
+                where=(RetryState.state == "ready") & (RetryState.attempt_count == 0),
+            )
         )
         with self._session_factory() as session, session.begin():
             session.execute(stmt)
@@ -446,17 +462,19 @@ class InMemoryRepo:
         return row["status"] if row else None
 
     def ensure_retry_state(self, execution_id: UUID, max_attempts: int) -> None:
-        self.retry_states.setdefault(
-            execution_id,
-            {
+        state = self.retry_states.get(execution_id)
+        if state is None:
+            self.retry_states[execution_id] = {
                 "state": "ready",
                 "attempt_count": 0,
                 "max_attempts": max_attempts,
                 "next_retry_at": None,
                 "last_attempt_at": None,
                 "last_failure_id": None,
-            },
-        )
+            }
+        elif state["state"] == "ready" and state["attempt_count"] == 0:
+            # drift alignment: mirror the Postgres backend's untouched-row rule
+            state["max_attempts"] = max_attempts
 
     def get_attempt_count(self, execution_id: UUID) -> int | None:
         state = self.retry_states.get(execution_id)

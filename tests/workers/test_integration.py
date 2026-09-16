@@ -3,8 +3,12 @@
 Requires the docker services and runs the full joint definition-of-done with
 S2.1 (webhook) and S2.2 (schema)::
 
-    docker compose up -d postgres redis
-    pytest -m integration
+    just test-integration        # stops the compose celery-worker first
+    # or manually: docker compose stop celery-worker && pytest -m integration
+
+The suite assumes EXCLUSIVE consumption: a compose worker running alongside
+the test worker shares the queue with a different retry budget, which is
+exactly the config-drift incident the drift-guard test below pins.
 
 A real Celery worker subprocess consumes the actual events queue with a test-
 scaled configuration (budget 3, base 0.2s, jitter off → deterministic 1:2
@@ -513,3 +517,41 @@ def test_replay_refuses_in_flight_event_against_real_postgres(repo, sync_engine)
     repo.claim_for_running(execution_id)  # a worker holds this right now
 
     assert repo.reset_for_replay(execution_id, max_attempts=WORKER_MAX_RETRIES) is False
+
+
+def test_ensure_retry_state_aligns_drifted_budget_on_untouched_rows(repo, sync_engine):
+    """Live version of the 2026-09-17 incident: a compose worker (budget 5)
+    and a test worker (budget 3) shared one queue and produced two CHECK
+    violations on the same event. The guard aligns untouched ('ready', 0)
+    rows to the caller's budget; rows with history are never rewritten."""
+    drifted_execution = _seed_event_with_execution(
+        sync_engine, _make_payload("INC" + uuid4().hex[:8])
+    )
+    repo.ensure_retry_state(drifted_execution, max_attempts=5)  # e.g. the replay CLI's budget
+    repo.ensure_retry_state(drifted_execution, max_attempts=3)  # the consuming worker's budget
+    assert repo.get_retry_state(drifted_execution)["max_attempts"] == 3
+
+    history_execution = _seed_event_with_execution(
+        sync_engine, _make_payload("INC" + uuid4().hex[:8])
+    )
+    repo.ensure_retry_state(history_execution, max_attempts=5)
+    repo.claim_for_running(history_execution)
+    failure_id = repo.log_failure(
+        execution_id=history_execution,
+        attempt=1,
+        failure_type="llm_timeout",
+        message="attempted under the old budget",
+        retryable=True,
+    )
+    repo.schedule_retry(
+        execution_id=history_execution,
+        attempt=1,
+        backoff_seconds=1.0,
+        next_retry_at=dt.datetime.now(dt.UTC) + dt.timedelta(seconds=1),
+        last_failure_id=failure_id,
+    )
+    repo.ensure_retry_state(history_execution, max_attempts=3)
+    snapshot = repo.get_retry_state(history_execution)
+    assert snapshot["max_attempts"] == 5, "burned budget history is never rewritten"
+    assert snapshot["state"] == "scheduled"
+    assert snapshot["attempt_count"] == 1
