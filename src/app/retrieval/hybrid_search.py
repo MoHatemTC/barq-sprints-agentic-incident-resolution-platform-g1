@@ -1,183 +1,204 @@
-"""Hybrid vector search entry point with mandatory workflow_state filtering.
-
-Single retrieval entry point for the BARQ incident resolution platform.
-Implements hybrid retrieval (dense Cosine + sparse BM25) fused via Reciprocal
-Rank Fusion (RRF), enforcing the safety-critical P3 invariant:
-**retired and draft knowledge articles are strictly excluded**.
-"""
-
 from __future__ import annotations
 
+from dataclasses import dataclass
+from time import time
+
 import structlog
+from pydantic import BaseModel, ConfigDict, ValidationError
+from qdrant_client import QdrantClient
+from qdrant_client.models import Filter
+
+from app.clients.qdrant import DENSE_VECTOR_NAME
+from app.core.config import RetrievalMode, get_retrieval_settings
+from app.models.knowledge import KnowledgePayload
+from app.retrieval.embedding import EmbeddingEngine, FastEmbedEngine
+from app.retrieval.filters import MetadataFilterBuilder, build_metadata_filter
 
 logger = structlog.get_logger(__name__)
 
 DEFAULT_COLLECTION_NAME = "incident_knowledge_base"
 
+# Multiplier for the number of candidates to fetch from Qdrant before reranking.
+DEFAULT_RERANK_CANDIDATE_MULTIPLIER = 4
 
-# @dataclass(frozen=True)
-# class SearchResult:
-#     """A retrieval call's hits plus the wall-clock time it took.
 
-#     Kept separate from `list[RetrievalHit]` so latency measurement (needed
-#     for the p50/p95 reporting in NFR-08) doesn't require timing at every
-#     call site — `eval/ablation.py` reads `.latency_ms` directly.
-#     """
+class RetrievalHit(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
-#     hits: list[RetrievalHit]
-#     latency_ms: float
+    score: float
+    article_id: str  # Composed unique identifier, e.g. "KB0010-v2.0"
+    article_number: str  # Article base identifier, e.g. "KB0010"
+    version: str  # Semantic version, e.g. "2.0"
+    title: str  # Article title
+    section: str  # Section heading the chunk belongs to
+    chunk_index: int  # 0-indexed position within article
+    chunk_text: str  # Chunk content text
+    workflow_state: str  # Always "published" for hits returned by retrieve_knowledge
+    security_level: str  # Audience tier: "public", "internal" or "restricted"
+    category: str  # Knowledge category, e.g. "database", "network"
+    service: str | None = None  # Affected service name, e.g. "postgres", "redis"
+
+
+@dataclass(frozen=True)
+class SearchResult:
+    hits: list[RetrievalHit]
+    latency_ms: float
+    mode: RetrievalMode
 
 
 def _get_default_collection_name() -> str:
-    """Resolve the configured collection name.
-
-    Settings errors propagate. This used to fall back to DEFAULT_COLLECTION_NAME on any
-    exception, so an unrelated bad setting (an invalid QDRANT_HTTP_PORT, say) silently
-    redirected retrieval from the configured collection to ``incident_knowledge_base``.
-    A broken config must stop the run, not quietly search somewhere else. See #45.
-    """
     from app.core.config import get_retrieval_settings
 
     return get_retrieval_settings().qdrant_collection_name
 
 
-# class RetrievalHit(BaseModel):
-#     """A scored knowledge chunk returned from hybrid vector retrieval.
+def _validate_hit(point) -> RetrievalHit:
+    payload = point.payload
+    if payload is None:
+        raise ValueError(f"Point {point.id} returned without payload")
+    try:
+        validated = KnowledgePayload.model_validate(payload)
+    except (ValidationError, TypeError, ValueError) as err:
+        raise ValueError(
+            f"Point {point.id} has malformed payload violating the ingestion contract: {err}"
+        ) from err
+    return RetrievalHit(
+        score=float(point.score),
+        article_id=validated.article_id,
+        article_number=validated.article_number,
+        version=validated.version,
+        title=validated.title,
+        section=validated.section,
+        chunk_index=validated.chunk_index,
+        chunk_text=validated.chunk_text,
+        workflow_state=validated.workflow_state.value,
+        security_level=validated.security_level.value,
+        category=validated.category,
+        service=validated.service,
+    )
 
-#     Note on score semantics:
-#     In hybrid search with Reciprocal Rank Fusion (RRF), `score` is a rank sum:
-#         score = sum(1 / (k + rank_i))
-#     It is NOT a cosine similarity or distance metric (values are small positive
-#     floats, typically between 0.01 and 0.5 with default k=2). Never compare this
-#     score directly against cosine similarity thresholds.
-#     """
 
-#     model_config = ConfigDict(frozen=True, extra="forbid")
-
-#     score: float
-#     article_id: str  # Composed unique identifier, e.g. "KB0010-v2.0"
-#     article_number: str  # Article base identifier, e.g. "KB0010"
-#     version: str  # Semantic version, e.g. "2.0"
-#     title: str  # Article title
-#     section: str  # Section heading the chunk belongs to
-#     chunk_index: int  # 0-indexed position within article
-#     chunk_text: str  # Chunk content text
-#     workflow_state: str  # Always "published" for hits returned by retrieve_knowledge
-#     security_level: str  # Audience tier: "public", "internal" or "restricted"
-#     category: str  # Knowledge category, e.g. "database", "network"
-#     service: str | None = None  # Affected service name, e.g. "postgres", "redis"
+def _tie_break_sort(hits: list[RetrievalHit]) -> list[RetrievalHit]:
+    """Deterministic sort: descending score, ties broken by (article_id, chunk_index)."""
+    return sorted(hits, key=lambda h: (-h.score, h.article_id, h.chunk_index))
 
 
-# def retrieve_knowledge(
-#     client: QdrantClient,
-#     query: str,
-#     *,
-#     collection_name: str | None = None,
-#     limit: int = 5,
-#     extra_filter: Filter | None = None,
-#     engine: EmbeddingEngine | None = None,
-# ) -> list[RetrievalHit]:
-#     """Retrieve top knowledge chunks using hybrid dense+sparse search and RRF fusion.
+def hybrid_search(
+    client: QdrantClient,
+    query: str,
+    *,
+    collection_name: str | None = None,
+    limit: int = 5,
+    metadata: MetadataFilterBuilder | None = None,
+    extra_filter: Filter | None = None,
+    engine: EmbeddingEngine | None = None,
+    mode: RetrievalMode | None = None,
+) -> list[RetrievalHit]:
+    result = timed_hybrid_search(
+        client,
+        query,
+        collection_name=collection_name,
+        limit=limit,
+        metadata=metadata,
+        extra_filter=extra_filter,
+        engine=engine,
+        mode=mode,
+    )
+    return result.hits
 
-#     Always enforces `workflow_state == 'published'`.
 
-#     Args:
-#         client: Active Qdrant client connection.
-#         query: Query text (e.g., incident description or error message).
-#         collection_name: Target collection. If None, resolves from RetrievalSettings.
-#             Production callers should leave this as None to use the configured collection.
-#         limit: Maximum number of final fused hits to return (top_k).
-#         extra_filter: Optional Qdrant Filter to further narrow results (e.g. by service
-#             or category). Cannot bypass the mandatory published or security filters.
-#         max_security_level: Highest audience tier the caller is cleared for. Defaults to
-#             `SecurityLevel.INTERNAL`, so `restricted` articles are excluded unless a
-#             caller explicitly opts in. Pass `SecurityLevel.RESTRICTED` only for callers
-#             actually cleared for it.
-#         engine: Embedding engine used to vectorize the query into dense and sparse vectors.
-#             If None, instantiates a new FastEmbedEngine. NOTE: Initializing FastEmbedEngine
-#             loads model weights from disk and is expensive; production callers should
-#             create and cache a shared engine instance.
+def timed_hybrid_search(
+    client: QdrantClient,
+    query: str,
+    *,
+    collection_name: str | None = None,
+    limit: int = 5,
+    metadata: MetadataFilterBuilder | None = None,
+    extra_filter: Filter | None = None,
+    engine: EmbeddingEngine | None = None,
+    mode: RetrievalMode = RetrievalMode.HYBRID_RERANKED,
+):
+    """
+    Same as hybrid_search() but returns a SearchResult with latency_ms and mode.
+    """
+    if not query or not query.strip():
+        raise ValueError("query must be a non-empty string")
 
-#     Returns:
-#         A list of `RetrievalHit` objects ordered by descending RRF fusion rank score.
+    settings = get_retrieval_settings()
+    resolved_mode = mode or settings.retrieval_mode
+    target_collection = collection_name or settings.qdrant_collection_name
 
-#     Raises:
-#         ValueError: If the query is empty or whitespace-only, or if a retrieved
-#             point has missing or malformed payload fields.
-#     """
-#     if not query or not query.strip():
-#         raise ValueError("query must be a non-empty string")
+    if engine is None:
+        engine = FastEmbedEngine()
 
-#     target_collection = collection_name or _get_default_collection_name()
+    search_filter = build_metadata_filter(metadata, extra=extra_filter)
+    needs_rerank = resolved_mode == RetrievalMode.HYBRID_RERANKED
+    fetch_limit = (
+        max(limit * DEFAULT_RERANK_CANDIDATE_MULTIPLIER, settings.rerank_candidate_limit)
+        if needs_rerank
+        else limit
+    )
 
-#     if engine is None:
-#         engine = FastEmbedEngine()
+    start = time.perf_counter()
+    embedded = engine.embed_query(query)
 
-#     search_filter = build_metadata_filter(extra_filter)
-#     prefetch_limit = max(limit * 4, 20)
+    if resolved_mode == RetrievalMode.DENSE_ONLY:
+        response = client.query_points(
+            collection_name=target_collection,
+            query=embedded.dense,
+            using=DENSE_VECTOR_NAME,
+            query_filter=search_filter,
+            limit=fetch_limit,
+            with_payload=True,
+        )
+        raw_points = response.points
+    else:
+        prefetch_limit = max(fetch_limit * 4, 20)
+        prefetches = [
+            client.Prefetch(
+                query=embedded.dense,
+                using=DENSE_VECTOR_NAME,
+                filter=search_filter,
+                limit=prefetch_limit,
+            ),
+            client.Prefetch(
+                query=client.SparseVector(
+                    indices=embedded.sparse_indices,
+                    values=embedded.sparse_values,
+                ),
+                using=client.SPARSE_VECTOR_NAME,
+                filter=search_filter,
+                limit=prefetch_limit,
+            ),
+        ]
+        response = client.query_points(
+            collection_name=target_collection,
+            prefetch=prefetches,
+            query=client.FusionQuery(fusion=client.Fusion.RRF),
+            query_filter=search_filter,
+            limit=fetch_limit,
+            with_payload=True,
+        )
+        raw_points = response.points
 
-#     embedded = engine.embed_query(query)
+    hits = _tie_break_sort([_validate_hit(point) for point in raw_points])
 
-#     # Dual-filter placement:
-#     # 1. Prefetch filter: Mandatory on :memory: backend (mock engine ignores top-level
-#     #    filter on FusionQuery) and critical on server to prevent candidate starvation.
-#     # 2. Top-level query_filter: Defense-in-depth on server Qdrant.
-#     prefetches = [
-#         Prefetch(
-#             query=embedded.dense,
-#             using=DENSE_VECTOR_NAME,
-#             filter=search_filter,
-#             limit=prefetch_limit,
-#         ),
-#         Prefetch(
-#             query=SparseVector(
-#                 indices=embedded.sparse_indices,
-#                 values=embedded.sparse_values,
-#             ),
-#             using=SPARSE_VECTOR_NAME,
-#             filter=search_filter,
-#             limit=prefetch_limit,
-#         ),
-#     ]
+    if needs_rerank and hits:
+        from app.retrieval.rerank import get_default_reranker
 
-#     response = client.query_points(
-#         collection_name=target_collection,
-#         prefetch=prefetches,
-#         query=FusionQuery(fusion=Fusion.RRF),
-#         query_filter=search_filter,
-#         limit=limit,
-#         with_payload=True,
-#     )
+        reranker = get_default_reranker()
+        hits = reranker.rerank(query, hits, top_n=limit)
+    else:
+        hits = hits[:limit]
 
-#     hits: list[RetrievalHit] = []
-#     for point in response.points:
-#         payload = point.payload
-#         if payload is None:
-#             raise ValueError(f"Point {point.id} returned without payload")
+    latency_ms = (time.perf_counter() - start) * 1000
 
-#         try:
-#             # Validate against the ingestion contract first: missing keys AND
-#             # wrong-typed values (e.g. title=None) must fail loud, not coerce
-#             # into plausible-looking hits.
-#             validated = KnowledgePayload.model_validate(payload)
-#             hit = RetrievalHit(
-#                 score=float(point.score),
-#                 article_id=validated.article_id,
-#                 article_number=validated.article_number,
-#                 version=validated.version,
-#                 title=validated.title,
-#                 section=validated.section,
-#                 chunk_index=validated.chunk_index,
-#                 chunk_text=validated.chunk_text,
-#                 workflow_state=validated.workflow_state.value,
-#                 security_level=validated.security_level.value,
-#                 category=validated.category,
-#                 service=validated.service,
-#             )
-#             hits.append(hit)
-#         except (ValidationError, TypeError, ValueError) as err:
-#             raise ValueError(
-#                 f"Point {point.id} has malformed payload violating the ingestion contract: {err}"
-#             ) from err
+    logger.debug(
+        "hybrid_search.completed",
+        mode=resolved_mode.value,
+        collection=target_collection,
+        hit_count=len(hits),
+        latency_ms=round(latency_ms, 2),
+    )
 
-#     return hits
+    return SearchResult(hits=hits, latency_ms=latency_ms, mode=resolved_mode)
