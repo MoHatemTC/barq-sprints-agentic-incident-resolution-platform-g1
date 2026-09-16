@@ -71,6 +71,12 @@ class Settings(RetrievalSettings):
         description="Target Knowledge Base sys_id for KB publishing",
     )
 
+    # WebHook
+    webhook_auth_token: str = Field(
+        ...,
+        description="Bearer token for webhook authentication",
+    )
+
     # PostgreSQL
     postgres_host: str = "localhost"
     postgres_port: int = 5432
