@@ -742,13 +742,40 @@ def _test_log_delete_forbidden(
     verify = client.get(
         f"{TABLE_API_BASE}/{SCOPED_LOG_TABLE}/{temp_id}", headers=hdrs, timeout=10.0
     )
-    record_exists = verify.status_code == 200
-    blocked = del_resp.status_code in (403, 404) or record_exists
 
-    if del_resp.status_code == 204:
-        notes = "WARNING: DELETE succeeded - log is NOT append-only. ACL should deny delete."
+    # #46: the verdict was `del_resp.status_code in (403, 404) or record_exists`, so a
+    # 404 on the DELETE counted as "blocked" - but a 404 is exactly what a *successful*
+    # delete looks like on a follow-up, and says nothing about the ACL. The only
+    # evidence that the delete was refused is that the record is still there.
+    if verify.status_code not in (200, 404):
+        return TestResult(
+            test_id="LOG-05",
+            category="Execution Log",
+            name="Cannot delete execution log records (append-only)",
+            operation="DELETE",
+            target=f"{SCOPED_LOG_TABLE}/{temp_id}",
+            expected="Record still present after DELETE",
+            http_status=verify.status_code,
+            observed=f"read-back unreadable (HTTP {verify.status_code})",
+            persisted_change=False,
+            verdict="FAIL",
+            notes=(
+                f"INCONCLUSIVE: could not read the record back (HTTP {verify.status_code}), "
+                "so it is unknown whether the DELETE was refused. Reported as FAIL because "
+                "a harness must fail closed."
+            ),
+        )
+
+    record_exists = verify.status_code == 200
+    blocked = record_exists
+
+    if record_exists:
+        notes = f"DELETE HTTP {del_resp.status_code}; record still present (blocked)."
     else:
-        notes = f"DELETE HTTP {del_resp.status_code}; record_exists={record_exists} (blocked)."
+        notes = (
+            f"SECURITY FAILURE: DELETE HTTP {del_resp.status_code} and the record is gone "
+            "- the log is NOT append-only. The ACL should deny delete."
+        )
 
     return TestResult(
         test_id="LOG-05",
@@ -907,7 +934,13 @@ def _forbidden_scalar(
     if not readable:
         return _unreadable("after", status)
 
-    changed = after == value and after != before
+    # #46: this was `after == value and after != before`, which required the stored
+    # value to equal exactly what was sent. A reference field never satisfies that:
+    # DENY-02 writes the string "admin" to assigned_to, which reads back as a sys_id,
+    # so `changed` was always False and the test passed even when the write landed.
+    # Any difference from the value read before the PATCH means the write persisted,
+    # whatever the platform stored.
+    changed = after != before
     blocked = patch_r.status_code in (401, 403) or not changed
 
     return TestResult(
