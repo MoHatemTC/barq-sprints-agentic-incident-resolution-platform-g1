@@ -1,6 +1,9 @@
 """Tests for retrieval configuration independence (RetrievalSettings)."""
 
-from app.core.config import RetrievalSettings, get_retrieval_settings
+import pytest
+from pydantic import ValidationError
+
+from app.core.config import RetrievalSettings, Settings, get_retrieval_settings
 from tests.clients.test_servicenow_integration import _load_live_test_settings
 
 _SERVICENOW_LIVE_CONFIG_ENV = (
@@ -77,3 +80,28 @@ def test_live_settings_load_dotenv_with_environment_precedence(tmp_path, monkeyp
     assert reason == ""
     assert overridden_settings is not None
     assert overridden_settings.servicenow_username == "environment-user"
+
+
+SENTINEL_PASSWORD = "SENTINEL-PASSWORD-123"
+
+
+def test_missing_field_error_hides_sibling_password(monkeypatch):
+    """#64: a pydantic validation error must not print the submitted values.
+
+    Settings is built at import in app/main.py and every ServiceNow field is
+    required, so one missing or misspelled variable in .env raised a ValidationError
+    whose `input_value` was the whole input dict - with SERVICENOW_PASSWORD at the end
+    of it - straight into a terminal or a container log. `hide_input_in_errors` on the
+    base class is what suppresses that.
+    """
+    monkeypatch.setenv("SERVICENOW_INSTANCE_URL", "https://dev00000.service-now.com")
+    monkeypatch.setenv("SERVICENOW_CLIENT_ID", "cid")
+    monkeypatch.setenv("SERVICENOW_CLIENT_SECRET", "csecret")
+    monkeypatch.setenv("SERVICENOW_PASSWORD", SENTINEL_PASSWORD)
+    monkeypatch.delenv("SERVICENOW_USERNAME", raising=False)
+
+    with pytest.raises(ValidationError) as excinfo:
+        Settings(_env_file=None)  # rely only on the env vars set above
+
+    assert SENTINEL_PASSWORD not in str(excinfo.value)
+    assert SENTINEL_PASSWORD not in repr(excinfo.value)
