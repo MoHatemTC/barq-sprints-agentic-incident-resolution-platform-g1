@@ -32,7 +32,7 @@ def test_producer_routes_to_events_queue_with_payload() -> None:
     sink.assert_called_once()
     call = sink.call_args
     assert call.args[0] == producer.PROCESS_INCIDENT_TASK
-    assert call.args[1] == {"args": [payload, "abc-123"]}
+    assert call.kwargs["args"] == [payload, "abc-123"]
     assert call.kwargs["queue"] == INCIDENT_EVENTS_QUEUE
 
 
@@ -45,7 +45,7 @@ def test_producer_coerces_uuid_to_str() -> None:
     with mock.patch.object(producer.celery_app, "send_task", sink):
         send_incident_event({"event_id": "evt-1"}, execution_id)
 
-    sent = sink.call_args.args[1]["args"]
+    sent = sink.call_args.kwargs["args"]
     assert sent[1] == str(execution_id)
     assert isinstance(sent[1], str)
 
