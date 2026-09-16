@@ -66,15 +66,7 @@ class ServiceNowClient:
 
     @staticmethod
     def _parse_incident(result: Any, sys_id: str) -> Incident:
-        """Validate a Table API record, raising the client's own error type on failure.
-
-        #67: a stored record with an ai_processing_state the enum does not know, or
-        with no number, raised pydantic's ValidationError - which is not a
-        ServiceNowError subclass. A caller following this client's contract and
-        catching ServiceNowError crashed instead of routing the incident to failure
-        handling. No PATCH is sent either way, so this already failed closed; the
-        problem was purely the escaping type.
-        """
+        """Validate a Table API record; raise ServiceNowValidationError if it does not fit."""
         try:
             return Incident.model_validate(result)
         except ValidationError as exc:
@@ -129,19 +121,14 @@ class ServiceNowClient:
                 details={"sys_id": sys_id, "ai_human_lock": state},
             )
 
-        # #67: IncidentUpdatePayload rejects end < start only when both are in the
-        # same write. The real lifecycle writes them in separate updates, so that check
-        # never fired in practice. The stored incident is already fetched above for the
-        # lock, so compare against it here - before any PATCH.
+        # Start and end are written in separate updates, so check end against the stored start.
         if payload.ai_processing_end is not None and payload.ai_processing_start is None:
             stored_start = current_incident.ai_processing_start
             if stored_start is not None and payload.ai_processing_end < stored_start:
                 raise ServiceNowValidationError(
                     f"Incident {sys_id}: ai_processing_end "
                     f"{payload.ai_processing_end.isoformat()} precedes the stored "
-                    f"ai_processing_start {stored_start.isoformat()}. Refusing the "
-                    "write - a negative duration would corrupt the timing evidence the "
-                    "execution log is audited on.",
+                    f"ai_processing_start {stored_start.isoformat()}.",
                     details={
                         "sys_id": sys_id,
                         "ai_processing_end": payload.ai_processing_end.isoformat(),

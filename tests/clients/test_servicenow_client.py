@@ -720,13 +720,7 @@ class TestWriteExecutionLog:
         assert entry.execution_id == eid
 
     async def test_token_not_in_log_post_error(self) -> None:
-        """Bearer token must not appear in logs or error details on log POST failure.
-
-        #74: this asserted only `entry is None` and never looked for the token, so the
-        name promised credential safety the body did not check. It now captures
-        structlog output and inspects every rendered event, and the swallowed
-        exception's own text, for the sentinel.
-        """
+        """Bearer token must not appear in logs or error details on log POST failure."""
         secret = "super_secret_token"  # noqa: S105 - deliberate sentinel
         resp = _api_response(status_code=404, result=None, text="Not found")
         client, http, token_mgr = _build_client(token=secret, responses=[resp])
@@ -1103,17 +1097,11 @@ class TestTransportErrorsDoNotChainTheBearerToken:
 
 
 class TestCrossWriteTimingAndParseErrors:
-    """#67: two contract gaps in the read/update paths."""
+    """Timing checks across separate writes, and typed parse errors."""
 
     @pytest.mark.asyncio
     async def test_end_before_stored_start_is_refused_without_patching(self) -> None:
-        """The real lifecycle writes start and end in separate updates.
-
-        IncidentUpdatePayload only compares them inside one payload, so the check never
-        fired in practice: a PATCH setting processing_end before the stored
-        processing_start went straight through and left a negative duration in the
-        timing evidence the execution log is audited on.
-        """
+        """An end time earlier than the stored start is refused before any PATCH."""
         stored = _incident_result()
         stored["x_2215032_ai_inc_0_ai_processing_start"] = "2026-09-16 12:00:00"
         stored["x_2215032_ai_inc_0_ai_human_lock"] = "false"
@@ -1133,7 +1121,7 @@ class TestCrossWriteTimingAndParseErrors:
 
     @pytest.mark.asyncio
     async def test_end_after_stored_start_still_writes(self) -> None:
-        """Regression guard: a legitimate end time is not blocked."""
+        """A valid end time is still written."""
         stored = _incident_result()
         stored["x_2215032_ai_inc_0_ai_processing_start"] = "2026-09-16 12:00:00"
         stored["x_2215032_ai_inc_0_ai_human_lock"] = "false"
@@ -1153,13 +1141,7 @@ class TestCrossWriteTimingAndParseErrors:
     async def test_unparseable_record_raises_servicenow_error_not_validation_error(
         self,
     ) -> None:
-        """A Sprint 2 caller catching ServiceNowError must not crash on a bad record.
-
-        A stored ai_processing_state the enum does not know raised pydantic's
-        ValidationError, which is not a ServiceNowError subclass, so a caller following
-        this client's contract crashed instead of routing the incident to failure
-        handling.
-        """
+        """An unparseable record raises ServiceNowValidationError, a ServiceNowError."""
         bad = _incident_result()
         bad["x_2215032_ai_inc_0_ai_processing_state"] = "a_state_the_enum_does_not_know"
         client, _, _ = _build_client(responses=[_api_response(result=bad)])
@@ -1170,5 +1152,4 @@ class TestCrossWriteTimingAndParseErrors:
         assert isinstance(exc_info.value, ServiceNowValidationError)
         assert exc_info.value.details["sys_id"] == "abc"
         assert exc_info.value.details["errors"], "the underlying errors must be retained"
-        # The chain is severed so a traceback cannot walk back into the request frame.
         assert exc_info.value.__cause__ is None
