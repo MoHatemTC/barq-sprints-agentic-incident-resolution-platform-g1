@@ -1,20 +1,8 @@
 """Exported update sets must not add records in the ServiceNow Global scope.
 
-#48. The PRD rule is "nothing in Global scope", and #29's description claimed the
-export had "0 global leaks". It does not: the S1.2 export carries four baseline
-platform ACLs that were changed on the PDI and captured into the app's update set,
-plus the business rule #32 added.
-
-Installing that update set elsewhere changes Global security for *every* user of
-`incident` and `sys_journal_field` - not just for this app.
-
-Removing them needs work on the instance (restore the baseline ACLs, rebuild the lock
-rule inside the scope, re-export), which this test cannot do. What it can do is stop
-the set growing: the five known records are listed below with the issue that tracks
-them, and anything else in Global fails.
-
-**This list only shrinks.** When a record is fixed on the PDI and re-exported, delete
-its entry. When it is empty, replace the allowlist with a plain assertion of zero.
+The known Global records below are tracked for removal; anything else in Global fails.
+This list only shrinks: delete an entry once the record is fixed and re-exported, and
+assert zero once it is empty.
 """
 
 from __future__ import annotations
@@ -41,9 +29,8 @@ KNOWN_GLOBAL_RECORDS: dict[str, str] = {
 def _global_records(export: Path) -> list[str]:
     """Names of records in the export whose sys_scope is Global.
 
-    sys_scope lives inside each sys_update_xml's <payload> CDATA, so the payload has
-    to be parsed as XML in its own right - scanning the outer document finds nothing,
-    which is why this drift went unnoticed.
+    sys_scope lives inside each sys_update_xml's <payload> CDATA, so the payload is
+    parsed as XML in its own right.
     """
     found: list[str] = []
     root = ET.parse(export).getroot()
