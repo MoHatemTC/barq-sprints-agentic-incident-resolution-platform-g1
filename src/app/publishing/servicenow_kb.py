@@ -71,6 +71,46 @@ _VERIFIED_FIELDS: tuple[str, ...] = (
 )
 
 
+_IMMUTABLE_STATES: frozenset[str] = frozenset({"published", "retired"})
+
+
+def _unwrap(value: Any) -> Any:
+    """Return a Table API reference field's value; pass scalars through unchanged."""
+    if isinstance(value, dict) and "value" in value:
+        return value["value"]
+    return value
+
+
+def _normalise_html(value: Any) -> Any:
+    """Collapse runs of whitespace so instance-side HTML reformatting is not a diff.
+
+    ServiceNow may re-render stored HTML (indentation, newlines between tags). That is
+    not a content change, and flagging it would refuse an identical re-publish. Actual
+    text differences survive this normalisation.
+    """
+    if isinstance(value, str):
+        return " ".join(value.split())
+    return value
+
+
+def _diff_against_stored(stored: dict[str, Any], payload: dict[str, Any]) -> list[str]:
+    """Names of payload fields whose stored value differs from what would be sent.
+
+    Every payload field is compared, including ``text`` and ``kb_category`` — the two
+    the read-back never checked, which is what let a swallowed 403 report success while
+    a stale body stayed live (#89).
+    """
+    differing: list[str] = []
+    for field, sent in payload.items():
+        current = _unwrap(stored.get(field))
+        if field == "text":
+            if _normalise_html(current) != _normalise_html(sent):
+                differing.append(field)
+        elif current != sent:
+            differing.append(field)
+    return sorted(differing)
+
+
 class ServiceNowKBClient:
     """Async HTTP client for the ServiceNow kb_knowledge Table API using OAuth 2.0."""
 
@@ -305,29 +345,39 @@ async def publish_article(
         outcome = "created"
     else:
         sys_id = str(existing["sys_id"])
-        # In ServiceNow with versioning enabled, retired articles are immutable (403 on PATCH).
-        # If the record is already retired, skip redundant PATCH and let read-back verify it.
-        if (
-            existing.get("workflow_state") == "retired"
-            and article.workflow_state.value == "retired"
-        ):
-            outcome = "updated"
+        stored_state = existing.get("workflow_state")
+        target_state = article.workflow_state.value
+
+        # #89. Two changes from the original handling, both about not inferring
+        # success from a refusal.
+        #
+        # 1. Nothing to write is its own outcome. When the row is already in a state
+        #    KB versioning freezes and every payload field already matches, there is
+        #    no PATCH to make. Skipping it avoids provoking a 403 that carries no
+        #    information, and reports "unchanged" rather than claiming an update.
+        # 2. A refusal is never swallowed. Previously a PATCH failure whose message
+        #    merely contained "403" was treated as success, so a corrected runbook
+        #    step could silently never reach the instance while the report said it
+        #    was published. The read-back could not catch it either: it compared
+        #    neither the body nor kb_category.
+        #
+        # The PATCH is still attempted whenever content differs, because a permitted
+        # account can update a published article. Only the instance decides that.
+        differing = _diff_against_stored(existing, payload)
+        if not differing and stored_state == target_state:
+            outcome = "unchanged"
         else:
             try:
                 await client.update(sys_id, payload)
-            except (ServiceNowRequestError, ServiceNowAccessError) as err:
-                # In ServiceNow, direct PATCH on published articles raises 403 ACL Exception
-                # for standard integration users without admin checkout.
-                # If the record is already published, let read-back verification confirm
-                # whether stored fields match the expected payload.
-                if (
-                    "403" in str(err)
-                    and existing.get("workflow_state") == "published"
-                    and article.workflow_state.value == "published"
-                ):
-                    pass
-                else:
-                    raise
+            except ServiceNowAccessError as err:
+                raise ServiceNowWriteRejectedError(
+                    f"{article.article_id!r} is {stored_state} and this account may not "
+                    f"modify it, but {differing or ['workflow_state']} differ from the "
+                    f"corpus, so the stored article is now stale. Publishing changed "
+                    f"content requires a version bump: the source id is "
+                    f"<number>-v<version>, so raising the version creates a new row "
+                    f"instead of editing a frozen one (sys_id={sys_id})."
+                ) from err
             outcome = "updated"
 
     stored = await client.get(sys_id)
@@ -361,10 +411,14 @@ def _verify_stored(
             "not an instance problem."
         )
 
-    for field in _VERIFIED_FIELDS:
-        stored_value = stored.get(field)
-        if isinstance(stored_value, dict) and "value" in stored_value:
-            stored_value = stored_value["value"]
+    # kb_category is verified only when the payload carried one: it is added solely
+    # when a mapping exists for the article's category (#89 — it was never compared).
+    compared = list(_VERIFIED_FIELDS)
+    if "kb_category" in sent:
+        compared.append("kb_category")
+
+    for field in compared:
+        stored_value = _unwrap(stored.get(field))
         if stored_value != sent[field]:
             raise ServiceNowWriteRejectedError(
                 f"Read-back mismatch for {article_id!r}: field {field!r} sent as "

@@ -29,6 +29,9 @@ class FakeServiceNow:
         self.kb_version_returns_error = False
         self.missing_schema_columns = False
         self.tamper_next_readback: tuple[str, str] | None = None
+        # #89: a published article is read-only for the integration user on a
+        # real instance, which answers a direct PATCH with 403.
+        self.refuse_patch = False
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         path = request.url.path
@@ -84,6 +87,8 @@ class FakeServiceNow:
             return httpx.Response(201, json={"result": row})
 
         if request.method == "PATCH" and path.startswith(f"/api/now/table/{KB_TABLE}/"):
+            if self.refuse_patch:
+                return httpx.Response(403, json={"error": {"message": "ACL Exception"}})
             sys_id = path.rsplit("/", 1)[-1]
             body = _json.loads(request.read())
             for row in self.rows:

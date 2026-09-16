@@ -121,6 +121,10 @@ async def async_main(args: argparse.Namespace) -> int:
 
     created = sum(1 for r in results if r["outcome"] == "created")
     updated = sum(1 for r in results if r["outcome"] == "updated")
+    # #89: an article already in an immutable state whose content matches is reported
+    # as its own outcome. Folding it into "updated" was what made a refused write look
+    # like a successful one.
+    unchanged = sum(1 for r in results if r["outcome"] == "unchanged")
     _write_report(
         args.report,
         {
@@ -128,6 +132,7 @@ async def async_main(args: argparse.Namespace) -> int:
             "dry_run": False,
             "created": created,
             "updated": updated,
+            "unchanged": unchanged,
             "failed": failed,
             "results": results,
         },
