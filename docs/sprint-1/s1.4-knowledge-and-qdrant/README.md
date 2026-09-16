@@ -13,7 +13,7 @@ Implementation complete. Verified real operational corpus (11 runbooks extracted
 
 ## Architecture Summary
 
-- **Source Corpus**: 11 operational runbooks (`data/corpus/barq_articles.json`) with realistic terminal commands, log paths, error codes, and version-specific mitigations.
+- **Source Corpus**: 11 service-desk runbooks (`data/corpus/barq_articles.json`) extracted from `BARQ_IT_Service_Desk_Manual_Ed5.1.pdf`, each with Symptom / Cause / Resolution / Escalation sections and numbered resolution steps. They are procedural prose aimed at a service desk — they do **not** contain terminal commands or log paths, and only KB0008 carries an error code (`RFC_ERROR_COMMUNICATION`). (#36)
 - **Chunking Pipeline**: `src/app/retrieval/chunking.py` implementing header-aware markdown splitting (Section 11.7 parameters: 700 chars, 120 overlap) producing exactly 45 bounded chunks.
 - **Hybrid Vector Store**: Qdrant collection `incident_knowledge_base` with 45 points, indexed payload fields (`category`, `service`, `workflow_state`, `version`, `security_level`, `article_id`, `article_number`), and deterministic idempotency.
 - **Ground Truth Evaluation**: `data/coverage_matrix.csv` with 13 benchmark scenarios for retrieval evaluation.

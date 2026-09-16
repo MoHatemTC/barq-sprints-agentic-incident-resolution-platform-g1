@@ -39,7 +39,10 @@ def ensure_collection(
     Configuration follows Qdrant Advisor recommendations:
     - Named dense vector: sized to the configured dense embedding model (default 384d,
       bge-small-en-v1.5), Cosine distance
-    - Named sparse vector: BM25 in-memory inverted index (on_disk=False, NO Modifier.IDF)
+    - Named sparse vector: BM25 in-memory inverted index (on_disk=False) with
+      ``Modifier.IDF``. fastembed's Bm25 model sets ``requires_idf=True`` and does not
+      fit IDF client-side, so Qdrant must supply it or rare tokens carry no more weight
+      than common ones (#44).
     - KEYWORD payload indexes on all 5 metadata fields + unique article identifiers.
 
     The dense dimension is derived from the embedding engine by the caller: a
@@ -68,6 +71,19 @@ def ensure_collection(
                 "Rebuild with `uv run python scripts/setup_qdrant.py --force-recreate` "
                 "or configure a model matching the collection dimension."
             )
+
+        # A collection created before #44 has modifier=None. BM25 scoring silently
+        # degrades rather than erroring, so check it the same way as the dimension.
+        sparse = info.config.params.sparse_vectors or {}
+        existing_sparse = sparse.get(SPARSE_VECTOR_NAME)
+        existing_modifier = getattr(existing_sparse, "modifier", None)
+        if existing_modifier != models.Modifier.IDF:
+            raise ValueError(
+                f"Collection '{name}' has sparse modifier {existing_modifier!r}, "
+                f"but BM25 requires {models.Modifier.IDF!r}. Without it, rare tokens "
+                "score no higher than common ones. Rebuild with "
+                "`uv run python scripts/setup_qdrant.py --force-recreate`."
+            )
     else:
         client.create_collection(
             collection_name=name,
@@ -80,7 +96,11 @@ def ensure_collection(
             sparse_vectors_config={
                 SPARSE_VECTOR_NAME: models.SparseVectorParams(
                     index=models.SparseIndexParams(on_disk=False),
-                    modifier=None,  # FastEmbed already applies client-side IDF
+                    # fastembed 0.8.0's Bm25 sets requires_idf=True and warns that the
+                    # model "is expected to be used with modifier='idf' in the sparse
+                    # vector index of Qdrant". It does not fit IDF over the corpus
+                    # client-side: every query token would otherwise weigh 1.0. See #44.
+                    modifier=models.Modifier.IDF,
                 ),
             },
         )

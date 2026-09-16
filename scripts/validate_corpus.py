@@ -3,12 +3,17 @@
 import csv
 from pathlib import Path
 
+from app.core.config import Settings
+from app.core.logging import configure_logging
 from app.retrieval.sources import LocalJSONSource
 
 CORPUS_PATH = Path("data/corpus/barq_articles.json")
 COVERAGE_PATH = Path("data/coverage_matrix.csv")
 
 VALID_SOURCES = {"manual", "synthetic"}
+
+settings = Settings()
+configure_logging(environment=settings.environment, log_level=settings.log_level)
 
 
 def main() -> None:
