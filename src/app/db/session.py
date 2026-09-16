@@ -1,4 +1,5 @@
 """Async SQLAlchemy engine and session construction without import-time I/O."""
+
 from __future__ import annotations
 
 from collections.abc import AsyncIterator

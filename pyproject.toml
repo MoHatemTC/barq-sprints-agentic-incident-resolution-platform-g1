@@ -78,6 +78,11 @@ indent-style = "space"
 testpaths = ["tests"]
 asyncio_mode = "auto"
 pythonpath = ["src"]
+# Integration tests need the docker stack (postgres, redis) which CI and fresh
+# clones don't have: deselect by default so `pytest` is green everywhere.
+# Run them explicitly with `just test-integration` (passes -m integration,
+# which overrides this filter).
+addopts = "-m 'not integration'"
 markers = [
     "integration: requires live docker services (redis, postgres); deselect with -m 'not integration'",
 ]

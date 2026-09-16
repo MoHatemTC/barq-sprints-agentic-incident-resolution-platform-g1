@@ -49,7 +49,6 @@ async def get_execution(
     return ExecutionResponse.model_validate(execution)
 
 
-
 @router.get(
     "/executions/{execution_id}/trace",
     response_model=TraceResponse,
@@ -77,7 +76,8 @@ async def get_execution_trace(
     return TraceResponse(
         execution_id=execution.execution_id,
         incident_sys_id=execution.incident_sys_id,
-        status=execution.status,
+        # execution.status is validated against the same set the Literal encodes
+        status=execution.status,  # type: ignore[arg-type]
         node_states=node_states,
     )
 

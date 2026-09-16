@@ -81,6 +81,8 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException) 
 
 def register_exception_handlers(app: FastAPI) -> None:
     """Register unified exception handlers on the FastAPI application."""
-    app.add_exception_handler(AgenticPlatformError, platform_error_handler)
-    app.add_exception_handler(RequestValidationError, validation_error_handler)
-    app.add_exception_handler(StarletteHTTPException, http_exception_handler)
+    # Starlette's expected handler signatures are narrower than the ones it
+    # actually supports at runtime; these registrations are correct.
+    app.add_exception_handler(AgenticPlatformError, platform_error_handler)  # type: ignore[arg-type]
+    app.add_exception_handler(RequestValidationError, validation_error_handler)  # type: ignore[arg-type]
+    app.add_exception_handler(StarletteHTTPException, http_exception_handler)  # type: ignore[arg-type]
