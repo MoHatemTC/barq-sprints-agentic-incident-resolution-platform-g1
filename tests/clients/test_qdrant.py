@@ -3,7 +3,7 @@
 from unittest.mock import MagicMock
 
 import pytest
-from qdrant_client import QdrantClient
+from qdrant_client import QdrantClient, models
 
 from app.clients.qdrant import (
     DENSE_VECTOR_NAME,
@@ -35,7 +35,9 @@ def test_qdrant_ensure_collection_in_memory() -> None:
     sparse_config = info.config.params.sparse_vectors
     assert isinstance(sparse_config, dict)
     assert SPARSE_VECTOR_NAME in sparse_config
-    assert sparse_config[SPARSE_VECTOR_NAME].modifier is None
+    # #44: fastembed's Bm25 sets requires_idf=True and does not fit IDF client-side,
+    # so Qdrant must apply it or every query token weighs 1.0.
+    assert sparse_config[SPARSE_VECTOR_NAME].modifier == models.Modifier.IDF
 
     # Idempotent call
     ensure_collection(client, collection_name, force_recreate=False)
@@ -77,3 +79,39 @@ def test_dimension_mismatch_raises_with_remedy() -> None:
     vectors_config = info.config.params.vectors
     assert isinstance(vectors_config, dict)
     assert vectors_config[DENSE_VECTOR_NAME].size == 768
+
+
+def test_ensure_collection_rejects_a_collection_without_the_idf_modifier() -> None:
+    """A pre-#44 collection has modifier=None and must not be reused silently.
+
+    BM25 without IDF degrades scoring rather than erroring, so the mismatch has to be
+    caught the same way a wrong dense dimension already is.
+    """
+    client = QdrantClient(":memory:")
+    name = "legacy_collection_without_idf"
+
+    client.create_collection(
+        collection_name=name,
+        vectors_config={
+            DENSE_VECTOR_NAME: models.VectorParams(
+                size=DENSE_VECTOR_SIZE,
+                distance=models.Distance.COSINE,
+            ),
+        },
+        sparse_vectors_config={
+            SPARSE_VECTOR_NAME: models.SparseVectorParams(
+                index=models.SparseIndexParams(on_disk=False),
+                modifier=None,
+            ),
+        },
+    )
+
+    with pytest.raises(ValueError, match="sparse modifier"):
+        ensure_collection(client, name)
+
+    # The remedy is named in the message, and it works.
+    ensure_collection(client, name, force_recreate=True)
+    info = client.get_collection(name)
+    sparse_config = info.config.params.sparse_vectors
+    assert isinstance(sparse_config, dict)
+    assert sparse_config[SPARSE_VECTOR_NAME].modifier == models.Modifier.IDF
