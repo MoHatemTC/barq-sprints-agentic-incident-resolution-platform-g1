@@ -112,6 +112,8 @@ services:
       --queues=${BARQ_EVENTS_QUEUE:-barq:incident:events}
       --concurrency=${WORKER_CONCURRENCY:-4}
       --loglevel=INFO
+    env_file:
+      - .env
     environment:
       REDIS_HOST: barq-redis
       REDIS_PORT: 6379
@@ -128,6 +130,7 @@ services:
       WORKER_SOFT_TIME_LIMIT: ${WORKER_SOFT_TIME_LIMIT:-120}
       WORKER_TIME_LIMIT: ${WORKER_TIME_LIMIT:-150}
       WORKER_REPO_BACKEND: ${WORKER_REPO_BACKEND:-postgres}
+      WEBHOOK_AUTH_TOKEN: ${WEBHOOK_AUTH_TOKEN:-integration-test-token}
     depends_on:
       redis:
         condition: service_healthy
