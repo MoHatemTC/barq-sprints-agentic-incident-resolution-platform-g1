@@ -119,17 +119,11 @@ The field is String(100) so the taxonomy could be refined without a schema chang
 
 `tests/models/test_classification_vocabulary.py` fails if the corpus grows a category with no mapping, if a label is neither mapped nor declared uncovered, or if a declared-uncovered label quietly gains coverage.
 
-### Cross-scope privileges (open — #56)
+### Cross-scope privileges (#56)
 
-The application is exported with `runtime_access_tracking=permissive` on `sys_app`, so the platform grants access to Global APIs automatically and records a `sys_scope_privilege` rather than refusing. The S1.1 export carries exactly one:
+The application runs with `runtime_access_tracking=enforcing`. It is set in the S1.2 security fixes update set and in `sdk-app/now.config.json`, so an unlisted Global API call is refused instead of being granted silently.
 
-| Record | Target | Operation | Status |
-|---|---|---|---|
-| `sys_scope_privilege_15358c08731fc7502aedfed25ab8b7c8` | `GlideRecordSecure.getValue` | `execute` | `allowed` |
-
-**No shipped S1.1 artifact requires it.** The export contains no server-side script: the only two scripts are the onChange and onSubmit Client Scripts in `confidence-validation.now.ts`, both of which use `g_form` exclusively and never touch `GlideRecordSecure`. The grant was therefore recorded by something run in the scope during authoring or testing, not by the deliverable.
-
-It should be deleted and the app re-exported, and tracking moved from Permissive to Enforcing. Both are changes on `dev434590` and are not yet done — this note records the finding, not a fix. The six further privileges on the S1.2 update set are @MohamedAbdelaiem's, tracked on the same issue.
+S1.1 keeps one privilege, `GlideRecordSecure.getValue` (`sys_scope_privilege_15358c08…`). Under Enforcing the platform requested it again for field access on `incident`, so it is needed. The full list of the app's privileges, each with the script that uses it, is in the S1.2 document (§2, Cross-Scope API Privileges). The six that no script used were removed there.
 
 ## Confirmed project decisions
 
