@@ -3,20 +3,10 @@ import { StringColumn, Table } from '@servicenow/sdk/core'
 /**
  * S1.4 scoped columns added to the global Knowledge (kb_knowledge) table.
  *
- * #90: these five columns existed only as a manual step in servicenow/README.md §2.
- * Nothing in the repository created them, so a clean PDI could not run KB publishing
- * until someone recreated them by hand from a table in a README — which contradicts the
- * Sprint 1 definition of done, "the application exports cleanly as an update set".
- *
- * Declared here the same way S1.1 augments the Incident table, so the columns ship with
- * the scoped application instead of being reproduced by hand. Every column name carries
- * the generated application prefix, which is what keeps them out of the Global scope
- * (see tests/repo/test_no_new_global_scope_in_exports.py and #48).
- *
- * Types and max lengths match servicenow/README.md §1 exactly. `src/app/publishing/
- * payload.py` writes these element names, and `ServiceNowProvisioner.ensure_schema`
- * checks they exist before publishing — tests/repo/test_kb_fields_match_publisher.py
- * asserts the three stay in step.
+ * Declared the same way S1.1 augments Incident, so the columns ship with the app. The
+ * application prefix keeps them out of the Global scope. Names and lengths must match
+ * servicenow/README.md and src/app/publishing/payload.py; see
+ * tests/repo/test_kb_fields_match_publisher.py.
  */
 export const kb_knowledge = Table({
     augments: 'kb_knowledge',

@@ -1,14 +1,7 @@
 """The five kb_knowledge columns must agree across all three places they appear.
 
-#90. These columns existed only as a manual step in servicenow/README.md §2 — nothing
-in the repository created them, so a clean PDI could not run KB publishing until
-someone recreated them by hand from a table in a README. They are now declared in the
-Fluent source and ship with the scoped application.
-
-That leaves three descriptions of the same schema: the Fluent source that creates the
-columns, the publisher that writes them, and the README that documents them. This test
-is what stops the three drifting, which is how the columns came to exist in only one of
-them in the first place.
+The Fluent source creates them, the publisher writes them and the README documents
+them; this test keeps the three in step.
 """
 
 from __future__ import annotations
@@ -57,8 +50,8 @@ def test_fluent_declares_exactly_the_publisher_fields() -> None:
         f"kb_knowledge columns disagree.\n"
         f"  declared in Fluent but unused by the publisher: {sorted(fluent - publisher)}\n"
         f"  written by the publisher but never created:     {sorted(publisher - fluent)}\n"
-        "A column the publisher writes but the app does not create is #90 all over "
-        "again: publishing fails on a clean PDI until someone adds it by hand."
+        "A column the publisher writes but the app does not create means publishing "
+        "fails on a clean PDI until someone adds it by hand."
     )
 
 
@@ -82,7 +75,7 @@ def test_readme_still_documents_every_column() -> None:
 
 
 def test_columns_carry_the_application_prefix() -> None:
-    """The prefix is what keeps these out of the Global scope (#48)."""
+    """The application prefix keeps these out of the Global scope."""
     for name in _fluent_columns():
         assert name.startswith("x_2215032_ai_inc_0_"), (
             f"{name!r} lacks the application prefix, so it would be created in Global "
