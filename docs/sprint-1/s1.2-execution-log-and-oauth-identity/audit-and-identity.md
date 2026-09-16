@@ -48,7 +48,7 @@ Task S1.2 delivers the foundational security, identity, and audit infrastructure
 
 #### Cross-Scope API Privileges
 
-The application runs with runtime access tracking set to **Enforcing**, so a script can only use a Global API that is listed here. Each privilege is used by a named script; anything else is refused at runtime.
+The application runs with runtime access tracking set to **Enforcing** (set in the security fixes update set, and in `sdk-app/now.config.json` so an SDK build or deploy keeps it), so a script can only use a Global API that is listed here. Each privilege is used by a named script; anything else is refused at runtime.
 
 | Privilege (`execute`) | Used by |
 |---|---|
