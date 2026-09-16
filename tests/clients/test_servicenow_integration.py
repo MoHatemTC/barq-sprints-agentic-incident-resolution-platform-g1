@@ -82,20 +82,9 @@ def test_sys_id(settings: LiveServiceNowTestSettings) -> str:
 
 @pytest.fixture
 def locked_test_sys_id() -> str:
-    """An incident with AI Human Lock already set to true.
+    """An incident with AI Human Lock set, from SERVICENOW_TEST_LOCKED_INCIDENT_SYS_ID.
 
-    This cannot be produced by the suite itself, and that is the security control
-    working: verified against dev407364 on 2026-09-16, a PATCH of
-    ``x_2215032_ai_inc_0_ai_human_lock`` as ``ai_orchestrator_svc`` returns HTTP 200
-    with the value still ``false`` - the ACL strips it. Per #69 the write ACL grants
-    ``itil`` and ``admin``, so a human has to set the flag.
-
-    Setup: open any incident in the PDI as an itil user, tick **AI Human Lock**, then
-    export SERVICENOW_TEST_LOCKED_INCIDENT_SYS_ID with that sys_id.
-
-    ``test_live_integration_identity_cannot_set_human_lock`` below covers the other
-    half of the control and needs no fixture, so the lock is not wholly untested while
-    this one is unset.
+    The integration identity cannot set the lock, so an itil user must tick it first.
     """
     sys_id = os.environ.get("SERVICENOW_TEST_LOCKED_INCIDENT_SYS_ID")
     if not sys_id:
@@ -195,11 +184,7 @@ async def test_live_execution_log_write_failure_safely_handled(
 
 
 async def _a_different_group_sys_id(client: ServiceNowClient, current: str) -> str:
-    """A real sys_user_group sys_id that is not the incident's current value.
-
-    A fabricated sys_id would be rejected as an invalid reference, which looks exactly
-    like an ACL refusal - the same fail-open shape this test exists to remove.
-    """
+    """A real sys_user_group sys_id other than ``current``, so the reference is valid."""
     groups = await client._request(
         "GET",
         "/api/now/table/sys_user_group",
@@ -233,17 +218,10 @@ async def test_live_forbidden_field_write_is_rejected(
 
     Uses ``assignment_group`` (the harness's DENY-03), not ``priority``. ServiceNow
     derives priority from impact and urgency, so a refused write and a value the
-    platform recalculated are indistinguishable - the test would pass either way.
+    platform recalculated are indistinguishable.
 
-    Verified against dev407364 on 2026-09-16: a PATCH of ``assignment_group`` as
-    ``ai_orchestrator_svc`` returns **HTTP 200 with the field silently stripped**, which
-    is how ServiceNow drops a write the ACL forbids. That is why the assertion is on the
-    stored value and not on the status code.
-
-    The write *sets* a value rather than clearing one. Clearing requires the field to
-    already be populated, and this identity cannot populate it - so that version skipped
-    on any incident it could actually create, which is no test at all. Setting works
-    from either starting state and never skips.
+    ServiceNow can answer 200 and silently drop the field, so the assertion is on the
+    stored value. The test sets a value rather than clearing one, so it never skips.
 
     Both outcomes prove the ACL held:
       * ``ServiceNowWriteRejectedError`` - the PATCH was accepted but did not persist.
@@ -293,20 +271,9 @@ async def test_live_human_lock_blocks_work_note(
 async def test_live_integration_identity_cannot_set_human_lock(
     client: ServiceNowClient, test_sys_id: str
 ) -> None:
-    """The integration identity must not be able to lift or set its own kill switch.
+    """The integration identity cannot set AI Human Lock (FR-06).
 
-    FR-06 and the S1.1 field model both say AI Human Lock is written by humans, never
-    by the integration user - otherwise the agent could unlock an incident a human
-    deliberately froze. The S1.2 export grants that write ACL to ``itil`` and ``admin``
-    only (#69).
-
-    Verified live against dev407364: the PATCH returns **HTTP 200 with the value still
-    ``false``**, so ServiceNow accepts the request and silently drops the field. That is
-    why this asserts on the stored value rather than the status code - a status-only
-    assertion would pass even if the write had landed.
-
-    This needs no locked-incident fixture, so it holds the lock control under test even
-    when SERVICENOW_TEST_LOCKED_INCIDENT_SYS_ID is unset.
+    ServiceNow answers 200 and drops the field, so the assertion is on the stored value.
     """
     field = "x_2215032_ai_inc_0_ai_human_lock"
 
