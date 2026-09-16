@@ -52,8 +52,10 @@ Retrieval and operational state are deliberately separate: Qdrant holds vectors 
 | `src/app/clients/` | Outbound integrations: `servicenow_client.py` (S1.5 Table API client) and `qdrant.py` (S1.4 vector store) |
 | `src/app/models/` | Pydantic domain models: `incident.py`, `execution_log.py`, `oauth.py`, `work_note.py` (S1.5) and `knowledge.py` (S1.4) |
 | `src/app/exceptions/` | Typed ServiceNow errors raised by the client (S1.5) |
+| `src/app/publishing/` | S1.4 ServiceNow KB publishing: `servicenow_kb.py` (idempotent upsert over OAuth), `payload.py`, `html.py`, `provisioning.py` |
 | `src/app/retrieval/` | S1.4 knowledge pipeline: `barq_manual.py`, `extraction.py`, `chunking.py`, `embedding.py`, `ingest.py`, `search.py`, `sources.py` |
 | `src/app/utils/` | Shared helpers, including timezone handling for ServiceNow datetimes |
+| `src/retrieval/` | Re-export shim onto `src/app/retrieval/`. Kept for import paths predating the `app` package; no logic of its own |
 | `src/app/repositories/` | Persistence layer — Sprint 2 |
 | `src/app/services/` | Business logic and orchestration — Sprint 2 |
 | `src/app/core/constants.py`, `core/logging.py` | Placeholders, not yet imported anywhere |
@@ -63,7 +65,9 @@ Retrieval and operational state are deliberately separate: Qdrant holds vectors 
 | `servicenow/ai_incident_orchestrator/` | Scoped ServiceNow application: exported update-set XML plus the SDK source it was built from |
 | `docs/` | Sprint deliverables, field dictionary, verification records, screenshots |
 | `docker-compose.yml` | Qdrant, PostgreSQL and Redis. Ports bind to `127.0.0.1` by default |
+| `justfile` | Task shortcuts for the common lint / type-check / test loop |
 | `.github/workflows/ci.yml` | Lint, format check, type-check and tests on every PR |
+| `.github/workflows/servicenow-sdk.yml` | Builds the scoped app with `--frozenKeys`, runs the S1.3 eligibility tests, and checks the build still reproduces the exported update set (#54, #99) |
 | `.github/workflows/codeql.yml` | Weekly and per-PR security scanning of Python and the hand-written ServiceNow JavaScript/TypeScript; generated SDK output is excluded |
 | `.github/workflows/labeler.yml`, `.github/labeler.yml` | Auto-labels PRs by which task's paths they touch |
 | `TEAM.md` | Who owns which task, and the other project roles |
