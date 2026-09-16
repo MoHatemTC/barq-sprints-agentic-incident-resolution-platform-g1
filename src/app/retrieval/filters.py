@@ -39,7 +39,7 @@ def _match_condition(key: str, value: str | list[str]) -> FieldCondition:
 
 
 def build_metadata_filter(
-    metadataFilterBuilder: MetadataFilterBuilder,
+    metadataFilterBuilder: MetadataFilterBuilder | None = None,
     extra: Filter | None = None,
 ) -> Filter:
     states = metadataFilterBuilder.worflow_state or [WorkflowState.PUBLISHED]

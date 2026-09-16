@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
-from time import time
 
 import structlog
 from pydantic import BaseModel, ConfigDict, ValidationError
@@ -116,7 +116,7 @@ def timed_hybrid_search(
     metadata: MetadataFilterBuilder | None = None,
     extra_filter: Filter | None = None,
     engine: EmbeddingEngine | None = None,
-    mode: RetrievalMode = RetrievalMode.HYBRID_RERANKED,
+    mode: RetrievalMode | None = None,
 ):
     """
     Same as hybrid_search() but returns a SearchResult with latency_ms and mode.
