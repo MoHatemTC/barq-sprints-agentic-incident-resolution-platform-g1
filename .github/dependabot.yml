@@ -14,12 +14,7 @@ updates:
       interval: "weekly"
     commit-message:
       prefix: "chore(ci)"
-    # codeql-action/init and codeql-action/analyze are pinned to the SAME commit SHA
-    # in codeql.yml and must move together: CodeQL refuses to analyze a database
-    # initialised by a different major. Ungrouped, Dependabot split the 3.38.0 ->
-    # 4.38.0 bump into #107 (init) and #109 (analyze), and BOTH failed, because
-    # merging either alone leaves the pair mismatched. Neither was individually
-    # mergeable. Grouping makes the coupled upgrade arrive as one reviewable PR.
+    # codeql-action/init and /analyze share one SHA and must be bumped together.
     groups:
       codeql:
         patterns:
@@ -35,20 +30,7 @@ updates:
     commit-message:
       prefix: "chore(deps-sdk)"
     ignore:
-      # #54: the SDK build is the authoritative reproduction of the exported update
-      # set. 4.11.2+ marks all five processing-state choice sys_ids deleted in
-      # generated/keys.ts and mints replacements that differ on every build, so a
-      # runbook deploy would replace the choices on the instance. It also blanks
-      # max_length on 7 of the 13 S1.1 fields. 4.8.0 is the version verified to
-      # reproduce the export byte-for-byte, and servicenow-sdk.yml enforces that
-      # with --frozenKeys plus check_build_matches_export.py.
-      #
-      # Dependabot proposed 4.12.1 as #105; its build failed, exactly as designed.
-      # Ignoring the major stops that PR returning every week. The four high
-      # advisories npm wanted to fix with it are already resolved by the
-      # "overrides" block in package.json, and npm audit --audit-level=high runs
-      # in CI, so nothing is left unwatched by this.
-      #
-      # Remove this entry when an SDK release is verified to reproduce the export.
+      # The SDK is pinned to 4.8.0, the version that rebuilds the exported update set
+      # exactly (see #54). Remove this once a newer release is verified to do the same.
       - dependency-name: "@servicenow/sdk"
         update-types: ["version-update:semver-major"]
