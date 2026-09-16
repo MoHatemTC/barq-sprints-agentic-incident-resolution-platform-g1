@@ -1,3 +1,4 @@
+import re
 import time
 from typing import Any
 
@@ -33,6 +34,12 @@ from app.utils.servicenow import parse_retry_after, values_equal
 
 logger = structlog.getLogger(__name__)
 
+# fullmatch, not match, is what enforces this at the call site below. In a regex "$"
+# also matches immediately before a trailing newline, so `re.match` accepts
+# "INC0010001\n" and the newline is carried into sysparm_query. The anchors are kept
+# so the intent stays readable even though fullmatch makes them redundant.
+_INCIDENT_NUMBER_RE = re.compile(r"^[A-Z]+[0-9]+$")
+
 
 class ServiceNowClient:
     def __init__(
@@ -62,6 +69,9 @@ class ServiceNowClient:
         return Incident.model_validate(result)
 
     async def find_incident_by_number(self, number: str) -> Incident | None:
+        if not _INCIDENT_NUMBER_RE.fullmatch(number):
+            raise ValueError(f"Invalid incident number format: {number!r}")
+
         result = await self._request(
             "GET",
             "/api/now/table/incident",
@@ -211,17 +221,22 @@ class ServiceNowClient:
                 json=json,
                 timeout=self._settings.servicenow_timeout_seconds,
             )
-        except httpx.TimeoutException as exc:
+        # "from None", not "from exc", for the same reason as the token manager: the
+        # frame these are raised from holds `headers`, which carries the bearer token.
+        # Chaining the httpx error keeps that frame in the traceback, so pytest's
+        # --showlocals or a rich traceback would print the token. The transport error
+        # carries no diagnostic the message below does not already give.
+        except httpx.TimeoutException:
             raise ServiceNowTimeoutError(
                 f"Timed out requesting {method} {url} after "
                 f"{self._settings.servicenow_timeout_seconds} seconds"
-            ) from exc
-        except httpx.ConnectError as exc:
-            raise ServiceNowConnectionError(f"Failed to connect to {url}: {exc}") from exc
-        except httpx.TransportError as exc:
+            ) from None
+        except httpx.ConnectError:
+            raise ServiceNowConnectionError(f"Failed to connect to {url}") from None
+        except httpx.TransportError:
             raise ServiceNowConnectionError(
                 f"Transport error while requesting {method} {url}"
-            ) from exc
+            ) from None
 
         if response.status_code == status.HTTP_401_UNAUTHORIZED and _retry_on_auth_failure:
             logger.warning(
