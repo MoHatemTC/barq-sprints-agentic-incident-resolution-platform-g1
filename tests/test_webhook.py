@@ -4,7 +4,6 @@ from uuid import uuid4
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from app.db.redis.keys import INCIDENT_EVENTS_QUEUE
 from app.main import create_app
 from app.repositories.idempotency import EventAcceptanceResult, EventAcceptanceStatus
 from tests.helpers import mock_settings
@@ -140,16 +139,20 @@ async def test_webhook_rejects_unknown_contract_version(app_with_mocks) -> None:
 
 @pytest.mark.asyncio
 async def test_webhook_accepts_valid_new_event(app_with_mocks) -> None:
-    app, session_factory, mock_redis = app_with_mocks
+    app, session_factory, _ = app_with_mocks
 
+    execution_id = uuid4()
     acceptance_res = EventAcceptanceResult(
         status=EventAcceptanceStatus.ACCEPTED,
         event_id=VALID_EVENT_ID,
         event_record_id=uuid4(),
-        execution_id=uuid4(),
+        execution_id=execution_id,
     )
 
-    with patch("api.routers.webhook.accept_inbound_event", new_callable=AsyncMock) as mock_accept:
+    with (
+        patch("api.routers.webhook.accept_inbound_event", new_callable=AsyncMock) as mock_accept,
+        patch("api.routers.webhook.send_incident_event") as mock_producer,
+    ):
         mock_accept.return_value = acceptance_res
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -167,22 +170,25 @@ async def test_webhook_accepts_valid_new_event(app_with_mocks) -> None:
         assert "correlation_id" in body
 
         mock_accept.assert_awaited_once()
-        mock_redis.lpush.assert_awaited_once()
-        call_args = mock_redis.lpush.call_args[0]
-        assert call_args[0] == INCIDENT_EVENTS_QUEUE
-        assert VALID_EVENT_ID in call_args[1]
+        mock_producer.assert_called_once()
+        call_args = mock_producer.call_args[0]
+        assert call_args[0] == {**VALID_PAYLOAD, "contract_version": "v1"}
+        assert call_args[1] == str(execution_id)
 
 
 @pytest.mark.asyncio
-async def test_webhook_idempotency_duplicate_skips_redis_enqueue(app_with_mocks) -> None:
-    app, session_factory, mock_redis = app_with_mocks
+async def test_webhook_idempotency_duplicate_skips_enqueue(app_with_mocks) -> None:
+    app, session_factory, _ = app_with_mocks
 
     duplicate_res = EventAcceptanceResult(
         status=EventAcceptanceStatus.DUPLICATE,
         event_id=VALID_EVENT_ID,
     )
 
-    with patch("api.routers.webhook.accept_inbound_event", new_callable=AsyncMock) as mock_accept:
+    with (
+        patch("api.routers.webhook.accept_inbound_event", new_callable=AsyncMock) as mock_accept,
+        patch("api.routers.webhook.send_incident_event") as mock_producer,
+    ):
         mock_accept.return_value = duplicate_res
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -199,8 +205,8 @@ async def test_webhook_idempotency_duplicate_skips_redis_enqueue(app_with_mocks)
         assert body["idempotent_replay"] is True
 
         mock_accept.assert_awaited_once()
-        # Redis enqueue MUST be skipped for duplicate replay
-        mock_redis.lpush.assert_not_called()
+        # Enqueue MUST be skipped for duplicate replay
+        mock_producer.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -223,9 +229,8 @@ async def test_webhook_returns_503_on_db_failure(app_with_mocks) -> None:
 
 
 @pytest.mark.asyncio
-async def test_webhook_returns_503_on_redis_enqueue_failure(app_with_mocks) -> None:
-    app, _, mock_redis = app_with_mocks
-    mock_redis.lpush.side_effect = RuntimeError("Redis connection broken")
+async def test_webhook_returns_503_on_enqueue_failure(app_with_mocks) -> None:
+    app, _, _ = app_with_mocks
 
     acceptance_res = EventAcceptanceResult(
         status=EventAcceptanceStatus.ACCEPTED,
@@ -234,7 +239,10 @@ async def test_webhook_returns_503_on_redis_enqueue_failure(app_with_mocks) -> N
         execution_id=uuid4(),
     )
 
-    with patch("api.routers.webhook.accept_inbound_event", new_callable=AsyncMock) as mock_accept:
+    with (
+        patch("api.routers.webhook.accept_inbound_event", new_callable=AsyncMock) as mock_accept,
+        patch("api.routers.webhook.send_incident_event", side_effect=RuntimeError("broker down")),
+    ):
         mock_accept.return_value = acceptance_res
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
