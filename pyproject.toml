@@ -8,6 +8,7 @@ requires-python = ">=3.12"
 dependencies = [
     # Imported directly by src/app/retrieval/extraction.py. It arrived only as a
     # markdownify transitive before, so a markdownify change could have broken imports.
+    "asyncpg>=0.29.0",
     "beautifulsoup4>=4.12.3",
     "fastapi>=0.141.1",
     "fastembed>=0.8.0",
@@ -18,6 +19,7 @@ dependencies = [
     "pydantic-settings>=2.15.0",
     "python-dotenv>=1.2.3",
     "qdrant-client>=1.14,<1.15",
+    "redis>=5.0.0",
     "structlog>=26.1.0",
     "uvicorn[standard]>=0.52.4",
 ]
