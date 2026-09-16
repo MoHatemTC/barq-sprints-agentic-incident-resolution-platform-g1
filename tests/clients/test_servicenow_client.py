@@ -6,6 +6,8 @@ from unittest.mock import AsyncMock, patch
 
 import httpx
 import pytest
+import structlog
+import structlog.testing
 
 from app.auth.token_manager import ServiceNowTokenManager
 from app.clients.servicenow_client import ServiceNowClient
@@ -718,12 +720,28 @@ class TestWriteExecutionLog:
         assert entry.execution_id == eid
 
     async def test_token_not_in_log_post_error(self) -> None:
-        """Bearer token must not appear in error details on log POST failure."""
+        """Bearer token must not appear in logs or error details on log POST failure.
+
+        #74: this asserted only `entry is None` and never looked for the token, so the
+        name promised credential safety the body did not check. It now captures
+        structlog output and inspects every rendered event, and the swallowed
+        exception's own text, for the sentinel.
+        """
+        secret = "super_secret_token"  # noqa: S105 - deliberate sentinel
         resp = _api_response(status_code=404, result=None, text="Not found")
-        client, http, token_mgr = _build_client(token="super_secret_token", responses=[resp])
-        # The 404 raises inside _request, caught by write_execution_log
-        entry = await client.write_execution_log(_log_payload())
+        client, http, token_mgr = _build_client(token=secret, responses=[resp])
+
+        with structlog.testing.capture_logs() as captured:
+            entry = await client.write_execution_log(_log_payload())
+
         assert entry is None
+        assert captured, "the failure path must log something, or this proves nothing"
+
+        rendered = repr(captured)
+        assert secret not in rendered, f"bearer token leaked into structlog output: {rendered}"
+        for event in captured:
+            for key, value in event.items():
+                assert secret not in str(value), f"token leaked in log field {key!r}"
 
     async def test_write_log_handles_realistic_servicenow_reference_response(
         self,
@@ -1082,3 +1100,75 @@ class TestTransportErrorsDoNotChainTheBearerToken:
         assert err.__suppress_context__ is True
         assert secret not in str(err)
         assert secret not in repr(err)
+
+
+class TestCrossWriteTimingAndParseErrors:
+    """#67: two contract gaps in the read/update paths."""
+
+    @pytest.mark.asyncio
+    async def test_end_before_stored_start_is_refused_without_patching(self) -> None:
+        """The real lifecycle writes start and end in separate updates.
+
+        IncidentUpdatePayload only compares them inside one payload, so the check never
+        fired in practice: a PATCH setting processing_end before the stored
+        processing_start went straight through and left a negative duration in the
+        timing evidence the execution log is audited on.
+        """
+        stored = _incident_result()
+        stored["x_2215032_ai_inc_0_ai_processing_start"] = "2026-09-16 12:00:00"
+        stored["x_2215032_ai_inc_0_ai_human_lock"] = "false"
+        client, http, _ = _build_client(responses=[_api_response(result=stored)])
+
+        payload = IncidentUpdatePayload(
+            ai_processing_end=datetime(2026, 9, 16, 11, 0, tzinfo=UTC),  # an hour early
+        )
+
+        with pytest.raises(ServiceNowValidationError) as exc_info:
+            await client.update_incident("abc", payload)
+
+        assert "precedes the stored" in str(exc_info.value)
+        # One GET for the lock check, and no PATCH.
+        assert http.request.call_count == 1
+        assert http.request.call_args.args[0] == "GET"
+
+    @pytest.mark.asyncio
+    async def test_end_after_stored_start_still_writes(self) -> None:
+        """Regression guard: a legitimate end time is not blocked."""
+        stored = _incident_result()
+        stored["x_2215032_ai_inc_0_ai_processing_start"] = "2026-09-16 12:00:00"
+        stored["x_2215032_ai_inc_0_ai_human_lock"] = "false"
+        written = dict(stored)
+        written["x_2215032_ai_inc_0_ai_processing_end"] = "2026-09-16 13:00:00"
+        client, http, _ = _build_client(
+            responses=[_api_response(result=stored), _api_response(result=written)]
+        )
+
+        await client.update_incident(
+            "abc", IncidentUpdatePayload(ai_processing_end=datetime(2026, 9, 16, 13, 0, tzinfo=UTC))
+        )
+
+        assert http.request.call_count == 2  # GET then PATCH
+
+    @pytest.mark.asyncio
+    async def test_unparseable_record_raises_servicenow_error_not_validation_error(
+        self,
+    ) -> None:
+        """A Sprint 2 caller catching ServiceNowError must not crash on a bad record.
+
+        A stored ai_processing_state the enum does not know raised pydantic's
+        ValidationError, which is not a ServiceNowError subclass, so a caller following
+        this client's contract crashed instead of routing the incident to failure
+        handling.
+        """
+        bad = _incident_result()
+        bad["x_2215032_ai_inc_0_ai_processing_state"] = "a_state_the_enum_does_not_know"
+        client, _, _ = _build_client(responses=[_api_response(result=bad)])
+
+        with pytest.raises(ServiceNowError) as exc_info:
+            await client.get_incident("abc")
+
+        assert isinstance(exc_info.value, ServiceNowValidationError)
+        assert exc_info.value.details["sys_id"] == "abc"
+        assert exc_info.value.details["errors"], "the underlying errors must be retained"
+        # The chain is severed so a traceback cannot walk back into the request frame.
+        assert exc_info.value.__cause__ is None
