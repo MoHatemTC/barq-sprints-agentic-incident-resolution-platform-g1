@@ -1,4 +1,4 @@
-"""Pydantic V2 schemas for Human-in-the-Loop (HITL) approval governance endpoints."""
+"""Pydantic V2 schemas matching the PostgreSQL operational-state Approval model."""
 
 from __future__ import annotations
 
@@ -8,51 +8,46 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-ApprovalStatus = Literal["pending", "approved", "rejected"]
-ApprovalDecision = Literal["approved", "rejected"]
+ApprovalDecision = Literal["approved", "rejected", "cancelled", "expired"]
 
 
 class ApprovalResponse(BaseModel):
-    """Schema representing a HITL approval request record."""
+    """Schema representing an approval record from the 'approvals' table."""
 
-    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+    model_config = ConfigDict(extra="forbid", validate_assignment=True, from_attributes=True)
 
-    approval_id: UUID | str = Field(
+    id: UUID = Field(
         ...,
-        description="Unique approval request identifier",
+        description="Primary key from approvals.id",
     )
-    execution_id: UUID | str = Field(
+    execution_id: UUID = Field(
         ...,
-        description="Associated execution identifier",
+        description="Foreign key to executions.execution_id",
     )
-    incident_sys_id: str = Field(
-        ...,
-        pattern=r"^[0-9a-fA-F]{32}$",
-        description="ServiceNow incident 32-character hexadecimal sys_id",
-    )
-    action_type: str = Field(
-        ...,
-        description="Type of proposed remediation action requiring approval",
-    )
-    proposed_payload: dict[str, Any] = Field(
-        ...,
-        description="Parameters and arguments for the proposed action",
-    )
-    status: ApprovalStatus = Field(
-        default="pending",
-        description="Current approval status: pending, approved, or rejected",
-    )
-    requested_at: datetime = Field(
-        ...,
-        description="Timestamp when approval was requested by the agent",
-    )
-    decided_at: datetime | None = Field(
+    workflow_state_id: UUID | None = Field(
         default=None,
-        description="Timestamp when human operator decided the approval",
+        description="Foreign key to workflow_state.id if associated with a specific node",
     )
-    decided_by: str | None = Field(
+    decision: ApprovalDecision = Field(
+        ...,
+        description="Decision outcome matching approvals.decision constraint",
+    )
+    decided_by: str = Field(
+        ...,
+        max_length=255,
+        description="Identity of the operator or automated service that decided",
+    )
+    reason: str | None = Field(
         default=None,
-        description="Identifier of operator or user who submitted the decision",
+        description="Operator justification or explanation text",
+    )
+    evidence: dict[str, Any] | None = Field(
+        default=None,
+        description="Structured context or parameters evaluated during decision",
+    )
+    decided_at: datetime = Field(
+        ...,
+        description="Timestamp when the decision was finalized",
     )
 
 
@@ -63,14 +58,19 @@ class ApprovalDecisionRequest(BaseModel):
 
     decision: ApprovalDecision = Field(
         ...,
-        description="Operator decision: 'approved' or 'rejected'",
-    )
-    comment: str | None = Field(
-        default=None,
-        description="Optional justification, feedback, or remediation note",
+        description="Decision: 'approved', 'rejected', 'cancelled', or 'expired'",
     )
     decided_by: str = Field(
         ...,
+        max_length=255,
         min_length=1,
-        description="Operator identifier submitting this decision",
+        description="Identity of the deciding operator",
+    )
+    reason: str | None = Field(
+        default=None,
+        description="Optional justification, feedback, or remediation note",
+    )
+    evidence: dict[str, Any] | None = Field(
+        default=None,
+        description="Optional structured evidence or parameter overrides",
     )

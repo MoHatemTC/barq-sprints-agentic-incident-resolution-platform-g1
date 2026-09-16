@@ -23,6 +23,14 @@ ERROR_STATUS_MAP: dict[type[AgenticPlatformError], int] = {
     NotImplementedStubError: 501,
 }
 
+# RBAC Roles
+ROLE_OPERATOR = "operator"
+ROLE_ADMIN = "admin"
+ROLE_USER = "user"
+
 __all__ = [
     "ERROR_STATUS_MAP",
+    "ROLE_ADMIN",
+    "ROLE_OPERATOR",
+    "ROLE_USER",
 ]

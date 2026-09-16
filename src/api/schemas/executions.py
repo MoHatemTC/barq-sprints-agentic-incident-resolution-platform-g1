@@ -1,4 +1,4 @@
-"""Pydantic V2 schemas for execution audit and trace queries across Sprints 2–4."""
+"""Pydantic V2 schemas matching the PostgreSQL operational-state models (Execution, ExecutionNodeState)."""
 
 from __future__ import annotations
 
@@ -8,111 +8,173 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+# Exact check constraint on executions.status in models.py
 ExecutionStatus = Literal[
     "accepted",
-    "in_progress",
+    "queued",
+    "running",
+    "awaiting_approval",
     "succeeded",
     "failed",
     "blocked",
     "abandoned",
 ]
 
+# Exact check constraint on workflow_state.status in models.py
+NodeStateStatus = Literal[
+    "started",
+    "succeeded",
+    "failed",
+    "blocked",
+    "awaiting_approval",
+    "skipped",
+]
+
 
 class ExecutionResponse(BaseModel):
-    """Execution status and audit record response schema."""
+    """Schema representing an execution record from the 'executions' table."""
 
-    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+    model_config = ConfigDict(extra="forbid", validate_assignment=True, from_attributes=True)
 
-    execution_id: UUID | str = Field(
+    execution_id: UUID = Field(
         ...,
-        description="Unique execution identifier",
+        description="Primary key from executions.execution_id",
+    )
+    event_record_id: UUID = Field(
+        ...,
+        description="Foreign key to events.id",
     )
     incident_sys_id: str = Field(
         ...,
-        pattern=r"^[0-9a-fA-F]{32}$",
-        description="ServiceNow incident 32-character hexadecimal sys_id",
+        max_length=32,
+        description="ServiceNow incident 32-character sys_id",
     )
     status: ExecutionStatus = Field(
         ...,
-        description="Current execution lifecycle status",
+        description="Execution lifecycle status matching executions.status constraint",
     )
-    contract_version: str = Field(
-        default="v1",
-        description="Contract version of the execution payload",
+    node_reached: str | None = Field(
+        default=None,
+        max_length=100,
+        description="Latest workflow node entered",
     )
-    created_at: datetime = Field(
+    model_name: str | None = Field(
+        default=None,
+        max_length=100,
+        description="LLM model identifier used for this execution",
+    )
+    agent_version: str | None = Field(
+        default=None,
+        max_length=64,
+        description="Version string of the executing agent",
+    )
+    started_at: datetime = Field(
         ...,
-        description="Timestamp when execution record was accepted",
+        description="Timestamp when execution started",
+    )
+    ended_at: datetime | None = Field(
+        default=None,
+        description="Timestamp when execution reached a terminal state",
+    )
+    termination_cause: str | None = Field(
+        default=None,
+        description="Explanation when execution reached terminal status",
     )
     updated_at: datetime = Field(
         ...,
-        description="Timestamp when execution status was last updated",
-    )
-    retry_count: int = Field(
-        default=0,
-        ge=0,
-        description="Number of retries attempted for this execution",
+        description="Timestamp when execution record was last modified",
     )
 
 
-class TraceStep(BaseModel):
-    """Single node execution step within an agent trace."""
+class ExecutionNodeStateResponse(BaseModel):
+    """Schema representing one node attempt from the 'workflow_state' table."""
 
-    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+    model_config = ConfigDict(extra="forbid", validate_assignment=True, from_attributes=True)
 
-    step_name: str = Field(
+    id: UUID = Field(
         ...,
-        description="Name of the trace step or LangGraph agent node",
+        description="Primary key of workflow_state record",
     )
-    status: str = Field(
+    execution_id: UUID = Field(
         ...,
-        description="Outcome of the step (e.g. started, succeeded, failed)",
+        description="Foreign key to executions.execution_id",
     )
-    duration_ms: float = Field(
+    sequence_number: int = Field(
         ...,
-        ge=0.0,
-        description="Elapsed execution time in milliseconds",
+        ge=1,
+        description="Sequence order of the node attempt (>= 1)",
     )
-    timestamp: datetime = Field(
+    node_name: str = Field(
         ...,
-        description="Timestamp when this step executed",
+        max_length=100,
+        description="Name of the workflow node",
     )
-    details: dict[str, Any] = Field(
-        default_factory=dict,
-        description="Structured step metadata, inputs, or node outputs",
+    attempt: int = Field(
+        default=1,
+        ge=1,
+        description="Attempt count for this specific node (>= 1)",
+    )
+    status: NodeStateStatus = Field(
+        ...,
+        description="Node state status matching workflow_state.status constraint",
+    )
+    started_at: datetime = Field(
+        ...,
+        description="Timestamp when node attempt started",
+    )
+    ended_at: datetime | None = Field(
+        default=None,
+        description="Timestamp when node attempt concluded",
+    )
+    evidence: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="Evidence array gathered during this node execution",
+    )
+    decision: dict[str, Any] | None = Field(
+        default=None,
+        description="Node decision payload if applicable",
+    )
+    state_snapshot: dict[str, Any] | None = Field(
+        default=None,
+        description="State snapshot object if captured",
     )
 
 
 class TraceResponse(BaseModel):
-    """Complete execution trace details and step progression."""
+    """Execution trace progression combining execution status and workflow node states."""
 
-    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+    model_config = ConfigDict(extra="forbid", validate_assignment=True, from_attributes=True)
 
-    execution_id: UUID | str = Field(
+    execution_id: UUID = Field(
         ...,
         description="Unique execution identifier",
     )
-    trace_id: str = Field(
+    incident_sys_id: str = Field(
         ...,
-        description="Distributed trace identifier (e.g. Langfuse / OpenTelemetry)",
+        max_length=32,
+        description="ServiceNow incident sys_id",
     )
-    steps: list[TraceStep] = Field(
+    status: ExecutionStatus = Field(
+        ...,
+        description="Current execution status",
+    )
+    node_states: list[ExecutionNodeStateResponse] = Field(
         default_factory=list,
-        description="Sequential list of executed agent trace steps",
+        description="Ordered list of historical workflow node attempts from workflow_state",
     )
 
 
 class IncidentExecutionsResponse(BaseModel):
-    """Collection of all execution records for a specific ServiceNow incident."""
+    """Collection of execution records for a specific ServiceNow incident."""
 
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
     incident_sys_id: str = Field(
         ...,
-        pattern=r"^[0-9a-fA-F]{32}$",
-        description="ServiceNow incident 32-character hexadecimal sys_id",
+        max_length=32,
+        description="ServiceNow incident 32-character sys_id",
     )
     executions: list[ExecutionResponse] = Field(
         default_factory=list,
-        description="List of all executions triggered for this incident",
+        description="List of executions associated with this incident",
     )
