@@ -743,10 +743,7 @@ def _test_log_delete_forbidden(
         f"{TABLE_API_BASE}/{SCOPED_LOG_TABLE}/{temp_id}", headers=hdrs, timeout=10.0
     )
 
-    # #46: the verdict was `del_resp.status_code in (403, 404) or record_exists`, so a
-    # 404 on the DELETE counted as "blocked" - but a 404 is exactly what a *successful*
-    # delete looks like on a follow-up, and says nothing about the ACL. The only
-    # evidence that the delete was refused is that the record is still there.
+    # The delete was refused only if the record is still there; the status alone proves nothing.
     if verify.status_code not in (200, 404):
         return TestResult(
             test_id="LOG-05",
@@ -934,12 +931,8 @@ def _forbidden_scalar(
     if not readable:
         return _unreadable("after", status)
 
-    # #46: this was `after == value and after != before`, which required the stored
-    # value to equal exactly what was sent. A reference field never satisfies that:
-    # DENY-02 writes the string "admin" to assigned_to, which reads back as a sys_id,
-    # so `changed` was always False and the test passed even when the write landed.
-    # Any difference from the value read before the PATCH means the write persisted,
-    # whatever the platform stored.
+    # Any change from the prior value means the write persisted. Reference fields read
+    # back as a sys_id, not the value sent.
     changed = after != before
     blocked = patch_r.status_code in (401, 403) or not changed
 

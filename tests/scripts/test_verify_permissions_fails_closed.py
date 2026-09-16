@@ -169,13 +169,7 @@ def test_journal_genuinely_blocked_still_passes() -> None:
 
 
 def test_scalar_reference_field_change_is_detected() -> None:
-    """#46: DENY-02 writes "admin" to assigned_to, which stores a sys_id.
-
-    The verdict used to require ``after == value``. A reference field can never
-    satisfy that, so the write landing looked exactly like the write being refused,
-    and DENY-02 could not fail under any circumstances. The evidence that matters is
-    that the stored value changed at all.
-    """
+    """A changed reference field is a FAIL even though it reads back as a sys_id."""
     module = _load_module()
     reads = iter(["", "6816f79cc0a8016401c5a33be04be441"])
 
@@ -193,7 +187,7 @@ def test_scalar_reference_field_change_is_detected() -> None:
 
 
 def test_scalar_unchanged_reference_field_still_passes() -> None:
-    """Regression guard: a genuinely refused write is still a PASS."""
+    """A refused write is a PASS."""
     module = _load_module()
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -238,7 +232,7 @@ def test_log_delete_that_removed_the_record_is_a_failure() -> None:
 
 
 def test_log_delete_refused_with_record_present_passes() -> None:
-    """Regression guard: 403 with the record still there is the real blocked case."""
+    """A 403 with the record still present is a PASS."""
     module = _load_module()
 
     with _client(_log_handler(delete_status=403, verify_status=200)) as client:
