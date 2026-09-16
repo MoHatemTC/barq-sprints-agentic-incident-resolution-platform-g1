@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+
 from qdrant_client.models import Condition, FieldCondition, Filter, MatchAny, MatchValue
 
 from app.models.knowledge import SecurityLevel, WorkflowState
@@ -15,10 +19,11 @@ DEFAULT_WORKFLOW_STATES: tuple[WorkflowState, ...] = (WorkflowState.PUBLISHED,)
 StrOrList = str | list[str] | None
 
 
+@dataclass
 class MetadataFilterBuilder:
     category: StrOrList | None = None
     service: StrOrList | None = None
-    worflow_state: list[WorkflowState]
+    workflow_state: list[WorkflowState]
     version: StrOrList | None = None
     max_security_level: SecurityLevel = DEFAULT_MAX_SECURITY_LEVEL
 
@@ -39,30 +44,32 @@ def _match_condition(key: str, value: str | list[str]) -> FieldCondition:
 
 
 def build_metadata_filter(
-    metadataFilterBuilder: MetadataFilterBuilder | None = None,
+    metadata: MetadataFilterBuilder | None = None,
     extra: Filter | None = None,
 ) -> Filter:
-    states = metadataFilterBuilder.worflow_state or [WorkflowState.PUBLISHED]
+    metadata = metadata or MetadataFilterBuilder()
+
+    states = metadata.worflow_state or [WorkflowState.PUBLISHED]
     if not states:
         raise ValueError("workflow_states must not be an empty list")
 
     mandatory: list[Condition] = [
         FieldCondition(
             key="workflow_state",
-            match=MatchValue(value="published"),
+            match=MatchAny(any=[state.value for state in states]),
         ),
         FieldCondition(
             key="security_level",
-            match=MatchAny(any=_allowed_security_levels(metadataFilterBuilder.max_security_level)),
+            match=MatchAny(any=_allowed_security_levels(metadata.max_security_level)),
         ),
     ]
 
-    if metadataFilterBuilder.category is not None:
-        mandatory.append(_match_condition("category", metadataFilterBuilder.category))
-    if metadataFilterBuilder.service is not None:
-        mandatory.append(_match_condition("service", metadataFilterBuilder.service))
-    if metadataFilterBuilder.version is not None:
-        mandatory.append(_match_condition("version", metadataFilterBuilder.version))
+    if metadata.category is not None:
+        mandatory.append(_match_condition("category", metadata.category))
+    if metadata.service is not None:
+        mandatory.append(_match_condition("service", metadata.service))
+    if metadata.version is not None:
+        mandatory.append(_match_condition("version", metadata.version))
 
     if extra is None:
         return Filter(must=mandatory)
