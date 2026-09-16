@@ -115,6 +115,15 @@ jobs:
           fi
           echo "Working tree clean after build."
 
+      # #99: these 26 tests are the only coverage of S1.3's eligibility and retry
+      # logic — the re-fire guard, the retry cap and the whitespace-endpoint check.
+      # Nothing ran them, so a change reintroducing any of those would have merged
+      # with every check green. They read the build output under dist/app/update,
+      # so they have to come after the build; they only read, so they cannot disturb
+      # the clean-tree assertion above.
+      - name: S1.3 eligibility and retry tests
+        run: npm test
+
       # The exported XML is the authoritative artifact: it is what was imported and
       # committed on dev434590 and dev204871. A clean tree alone would not catch a build
       # that regenerated keys.ts and then had its output committed, so compare the

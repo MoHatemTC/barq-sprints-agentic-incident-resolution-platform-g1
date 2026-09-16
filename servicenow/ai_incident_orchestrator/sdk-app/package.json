@@ -8,6 +8,7 @@
     },
     "scripts": {
         "build": "now-sdk build",
+        "test": "node --test \"test/**/*.test.cjs\"",
         "deploy": "now-sdk install",
         "transform": "now-sdk transform",
         "types": "now-sdk dependencies"
