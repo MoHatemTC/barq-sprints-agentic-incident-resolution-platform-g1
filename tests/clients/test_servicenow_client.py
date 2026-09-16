@@ -345,6 +345,29 @@ class TestFindIncidentByNumber:
 
         http.request.assert_not_called()
 
+    @pytest.mark.parametrize(
+        "number",
+        [
+            "INC0010001\n",
+            "INC0010001\n^NQactive=true",
+            "INC0010001\r\n",
+        ],
+    )
+    async def test_rejects_trailing_newline(self, number: str) -> None:
+        """A regex "$" also matches just before a trailing newline.
+
+        With ``re.match`` the anchored pattern accepted ``"INC0010001\n"``, and the
+        newline was carried straight into ``sysparm_query``. ``fullmatch`` is what
+        actually rejects it. The second case shows why it matters: everything after
+        the newline would otherwise ride along into the encoded query.
+        """
+        client, http, _ = _build_client()
+
+        with pytest.raises(ValueError, match="Invalid incident number format"):
+            await client.find_incident_by_number(number)
+
+        http.request.assert_not_called()
+
     async def test_rejects_lowercase(self) -> None:
         client, http, _ = _build_client()
         with pytest.raises(ValueError):

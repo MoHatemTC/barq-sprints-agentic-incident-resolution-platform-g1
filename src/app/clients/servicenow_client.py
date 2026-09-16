@@ -34,6 +34,10 @@ from app.utils.servicenow import parse_retry_after, values_equal
 
 logger = structlog.getLogger(__name__)
 
+# fullmatch, not match, is what enforces this at the call site below. In a regex "$"
+# also matches immediately before a trailing newline, so `re.match` accepts
+# "INC0010001\n" and the newline is carried into sysparm_query. The anchors are kept
+# so the intent stays readable even though fullmatch makes them redundant.
 _INCIDENT_NUMBER_RE = re.compile(r"^[A-Z]+[0-9]+$")
 
 
@@ -65,7 +69,7 @@ class ServiceNowClient:
         return Incident.model_validate(result)
 
     async def find_incident_by_number(self, number: str) -> Incident | None:
-        if not _INCIDENT_NUMBER_RE.match(number):
+        if not _INCIDENT_NUMBER_RE.fullmatch(number):
             raise ValueError(f"Invalid incident number format: {number!r}")
 
         result = await self._request(
