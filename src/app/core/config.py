@@ -89,6 +89,50 @@ class Settings(RetrievalSettings):
     redis_port: int = 6379
     redis_password: SecretStr | None = None
 
+    # Workers (S2.3) — every value is configuration-driven; the worker code must
+    # contain no literal concurrency/retry/timeout numbers.
+    worker_concurrency: int = Field(
+        default=4,
+        description="Celery worker concurrency (prefork child processes)",
+    )
+    worker_max_retries: int = Field(
+        default=5,
+        description="Maximum attempts per event before dead-lettering; also written "
+        "to retry_state.max_attempts so the database enforces the same budget",
+    )
+    worker_backoff_base: float = Field(
+        default=1.0,
+        description="Exponential backoff base in seconds: delay = base * 2**(attempt-1)",
+    )
+    worker_backoff_max: float = Field(
+        default=60.0,
+        description="Upper bound for a single backoff delay in seconds",
+    )
+    worker_backoff_jitter: bool = Field(
+        default=True,
+        description="Full jitter on backoff delays so parallel retriers do not sync up",
+    )
+    worker_soft_time_limit: int = Field(
+        default=120,
+        description="Soft task time limit (s): raises SoftTimeLimitExceeded inside the "
+        "task so it can log and retry. Sized for an assumed sub-90s graph run; "
+        "revisit when Sprint 3 lands real latency numbers",
+    )
+    worker_time_limit: int = Field(
+        default=150,
+        description="Hard task time limit (s): SIGKILL the worker process; must exceed "
+        "the soft limit to leave room for cleanup",
+    )
+    worker_prefetch: int = Field(
+        default=1,
+        description="Prefetch multiplier: 1 for long-running tasks so workers do not "
+        "hoard jobs while others sit idle",
+    )
+    worker_repo_backend: str = Field(
+        default="postgres",
+        description="Worker repository backend: 'postgres' or 'memory' (tests/stand-in)",
+    )
+
     @field_validator("servicenow_instance_url")
     @classmethod
     def validate_instance_url(cls, v: str) -> str:

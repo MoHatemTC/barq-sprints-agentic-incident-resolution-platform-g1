@@ -92,6 +92,57 @@ services:
     networks:
       - barq-network
 
+  # ---------------------------------------------------------------------------
+  # Celery Worker — execution substrate (Sprint 2, Task S2.3)
+  # Consumes accepted incident events and runs the processing graph. Listens
+  # ONLY on the events queue: the DLQ is a parking lot for humans/replay tooling,
+  # never a worker-consumed queue.
+  # ---------------------------------------------------------------------------
+  celery-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: barq-celery-worker
+    restart: unless-stopped
+    # SIGTERM → warm shutdown finishes the in-flight task; grace period must
+    # exceed the worst-case remaining task time (see worker_soft_time_limit).
+    stop_grace_period: 30s
+    command: >
+      celery -A app.workers.celery_app worker
+      --queues=${BARQ_EVENTS_QUEUE:-barq:incident:events}
+      --concurrency=${WORKER_CONCURRENCY:-4}
+      --loglevel=INFO
+    environment:
+      REDIS_HOST: barq-redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      POSTGRES_HOST: barq-postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-barq_incident_dev}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+      WORKER_MAX_RETRIES: ${WORKER_MAX_RETRIES:-5}
+      WORKER_BACKOFF_BASE: ${WORKER_BACKOFF_BASE:-1.0}
+      WORKER_BACKOFF_MAX: ${WORKER_BACKOFF_MAX:-60.0}
+      WORKER_BACKOFF_JITTER: ${WORKER_BACKOFF_JITTER:-true}
+      WORKER_SOFT_TIME_LIMIT: ${WORKER_SOFT_TIME_LIMIT:-120}
+      WORKER_TIME_LIMIT: ${WORKER_TIME_LIMIT:-150}
+      WORKER_REPO_BACKEND: ${WORKER_REPO_BACKEND:-postgres}
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      # Celery responds to `inspect ping` on its own control bus.
+      test: ["CMD-SHELL", "celery -A app.workers.celery_app inspect ping -d celery@$$HOSTNAME --timeout=5 | grep -q pong || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    networks:
+      - barq-network
+
 # -----------------------------------------------------------------------------
 # Networks
 # -----------------------------------------------------------------------------
