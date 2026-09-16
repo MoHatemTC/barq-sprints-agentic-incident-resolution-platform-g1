@@ -1,8 +1,15 @@
+from enum import StrEnum
 from functools import lru_cache
 from importlib.metadata import PackageNotFoundError, version
 
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Environment(StrEnum):
+    DEVELOPMENT = "development"
+    STAGING = "staging"
+    PRODUCTION = "production"
 
 
 def _get_version() -> str:
@@ -43,7 +50,7 @@ class Settings(RetrievalSettings):
     app_name: str = "incident-resolution-platform"
     app_version: str = Field(default_factory=_get_version)
     log_level: str = "INFO"
-    environment: str = "development"
+    environment: Environment = Environment.DEVELOPMENT
 
     # Host & Network Binding (Security)
     bind_ip: str = "127.0.0.1"
