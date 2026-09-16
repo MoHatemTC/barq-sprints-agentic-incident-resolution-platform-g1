@@ -88,6 +88,11 @@ packages = ["app"]
 warn_unused_ignores = true
 warn_redundant_casts = true
 
+[[tool.mypy.overrides]]
+# celery ships without py.typed markers
+module = ["celery", "celery.*"]
+ignore_missing_imports = true
+
 [tool.coverage.run]
 source = ["src/app", "src/retrieval"]
 
