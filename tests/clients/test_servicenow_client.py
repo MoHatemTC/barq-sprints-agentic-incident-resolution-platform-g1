@@ -329,6 +329,66 @@ class TestFindIncidentByNumber:
         assert params["sysparm_query"] == "number=INC0010001"
         assert params["sysparm_limit"] == 2
 
+    async def test_rejects_injection_attempt_no_request_sent(self) -> None:
+        client, http, _ = _build_client()
+
+        with pytest.raises(ValueError, match="Invalid incident number format"):
+            await client.find_incident_by_number("INC_NOPE^NQsys_id=abc123")
+
+        http.request.assert_not_called()
+
+    async def test_rejects_new_or_query_injection(self) -> None:
+        client, http, _ = _build_client()
+
+        with pytest.raises(ValueError):
+            await client.find_incident_by_number("INC0010001^NQactive=true")
+
+        http.request.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "number",
+        [
+            "INC0010001\n",
+            "INC0010001\n^NQactive=true",
+            "INC0010001\r\n",
+        ],
+    )
+    async def test_rejects_trailing_newline(self, number: str) -> None:
+        """A regex "$" also matches just before a trailing newline.
+
+        With ``re.match`` the anchored pattern accepted ``"INC0010001\n"``, and the
+        newline was carried straight into ``sysparm_query``. ``fullmatch`` is what
+        actually rejects it. The second case shows why it matters: everything after
+        the newline would otherwise ride along into the encoded query.
+        """
+        client, http, _ = _build_client()
+
+        with pytest.raises(ValueError, match="Invalid incident number format"):
+            await client.find_incident_by_number(number)
+
+        http.request.assert_not_called()
+
+    async def test_rejects_lowercase(self) -> None:
+        client, http, _ = _build_client()
+        with pytest.raises(ValueError):
+            await client.find_incident_by_number("inc0010001")
+        http.request.assert_not_called()
+
+    async def test_rejects_empty_string(self) -> None:
+        client, http, _ = _build_client()
+        with pytest.raises(ValueError):
+            await client.find_incident_by_number("")
+        http.request.assert_not_called()
+
+    async def test_accepts_valid_number_format(self) -> None:
+        """Regression guard: legitimate numbers still work."""
+        resp = _api_response(result=[_incident_result()])
+        client, http, _ = _build_client(responses=[resp])
+
+        incident = await client.find_incident_by_number("INC0010001")
+        assert incident is not None
+        http.request.assert_called_once()
+
 
 class TestUpdateIncident:
     async def test_update_sends_patch(self) -> None:
@@ -985,3 +1045,40 @@ class TestRetryAfterDateForm:
             await client.get_incident("abc")
 
         assert exc_info.value.retry_after == 30.0
+
+
+class TestTransportErrorsDoNotChainTheBearerToken:
+    """A transport failure must not leave the Authorization header in the traceback.
+
+    ``_request`` builds ``headers`` with ``Bearer <token>`` and then calls httpx from
+    that same frame. Raising ``from exc`` keeps the httpx frame in the chain, so
+    ``pytest --showlocals`` or a rich traceback would render those locals and print
+    the token. The token manager already uses ``from None`` for exactly this; these
+    three handlers did not (NFR-06).
+    """
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("raised", "expected"),
+        [
+            (httpx.ConnectError("refused"), ServiceNowConnectionError),
+            (httpx.ReadError("reset"), ServiceNowConnectionError),
+            (httpx.ConnectTimeout("timed out"), ServiceNowTimeoutError),
+        ],
+    )
+    async def test_transport_error_is_not_chained(
+        self, raised: Exception, expected: type[Exception]
+    ) -> None:
+        secret = "super_secret_token"  # noqa: S105 - deliberate sentinel
+        client, http, _ = _build_client(token=secret)
+        http.request.side_effect = raised
+
+        with pytest.raises(expected) as exc_info:
+            await client.get_incident("abc")
+
+        err = exc_info.value
+        # The chain is severed, so no httpx frame carrying `headers` is reachable.
+        assert err.__cause__ is None
+        assert err.__suppress_context__ is True
+        assert secret not in str(err)
+        assert secret not in repr(err)
