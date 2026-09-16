@@ -44,7 +44,7 @@ The **persistence component** is the component that performs the ServiceNow Tabl
 
 | Field | Value-producing component | Persistence component | Intended write role(s) | Intended read role(s) |
 |---|---|---|---|---|
-| AI Enabled | Authorized Incident fulfiller | ServiceNow Incident form | `x_2215032_ai_inc_0.user`, `x_2215032_ai_inc_0.admin`; explicitly deny `x_2215032_ai_inc_0.integration_writer` | App user/admin and integration writer |
+| AI Enabled | Authorized Incident fulfiller | ServiceNow Incident form | `itil`, `admin`; explicitly deny `x_2215032_ai_inc_0.integration_writer` (see the decision below) | App user/admin and integration writer |
 | AI Processing State | Backend Incident Orchestrator lifecycle controller | Backend ServiceNow Writer using OAuth/Table API | `x_2215032_ai_inc_0.integration_writer`; `x_2215032_ai_inc_0.admin` only for controlled recovery | App user/admin and integration writer |
 | AI Classification | LangGraph Classification Agent node | Backend ServiceNow Writer using OAuth/Table API | `x_2215032_ai_inc_0.integration_writer` | App user/admin and integration writer |
 | AI Confidence | Confidence Evaluation/Guardrail node | Backend ServiceNow Writer using OAuth/Table API | `x_2215032_ai_inc_0.integration_writer` | App user/admin and integration writer |
@@ -55,7 +55,7 @@ The **persistence component** is the component that performs the ServiceNow Tabl
 | AI Processing Start | Backend worker claim/start handler | Backend ServiceNow Writer using OAuth/Table API | `x_2215032_ai_inc_0.integration_writer` | App user/admin and integration writer |
 | AI Processing End | Backend completion/failure handler | Backend ServiceNow Writer using OAuth/Table API | `x_2215032_ai_inc_0.integration_writer` | App user/admin and integration writer |
 | AI Human Review Required | Risk/Confidence Router and approval workflow | Backend ServiceNow Writer using OAuth/Table API; approval workflow clears after review | `x_2215032_ai_inc_0.integration_writer`; `x_2215032_ai_inc_0.user` and `.admin` for the human review transition | App user/admin and integration writer |
-| AI Human Lock | Authorized Incident fulfiller or risk owner | ServiceNow Incident form | `x_2215032_ai_inc_0.user`, `x_2215032_ai_inc_0.admin`; explicitly deny `x_2215032_ai_inc_0.integration_writer` | App user/admin and integration writer |
+| AI Human Lock | Authorized Incident fulfiller or risk owner | ServiceNow Incident form | `itil`, `admin`; explicitly deny `x_2215032_ai_inc_0.integration_writer` (see the decision below) | App user/admin and integration writer |
 | AI Failure Reason | Backend worker error handler | Backend ServiceNow Writer using OAuth/Table API | `x_2215032_ai_inc_0.integration_writer` | App user/admin and integration writer |
 | AI Retry Count | S1.3 eligibility/retry Business Rule, on the ServiceNow side | The Business Rule itself — never the backend | **The Business Rule only.** No human role and **not** `x_2215032_ai_inc_0.integration_writer` | App user/admin and integration writer |
 
@@ -77,8 +77,8 @@ Recorded rather than quietly corrected, because the document is the contract eve
 workstream builds against.
 
 **Human Lock and AI Enabled — `itil` + `admin`, not the app roles (#69).** The rows above
-name `x_2215032_ai_inc_0.user` and `.admin`. The S1.2 export actually grants the write
-ACLs `incident.x_2215032_ai_inc_0_ai_human_lock` and `…_ai_enabled` to **`itil` and
+named `x_2215032_ai_inc_0.user` and `.admin` until this change. The S1.2 export grants the
+write ACLs `incident.x_2215032_ai_inc_0_ai_human_lock` and `…_ai_enabled` to **`itil` and
 `admin`**.
 
 The security-critical half of the contract holds, and is now proven rather than asserted.
@@ -93,9 +93,32 @@ is a fulfiller, and requiring an app-specific role would mean granting that role
 fulfiller who might ever need to freeze an AI run. It is also a wider grant than this
 document promised, and it was never a recorded decision.
 
-**Open, and owned by @MohamedAbdelaiem with @AyaAshraf3 to confirm:** either narrow the
-ACLs to the app roles, or keep `itil` and accept the wider grant deliberately. Until that
-is settled, the platform behaviour above is what is true. Tracked in #69.
+**Decision: keep `itil` + `admin`, and this contract is corrected to match.** Three
+reasons.
+
+First, the contract was already internally inconsistent. The Writer column of the field
+table above says *"Authorized Incident fulfiller or risk owner"*, and `itil` **is** the
+fulfiller role in ServiceNow. Only the role-name column named the app roles, so the prose
+and the role names disagreed before the platform ever did.
+
+Second, a kill switch that is hard to reach is a broken kill switch. S1.2 calls this the
+*"Platform-Side Circuit Breaker"* and the abort message says the incident is *"locked by
+a human operator"*. If the write required `x_2215032_ai_inc_0.user`, a fulfiller watching
+an automated run go wrong could not stop it until somebody granted them a role first.
+Safety interlocks should fail toward being operable by the person holding the incident.
+
+Third, the alternative collapses to the same thing with more moving parts: granting the
+app role to every fulfiller who might need to freeze a run reaches the same population,
+via an extra administrative step that can be forgotten.
+
+The property that actually matters is unchanged and is now proven rather than asserted:
+`x_2215032_ai_inc_0.integration_writer` is denied, so the agent cannot lift its own kill
+switch.
+
+`itil` is a wider grant than this document originally promised, so it is recorded here as
+a decision rather than left as drift. @MohamedAbdelaiem owns the ACLs and @AyaAshraf3 can
+overrule this if she wants the narrower grant; if she does, the ACLs change and this
+section changes with them. Tracked in #69.
 
 **AI Retry Count has no field-level ACL at all (#100).** No `sys_security_acl` record in
 either export mentions `x_2215032_ai_inc_0_ai_retry_count`, although every other AI field
