@@ -57,6 +57,7 @@ The **persistence component** is the component that performs the ServiceNow Tabl
 | AI Human Review Required | Risk/Confidence Router and approval workflow | Backend ServiceNow Writer using OAuth/Table API; approval workflow clears after review | `x_2215032_ai_inc_0.integration_writer`; `x_2215032_ai_inc_0.user` and `.admin` for the human review transition | App user/admin and integration writer |
 | AI Human Lock | Authorized Incident fulfiller or risk owner | ServiceNow Incident form | `x_2215032_ai_inc_0.user`, `x_2215032_ai_inc_0.admin`; explicitly deny `x_2215032_ai_inc_0.integration_writer` | App user/admin and integration writer |
 | AI Failure Reason | Backend worker error handler | Backend ServiceNow Writer using OAuth/Table API | `x_2215032_ai_inc_0.integration_writer` | App user/admin and integration writer |
+| AI Retry Count | S1.3 eligibility/retry Business Rule, on the ServiceNow side | The Business Rule itself — never the backend | **The Business Rule only.** No human role and **not** `x_2215032_ai_inc_0.integration_writer` | App user/admin and integration writer |
 
 Permission rules:
 
@@ -64,7 +65,46 @@ Permission rules:
 - Human Lock and AI Enabled are human-controlled. The integration identity may read them for eligibility but cannot write or clear them.
 - AI Suggestion remains machine-authored. AI Resolution may be written only after an approved/safe action or by an authorized human fulfiller.
 - Application users may read AI-produced audit fields; only the integration writer and explicitly listed human roles may update them.
+- **AI Retry Count is written by the S1.3 Business Rule and by nothing else.** The retry
+  cap only works if nothing outside the rule can reset the count: anything that can set
+  it back to `0` can re-trigger emissions without limit. The integration identity reads
+  it and must never write it (#100).
 - S1.2 owns implementation and automated testing of these field ACLs.
+
+### Where the platform differs from this contract
+
+Recorded rather than quietly corrected, because the document is the contract every other
+workstream builds against.
+
+**Human Lock and AI Enabled — `itil` + `admin`, not the app roles (#69).** The rows above
+name `x_2215032_ai_inc_0.user` and `.admin`. The S1.2 export actually grants the write
+ACLs `incident.x_2215032_ai_inc_0_ai_human_lock` and `…_ai_enabled` to **`itil` and
+`admin`**.
+
+The security-critical half of the contract holds, and is now proven rather than asserted.
+Verified against `dev407364` on 2026-09-16 as `ai_orchestrator_svc`: a PATCH of
+`x_2215032_ai_inc_0_ai_human_lock=true` returns **HTTP 200 with the value still `false`**
+— the ACL strips it. The agent cannot lift its own kill switch. That is covered by
+`test_live_integration_identity_cannot_set_human_lock`.
+
+What changed is *which humans* may set it. `itil` is every fulfiller on the instance, not
+only holders of the app's role. That is arguably right — the human who reviews an incident
+is a fulfiller, and requiring an app-specific role would mean granting that role to every
+fulfiller who might ever need to freeze an AI run. It is also a wider grant than this
+document promised, and it was never a recorded decision.
+
+**Open, and owned by @MohamedAbdelaiem with @AyaAshraf3 to confirm:** either narrow the
+ACLs to the app roles, or keep `itil` and accept the wider grant deliberately. Until that
+is settled, the platform behaviour above is what is true. Tracked in #69.
+
+**AI Retry Count has no field-level ACL at all (#100).** No `sys_security_acl` record in
+either export mentions `x_2215032_ai_inc_0_ai_retry_count`, although every other AI field
+has one. Write access therefore falls back to whatever table-level rules apply, and the
+integration role is linked to the baseline `incident` write ACL — so the integration
+identity, or any human with incident write, may be able to reset the counter and defeat
+the S1.3 retry cap. The row added above states the intended owner; the ACL that enforces
+it still has to be created in the scoped app and re-exported, and a harness DENY test
+should show the integration identity refused. Owned by @ahmedtamer101, tracked in #100.
 
 ## Suggestion and resolution separation
 
