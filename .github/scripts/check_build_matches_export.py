@@ -44,9 +44,18 @@ BUILT_CANDIDATES = (
 )
 EXPORT_DIR = REPO / "servicenow" / "ai_incident_orchestrator"
 CHOICE_EXPORT = EXPORT_DIR / "ai_incident_orchestrator_s1_1.xml"
-FIELD_EXPORTS = (
-    CHOICE_EXPORT,
-    EXPORT_DIR / "ai_incident_orchestrator_s1_3.xml",
+S13_EXPORT = EXPORT_DIR / "ai_incident_orchestrator_s1_3.xml"
+FIELD_EXPORTS = (CHOICE_EXPORT, S13_EXPORT)
+# S1.3 ships as the update set; the Fluent source must target the same records so a
+# deploy updates them in place instead of adding a second copy (#94).
+S13_TABLES = (
+    "sys_script",
+    "sysevent_script_action",
+    "sysevent_register",
+    "sys_rest_message",
+    "sys_rest_message_fn",
+    "sys_rest_message_fn_headers",
+    "sys_properties",
 )
 
 
@@ -138,6 +147,36 @@ def _check_fields() -> int:
     return 1
 
 
+def _check_s13_records() -> int:
+    exported: set[tuple[str, str]] = set()
+    for update in ET.parse(S13_EXPORT).getroot().findall("sys_update_xml"):
+        record = next(iter(ET.fromstring(update.findtext("payload") or "")), None)
+        if record is not None and record.tag in S13_TABLES:
+            exported.add((record.tag, (record.findtext("sys_id") or "").strip()))
+
+    built: set[tuple[str, str]] = set()
+    for parent in {p.parent for p in BUILT_CANDIDATES}:
+        for table in S13_TABLES:
+            for path in parent.glob(f"{table}_*.xml"):
+                sys_id = path.stem.removeprefix(f"{table}_")
+                if len(sys_id) != 32:
+                    continue
+                record = ET.parse(path).getroot().find(table)
+                if record is not None and record.get("action") == "DELETE":
+                    continue
+                built.add((table, sys_id))
+
+    if built == exported:
+        print(f"\n{len(built)} S1.3 records share their sys_ids with the exported update set")
+        return 0
+    print("::error::the S1.3 Fluent records and the S1.3 update set use different sys_ids")
+    for table, sys_id in sorted(exported - built):
+        print(f"  only in the export : {table} {sys_id}")
+    for table, sys_id in sorted(built - exported):
+        print(f"  only in the build  : {table} {sys_id}")
+    return 1
+
+
 def main() -> int:
     built_path = next((p for p in BUILT_CANDIDATES if p.exists()), None)
     if built_path is None:
@@ -157,7 +196,7 @@ def main() -> int:
         print(f"{len(built)} choice records match the exported update set:")
         for sys_id, value in sorted(built.items(), key=lambda kv: kv[1]):
             print(f"  ok  {value:<18} {sys_id}")
-        return _check_fields()
+        return _check_fields() or _check_s13_records()
 
     print("::error::the SDK build no longer reproduces the exported update set")
     for sys_id in sorted(exported.keys() - built.keys()):
