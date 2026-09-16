@@ -14,7 +14,19 @@ Added `ServiceNowTokenManager` to handle access token caching, expiry, and refre
 * If a request receives a `401`, `ServiceNowClient` refreshes the token and retries the request once.
 * Token acquisition and refreshes are protected by an `asyncio.Lock` to prevent duplicate refreshes when multiple requests encounter an expired token at the same time.
 * A failed refresh clears the in-memory token state and re-raises the error.
-* Credentials are never included in logs or exception messages.
+* Credentials are kept out of logs, exception messages and tracebacks by three
+  specific measures, each covered by a test:
+  * `Settings` sets `hide_input_in_errors`, so a missing or malformed setting does not
+    print the submitted values — a pydantic validation error would otherwise include
+    the whole input dict, with `SERVICENOW_PASSWORD` in it.
+  * The OAuth token manager raises `from None`, so the grant form — which holds
+    `client_secret` and `password` — cannot be reached through the exception chain and
+    rendered by `pytest --showlocals` or a rich traceback.
+  * `ServiceNowClient._request` raises transport errors `from None` for the same
+    reason: that frame holds the `Authorization: Bearer ...` header.
+
+  This is a statement about those paths, not a guarantee for every possible caller.
+  Anything that logs a payload or a header itself can still leak.
 
 ### Incident Reading
 

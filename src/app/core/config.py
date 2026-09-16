@@ -40,13 +40,12 @@ class RetrievalSettings(BaseSettings):
 
 
 class Settings(RetrievalSettings):
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        extra="ignore",
-        hide_input_in_errors=True,
-    )
-
+    # No model_config here on purpose. It is inherited from RetrievalSettings, and
+    # re-declaring it hard-codes env_file=".env" on the subclass. #77 makes the base
+    # class use env_file=None under pytest so unit tests cannot read a developer's
+    # .env; a subclass override wins over that, so Settings would still load .env
+    # during tests and silently undo #77's isolation. hide_input_in_errors, which is
+    # what this PR needs, applies from the base class.
     app_name: str = "incident-resolution-platform"
     app_version: str = Field(default_factory=_get_version)
     log_level: str = "INFO"

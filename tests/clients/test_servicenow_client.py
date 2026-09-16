@@ -985,3 +985,40 @@ class TestRetryAfterDateForm:
             await client.get_incident("abc")
 
         assert exc_info.value.retry_after == 30.0
+
+
+class TestTransportErrorsDoNotChainTheBearerToken:
+    """A transport failure must not leave the Authorization header in the traceback.
+
+    ``_request`` builds ``headers`` with ``Bearer <token>`` and then calls httpx from
+    that same frame. Raising ``from exc`` keeps the httpx frame in the chain, so
+    ``pytest --showlocals`` or a rich traceback would render those locals and print
+    the token. The token manager already uses ``from None`` for exactly this; these
+    three handlers did not (NFR-06).
+    """
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("raised", "expected"),
+        [
+            (httpx.ConnectError("refused"), ServiceNowConnectionError),
+            (httpx.ReadError("reset"), ServiceNowConnectionError),
+            (httpx.ConnectTimeout("timed out"), ServiceNowTimeoutError),
+        ],
+    )
+    async def test_transport_error_is_not_chained(
+        self, raised: Exception, expected: type[Exception]
+    ) -> None:
+        secret = "super_secret_token"  # noqa: S105 - deliberate sentinel
+        client, http, _ = _build_client(token=secret)
+        http.request.side_effect = raised
+
+        with pytest.raises(expected) as exc_info:
+            await client.get_incident("abc")
+
+        err = exc_info.value
+        # The chain is severed, so no httpx frame carrying `headers` is reachable.
+        assert err.__cause__ is None
+        assert err.__suppress_context__ is True
+        assert secret not in str(err)
+        assert secret not in repr(err)
