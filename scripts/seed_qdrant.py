@@ -14,10 +14,14 @@ from pathlib import Path
 import structlog
 from qdrant_client import QdrantClient
 
-from app.core.config import get_retrieval_settings
+from app.core.config import Settings, get_retrieval_settings
+from app.core.logging import configure_logging
 from app.retrieval.embedding import FastEmbedEngine
 from app.retrieval.ingest import ingest_articles
 from app.retrieval.sources import LocalJSONSource
+
+settings = Settings()
+configure_logging(environment=settings.environment, log_level=settings.log_level)
 
 # stdlib logging still governs third-party library output (qdrant-client, httpx);
 # our own messages go through structlog.

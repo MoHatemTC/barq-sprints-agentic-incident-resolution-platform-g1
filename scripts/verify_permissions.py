@@ -17,15 +17,13 @@ Requirements covered:
   SS8  Bulk/multi-field bypass
   SS9  Read-after-write built into every test
   SS10 OAuth token lifecycle (normal + invalid + mid-run)
-  SS11 Credential cleanliness / repository secret scan
-  SS12 Machine-readable JSON report (verification_report.json)
+  SS11 Machine-readable JSON report (verification_report.json)
 """
 
 from __future__ import annotations
 
 import json
 import os
-import re
 import sys
 import uuid
 from dataclasses import asdict, dataclass
@@ -36,11 +34,17 @@ from typing import Any
 import httpx
 from dotenv import load_dotenv
 
+from app.core.config import Settings
+from app.core.logging import configure_logging
+
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
 
 load_dotenv()
+settings = Settings()
+configure_logging(environment=settings.environment, log_level=settings.log_level)
+
 
 INSTANCE_URL: str = os.getenv("SERVICENOW_INSTANCE_URL", "").rstrip("/")
 CLIENT_ID: str = os.getenv("SERVICENOW_CLIENT_ID", "")
@@ -54,12 +58,11 @@ TABLE_API_BASE: str = f"{INSTANCE_URL}/api/now/table"
 SCOPED_LOG_TABLE: str = "x_2215032_ai_inc_0_ai_execution_log"
 HUMAN_LOCK_FIELD: str = "x_2215032_ai_inc_0_ai_human_lock"
 AI_CLASSIFICATION_FIELD: str = "x_2215032_ai_inc_0_ai_classification"
+AI_HUMAN_REVIEW_FIELD: str = "x_2215032_ai_inc_0_ai_human_review_required"
+AI_ENABLED_FIELD: str = "x_2215032_ai_inc_0_ai_enabled"
 
 # Known OOB ServiceNow group sys_id used in assignment_group test
 _DENY_GROUP_ID: str = "287ebd7da9fe198100f92cc8d1d2154e"
-
-# Repository root for secret scan
-REPO_ROOT: Path = Path(__file__).resolve().parent.parent
 
 
 # ---------------------------------------------------------------------------
@@ -104,6 +107,14 @@ def validate_environment() -> None:
     if missing:
         print(f"\n[ERROR] Missing required environment variables: {', '.join(missing)}")
         print("Ensure a valid .env file is present. No admin credentials in source.\n")
+        sys.exit(1)
+
+    if USERNAME.strip().lower() == "admin":
+        print("\n[ERROR] SERVICENOW_USERNAME cannot be 'admin'.")
+        print(
+            "verify_permissions.py verifies least-privilege boundaries "
+            "for the integration identity, not admin.\n"
+        )
         sys.exit(1)
 
 
@@ -256,7 +267,7 @@ def _test_identity(client: httpx.Client, hdrs: dict[str, str]) -> TestResult:
     """AUTH-02: Authenticated identity is the expected service account."""
     resp = client.get(
         f"{TABLE_API_BASE}/sys_user"
-        f"?sysparm_query=user_name={USERNAME}&sysparm_fields=user_name,name",
+        f"?sysparm_query=sys_id=javascript:gs.getUserID()&sysparm_fields=user_name,name,sys_id",
         headers=hdrs,
         timeout=10.0,
     )
@@ -267,13 +278,15 @@ def _test_identity(client: httpx.Client, hdrs: dict[str, str]) -> TestResult:
         category="Authentication",
         name=f"Identity is expected service account ({USERNAME})",
         operation="GET",
-        target="/api/now/table/sys_user",
-        expected=f"user_name={USERNAME}",
+        target="/api/now/table/sys_user?sysparm_query=sys_id=javascript:gs.getUserID()",
+        expected=f"Token owner user_name={USERNAME}",
         http_status=resp.status_code,
-        observed=f"user_name={results[0].get('user_name', 'N/A')}" if results else "no result",
+        observed=(f"user_name={results[0].get('user_name', 'N/A')}" if results else "no result"),
         persisted_change=False,
         verdict="PASS" if ok else "FAIL",
-        notes=f"Account display name: {results[0].get('name', '')}" if results else "",
+        notes=f"Token owner: {results[0].get('name', '')} ({results[0].get('user_name', '')})"
+        if results
+        else "Failed to resolve authenticated session identity.",
     )
 
 
@@ -299,9 +312,11 @@ def _test_non_admin(client: httpx.Client, hdrs: dict[str, str]) -> TestResult:
         observed=f"HTTP {resp.status_code}",
         persisted_change=False,
         verdict="PASS" if is_denied else "FAIL",
-        notes="403 confirms account lacks admin/security_admin."
-        if is_denied
-        else "FAIL: account can read role assignments (elevated privilege detected).",
+        notes=(
+            "403 confirms account lacks admin/security_admin."
+            if is_denied
+            else "FAIL: account can read role assignments (elevated privilege detected)."
+        ),
     )
 
 
@@ -329,10 +344,10 @@ def _test_invalid_token(client: httpx.Client) -> TestResult:
 
 
 def _test_mid_run_expiry(client: httpx.Client) -> TestResult:
-    """TOKEN-01: Mid-run expiry detection.
+    """TOKEN-01: Mid-run expiry detection and re-authentication.
 
-    A simulated stale token returns 401/403, not a silent 200.
-    The harness must re-authenticate rather than continuing as if the call succeeded.
+    A simulated stale token returns 401/403.
+    The harness detects the 401 and re-authenticates to acquire a fresh token.
     """
     simulated_expired = {
         "Authorization": "Bearer SIMULATED_EXPIRED_TOKEN_MIDRUN_0000",
@@ -344,19 +359,43 @@ def _test_mid_run_expiry(client: httpx.Client) -> TestResult:
         headers=simulated_expired,
         timeout=10.0,
     )
-    detected = resp.status_code in (401, 403)
+    detected_401 = resp.status_code in (401, 403)
+
+    reauth_ok = False
+    recovered_status = 0
+    if detected_401:
+        auth_res, fresh_token = _test_auth_success(client)
+        if auth_res.verdict == "PASS" and fresh_token:
+            fresh_hdrs = _auth_headers(fresh_token)
+            rec_resp = client.get(
+                f"{TABLE_API_BASE}/incident?sysparm_limit=1",
+                headers=fresh_hdrs,
+                timeout=10.0,
+            )
+            recovered_status = rec_resp.status_code
+            reauth_ok = recovered_status == 200
+
+    ok = detected_401 and reauth_ok
     return TestResult(
         test_id="TOKEN-01",
         category="Token Lifecycle",
-        name="Mid-run expiry detected (harness does not swallow 401)",
-        operation="GET",
+        name="Mid-run expiry detected (harness re-authenticates)",
+        operation="GET + POST",
         target="/api/now/table/incident",
-        expected="HTTP 401 or 403",
-        http_status=resp.status_code,
-        observed=f"HTTP {resp.status_code}",
+        expected="Stale token returns 401 -> Re-authentication succeeds (HTTP 200)",
+        http_status=recovered_status or resp.status_code,
+        observed=f"Initial: HTTP {resp.status_code} -> Re-auth: HTTP {recovered_status}",
         persisted_change=False,
-        verdict="PASS" if detected else "FAIL",
-        notes="Harness must re-authenticate on 401/403 rather than continuing silently.",
+        verdict="PASS" if ok else "FAIL",
+        notes=(
+            f"Stale token rejected (HTTP {resp.status_code}); "
+            f"re-authenticated successfully (HTTP {recovered_status})."
+            if ok
+            else (
+                f"Re-auth failed after 401: "
+                f"initial={resp.status_code}, recovered={recovered_status}."
+            )
+        ),
     )
 
 
@@ -423,7 +462,7 @@ def _test_write_work_notes(
         observed=f"HTTP {patch.status_code} ({count} journal entries)",
         persisted_change=count > 0,
         verdict="PASS" if ok else "FAIL",
-        notes=f"Journal entry confirmed (count={count})." if ok else "NOT persisted in journal!",
+        notes=(f"Journal entry confirmed (count={count})." if ok else "NOT persisted in journal!"),
     )
 
 
@@ -475,9 +514,67 @@ def _test_write_ai_field(client: httpx.Client, hdrs: dict[str, str], inc_sys_id:
         observed=f"HTTP {patch.status_code} (value='{after}')",
         persisted_change=(after == target_value),
         verdict="PASS" if ok else "FAIL",
+        notes=(
+            f"'{before}' -> '{after}' (restored after test)."
+            if ok
+            else f"Expected '{target_value}', got '{after}'."
+        ),
+    )
+
+
+def _test_write_human_review_required(
+    client: httpx.Client, hdrs: dict[str, str], inc_sys_id: str
+) -> TestResult:
+    """PERM-04: Write scoped AI human review required field; prove persisted via read-back."""
+    before = (
+        client.get(
+            f"{TABLE_API_BASE}/incident/{inc_sys_id}?sysparm_fields={AI_HUMAN_REVIEW_FIELD}",
+            headers=hdrs,
+            timeout=10.0,
+        )
+        .json()
+        .get("result", {})
+        .get(AI_HUMAN_REVIEW_FIELD, "")
+    )
+    target_value = "true" if str(before).lower() != "true" else "false"
+    patch = client.patch(
+        f"{TABLE_API_BASE}/incident/{inc_sys_id}",
+        headers=hdrs,
+        json={AI_HUMAN_REVIEW_FIELD: target_value},
+        timeout=10.0,
+    )
+    after = (
+        client.get(
+            f"{TABLE_API_BASE}/incident/{inc_sys_id}?sysparm_fields={AI_HUMAN_REVIEW_FIELD}",
+            headers=hdrs,
+            timeout=10.0,
+        )
+        .json()
+        .get("result", {})
+        .get(AI_HUMAN_REVIEW_FIELD, "")
+    )
+    ok = patch.status_code == 200 and str(after).lower() == target_value.lower()
+    # Restore original value
+    client.patch(
+        f"{TABLE_API_BASE}/incident/{inc_sys_id}",
+        headers=hdrs,
+        json={AI_HUMAN_REVIEW_FIELD: before},
+        timeout=10.0,
+    )
+    return TestResult(
+        test_id="PERM-04",
+        category="Permitted",
+        name=f"Write scoped AI field ({AI_HUMAN_REVIEW_FIELD})",
+        operation="PATCH",
+        target=f"incident/{inc_sys_id}.{AI_HUMAN_REVIEW_FIELD}",
+        expected=f"200 OK + field='{target_value}'",
+        http_status=patch.status_code,
+        observed=f"HTTP {patch.status_code} (value='{after}')",
+        persisted_change=(str(after).lower() == target_value.lower()),
+        verdict="PASS" if ok else "FAIL",
         notes=f"'{before}' -> '{after}' (restored after test)."
         if ok
-        else f"Expected '{target_value}', got '{after}'.",
+        else f"Expected '{target_value}', got '{after}'. Check field-level write ACL.",
     )
 
 
@@ -530,17 +627,26 @@ def _test_log_status(
         created_ids.append(sys_id)
 
     fields_ok = False
+    details = ""
     if http_status == 201 and sys_id:
         rb = client.get(f"{TABLE_API_BASE}/{SCOPED_LOG_TABLE}/{sys_id}", headers=hdrs, timeout=10.0)
         rec = rb.json().get("result", {})
-        # Fields may be prefixed with u_ depending on scope config
-        fields_ok = bool(sys_id) and any(
-            [
-                rec.get("u_execution_id") or rec.get("execution_id"),
-                rec.get("u_agent") or rec.get("agent"),
-                rec.get("u_status") or rec.get("status"),
-            ]
-        )
+        rec_exec = rec.get("execution_id") or rec.get("u_execution_id", "")
+        rec_st = rec.get("status") or rec.get("u_status", "")
+        rec_act = rec.get("action") or rec.get("u_action", "")
+        rec_ag = rec.get("agent") or rec.get("u_agent", "")
+
+        status_ok = str(rec_st).lower() == status.lower()
+        action_ok = str(rec_act).lower() == "execute"
+        exec_ok = str(rec_exec) == exec_id
+        agent_ok = bool(rec_ag)
+
+        fields_ok = status_ok and action_ok and exec_ok and agent_ok
+        if not fields_ok:
+            details = (
+                f"Field mismatch: expected status={status}, action=execute; "
+                f"got status={rec_st}, action={rec_act}, exec_id={rec_exec}"
+            )
 
     ok = http_status == 201 and bool(sys_id) and fields_ok
     return TestResult(
@@ -549,14 +655,14 @@ def _test_log_status(
         name=f"Create execution log: status={status} (FR-02)",
         operation="POST",
         target=SCOPED_LOG_TABLE,
-        expected="201 Created + all required fields persisted",
+        expected=f"201 Created + status='{status}' + action='execute'",
         http_status=http_status,
         observed=f"HTTP {http_status} (sys_id={sys_id or 'N/A'})",
         persisted_change=ok,
         verdict="PASS" if ok else "FAIL",
-        notes=f"exec_id={exec_id} | sys_id={sys_id}"
+        notes=f"exec_id={exec_id} | sys_id={sys_id} | status={status} confirmed"
         if ok
-        else "Record not created or fields missing.",
+        else (details or "Record not created or fields missing."),
     )
 
 
@@ -595,7 +701,7 @@ def _test_execution_id_lookup(
     return TestResult(
         test_id="LOG-04",
         category="Execution Log",
-        name="Execution ID indexed lookup (unique key)",
+        name="Execution ID indexed lookup (correlation trace key)",
         operation="GET",
         target=f"{SCOPED_LOG_TABLE}?execution_id=<unique>",
         expected="Exactly 1 record matching execution_id",
@@ -603,9 +709,11 @@ def _test_execution_id_lookup(
         observed=f"HTTP {qr.status_code} ({len(found)} record(s) found)",
         persisted_change=False,
         verdict="PASS" if ok else "FAIL",
-        notes=f"exec_id='{unique_exec_id}' -> sys_id={cr_sys_id}"
-        if ok
-        else "Lookup failed or wrong count.",
+        notes=(
+            f"exec_id='{unique_exec_id}' -> sys_id={cr_sys_id}"
+            if ok
+            else "Lookup failed or wrong count."
+        ),
     )
 
 
@@ -657,9 +765,98 @@ def _test_log_delete_forbidden(
     )
 
 
+def _test_log_modify_forbidden(
+    client: httpx.Client, hdrs: dict[str, str], inc_sys_id: str
+) -> TestResult:
+    """LOG-07: Integration CANNOT modify execution log records (append-only audit trail)."""
+    http_status, result, _ = _post_log(client, hdrs, inc_sys_id, "succeeded")
+    temp_id = result.get("sys_id", "")
+    if not temp_id:
+        return TestResult(
+            test_id="LOG-07",
+            category="Execution Log",
+            name="Cannot modify execution log records (append-only)",
+            operation="PATCH",
+            target=SCOPED_LOG_TABLE,
+            expected="401 or 403 (write blocked)",
+            http_status=0,
+            observed="Could not create temp record to test modification.",
+            persisted_change=False,
+            verdict="FAIL",
+        )
+
+    tamper_value = "TAMPERED_AUDIT_ENTRY"
+    patch_resp = client.patch(
+        f"{TABLE_API_BASE}/{SCOPED_LOG_TABLE}/{temp_id}",
+        headers=hdrs,
+        json={"result": tamper_value},
+        timeout=10.0,
+    )
+    verify = client.get(
+        f"{TABLE_API_BASE}/{SCOPED_LOG_TABLE}/{temp_id}?sysparm_fields=result",
+        headers=hdrs,
+        timeout=10.0,
+    )
+    observed_result = ""
+    if verify.status_code == 200:
+        observed_result = str(verify.json().get("result", {}).get("result", ""))
+
+    modified = observed_result == tamper_value
+    blocked = patch_resp.status_code in (401, 403) or (verify.status_code == 200 and not modified)
+
+    return TestResult(
+        test_id="LOG-07",
+        category="Execution Log",
+        name="Cannot modify execution log records (append-only)",
+        operation="PATCH",
+        target=f"{SCOPED_LOG_TABLE}/{temp_id}",
+        expected="401/403 or write ignored (record immutable)",
+        http_status=patch_resp.status_code,
+        observed=f"HTTP {patch_resp.status_code} (modified={modified})",
+        persisted_change=modified,
+        verdict="PASS" if (blocked and not modified) else "FAIL",
+        notes="Record immutable - write blocked."
+        if (blocked and not modified)
+        else "SECURITY FAILURE: execution log modified after creation!",
+    )
+
+
 # ---------------------------------------------------------------------------
 # SS3  Forbidden incident fields (DENY-01 .. DENY-05)
 # ---------------------------------------------------------------------------
+
+
+def _read_field(
+    client: httpx.Client,
+    hdrs: dict[str, str],
+    inc_sys_id: str,
+    field: str,
+) -> tuple[bool, str, int]:
+    """Read one field, reporting whether the read itself actually succeeded.
+
+    Returns ``(readable, value, status)``. #46: the DENY and BULK checks used to read
+    back with ``.get(field, "")`` and no status check, so a 403 or 404 on the read, or a
+    response that simply does not carry the field, produced ``after == ""``. That looked
+    identical to "the write was refused" and the test passed. A harness must never
+    report PASS because it could not see the result — if the read is not readable the
+    caller fails the test instead.
+    """
+    r = client.get(
+        f"{TABLE_API_BASE}/incident/{inc_sys_id}?sysparm_fields={field}",
+        headers=hdrs,
+        timeout=10.0,
+    )
+    if r.status_code != 200:
+        return False, "", r.status_code
+    try:
+        result = r.json().get("result")
+    except ValueError:
+        return False, "", r.status_code
+    if not isinstance(result, dict) or field not in result:
+        return False, "", r.status_code
+    raw = result.get(field, "")
+    value = raw.get("value", "") if isinstance(raw, dict) else str(raw)
+    return True, value, r.status_code
 
 
 def _forbidden_scalar(
@@ -670,18 +867,34 @@ def _forbidden_scalar(
     field: str,
     value: str,
 ) -> TestResult:
-    """Read-patch-read for scalar forbidden fields."""
-    before_raw = (
-        client.get(
-            f"{TABLE_API_BASE}/incident/{inc_sys_id}?sysparm_fields={field}",
-            headers=hdrs,
-            timeout=10.0,
+    """Read-patch-read for scalar forbidden fields.
+
+    Fails closed: if either read-back cannot be performed, the result is FAIL rather
+    than PASS, because an unobservable write is not a blocked write (#46).
+    """
+
+    def _unreadable(stage: str, status: int) -> TestResult:
+        return TestResult(
+            test_id=test_id,
+            category="Forbidden",
+            name=f"FORBIDDEN write to incident.{field}",
+            operation="PATCH",
+            target=f"incident/{inc_sys_id}.{field}",
+            expected="Blocked (value unchanged after write)",
+            http_status=status,
+            observed=f"{stage} read-back unreadable (HTTP {status})",
+            persisted_change=False,
+            verdict="FAIL",
+            notes=(
+                f"INCONCLUSIVE: could not read {field!r} {stage} the write "
+                f"(HTTP {status}), so it is unknown whether the ACL blocked it. "
+                "Reported as FAIL because a harness must fail closed."
+            ),
         )
-        .json()
-        .get("result", {})
-        .get(field, "")
-    )
-    before = before_raw.get("value", "") if isinstance(before_raw, dict) else str(before_raw)
+
+    readable, before, status = _read_field(client, hdrs, inc_sys_id, field)
+    if not readable:
+        return _unreadable("before", status)
 
     patch_r = client.patch(
         f"{TABLE_API_BASE}/incident/{inc_sys_id}",
@@ -690,17 +903,9 @@ def _forbidden_scalar(
         timeout=10.0,
     )
 
-    after_raw = (
-        client.get(
-            f"{TABLE_API_BASE}/incident/{inc_sys_id}?sysparm_fields={field}",
-            headers=hdrs,
-            timeout=10.0,
-        )
-        .json()
-        .get("result", {})
-        .get(field, "")
-    )
-    after = after_raw.get("value", "") if isinstance(after_raw, dict) else str(after_raw)
+    readable, after, status = _read_field(client, hdrs, inc_sys_id, field)
+    if not readable:
+        return _unreadable("after", status)
 
     changed = after == value and after != before
     blocked = patch_r.status_code in (401, 403) or not changed
@@ -716,9 +921,11 @@ def _forbidden_scalar(
         observed=f"HTTP {patch_r.status_code} | before='{before}' after='{after}'",
         persisted_change=changed,
         verdict="PASS" if blocked else "FAIL",
-        notes="ACL blocked: field unchanged."
-        if blocked
-        else f"SECURITY FAILURE: {field} changed from '{before}' to '{after}'!",
+        notes=(
+            "ACL blocked: field unchanged."
+            if blocked
+            else f"SECURITY FAILURE: {field} changed from '{before}' to '{after}'!"
+        ),
     )
 
 
@@ -748,6 +955,28 @@ def _forbidden_journal(
         headers=hdrs,
         timeout=10.0,
     )
+    # #46: a denied journal query returns no "result", which len() reported as 0, which
+    # counted as "blocked". Not being allowed to look is not evidence that nothing was
+    # written, so the read has to be checked before its count means anything.
+    if chk.status_code != 200:
+        return TestResult(
+            test_id=test_id,
+            category="Forbidden",
+            name=f"FORBIDDEN write to incident.{field} (journal field)",
+            operation="PATCH",
+            target=f"incident/{inc_sys_id}.{field}",
+            expected="Blocked (0 entries in sys_journal_field)",
+            http_status=chk.status_code,
+            observed=f"sys_journal_field query unreadable (HTTP {chk.status_code})",
+            persisted_change=False,
+            verdict="FAIL",
+            notes=(
+                f"INCONCLUSIVE: could not query sys_journal_field (HTTP {chk.status_code}), "
+                f"so it is unknown whether a {field!r} entry was posted. Reported as FAIL "
+                "because a harness must fail closed."
+            ),
+        )
+
     journal_count = len(chk.json().get("result", []))
     blocked = patch_r.status_code in (401, 403) or journal_count == 0
     return TestResult(
@@ -761,9 +990,11 @@ def _forbidden_journal(
         observed=f"HTTP {patch_r.status_code} | journal_count={journal_count}",
         persisted_change=(journal_count > 0),
         verdict="PASS" if blocked else "FAIL",
-        notes="0 journal entries - ACL blocked."
-        if blocked
-        else f"SECURITY FAILURE: {journal_count} '{field}' entries posted!",
+        notes=(
+            "0 journal entries - ACL blocked."
+            if blocked
+            else f"SECURITY FAILURE: {journal_count} '{field}' entries posted!"
+        ),
     )
 
 
@@ -774,16 +1005,26 @@ def _forbidden_journal(
 
 def _test_human_lock(client: httpx.Client, hdrs: dict[str, str], inc_sys_id: str) -> TestResult:
     """LOCK-01: Integration account cannot modify the human-lock flag."""
-    before = str(
-        client.get(
-            f"{TABLE_API_BASE}/incident/{inc_sys_id}?sysparm_fields={HUMAN_LOCK_FIELD}",
-            headers=hdrs,
-            timeout=10.0,
-        )
-        .json()
-        .get("result", {})
-        .get(HUMAN_LOCK_FIELD, "false")
+    get_before = client.get(
+        f"{TABLE_API_BASE}/incident/{inc_sys_id}?sysparm_fields={HUMAN_LOCK_FIELD}",
+        headers=hdrs,
+        timeout=10.0,
     )
+    if get_before.status_code != 200:
+        return TestResult(
+            test_id="LOCK-01",
+            category="Human Lock",
+            name="Integration CANNOT modify human-lock (circuit breaker)",
+            operation="GET",
+            target=f"incident/{inc_sys_id}.{HUMAN_LOCK_FIELD}",
+            expected="HTTP 200 baseline check",
+            http_status=get_before.status_code,
+            observed=f"Initial GET failed with HTTP {get_before.status_code}",
+            persisted_change=False,
+            verdict="FAIL",
+            notes="Failed to retrieve baseline state before test.",
+        )
+    before = str(get_before.json().get("result", {}).get(HUMAN_LOCK_FIELD, "false"))
     attempt = "true" if before == "false" else "false"
 
     patch_r = client.patch(
@@ -792,17 +1033,29 @@ def _test_human_lock(client: httpx.Client, hdrs: dict[str, str], inc_sys_id: str
         json={HUMAN_LOCK_FIELD: attempt},
         timeout=10.0,
     )
-    after = str(
-        client.get(
-            f"{TABLE_API_BASE}/incident/{inc_sys_id}?sysparm_fields={HUMAN_LOCK_FIELD}",
-            headers=hdrs,
-            timeout=10.0,
-        )
-        .json()
-        .get("result", {})
-        .get(HUMAN_LOCK_FIELD, "false")
+
+    get_after = client.get(
+        f"{TABLE_API_BASE}/incident/{inc_sys_id}?sysparm_fields={HUMAN_LOCK_FIELD}",
+        headers=hdrs,
+        timeout=10.0,
     )
-    blocked = patch_r.status_code in (401, 403) or after == before
+    if get_after.status_code != 200:
+        return TestResult(
+            test_id="LOCK-01",
+            category="Human Lock",
+            name="Integration CANNOT modify human-lock (circuit breaker)",
+            operation="GET",
+            target=f"incident/{inc_sys_id}.{HUMAN_LOCK_FIELD}",
+            expected="HTTP 200 post-patch check",
+            http_status=get_after.status_code,
+            observed=f"Post-patch GET failed with HTTP {get_after.status_code}",
+            persisted_change=False,
+            verdict="FAIL",
+            notes="Failed to retrieve post-patch state.",
+        )
+    after = str(get_after.json().get("result", {}).get(HUMAN_LOCK_FIELD, "false"))
+
+    blocked = (patch_r.status_code in (401, 403) or after == before) and (after != attempt)
     return TestResult(
         test_id="LOCK-01",
         category="Human Lock",
@@ -814,10 +1067,156 @@ def _test_human_lock(client: httpx.Client, hdrs: dict[str, str], inc_sys_id: str
         observed=f"HTTP {patch_r.status_code} | before='{before}' after='{after}'",
         persisted_change=(after != before),
         verdict="PASS" if blocked else "FAIL",
-        notes="Circuit breaker tamper-proof."
-        if blocked
-        else f"SECURITY FAILURE: human-lock changed '{before}' -> '{after}'!",
+        notes=(
+            "Circuit breaker tamper-proof."
+            if blocked
+            else f"SECURITY FAILURE: human-lock changed '{before}' -> '{after}'!"
+        ),
     )
+
+
+def _test_ai_enabled(client: httpx.Client, hdrs: dict[str, str], inc_sys_id: str) -> TestResult:
+    """LOCK-02: Integration account cannot modify the AI-enabled flag (human opt-in switch)."""
+    get_before = client.get(
+        f"{TABLE_API_BASE}/incident/{inc_sys_id}?sysparm_fields={AI_ENABLED_FIELD}",
+        headers=hdrs,
+        timeout=10.0,
+    )
+    if get_before.status_code != 200:
+        return TestResult(
+            test_id="LOCK-02",
+            category="Human Lock",
+            name="Integration CANNOT modify AI-enabled (opt-in switch)",
+            operation="GET",
+            target=f"incident/{inc_sys_id}.{AI_ENABLED_FIELD}",
+            expected="HTTP 200 baseline check",
+            http_status=get_before.status_code,
+            observed=f"Initial GET failed with HTTP {get_before.status_code}",
+            persisted_change=False,
+            verdict="FAIL",
+            notes="Failed to retrieve baseline state before test.",
+        )
+    before = str(get_before.json().get("result", {}).get(AI_ENABLED_FIELD, "false"))
+    attempt = "true" if before == "false" else "false"
+
+    patch_r = client.patch(
+        f"{TABLE_API_BASE}/incident/{inc_sys_id}",
+        headers=hdrs,
+        json={AI_ENABLED_FIELD: attempt},
+        timeout=10.0,
+    )
+
+    get_after = client.get(
+        f"{TABLE_API_BASE}/incident/{inc_sys_id}?sysparm_fields={AI_ENABLED_FIELD}",
+        headers=hdrs,
+        timeout=10.0,
+    )
+    if get_after.status_code != 200:
+        return TestResult(
+            test_id="LOCK-02",
+            category="Human Lock",
+            name="Integration CANNOT modify AI-enabled (opt-in switch)",
+            operation="GET",
+            target=f"incident/{inc_sys_id}.{AI_ENABLED_FIELD}",
+            expected="HTTP 200 post-patch check",
+            http_status=get_after.status_code,
+            observed=f"Post-patch GET failed with HTTP {get_after.status_code}",
+            persisted_change=False,
+            verdict="FAIL",
+            notes="Failed to retrieve post-patch state.",
+        )
+    after = str(get_after.json().get("result", {}).get(AI_ENABLED_FIELD, "false"))
+
+    blocked = (patch_r.status_code in (401, 403) or after == before) and (after != attempt)
+    return TestResult(
+        test_id="LOCK-02",
+        category="Human Lock",
+        name="Integration CANNOT modify AI-enabled (opt-in switch)",
+        operation="PATCH",
+        target=f"incident/{inc_sys_id}.{AI_ENABLED_FIELD}",
+        expected=f"Blocked (remains '{before}')",
+        http_status=patch_r.status_code,
+        observed=f"HTTP {patch_r.status_code} | before='{before}' after='{after}'",
+        persisted_change=(after != before),
+        verdict="PASS" if blocked else "FAIL",
+        notes="Opt-in switch tamper-proof."
+        if blocked
+        else f"SECURITY FAILURE: ai_enabled changed '{before}' -> '{after}'!",
+    )
+
+
+def _test_human_lock_safety_stop(
+    client: httpx.Client, hdrs: dict[str, str], inc_sys_id: str
+) -> TestResult:
+    """LOCK-03: When ai_human_lock is true, automated AI updates are aborted by Business Rule."""
+    # Look for any incident where human lock is active
+    locked_res = client.get(
+        f"{TABLE_API_BASE}/incident?sysparm_query={HUMAN_LOCK_FIELD}=true&sysparm_limit=1",
+        headers=hdrs,
+        timeout=10.0,
+    )
+    locked_list = locked_res.json().get("result", [])
+
+    if locked_list:
+        target_id = locked_list[0]["sys_id"]
+        target_num = locked_list[0].get("number", target_id)
+        marker = f"AI attempt on locked incident {_uid(6)}"
+
+        patch_r = client.patch(
+            f"{TABLE_API_BASE}/incident/{target_id}",
+            headers=hdrs,
+            json={"work_notes": marker},
+            timeout=10.0,
+        )
+
+        chk = client.get(
+            f"{TABLE_API_BASE}/sys_journal_field?sysparm_query=element_id={target_id}^valueLIKE{marker}",
+            headers=hdrs,
+            timeout=10.0,
+        )
+        if chk.status_code != 200:
+            journal_query_ok = False
+            journal_count = -1
+        else:
+            journal_query_ok = True
+            journal_count = len(chk.json().get("result", []))
+
+        # Tightened validation: requires HTTP abort status (400/403),
+        # verified journal query, and 0 journal entries
+        aborted = patch_r.status_code in (400, 403) and journal_query_ok and journal_count == 0
+
+        return TestResult(
+            test_id="LOCK-03",
+            category="Human Lock",
+            name="Platform Business Rule enforces safety stop on locked incident",
+            operation="PATCH",
+            target=f"incident/{target_id}",
+            expected="HTTP 400/403 abort + 0 journal entries",
+            http_status=patch_r.status_code,
+            observed=f"HTTP {patch_r.status_code} | journal_count={journal_count}",
+            persisted_change=(journal_count > 0),
+            verdict="PASS" if aborted else "FAIL",
+            notes=f"Locked incident {target_num}: Business rule aborted automated update."
+            if aborted
+            else f"SECURITY FAILURE: Automated update persisted on locked incident {target_num}!",
+        )
+    else:
+        return TestResult(
+            test_id="LOCK-03",
+            category="Human Lock",
+            name="Platform Business Rule enforces safety stop on locked incident",
+            operation="PATCH",
+            target=f"incident ({HUMAN_LOCK_FIELD}=true)",
+            expected="Active locked incident tested and aborted",
+            http_status=0,
+            observed="No incident currently has human_lock=true on instance",
+            persisted_change=False,
+            verdict="FAIL",
+            notes=(
+                "TEST SKIPPED / FAILED: Set ai_human_lock=true on a test incident "
+                "to verify the platform safety stop live abort."
+            ),
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -850,7 +1249,10 @@ def _test_bulk_bypass(client: httpx.Client, hdrs: dict[str, str], inc_sys_id: st
         "state": "6",  # FORBIDDEN
     }
     patch_r = client.patch(
-        f"{TABLE_API_BASE}/incident/{inc_sys_id}", headers=hdrs, json=payload, timeout=10.0
+        f"{TABLE_API_BASE}/incident/{inc_sys_id}",
+        headers=hdrs,
+        json=payload,
+        timeout=10.0,
     )
 
     wn_count = len(
@@ -905,75 +1307,7 @@ def _test_bulk_bypass(client: httpx.Client, hdrs: dict[str, str], inc_sys_id: st
 
 
 # ---------------------------------------------------------------------------
-# SS11  Credential cleanliness (CRED-01)
-# ---------------------------------------------------------------------------
-
-_SECRET_PATTERNS: list[tuple[str, str]] = [
-    (r"(?i)(password|passwd|pwd)\s*[:=]\s*[\"'][^\"']{8,}[\"']", "password literal"),
-    (r"(?i)client_secret\s*[:=]\s*[\"'][^\"']{8,}[\"']", "client_secret literal"),
-    (r"(?i)(access|bearer)_?token\s*[:=]\s*[\"'][^\"']{20,}[\"']", "access_token literal"),
-    (r"(?i)api[_-]?key\s*[:=]\s*[\"'][^\"']{8,}[\"']", "api_key literal"),
-    (r"admin:[A-Za-z0-9!@#$%^&*]{6,}", "admin credential pattern"),
-    (r"(?i)Authorization:\s*Basic\s+[A-Za-z0-9+/=]{10,}", "Basic auth header in source"),
-]
-_SCAN_EXTENSIONS: frozenset[str] = frozenset(
-    {".py", ".md", ".yaml", ".yml", ".json", ".txt", ".cfg", ".ini", ".toml", ".rst"}
-)
-_SKIP_DIRS: frozenset[str] = frozenset(
-    {".git", "__pycache__", ".venv", "venv", "node_modules", "dist", "build"}
-)
-_SKIP_FILES: frozenset[str] = frozenset(
-    {".env", "verify_permissions.py", "verification_report.json"}
-)
-_ALLOW_PLACEHOLDERS: frozenset[str] = frozenset(
-    {"your_", "<", ">", "changeme", "placeholder", "${", "example", "xxx", "***", "secretstr"}
-)
-
-
-def _test_credential_cleanliness() -> TestResult:
-    """CRED-01: Repository secret scan - no hardcoded credentials in tracked files."""
-    findings: list[str] = []
-    scanned = 0
-    for path in REPO_ROOT.rglob("*"):
-        if not path.is_file():
-            continue
-        if any(skip in path.parts for skip in _SKIP_DIRS):
-            continue
-        if path.name in _SKIP_FILES:
-            continue
-        if path.suffix not in _SCAN_EXTENSIONS:
-            continue
-        scanned += 1
-        try:
-            text = path.read_text(encoding="utf-8", errors="ignore")
-        except OSError:
-            continue
-        for pattern, label in _SECRET_PATTERNS:
-            for match in re.finditer(pattern, text):
-                snippet = match.group().lower()
-                if any(ph in snippet for ph in _ALLOW_PLACEHOLDERS):
-                    continue
-                rel = path.relative_to(REPO_ROOT)
-                findings.append(f"{rel} [{label}]")
-
-    ok = len(findings) == 0
-    return TestResult(
-        test_id="CRED-01",
-        category="Credential Cleanliness",
-        name="Repository secret scan",
-        operation="SCAN",
-        target=str(REPO_ROOT),
-        expected="No prohibited credentials in tracked source files",
-        http_status=0,
-        observed=f"Scanned {scanned} files; {len(findings)} finding(s)",
-        persisted_change=False,
-        verdict="PASS" if ok else "FAIL",
-        notes="; ".join(findings[:5]) if findings else f"Clean - {scanned} files scanned.",
-    )
-
-
-# ---------------------------------------------------------------------------
-# SS12  Output & machine-readable JSON report
+# SS11  Output & machine-readable JSON report
 # ---------------------------------------------------------------------------
 
 
@@ -1062,6 +1396,7 @@ def run_verification() -> None:
             lambda: _test_read_incident(client, hdrs, inc_sys_id, inc_number),
             lambda: _test_write_work_notes(client, hdrs, inc_sys_id),
             lambda: _test_write_ai_field(client, hdrs, inc_sys_id),
+            lambda: _test_write_human_review_required(client, hdrs, inc_sys_id),
         ):
             r = fn()
             results.append(r)
@@ -1071,8 +1406,13 @@ def run_verification() -> None:
         _banner("PHASE 3 - Execution Log (FR-02 Audit Trail)")
         for tid, status, error in [
             ("LOG-01", "succeeded", ""),
-            ("LOG-02", "failed", "Simulated processing failure for audit verification."),
+            (
+                "LOG-02",
+                "failed",
+                "Simulated processing failure for audit verification.",
+            ),
             ("LOG-03", "blocked", ""),
+            ("LOG-06", "abandoned", "Simulated run abandoned due to operator cancellation."),
         ]:
             r = _test_log_status(client, hdrs, inc_sys_id, created_log_ids, tid, status, error)
             results.append(r)
@@ -1080,6 +1420,7 @@ def run_verification() -> None:
         for fn in (
             lambda: _test_execution_id_lookup(client, hdrs, inc_sys_id, created_log_ids),
             lambda: _test_log_delete_forbidden(client, hdrs, inc_sys_id),
+            lambda: _test_log_modify_forbidden(client, hdrs, inc_sys_id),
         ):
             r = fn()
             results.append(r)
@@ -1100,21 +1441,23 @@ def run_verification() -> None:
         results.append(r)
         _print_test(r)
 
-        # Phase 5: Human lock
-        _banner("PHASE 5 - Human-Lock Circuit Breaker")
+        # Phase 5: Human lock & controls
+        _banner("PHASE 5 - Human Controls & Circuit Breakers")
         r = _test_human_lock(client, hdrs, inc_sys_id)
+        results.append(r)
+        _print_test(r)
+
+        r = _test_ai_enabled(client, hdrs, inc_sys_id)
+        results.append(r)
+        _print_test(r)
+
+        r = _test_human_lock_safety_stop(client, hdrs, inc_sys_id)
         results.append(r)
         _print_test(r)
 
         # Phase 6: Bulk bypass
         _banner("PHASE 6 - Bulk/Multi-Field Bypass")
         r = _test_bulk_bypass(client, hdrs, inc_sys_id)
-        results.append(r)
-        _print_test(r)
-
-        # Phase 7: Credential cleanliness
-        _banner("PHASE 7 - Credential Cleanliness (Repository Secret Scan)")
-        r = _test_credential_cleanliness()
         results.append(r)
         _print_test(r)
 

@@ -6,7 +6,12 @@ import json
 import sys
 from pathlib import Path
 
+from app.core.config import Settings
+from app.core.logging import configure_logging
 from app.retrieval.barq_manual import extract_barq_manual_articles
+
+settings = Settings()
+configure_logging(environment=settings.environment, log_level=settings.log_level)
 
 
 def main() -> int:
