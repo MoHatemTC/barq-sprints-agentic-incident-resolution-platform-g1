@@ -1,3 +1,5 @@
+import os
+import sys
 from enum import StrEnum
 from functools import lru_cache
 from importlib.metadata import PackageNotFoundError, version
@@ -19,9 +21,14 @@ def _get_version() -> str:
         return "0.1.0"
 
 
+_RUNNING_UNDER_PYTEST = "pytest" in sys.modules
+_IGNORE_DOTENV = _RUNNING_UNDER_PYTEST and os.environ.get("SERVICENOW_LIVE_TESTS") != "1"
+_ENV_FILE = None if _IGNORE_DOTENV else ".env"
+
+
 class RetrievalSettings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=_ENV_FILE,
         env_file_encoding="utf-8",
         extra="ignore",
         hide_input_in_errors=True,
