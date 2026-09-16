@@ -6,9 +6,9 @@ from dataclasses import dataclass
 import structlog
 from pydantic import BaseModel, ConfigDict, ValidationError
 from qdrant_client import QdrantClient
-from qdrant_client.models import Filter
+from qdrant_client.models import Filter, Prefetch
 
-from app.clients.qdrant import DENSE_VECTOR_NAME
+from app.clients.qdrant import DENSE_VECTOR_NAME, SPARSE_VECTOR_NAME
 from app.core.config import RetrievalMode, get_retrieval_settings
 from app.models.knowledge import KnowledgePayload
 from app.retrieval.embedding import EmbeddingEngine, FastEmbedEngine
@@ -126,7 +126,7 @@ def timed_hybrid_search(
 
     settings = get_retrieval_settings()
     resolved_mode = mode or settings.retrieval_mode
-    target_collection = collection_name or settings.qdrant_collection_name
+    target_collection = collection_name or _get_default_collection_name()
 
     if engine is None:
         engine = FastEmbedEngine()
@@ -155,18 +155,18 @@ def timed_hybrid_search(
     else:
         prefetch_limit = max(fetch_limit * 4, 20)
         prefetches = [
-            client.Prefetch(
+            Prefetch(
                 query=embedded.dense,
                 using=DENSE_VECTOR_NAME,
                 filter=search_filter,
                 limit=prefetch_limit,
             ),
-            client.Prefetch(
+            Prefetch(
                 query=client.SparseVector(
                     indices=embedded.sparse_indices,
                     values=embedded.sparse_values,
                 ),
-                using=client.SPARSE_VECTOR_NAME,
+                using=SPARSE_VECTOR_NAME,
                 filter=search_filter,
                 limit=prefetch_limit,
             ),

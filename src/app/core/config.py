@@ -46,7 +46,7 @@ class RetrievalSettings(BaseSettings):
     # Retrieval
     retrieval_mode: RetrievalMode = RetrievalMode.HYBRID_RERANKED
     # TODO: choose a better one later
-    rerank_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    rerank_model: str = "Xenova/ms-marco-MiniLM-L-6-v2"
     rerank_top_k: int = 5
     rerank_candidate_limit: int = 20  # must be larger than rerank_top_k
 

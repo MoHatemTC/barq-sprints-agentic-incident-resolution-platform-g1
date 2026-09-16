@@ -22,10 +22,10 @@ class CrossEncoderReranker:
 
     def _load(self):
         if self._model is None:
-            from sentence_transformers import CrossEncoder
+            from fastembed.rerank.cross_encoder import TextCrossEncoder
 
             logger.info("rerank.loading_model", model=self.model_name)
-            self._model = CrossEncoder(self.model_name)
+            self._model = TextCrossEncoder(model_name=self.model_name)
         return self._model
 
     def rerank(self, query: str, hits: list[RetrievalHit], *, top_n: int) -> list[RetrievalHit]:
@@ -38,8 +38,8 @@ class CrossEncoderReranker:
             raise ValueError("top_n must be a positive integer")
 
         model = self._load()
-        pairs = [(query, hit.chunk_text) for hit in hits]
-        raw_scores = model.predict(pairs)
+        documents = [hit.chunk_text for hit in hits]
+        raw_scores = list(model.rerank(query, documents))
 
         rescored = [
             hit.model_copy(update={"score": float(score)})
