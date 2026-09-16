@@ -84,13 +84,13 @@ def test_sys_id(settings: LiveServiceNowTestSettings) -> str:
 def locked_test_sys_id() -> str:
     """An incident with AI Human Lock set, from SERVICENOW_TEST_LOCKED_INCIDENT_SYS_ID.
 
-    The integration identity cannot set the lock, so an itil user must tick it first.
+    The integration identity cannot set the lock, so an admin must tick it first.
     """
     sys_id = os.environ.get("SERVICENOW_TEST_LOCKED_INCIDENT_SYS_ID")
     if not sys_id:
         pytest.skip(
             "SERVICENOW_TEST_LOCKED_INCIDENT_SYS_ID not set. Lock an incident as an "
-            "itil user (see fixture docstring) - the integration identity cannot set "
+            "admin (see fixture docstring) - the integration identity cannot set "
             "the flag itself, by design."
         )
     return sys_id
