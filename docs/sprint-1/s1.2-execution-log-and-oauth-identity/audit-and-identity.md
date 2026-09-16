@@ -138,7 +138,7 @@ Permissions are bounded strictly to the minimal operational surface required for
 |                                                                                |
 |  All of the above only while ai_human_lock is false (record-level ACL).       |
 |                                                                                |
-|  [HUMAN-ONLY WRITES - itil/admin only, AI blocked]                             |
+|  [HUMAN-ONLY WRITES - admin only, AI blocked]                                  |
 |    * incident.x_2215032_ai_inc_0_ai_human_lock  -> Emergency circuit breaker  |
 |    * incident.x_2215032_ai_inc_0_ai_enabled     -> Human opt-in switch        |
 |    * incident.x_2215032_ai_inc_0_ai_retry_count -> Set by the S1.3 rule only   |
@@ -246,7 +246,7 @@ Three links from the original export are removed, because they were wrong on a c
 #### The Race Window Problem
 The external AI orchestrator performs client-side inspection (`if incident.ai_human_lock: abort()`) before executing updates. However, because ServiceNow's REST Table API does not support optimistic concurrency or conditional updates (`ETag` / `If-Match`), a concurrency race condition exists:
 1. Orchestrator reads `ai_human_lock == false`.
-2. A human ITIL agent toggles `ai_human_lock = true` on the incident form to take manual ownership.
+2. A human admin sets `ai_human_lock = true` on the incident form to take manual ownership.
 3. Orchestrator issues `PATCH /api/now/table/incident/{sys_id}` with automated suggestions or notes.
 4. Without server-side enforcement, ServiceNow commits the patch, overwriting data despite active human lock.
 
@@ -260,7 +260,7 @@ The safety stop is the condition on the app's record-level write ACL for `incide
 
 ServiceNow evaluates the ACL on the server for every write, against the stored record. When a human has set AI Human Lock, the integration role has no write access to the incident at all, so a `PATCH` is refused with `HTTP 403` and no work note or AI field is written (`LOCK-03`). Humans are unaffected; they write through the platform's own incident ACLs.
 
-The integration role cannot clear the lock itself: `incident.x_2215032_ai_inc_0_ai_human_lock` has its own write ACL for `itil` and `admin` only (`LOCK-01`).
+The integration role cannot clear the lock itself: `incident.x_2215032_ai_inc_0_ai_human_lock` has its own write ACL for `admin` only (`LOCK-01`). The role choice is recorded in the S1.1 field model (#69).
 
 > [!NOTE]
 > **Why not a Business Rule.** The first version used a `before update` Business Rule calling `current.setAbortAction(true)`. Built inside the app scope, that rule fires but cannot abort a write to the Global `incident` table: on `dev434590` the rule ran, its conditions were all true, and the work note was still written. The earlier export worked around this by shipping the rule in the Global scope, which a clean install refuses to commit (#48). The ACL condition needs neither.
