@@ -24,6 +24,7 @@ from app.repositories.idempotency import (
     accept_inbound_event,
 )
 from app.workers.producer import send_incident_event
+from observability.tracing import get_tracer
 
 logger = structlog.getLogger("api.webhook")
 
@@ -47,6 +48,33 @@ async def ingest_incident_webhook(
 ) -> WebhookAcceptedResponse:
     """Ingest, validate, persist, and queue an incoming ServiceNow incident event."""
     correlation_id = get_correlation_id()
+    tracer = get_tracer()
+    with (
+        tracer.span(
+            "webhook.receipt",
+            correlation_id=correlation_id,
+            input={
+                "event_id": payload.event_id,
+                "number": payload.number,
+                "event_type": payload.event_type,
+            },
+            metadata={"incident_number": payload.number, "event_id": payload.event_id},
+        ) as receipt,
+        tracer.trace_attributes(correlation_id=correlation_id, incident_number=payload.number),
+    ):
+        response = await _ingest(payload, request, session_factory, settings, correlation_id)
+        receipt.update(output=response.model_dump(mode="json"))
+        return response
+
+
+async def _ingest(
+    payload: IncidentWebhookPayload,
+    request: Request,
+    session_factory: SessionFactory,
+    settings: Settings,
+    correlation_id: str,
+) -> WebhookAcceptedResponse:
+    tracer = get_tracer()
 
     # 1. Bearer Token Authentication
     auth_header = request.headers.get("Authorization")
@@ -92,11 +120,19 @@ async def ingest_incident_webhook(
             execution_id=str(acceptance.execution_id),
         )
         try:
-            await asyncio.to_thread(
-                send_incident_event,
-                payload.model_dump(),
-                str(acceptance.execution_id),
-            )
+            with tracer.span(
+                "queue.enqueue",
+                metadata={
+                    "execution_id": str(acceptance.execution_id),
+                    "incident_number": payload.number,
+                },
+            ):
+                await asyncio.to_thread(
+                    send_incident_event,
+                    payload.model_dump(),
+                    str(acceptance.execution_id),
+                    correlation_id,
+                )
         except Exception as exc:
             logger.error(
                 "event_enqueue_failed",

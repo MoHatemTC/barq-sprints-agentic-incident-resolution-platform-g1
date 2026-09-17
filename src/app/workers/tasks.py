@@ -4,9 +4,10 @@ Flow per attempt:
 
 1. Atomic claim (zombie + terminal protection — see db.WorkerRepo).
 2. Get-or-create retry_state (``accept_inbound_event`` does not create it).
-3. ``invoke_graph`` — Sprint 3 plugs the LangGraph state machine in here; the
-   stub below simulates the work and the forced-failure magic numbers make the
-   failure-injection tests (and the demo) possible before Sprint 3 lands.
+3. ``invoke_graph`` — runs the S2.5 LangGraph state machine
+   (``agent.runtime.invoke_incident_graph``) when ``AGENT_GRAPH_BACKEND=langgraph``
+   (the default). ``stub`` keeps the simulated work and its forced-failure magic
+   numbers for the failure-injection tests and demo.
 4. Exception handling, in exactly three branches:
    - ``(RetryableError, SoftTimeLimitExceeded)``: log the attempt, then either
      schedule a retry (explicit ``self.retry`` with THE delay — the same delay
@@ -34,11 +35,15 @@ import redis as redis_lib
 import structlog
 from celery import Task
 from celery.exceptions import SoftTimeLimitExceeded
+from celery.signals import worker_process_shutdown
 
+from agent.config import get_agent_settings
 from app.core.config import Settings, get_settings
+from app.core.correlation import clear_correlation_id, set_correlation_id
 from app.db.redis.keys import INCIDENT_DLQ_QUEUE
 from app.workers.celery_app import celery_app
 from app.workers.db import WorkerRepo, build_worker_repo
+from app.workers.producer import CORRELATION_HEADER
 from app.workers.retry_policy import (
     RetryableError,
     RetryConfig,
@@ -46,6 +51,7 @@ from app.workers.retry_policy import (
     backoff_delay,
     build_retry_config,
 )
+from observability.tracing import get_tracer
 
 logger = structlog.getLogger(__name__)
 
@@ -56,9 +62,35 @@ GRAPH_STUB_SLEEP_SECONDS = 0.1
 _TERMINAL_EXECUTION_STATUSES = ("succeeded", "failed", "blocked", "abandoned")
 
 
-def invoke_graph(payload: dict[str, Any]) -> dict[str, Any]:
-    """Sprint 3 seam. Simulates the agent graph: takes ~0.1s, and raises the
-    configured failure classes for the failure-injection demo numbers."""
+def invoke_graph(
+    payload: dict[str, Any],
+    *,
+    backend: str = "stub",
+    execution_id: str | None = None,
+    attempt: int = 1,
+    correlation_id: str | None = None,
+) -> dict[str, Any]:
+    """The graph seam: the S2.5 LangGraph state machine, or S2.3's stub.
+
+    ``backend`` defaults to the stub so the S2.3 state-machine tests can drive
+    ``_run_incident`` without live services; the registered task passes the
+    configured ``AGENT_GRAPH_BACKEND``.
+    """
+    if backend == "langgraph":
+        from agent.runtime import invoke_incident_graph
+
+        return invoke_incident_graph(
+            payload,
+            execution_id=str(execution_id),
+            correlation_id=correlation_id or str(execution_id),
+            attempt=attempt,
+        )
+    return _stub_graph(payload)
+
+
+def _stub_graph(payload: dict[str, Any]) -> dict[str, Any]:
+    """Simulates the agent graph: takes ~0.1s, and raises the configured failure
+    classes for the failure-injection demo numbers."""
     time.sleep(GRAPH_STUB_SLEEP_SECONDS)
 
     number = str(payload.get("number", ""))
@@ -148,6 +180,8 @@ def _run_incident(
     cfg: RetryConfig,
     repo: WorkerRepo,
     soft_time_limit_seconds: int = 120,
+    correlation_id: str | None = None,
+    graph_backend: str = "stub",
 ) -> dict[str, Any]:
     """One delivery attempt. ``task`` is the bound Celery task (or a fake in
     tests) providing ``request.retries`` and ``retry()``."""
@@ -169,7 +203,13 @@ def _run_incident(
     repo.ensure_retry_state(execution_uuid, max_attempts=cfg.max_retries)
 
     try:
-        result = invoke_graph(payload)
+        result = invoke_graph(
+            payload,
+            backend=graph_backend,
+            execution_id=execution_id,
+            attempt=attempt,
+            correlation_id=correlation_id,
+        )
     except (RetryableError, SoftTimeLimitExceeded) as exc:
         if isinstance(exc, SoftTimeLimitExceeded):
             wrapped = RetryableError(f"soft time limit exceeded after {soft_time_limit_seconds}s")
@@ -253,6 +293,7 @@ def build_incident_task(
 ) -> Any:
     """Build the task bound to a specific app/settings — the factory exists so
     tests (and alternative deployments) can inject configuration and backends."""
+    graph_backend = get_agent_settings().agent_graph_backend
     cfg = build_retry_config(settings)
     repo = repo if repo is not None else build_worker_repo(settings)
     if dlq_redis is None:
@@ -279,22 +320,67 @@ def build_incident_task(
         self.settings = settings
         self.repo = repo
         self.dlq_redis = dlq_redis
-        return _run_incident(
-            self,
-            payload,
-            execution_id,
-            cfg=cfg,
-            repo=repo,
-            soft_time_limit_seconds=settings.worker_soft_time_limit,
-        )
+        correlation_id = correlation_id_from(self.request) or execution_id
+        attempt = int(self.request.retries) + 1
+        tracer = get_tracer()
+        set_correlation_id(correlation_id)
+        try:
+            with (
+                tracer.span(
+                    "worker.pickup",
+                    correlation_id=correlation_id,
+                    as_type="agent",
+                    input={"event_id": payload.get("event_id"), "attempt": attempt},
+                    metadata={
+                        "execution_id": execution_id,
+                        "incident_number": payload.get("number"),
+                        "attempt": attempt,
+                        "graph_backend": graph_backend,
+                    },
+                ) as span,
+                tracer.trace_attributes(
+                    correlation_id=correlation_id,
+                    incident_number=str(payload.get("number") or "") or None,
+                    execution_id=execution_id,
+                ),
+            ):
+                result = _run_incident(
+                    self,
+                    payload,
+                    execution_id,
+                    cfg=cfg,
+                    repo=repo,
+                    soft_time_limit_seconds=settings.worker_soft_time_limit,
+                    correlation_id=correlation_id,
+                    graph_backend=graph_backend,
+                )
+                span.update(output=result)
+                return result
+        finally:
+            clear_correlation_id()
 
     return process_incident
+
+
+def correlation_id_from(request: Any) -> str | None:
+    """The correlation id the producer put in the message headers, if any."""
+    value = getattr(request, CORRELATION_HEADER, None)
+    if not value:
+        headers = getattr(request, "headers", None) or {}
+        value = headers.get(CORRELATION_HEADER)
+    return str(value) if value else None
+
+
+@worker_process_shutdown.connect
+def _flush_traces(**_: Any) -> None:
+    get_tracer().flush()
 
 
 process_incident = build_incident_task(celery_app, get_settings())
 
 __all__ = [
     "IncidentTask",
+    "correlation_id_from",
     "build_incident_task",
     "invoke_graph",
     "process_incident",

@@ -131,10 +131,15 @@ services:
       WORKER_TIME_LIMIT: ${WORKER_TIME_LIMIT:-150}
       WORKER_REPO_BACKEND: ${WORKER_REPO_BACKEND:-postgres}
       WEBHOOK_AUTH_TOKEN: ${WEBHOOK_AUTH_TOKEN:-integration-test-token}
+      # S2.5: the graph retrieves from Qdrant on the compose network.
+      QDRANT_URL: http://barq-qdrant:6333
+      AGENT_GRAPH_BACKEND: ${AGENT_GRAPH_BACKEND:-langgraph}
     depends_on:
       redis:
         condition: service_healthy
       postgres:
+        condition: service_healthy
+      qdrant:
         condition: service_healthy
     healthcheck:
       # Celery responds to `inspect ping` on its own control bus.

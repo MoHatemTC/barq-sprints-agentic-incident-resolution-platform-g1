@@ -1,0 +1,182 @@
+# Graph architecture and the risk-ordering design record
+
+The S2.5 brief names this file `sprint3_graph_design.md`. It describes the eleven-node
+state machine delivered in Sprint 2 (FR-11) and the decision to determine risk before
+retrieval (PRD A-09). Diagram: [`graph_state_diagram.png`](graph_state_diagram.png),
+generated from the compiled graph by `scripts/render_graph_diagram.py`.
+
+## 1. Nodes
+
+Every node has the same signature, `(state, deps) -> partial state`. It reads only
+sections written before it and writes exactly one section.
+
+| # | Node | Reads | Writes | Model? | Side effects |
+|---|---|---|---|---|---|
+| 1 | `load` | `event` | `incident` | no | ServiceNow read (OAuth, integration user) |
+| 2 | `validate` | `event`, `incident` | `eligibility` | no | — |
+| 3 | `classify` | `incident` | `classification` | yes | — |
+| 4 | `determine_risk` | `incident`, `classification` | `risk` | **no** | — |
+| 5 | `retrieve` | `incident`, `classification` | `retrieval` | no (embeddings) | Qdrant search |
+| 6 | `diagnose` | `incident`, `classification`, `retrieval` | `diagnosis` | yes | — |
+| 7 | `generate` | `incident`, `retrieval`, `diagnosis` | `draft` | yes | — |
+| 8 | `verify_evidence` | (Sprint 4) | `verification` | no | pass-through |
+| 9 | `safety_check` | (Sprint 4) | `safety` | no | pass-through |
+| 10 | `confidence_check` | `diagnosis`, `draft` | `confidence` | no | — |
+| 11 | `act` | everything | `output` | no | the only ServiceNow write |
+
+**The three explicit pass-through gates.**
+
+- `verify_evidence` and `safety_check` return a `GateResult` with `passed=True` and
+  `implemented=False`.
+- `confidence_check` already applies the manual's floor (0.45).
+- Sprint 4 fills in the checks without changing the gate signatures, the state shape or
+  the edges. Failed-gate routing is already wired and tested.
+
+**`generate` output.** It is a numbered procedure. Each step cites its article, version
+and section, for example `2. Sign out of the VPN client completely. [KB0001 v2.0
+§Resolution]`, followed by a *Sources* line. A step that cites an article that was not
+retrieved is dropped and counted, and the count lowers the confidence score. The draft
+is capped at the 4000-character `ai_suggestion` field.
+
+## 2. Edge conditions — fully enumerated
+
+Each router is a pure function of one state section. A missing or malformed section
+routes to `act`, so the graph fails closed. The table is `agent.edges.EDGE_TABLE`, and
+`tests/test_graph.py::test_edge_table_matches_the_compiled_graph` asserts it equals the
+compiled graph.
+
+| From | Condition | To |
+|---|---|---|
+| START | always | `load` |
+| `load` | always | `validate` |
+| `validate` | `eligibility.eligible` | `classify` |
+| `validate` | not eligible, or section missing | `act` |
+| `classify` | always | `determine_risk` |
+| `determine_risk` | `risk.level ∈ {low, elevated}` | `retrieve` |
+| `determine_risk` | `risk.level == high`, or section missing | `act` |
+| `retrieve` | `best_relevance ≥ threshold` and hits exist | `diagnose` |
+| `retrieve` | below threshold, no hits, no corpus category, or section missing | `act` |
+| `diagnose` | at least one *retrieved* article matches the fault | `generate` |
+| `diagnose` | none matches, or section missing | `act` |
+| `generate` | always | `verify_evidence` |
+| `verify_evidence` | `verification.passed` | `safety_check` |
+| `verify_evidence` | failed or missing | `act` |
+| `safety_check` | `safety.passed` | `confidence_check` |
+| `safety_check` | failed or missing | `act` |
+| `confidence_check` | always (`act` applies the result) | `act` |
+| `act` | always | END |
+
+`act` derives the outcome from the same recorded sections, in the same order
+(`decide_outcome`), so the route taken and the outcome written cannot disagree:
+
+| Outcome | Written to ServiceNow |
+|---|---|
+| `skipped_ineligible` | nothing |
+| `escalated_high_risk` | work note with the risk verdict; review flag |
+| `escalated_no_evidence` | work note naming what was searched and the best match; review flag |
+| `escalated_blocked` | work note naming the gate; review flag |
+| `escalated_low_confidence` | work note with score vs floor; confidence; review flag |
+| `suggested` | draft, confidence, classification, model, version; work note; review flag |
+| `skipped_human_lock` | nothing (an analyst locked the incident before the write) |
+
+## 3. Risk before retrieval — the design record
+
+**Decision.** `determine_risk` runs after `classify` and before `retrieve`. A HIGH
+verdict routes straight to `act`: no search, no diagnosis, no generation. It decides
+from the incident record and the category label only.
+
+**Rules** (`agent/policy.py`, all deterministic):
+
+| Verdict | When | Source |
+|---|---|---|
+| HIGH | effective priority ∈ `AGENT_RISK_PRIORITIES` (default `[1]`) | manual §11.7 `risk_p` |
+| HIGH | priority unknown | fail closed |
+| HIGH | classification `security` | manual §6: suspected compromise goes to Security |
+| ELEVATED | service is Tier 1 (order-processing, identity, sap-erp) | manual §11.1: no action on Tier 1 without approval |
+| ELEVATED | MFA reset or lost/replaced authenticator | manual §6 (KB0006): always requires approval |
+| LOW | otherwise | — |
+
+**Effective priority** is the more severe of two values: the recorded priority, and the
+priority derived from impact × urgency in the manual's §3.3 matrix. "Priority is derived,
+not chosen," so a hand-lowered priority cannot lower the verdict.
+
+**ELEVATED** may still draft, but `ai_processing_state` becomes `awaiting_approval` and
+the work note says approval is required. The Sprint 4 interrupt hooks onto the same
+`risk.approval_required` flag.
+
+### Why this order — on cost
+
+- A HIGH incident never needs a draft: the manual says a person handles it. Running
+  retrieval, diagnosis and generation first would spend two of the three model calls,
+  plus embedding and search, on output that is thrown away. Risk costs one short
+  classification call, and for a P1 even that could be skipped.
+- The manual states the intent directly: "Priority 1 leaves the automated path before
+  any search runs, so nothing is spent on an incident that was never eligible" (§11.7).
+- NFR-02 budgets 90 s p95 per execution. Escalating a P1 quickly is where latency
+  matters most, and this path is the shortest one: `load → validate → classify →
+  determine_risk → act`.
+
+### Why this order — on safety
+
+- Nothing the model writes can reach a high-risk incident's form, because no draft
+  exists. The manual's INC0010052 (P1 on order-processing) shows the risk: the
+  knowledge base holds a *correct* article, KB0010 v2, whose first step is "do not
+  restart". The retired v1 said the opposite. On a revenue-bearing outage the safe path
+  is a person on the bridge, not a plausible procedure.
+- A retrieval result cannot argue the verdict down. If risk were assessed *after*
+  retrieval, a strong match could make a P1 look "routine", which is exactly the
+  confidence the pilot must not borrow.
+- It keeps the untrusted surface small. Retrieved text and model output are the
+  prompt-injection vectors (manual §11.6); the verdict never sees either.
+
+### Why this order — on decision independence
+
+- The verdict depends only on data that exists before the agent runs: priority,
+  impact, urgency, service and category. It is reproducible from the incident record
+  alone, auditable from the `determine_risk` row in `workflow_state`, and unaffected by
+  corpus changes, embedding-model changes or model non-determinism.
+- The only model input is the category label, and it can only *raise* risk
+  (`security`). No label lowers a verdict that the record already makes HIGH.
+- Tests pin this in three places:
+  - `test_nodes.py::TestDetermineRisk::test_reads_no_evidence`: the node ignores
+    retrieval state.
+  - `test_graph.py::test_risk_is_determined_before_any_retrieval`: with
+    `determine_risk` removed, `retrieve` and `generate` are unreachable from START.
+  - `test_graph.py::test_high_risk_escalates_at_determine_risk_without_retrieval_or_generation`:
+    the retriever is never called and the only model call is `classify`.
+
+### Alternatives considered
+
+- **Risk after retrieval, using evidence** — rejected on all three grounds above.
+- **Risk before classification** — would make `security` invisible to the verdict.
+  Classification is a single cheap call, and for HIGH-by-priority incidents it is the
+  only one made.
+- **Model-judged risk** — rejected: not reproducible, and it puts the injection surface
+  in front of the gate.
+
+## 4. State and persistence
+
+- **State:** `AgentState` is a `TypedDict` of JSON-only sections, each validated by a
+  Pydantic model at the node boundary.
+- **Checkpoints:** a checkpoint is written after every node into `workflow_state`
+  (see `sprint2_tracing_and_agent.md` §5). The execution id is the LangGraph thread id.
+- **Retries:** a retry with a higher attempt number resumes after the last completed
+  node, and a finished thread is never run again.
+- **Path:** `path` accumulates the visited nodes, which the tests use to assert every
+  route.
+
+## 5. Open items for Sprint 3 and 4
+
+- **Sprint 4:** implement `verify_evidence` (match every step to evidence text) and
+  `safety_check` (output schema, action allowlist, secret scan of the draft), plus input
+  screening for embedded instructions (manual §11.6). Add the approval interrupt on
+  `risk.approval_required`.
+- **S2.4 (#110):** swap `QdrantRetriever` onto the reranked hybrid search once it
+  merges. The evidence gate can then use the reranker's calibrated score.
+- **Corpus:** decide on the `restricted` tags that exclude every hardware article (see
+  `sprint2_tracing_and_agent.md` §4).
+- **"Ask" outcome:** the W0.3 set expects vague reports to be answered with a request
+  for detail. Today they escalate as low confidence.
+- **Service tiers:** `load` reads the service from `business_service`, and only the
+  display value names the tier. Reading with `sysparm_display_value` is a small S1.5
+  client change. Without it, the Tier 1 rule relies on priority alone.
