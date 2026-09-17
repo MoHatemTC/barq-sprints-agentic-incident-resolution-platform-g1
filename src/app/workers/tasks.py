@@ -88,8 +88,16 @@ def record_dead_letter(
         "retry_count": attempt,
         "failed_at": dt.datetime.now(dt.UTC).isoformat(),
     }
-    redis_sink.lpush(INCIDENT_DLQ_QUEUE, json.dumps(record))
-    logger.warning("dead_lettered", event_id=record["event_id"], reason=reason)
+    try:
+        redis_sink.lpush(INCIDENT_DLQ_QUEUE, json.dumps(record))
+    except Exception:  # noqa: BLE001 — Redis down must not prevent DB reconciliation
+        logger.error(
+            "dead_letter_redis_push_failed",
+            event_id=record["event_id"],
+            reason=reason,
+        )
+    else:
+        logger.warning("dead_lettered", event_id=record["event_id"], reason=reason)
 
     try:
         execution_uuid = UUID(execution_id)

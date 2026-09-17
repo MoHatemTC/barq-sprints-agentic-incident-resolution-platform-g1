@@ -25,6 +25,7 @@ from celery.exceptions import Retry, SoftTimeLimitExceeded
 from api.schemas.dlq import DLQEventResponse
 from app.workers import tasks as tasks_module
 from app.workers.db import InMemoryRepo
+from app.workers.db import InMemoryRepo as _BaseInMemoryRepo
 from app.workers.retry_policy import RetryableError, RetryConfig, TerminalError
 from app.workers.tasks import _run_incident, record_dead_letter
 
@@ -229,3 +230,131 @@ class TestDeadLetterRecord:
         assert record["failure_reason"] == "LLM timeout"
         assert record["retry_count"] == 3
         assert record["failed_at"] is not None
+
+
+class TestMaxRetriesOneEdgeCase:
+    """Gap 1: max_retries=1 means ONE attempt, ZERO retries.
+
+    An operator might set WORKER_MAX_RETRIES=1 thinking "one retry." They
+    actually get: first attempt fails → attempt(1) < max_retries(1) is False →
+    immediate exhaustion, no retry at all. This test pins that surprising
+    behaviour so nobody changes it accidentally."""
+
+    def test_single_attempt_budget_exhausts_immediately(self) -> None:
+        """With max_retries=1, the very first retryable error exhausts the
+        budget — no retry is ever scheduled."""
+        cfg = RetryConfig(max_retries=1, backoff_base=1.0, backoff_max=60.0, jitter=False)
+        repo = make_repo()
+        task = FakeTask(retries=0)  # attempt 1 (retries + 1)
+
+        with pytest.raises(RetryableError):
+            _run_incident(task, PAYLOAD_TRANSIENT, str(EXECUTION_ID), cfg, repo)
+
+        # Budget consumed on the first and only attempt.
+        snapshot = repo.get_retry_state(EXECUTION_ID)
+        assert snapshot["state"] == "exhausted"
+        assert snapshot["attempt_count"] == 1  # honest count
+        assert snapshot["next_retry_at"] is None
+        assert repo.get_status(EXECUTION_ID) == "failed"
+        assert repo.count_failures(EXECUTION_ID) == 1
+        # FakeTask.retry was NEVER called (no Retry raised).
+        assert task.last_countdown is None
+
+
+class TestDLQRedisFailureGuard:
+    """Gap 7: record_dead_letter must survive a Redis blip.
+
+    If Redis is down when on_failure fires, the DLQ push fails — but the DB
+    reconciliation must still run and the worker must NOT crash."""
+
+    def test_redis_down_does_not_crash_and_db_reconciliation_runs(self) -> None:
+        repo = make_repo()
+        broken_redis = MagicMock()
+        broken_redis.lpush.side_effect = ConnectionError("Redis is down")
+
+        # Should NOT raise — the try/except catches the Redis failure.
+        record_dead_letter(
+            repo,
+            broken_redis,
+            PAYLOAD_TRANSIENT,
+            str(EXECUTION_ID),
+            RetryableError("LLM timeout"),
+            attempt=3,
+        )
+
+        # Redis was attempted.
+        broken_redis.lpush.assert_called_once()
+        # DB reconciliation still ran: the execution is now terminal.
+        assert repo.get_status(EXECUTION_ID) == "failed"
+        assert repo.get_termination_cause(EXECUTION_ID) is not None
+
+    def test_healthy_redis_still_writes_dlq_record(self) -> None:
+        """Sanity check: when Redis is healthy, the record lands."""
+        repo = make_repo()
+        healthy_redis = MagicMock()
+
+        record_dead_letter(
+            repo,
+            healthy_redis,
+            PAYLOAD_TRANSIENT,
+            str(EXECUTION_ID),
+            RetryableError("LLM timeout"),
+            attempt=3,
+        )
+
+        healthy_redis.lpush.assert_called_once()
+
+
+class TestFaultInjectionScheduleRetry:
+    """Gap 3: if schedule_retry raises (Postgres dies between log_failure and
+    schedule_retry), the exception escapes → on_failure fires → DLQ record must
+    still land. The worker must not crash in a way that loses the event.
+
+    The other agent's correction is important here: acks_late does NOT redeliver
+    on task exceptions — Celery acks after the task function finishes (including
+    raises). Recovery is DLQ + replay, not auto-redelivery."""
+
+    def test_schedule_retry_failure_still_raises_to_on_failure(self) -> None:
+        """When schedule_retry raises, the exception propagates out of
+        _run_incident. Celery's on_failure hook then fires, which writes the
+        DLQ record. This test pins that the original exception escapes."""
+
+        class BrokenScheduleRepo(_BaseInMemoryRepo):
+            def schedule_retry(self, **kwargs):
+                raise ConnectionError("Postgres connection lost")
+
+        repo = BrokenScheduleRepo()
+        repo.seed_execution(EXECUTION_ID, status="queued")
+        task = FakeTask(retries=0)
+
+        # The Postgres failure escapes as ConnectionError (which classify()
+        # treats as retryable, but _run_incident already passed the retry
+        # branch — the re-raise is the raw ConnectionError from schedule_retry).
+        with pytest.raises(ConnectionError, match="Postgres connection lost"):
+            _run_incident(task, PAYLOAD_TRANSIENT, str(EXECUTION_ID), CFG, repo)
+
+        # The failure row WAS logged (separate transaction, before schedule_retry).
+        assert repo.count_failures(EXECUTION_ID) == 1
+
+
+class TestBackoffSecondsTruncation:
+    """Gap 6: retry_state.backoff_seconds is Integer in the schema (Ahmed's
+    column). int(0.2) = 0. The actual Celery countdown uses the float, so
+    behaviour is correct — but the DB record is wrong for sub-second delays.
+
+    This test documents the truncation as deliberate rather than a bug.
+    TODO(Ahmed): consider Numeric for backoff_seconds in retry_state."""
+
+    def test_subsecond_backoff_truncates_to_zero_in_db(self) -> None:
+        cfg = RetryConfig(max_retries=3, backoff_base=0.2, backoff_max=60.0, jitter=False)
+        repo = make_repo()
+        task = FakeTask(retries=0)  # attempt 1
+
+        with pytest.raises(Retry):
+            _run_incident(task, PAYLOAD_TRANSIENT, str(EXECUTION_ID), cfg, repo)
+
+        # Celery countdown uses the FLOAT — actual delay is correct.
+        assert task.last_countdown == 0.2
+        # But the DB stores int(0.2) = 0.
+        snapshot = repo.get_retry_state(EXECUTION_ID)
+        assert snapshot["backoff_seconds"] == 0  # <-- the truncation

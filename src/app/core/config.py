@@ -97,9 +97,12 @@ class Settings(RetrievalSettings):
     )
     worker_max_retries: int = Field(
         default=5,
+        ge=1,
         description="Maximum total attempts per event (initial + retries) before "
         "dead-lettering; also written to retry_state.max_attempts so the database "
-        "enforces the same budget: attempt_count may never exceed it",
+        "enforces the same budget: attempt_count may never exceed it. "
+        "NOTE: a value of 1 means ONE attempt with ZERO retries — the event "
+        "dead-letters on the first failure.",
     )
     worker_backoff_base: float = Field(
         default=1.0,
