@@ -459,6 +459,211 @@
           }
         ]
       }
+    },
+    "/api/v1/dlq": {
+      "get": {
+        "tags": [
+          "Dead-Letter Queue"
+        ],
+        "summary": "List all dead-lettered events",
+        "description": "Retrieve all poisoned or retry-exhausted incident events currently in the DLQ.",
+        "operationId": "list_dlq_events_api_v1_dlq_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DLQEventResponse"
+                  },
+                  "type": "array",
+                  "title": "Response List Dlq Events Api V1 Dlq Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/dlq/{event_id}/replay": {
+      "post": {
+        "tags": [
+          "Dead-Letter Queue"
+        ],
+        "summary": "Replay a dead-lettered event",
+        "description": "Replay a poisoned or failed event from the DLQ. Enforces Operator Role RBAC.",
+        "operationId": "replay_dlq_event_api_v1_dlq__event_id__replay_post",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "event_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The unique event ID of the dead-lettered event to replay",
+              "title": "Event Id"
+            },
+            "description": "The unique event ID of the dead-lettered event to replay"
+          },
+          {
+            "name": "X-User-Role",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Role"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DLQReplayResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/eval/run": {
+      "post": {
+        "tags": [
+          "Evaluation & Benchmarks"
+        ],
+        "summary": "Trigger an evaluation run",
+        "description": "Initiate an asynchronous benchmark evaluation run on a specified dataset.",
+        "operationId": "trigger_eval_run_api_v1_eval_run_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EvalRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvalRunResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/eval/results": {
+      "get": {
+        "tags": [
+          "Evaluation & Benchmarks"
+        ],
+        "summary": "Get evaluation benchmark results",
+        "description": "Retrieve scores, accuracy metrics, and latency statistics for evaluation runs.",
+        "operationId": "get_eval_results_api_v1_eval_results_get",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional filter by specific evaluation run ID",
+              "title": "Run Id"
+            },
+            "description": "Optional filter by specific evaluation run ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EvalResultResponse"
+                  },
+                  "title": "Response Get Eval Results Api V1 Eval Results Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -605,6 +810,206 @@
         ],
         "title": "ApprovalResponse",
         "description": "Schema representing an approval record from the 'approvals' table."
+      },
+      "DLQEventResponse": {
+        "properties": {
+          "event_id": {
+            "type": "string",
+            "title": "Event Id",
+            "description": "Unique event identifier"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Payload",
+            "description": "Raw outbound event payload that failed processing"
+          },
+          "failure_reason": {
+            "type": "string",
+            "title": "Failure Reason",
+            "description": "Reason or error message that routed the event to DLQ"
+          },
+          "retry_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Retry Count",
+            "description": "Number of retry attempts attempted before landing in DLQ",
+            "default": 0
+          },
+          "failed_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Failed At",
+            "description": "Timestamp when event was placed into the DLQ"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "event_id",
+          "payload",
+          "failure_reason",
+          "failed_at"
+        ],
+        "title": "DLQEventResponse",
+        "description": "Schema representing a poisoned or retry-exhausted incident event in the DLQ."
+      },
+      "DLQReplayResponse": {
+        "properties": {
+          "event_id": {
+            "type": "string",
+            "title": "Event Id",
+            "description": "Identifier of the event being replayed"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "accepted",
+              "replayed"
+            ],
+            "title": "Status",
+            "description": "Replay outcome status ('accepted' or 'replayed')",
+            "default": "accepted"
+          },
+          "correlation_id": {
+            "type": "string",
+            "title": "Correlation Id",
+            "description": "Correlation ID tracking the replay operation"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Human-readable result summary of the replay dispatch"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "event_id",
+          "correlation_id",
+          "message"
+        ],
+        "title": "DLQReplayResponse",
+        "description": "Response schema returned upon replaying a DLQ event."
+      },
+      "EvalResultResponse": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id",
+            "description": "Unique identifier of the completed evaluation run"
+          },
+          "dataset_name": {
+            "type": "string",
+            "title": "Dataset Name",
+            "description": "Name of the evaluated benchmark dataset"
+          },
+          "benchmark_score": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Benchmark Score",
+            "description": "Overall benchmark composite score"
+          },
+          "accuracy": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Accuracy",
+            "description": "Evaluation accuracy score between 0.0 and 1.0"
+          },
+          "p95_latency_ms": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "P95 Latency Ms",
+            "description": "95th percentile inference/processing latency in milliseconds"
+          },
+          "completed_at": {
+            "type": "string",
+            "title": "Completed At",
+            "description": "ISO 8601 timestamp when evaluation finished"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "run_id",
+          "dataset_name",
+          "benchmark_score",
+          "accuracy",
+          "p95_latency_ms",
+          "completed_at"
+        ],
+        "title": "EvalResultResponse",
+        "description": "Response schema containing benchmark metrics and scores for an evaluation run."
+      },
+      "EvalRunRequest": {
+        "properties": {
+          "dataset_name": {
+            "type": "string",
+            "title": "Dataset Name",
+            "description": "Name of the evaluation dataset or benchmark corpus"
+          },
+          "sample_size": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sample Size",
+            "description": "Optional limit on the number of evaluation samples to execute"
+          },
+          "model_override": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Override",
+            "description": "Optional model identifier override for the evaluation run"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "dataset_name"
+        ],
+        "title": "EvalRunRequest",
+        "description": "Request schema to initiate an automated benchmark evaluation run."
+      },
+      "EvalRunResponse": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id",
+            "description": "Unique identifier for the initiated evaluation run"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "Current state of the evaluation run (e.g. 'started', 'running')"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At",
+            "description": "ISO 8601 timestamp when evaluation run was initiated"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "run_id",
+          "status",
+          "created_at"
+        ],
+        "title": "EvalRunResponse",
+        "description": "Response schema acknowledging the launch of an evaluation run."
       },
       "ExecutionNodeStateResponse": {
         "properties": {
