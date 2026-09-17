@@ -124,16 +124,12 @@ def test_workflow_state_override_allows_multiple_states():
     assert getattr(filt.must[0].match, "any", None) == ["published", "draft"]
 
 
-def test_explicit_empty_workflow_state_list_falls_back_to_default():
-    """Documents CURRENT behavior: `workflow_state=[]` is falsy in Python, so
-    `states = metadata.workflow_state or [WorkflowState.PUBLISHED]` silently
-    substitutes the default instead of raising -- the `if not states: raise`
-    guard a few lines later is unreachable given this pattern. If an explicit
-    empty list should instead be a caller error, change the `or` to an
-    `is None` check and this test's expectation."""
+def test_explicit_empty_workflow_state_list_raises() -> None:
+    """workflow_state=[] is a caller error, not an implicit request for the default —
+    consistent with how category/service/version already treat empty lists."""
     metadata = MetadataFilterBuilder(workflow_state=[])
-    filt = build_metadata_filter(metadata)
-    assert getattr(filt.must[0].match, "any", None) == ["published"]
+    with pytest.raises(ValueError, match="workflow_states must not be an empty list"):
+        build_metadata_filter(metadata)
 
 
 def test_extra_filter_is_appended_after_mandatory_and_optional_conditions():

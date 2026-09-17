@@ -49,7 +49,11 @@ def build_metadata_filter(
 ) -> Filter:
     metadata = metadata or MetadataFilterBuilder()
 
-    states = metadata.workflow_state or [WorkflowState.PUBLISHED]
+    states = (
+        metadata.workflow_state
+        if metadata.workflow_state is not None
+        else [WorkflowState.PUBLISHED]
+    )
     if not states:
         raise ValueError("workflow_states must not be an empty list")
 
