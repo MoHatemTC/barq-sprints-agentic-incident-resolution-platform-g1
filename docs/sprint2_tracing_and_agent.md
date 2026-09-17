@@ -344,6 +344,17 @@ Langfuse holds **one trace with 20 observations**, session `INC0010025`, in this
 Model cost for the whole run: $0.032. The correlation id travelled from the HTTP
 header, through the Celery message header, to the worker.
 
+Screenshots of the Langfuse UI, captured 2026-09-17:
+
+- [`evidence/langfuse-full-pipeline-INC0010025.png`](evidence/langfuse-full-pipeline-INC0010025.png):
+  the single webhook-to-ServiceNow trace;
+- [`evidence/langfuse-vpn-draft-INC0010022.png`](evidence/langfuse-vpn-draft-INC0010022.png): the
+  cited draft;
+- [`evidence/langfuse-p1-escalation-INC0010023.png`](evidence/langfuse-p1-escalation-INC0010023.png):
+  risk HIGH, with no retrieval or generation spans.
+
+The only key visible in them is the Langfuse *public* key, which is not a secret.
+
 **Secret scan of what Langfuse actually stored.** All 137 observations stored in the
 project, read back with inputs, outputs and metadata, were checked against the ten real
 credential values in use:
