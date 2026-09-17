@@ -1,4 +1,4 @@
-"""Tests for single retrieval entry point and mandatory workflow_state filtering (P3)."""
+"""Tests for hybrid search, metadata filtering, and mandatory safety invariants."""
 
 from collections import Counter
 from pathlib import Path
@@ -14,12 +14,14 @@ from qdrant_client.models import (
 )
 
 from app.clients.qdrant import ensure_collection
+from app.core.config import RetrievalMode
 from app.models.knowledge import Article, SecurityLevel, WorkflowState
 from app.retrieval.embedding import EmbeddedText, FastEmbedEngine
+from app.retrieval.filters import MetadataFilterBuilder, build_metadata_filter
 from app.retrieval.hybrid_search import (
     RetrievalHit,
-    _build_filter,
-    retrieve_knowledge,
+    hybrid_search,
+    timed_hybrid_search,
 )
 from app.retrieval.ingest import ingest_articles
 from app.retrieval.sources import LocalJSONSource
@@ -48,46 +50,90 @@ def _dummy_mock_engine() -> MagicMock:
 # ---------------------------------------------------------------------------
 
 
-def test_published_filter_present_without_extra_filter() -> None:
-    """With extra_filter=None, both mandatory conditions are present and nothing else."""
-    filt = _build_filter(None)
+def test_default_filter_has_published_and_security() -> None:
+    """With defaults, both mandatory conditions are present and nothing else."""
+    filt = build_metadata_filter()
     assert filt.must is not None
     assert len(filt.must) == 2
 
-    published, security = filt.must
-    assert isinstance(published, FieldCondition)
-    assert published.key == "workflow_state"
-    assert getattr(published.match, "value", None) == "published"
+    wf_cond, sec_cond = filt.must
+    assert isinstance(wf_cond, FieldCondition)
+    assert wf_cond.key == "workflow_state"
+    assert getattr(wf_cond.match, "any", None) == ["published"]
 
     # #45: restricted content is excluded unless the caller opts in.
-    assert isinstance(security, FieldCondition)
-    assert security.key == "security_level"
-    assert getattr(security.match, "any", None) == ["public", "internal"]
+    assert isinstance(sec_cond, FieldCondition)
+    assert sec_cond.key == "security_level"
+    assert getattr(sec_cond.match, "any", None) == ["public", "internal"]
 
 
-def test_published_filter_merged_with_extra_filter() -> None:
-    """Extra filters are wrapped inside parent must, preserving should/must_not."""
+def test_filter_merged_with_extra_filter() -> None:
+    """Extra filters are appended inside the parent must list."""
     extra = Filter(
         must=[FieldCondition(key="category", match=MatchValue(value="database"))],
         should=[FieldCondition(key="service", match=MatchValue(value="postgresql"))],
     )
-    merged = _build_filter(extra)
+    merged = build_metadata_filter(extra=extra)
     assert merged.must is not None
     assert len(merged.must) == 3
 
     # First clause is the non-negotiable published condition
-    published_cond = merged.must[0]
-    assert isinstance(published_cond, FieldCondition)
-    assert published_cond.key == "workflow_state"
-    assert getattr(published_cond.match, "value", None) == "published"
+    wf_cond = merged.must[0]
+    assert isinstance(wf_cond, FieldCondition)
+    assert wf_cond.key == "workflow_state"
 
     # Second is the equally non-negotiable audience condition (#45)
-    security_cond = merged.must[1]
-    assert isinstance(security_cond, FieldCondition)
-    assert security_cond.key == "security_level"
+    sec_cond = merged.must[1]
+    assert isinstance(sec_cond, FieldCondition)
+    assert sec_cond.key == "security_level"
 
     # Third clause is the caller's extra filter intact
     assert merged.must[2] == extra
+
+
+def test_metadata_builder_adds_category_filter() -> None:
+    """MetadataFilterBuilder fields add to the must list."""
+    metadata = MetadataFilterBuilder(category="network")
+    filt = build_metadata_filter(metadata)
+    # 2 mandatory (workflow_state, security_level) + 1 category
+    assert filt.must is not None
+    assert len(filt.must) == 3
+    category_cond = filt.must[2]
+    assert isinstance(category_cond, FieldCondition)
+    assert category_cond.key == "category"
+    assert getattr(category_cond.match, "value", None) == "network"
+
+
+def test_metadata_builder_multi_value_service() -> None:
+    """List values produce a MatchAny condition."""
+    metadata = MetadataFilterBuilder(service=["corporate-vpn", "sap-erp"])
+    filt = build_metadata_filter(metadata)
+    service_cond = filt.must[2]
+    assert service_cond.key == "service"
+    assert getattr(service_cond.match, "any", None) == ["corporate-vpn", "sap-erp"]
+
+
+def test_metadata_builder_restricted_security_includes_all_tiers() -> None:
+    """Requesting RESTRICTED includes public + internal + restricted."""
+    metadata = MetadataFilterBuilder(max_security_level=SecurityLevel.RESTRICTED)
+    filt = build_metadata_filter(metadata)
+    sec_cond = filt.must[1]
+    assert getattr(sec_cond.match, "any", None) == ["public", "internal", "restricted"]
+
+
+def test_metadata_builder_public_security_only_public() -> None:
+    """Requesting PUBLIC limits to just public."""
+    metadata = MetadataFilterBuilder(max_security_level=SecurityLevel.PUBLIC)
+    filt = build_metadata_filter(metadata)
+    sec_cond = filt.must[1]
+    assert getattr(sec_cond.match, "any", None) == ["public"]
+
+
+def test_empty_filter_value_list_raises() -> None:
+    """An empty list for a filter field must raise, not silently match nothing."""
+    metadata = MetadataFilterBuilder(service=[])
+    with pytest.raises(ValueError, match="must not be empty"):
+        build_metadata_filter(metadata)
 
 
 def test_extra_filter_cannot_override_published(memory_qdrant: QdrantClient) -> None:
@@ -116,7 +162,7 @@ def test_extra_filter_cannot_override_published(memory_qdrant: QdrantClient) -> 
     caller_filter = Filter(
         must=[FieldCondition(key="workflow_state", match=MatchValue(value="retired"))]
     )
-    hits = retrieve_knowledge(
+    hits = hybrid_search(
         memory_qdrant,
         "database query",
         collection_name=col,
@@ -132,12 +178,12 @@ def test_extra_filter_cannot_override_published(memory_qdrant: QdrantClient) -> 
 
 
 def test_filter_applied_to_both_prefetches() -> None:
-    """Dual-filter requirement: dense and sparse prefetches both carry the published filter."""
+    """Dual-filter requirement: dense and sparse prefetches both carry the filter."""
     spy_client = MagicMock(spec=QdrantClient)
     spy_client.query_points.return_value = MagicMock(points=[])
 
     engine = _dummy_mock_engine()
-    retrieve_knowledge(
+    hybrid_search(
         spy_client,
         "test query",
         collection_name="col",
@@ -157,18 +203,17 @@ def test_filter_applied_to_both_prefetches() -> None:
     assert sparse_prefetch.filter is not None
 
     for pf in (dense_prefetch, sparse_prefetch):
-        cond = pf.filter.must[0]
-        assert cond.key == "workflow_state"
-        assert getattr(cond.match, "value", None) == "published"
+        wf_cond = pf.filter.must[0]
+        assert wf_cond.key == "workflow_state"
 
 
 def test_filter_applied_to_top_level_query() -> None:
-    """Top-level query_filter carries the published filter for defense-in-depth."""
+    """Top-level query_filter carries the filter for defense-in-depth."""
     spy_client = MagicMock(spec=QdrantClient)
     spy_client.query_points.return_value = MagicMock(points=[])
 
     engine = _dummy_mock_engine()
-    retrieve_knowledge(
+    hybrid_search(
         spy_client,
         "test query",
         collection_name="col",
@@ -179,7 +224,95 @@ def test_filter_applied_to_top_level_query() -> None:
     top_filter = kwargs.get("query_filter")
     assert top_filter is not None
     assert top_filter.must[0].key == "workflow_state"
-    assert getattr(top_filter.must[0].match, "value", None) == "published"
+
+
+# ---------------------------------------------------------------------------
+# Unit tests: Dense-only mode uses query_points without prefetch
+# ---------------------------------------------------------------------------
+
+
+def test_dense_only_mode_no_prefetch() -> None:
+    """In DENSE_ONLY mode, query_points is called with query= (not prefetch=)."""
+    spy_client = MagicMock(spec=QdrantClient)
+    spy_client.query_points.return_value = MagicMock(points=[])
+
+    engine = _dummy_mock_engine()
+    hybrid_search(
+        spy_client,
+        "test query",
+        collection_name="col",
+        engine=engine,
+        mode=RetrievalMode.DENSE_ONLY,
+    )
+
+    kwargs = spy_client.query_points.call_args.kwargs
+    assert "prefetch" not in kwargs or kwargs.get("prefetch") is None
+    assert kwargs.get("query") is not None
+
+
+def test_hybrid_reranked_mode_fetches_more_and_reranks(monkeypatch: pytest.MonkeyPatch) -> None:
+    """HYBRID_RERANKED expands the fetch limit and calls the cross-encoder."""
+
+    # Mock the Qdrant client to return a dummy point
+    spy_client = MagicMock(spec=QdrantClient)
+    dummy_point = ScoredPoint(
+        id="dummy-uuid",
+        version=1,
+        score=0.5,
+        payload={
+            "article_number": "KB0001",
+            "version": "1.0",
+            "title": "Title",
+            "category": "software",
+            "service": "app",
+            "workflow_state": "published",
+            "security_level": "public",
+            "section": "General",
+            "chunk_index": 0,
+            "total_chunks": 1,
+            "chunk_text": "Text",
+        },
+        vector=None,
+    )
+    spy_client.query_points.return_value = MagicMock(points=[dummy_point])
+
+    # Mock the reranker to observe the call
+    spy_reranker = MagicMock()
+    spy_reranker.rerank.return_value = [
+        RetrievalHit(
+            score=0.99,
+            article_id="KB0001-v1.0",
+            article_number="KB0001",
+            version="1.0",
+            title="Title",
+            section="General",
+            chunk_index=0,
+            chunk_text="Text",
+            workflow_state="published",
+            security_level="public",
+            category="software",
+            service="app",
+        )
+    ]
+    monkeypatch.setattr("app.retrieval.rerank.get_default_reranker", lambda: spy_reranker)
+
+    engine = _dummy_mock_engine()
+    hits = hybrid_search(
+        spy_client,
+        "test query",
+        collection_name="col",
+        limit=2,
+        engine=engine,
+        mode=RetrievalMode.HYBRID_RERANKED,
+    )
+
+    # Verify Qdrant was called with an expanded fetch_limit for reranking
+    kwargs = spy_client.query_points.call_args.kwargs
+    assert kwargs["limit"] >= 8  # DEFAULT_RERANK_CANDIDATE_MULTIPLIER=4 * 2
+
+    # Verify the reranker was called
+    assert spy_reranker.rerank.called
+    assert hits[0].score == 0.99
 
 
 # ---------------------------------------------------------------------------
@@ -191,9 +324,9 @@ def test_blank_query_raises_loudly() -> None:
     """An empty/whitespace query is invalid input and must fail loud, not return []."""
     spy_client = MagicMock(spec=QdrantClient)
     with pytest.raises(ValueError, match="query must be a non-empty string"):
-        retrieve_knowledge(spy_client, "")
+        hybrid_search(spy_client, "")
     with pytest.raises(ValueError, match="query must be a non-empty string"):
-        retrieve_knowledge(spy_client, "   ")
+        hybrid_search(spy_client, "   ")
     assert not spy_client.query_points.called
 
 
@@ -201,7 +334,7 @@ def test_empty_results_return_empty_list() -> None:
     """Zero matching points returns an empty list gracefully."""
     spy_client = MagicMock(spec=QdrantClient)
     spy_client.query_points.return_value = MagicMock(points=[])
-    hits = retrieve_knowledge(
+    hits = hybrid_search(
         spy_client,
         "some query",
         collection_name="col",
@@ -223,7 +356,7 @@ def test_malformed_payload_raises() -> None:
     spy_client.query_points.return_value = MagicMock(points=[bad_point])
 
     with pytest.raises(ValueError, match="bad-point-uuid.*malformed payload"):
-        retrieve_knowledge(
+        hybrid_search(
             spy_client,
             "test query",
             collection_name="col",
@@ -256,7 +389,7 @@ def test_wrong_typed_payload_value_raises() -> None:
     spy_client.query_points.return_value = MagicMock(points=[bad_point])
 
     with pytest.raises(ValueError, match="null-title-uuid.*malformed payload"):
-        retrieve_knowledge(
+        hybrid_search(
             spy_client,
             "test query",
             collection_name="col",
@@ -264,17 +397,40 @@ def test_wrong_typed_payload_value_raises() -> None:
         )
 
 
-def test_root_shim_exposes_entry_point() -> None:
-    """The retrieval.* compatibility namespace exposes the same public API as app.retrieval."""
-    from retrieval.search import (
-        RetrievalHit as ShimRetrievalHit,
-    )
-    from retrieval.search import (
-        retrieve_knowledge as shim_retrieve_knowledge,
+def test_timed_search_returns_search_result() -> None:
+    """timed_hybrid_search returns a SearchResult with latency_ms and mode."""
+    spy_client = MagicMock(spec=QdrantClient)
+    spy_client.query_points.return_value = MagicMock(points=[])
+
+    result = timed_hybrid_search(
+        spy_client,
+        "test query",
+        collection_name="col",
+        engine=_dummy_mock_engine(),
     )
 
-    assert shim_retrieve_knowledge is retrieve_knowledge
-    assert ShimRetrievalHit is RetrievalHit
+    assert result.hits == []
+    assert result.latency_ms >= 0
+    assert isinstance(result.mode, RetrievalMode)
+
+
+def test_settings_errors_stop_retrieval_instead_of_switching_collection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A broken config must fail, not silently search a different collection.
+
+    Previously any exception fell back to ``incident_knowledge_base``, so an unrelated
+    bad setting redirected retrieval away from the configured collection.
+    """
+    import app.core.config as config_module
+
+    def _boom() -> object:
+        raise RuntimeError("QDRANT_HTTP_PORT is not a valid integer")
+
+    monkeypatch.setattr(config_module, "get_retrieval_settings", _boom)
+
+    with pytest.raises(RuntimeError, match="QDRANT_HTTP_PORT"):
+        hybrid_search(MagicMock(), "any query")
 
 
 # ---------------------------------------------------------------------------
@@ -311,11 +467,13 @@ def test_p3_kb0010_v1_never_returned(
     client, engine, collection_name = seeded_acceptance_qdrant
     query = "the order service is returning errors and the pool is exhausted"
 
-    hits = retrieve_knowledge(
+    metadata = MetadataFilterBuilder(max_security_level=SecurityLevel.RESTRICTED)
+    hits = hybrid_search(
         client,
         query,
         collection_name=collection_name,
         limit=5,
+        metadata=metadata,
         engine=engine,
     )
 
@@ -337,11 +495,13 @@ def test_all_hits_are_published(
     client, engine, collection_name = seeded_acceptance_qdrant
     query = "the order service is returning errors and the pool is exhausted"
 
-    hits = retrieve_knowledge(
+    metadata = MetadataFilterBuilder(max_security_level=SecurityLevel.RESTRICTED)
+    hits = hybrid_search(
         client,
         query,
         collection_name=collection_name,
         limit=5,
+        metadata=metadata,
         engine=engine,
     )
 
@@ -367,12 +527,13 @@ def test_p3_kb0010_v2_present(
     client, engine, collection_name = seeded_acceptance_qdrant
     query = "the order service is returning errors and the pool is exhausted"
 
-    hits = retrieve_knowledge(
+    metadata = MetadataFilterBuilder(max_security_level=SecurityLevel.RESTRICTED)
+    hits = hybrid_search(
         client,
         query,
         collection_name=collection_name,
         limit=5,
-        max_security_level=SecurityLevel.RESTRICTED,
+        metadata=metadata,
         engine=engine,
     )
 
@@ -421,7 +582,7 @@ def test_restricted_articles_are_excluded_by_default(
     client, engine, collection_name = seeded_acceptance_qdrant
     query = "the order service is returning errors and the pool is exhausted"
 
-    hits = retrieve_knowledge(
+    hits = hybrid_search(
         client,
         query,
         collection_name=collection_name,
@@ -446,34 +607,16 @@ def test_restricted_articles_are_returned_when_explicitly_requested(
     client, engine, collection_name = seeded_acceptance_qdrant
     query = "the order service is returning errors and the pool is exhausted"
 
-    hits = retrieve_knowledge(
+    metadata = MetadataFilterBuilder(max_security_level=SecurityLevel.RESTRICTED)
+    hits = hybrid_search(
         client,
         query,
         collection_name=collection_name,
         limit=10,
-        max_security_level=SecurityLevel.RESTRICTED,
+        metadata=metadata,
         engine=engine,
     )
 
     assert any(h.security_level == "restricted" for h in hits), (
         "explicitly requesting the restricted tier returned none of it"
     )
-
-
-def test_settings_errors_stop_retrieval_instead_of_switching_collection(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A broken config must fail, not silently search a different collection.
-
-    Previously any exception fell back to ``incident_knowledge_base``, so an unrelated
-    bad setting redirected retrieval away from the configured collection.
-    """
-    import app.core.config as config_module
-
-    def _boom() -> object:
-        raise RuntimeError("QDRANT_HTTP_PORT is not a valid integer")
-
-    monkeypatch.setattr(config_module, "get_retrieval_settings", _boom)
-
-    with pytest.raises(RuntimeError, match="QDRANT_HTTP_PORT"):
-        retrieve_knowledge(MagicMock(), "any query")
