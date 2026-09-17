@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import structlog
 from pydantic import BaseModel, ConfigDict, ValidationError
 from qdrant_client import QdrantClient
-from qdrant_client.models import Filter, Prefetch
+from qdrant_client.models import Filter, Fusion, FusionQuery, Prefetch, SparseVector
 
 from app.clients.qdrant import DENSE_VECTOR_NAME, SPARSE_VECTOR_NAME
 from app.core.config import RetrievalMode, get_retrieval_settings
@@ -162,7 +162,7 @@ def timed_hybrid_search(
                 limit=prefetch_limit,
             ),
             Prefetch(
-                query=client.SparseVector(
+                query=SparseVector(
                     indices=embedded.sparse_indices,
                     values=embedded.sparse_values,
                 ),
@@ -174,7 +174,7 @@ def timed_hybrid_search(
         response = client.query_points(
             collection_name=target_collection,
             prefetch=prefetches,
-            query=client.FusionQuery(fusion=client.Fusion.RRF),
+            query=FusionQuery(fusion=Fusion.RRF),
             query_filter=search_filter,
             limit=fetch_limit,
             with_payload=True,

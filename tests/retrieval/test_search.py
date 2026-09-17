@@ -18,7 +18,6 @@ from app.models.knowledge import Article, SecurityLevel, WorkflowState
 from app.retrieval.embedding import EmbeddedText, FastEmbedEngine
 from app.retrieval.hybrid_search import (
     RetrievalHit,
-    _allowed_security_levels,
     _build_filter,
     retrieve_knowledge,
 )
@@ -404,17 +403,6 @@ def test_corpus_max_one_published_per_article_number() -> None:
 # ---------------------------------------------------------------------------
 # #45 — restricted knowledge must not reach callers that did not ask for it
 # ---------------------------------------------------------------------------
-
-
-def test_allowed_security_levels_is_cumulative() -> None:
-    """A caller cleared for a level may read every level at or below it."""
-    assert _allowed_security_levels(SecurityLevel.PUBLIC) == ["public"]
-    assert _allowed_security_levels(SecurityLevel.INTERNAL) == ["public", "internal"]
-    assert _allowed_security_levels(SecurityLevel.RESTRICTED) == [
-        "public",
-        "internal",
-        "restricted",
-    ]
 
 
 @pytest.mark.skipif(

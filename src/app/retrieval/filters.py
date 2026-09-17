@@ -23,7 +23,7 @@ StrOrList = str | list[str] | None
 class MetadataFilterBuilder:
     category: StrOrList | None = None
     service: StrOrList | None = None
-    workflow_state: list[WorkflowState]
+    workflow_state: list[WorkflowState] | None = None
     version: StrOrList | None = None
     max_security_level: SecurityLevel = DEFAULT_MAX_SECURITY_LEVEL
 
@@ -49,7 +49,7 @@ def build_metadata_filter(
 ) -> Filter:
     metadata = metadata or MetadataFilterBuilder()
 
-    states = metadata.worflow_state or [WorkflowState.PUBLISHED]
+    states = metadata.workflow_state or [WorkflowState.PUBLISHED]
     if not states:
         raise ValueError("workflow_states must not be an empty list")
 
