@@ -1,0 +1,1271 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "BARQ Agentic Incident Resolution Platform",
+    "description": "Autonomous incident triage, diagnosis, and remediation platform with HITL governance.",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Liveness probe",
+        "description": "Process liveness probe; returns 200 if ASGI process is running.",
+        "operationId": "health_check_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Health Check Health Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ready": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Readiness probe",
+        "description": "Readiness probe checking PostgreSQL and Redis connectivity.",
+        "operationId": "readiness_check_ready_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/webhook/incident": {
+      "post": {
+        "tags": [
+          "Webhook"
+        ],
+        "summary": "Ingest inbound ServiceNow incident event",
+        "description": "Validates Outbound Event Contract v1, persists idempotently, and enqueues to Redis.",
+        "operationId": "ingest_incident_webhook_api_v1_webhook_incident_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IncidentWebhookPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookAcceptedResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/executions/{execution_id}": {
+      "get": {
+        "tags": [
+          "Executions"
+        ],
+        "summary": "Get execution details by ID",
+        "description": "Fetch the operational status and lifecycle attributes of a specific execution.",
+        "operationId": "get_execution_api_v1_executions__execution_id__get",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "execution_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Execution Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExecutionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/executions/{execution_id}/trace": {
+      "get": {
+        "tags": [
+          "Executions"
+        ],
+        "summary": "Get execution trace and node progression",
+        "description": "Fetch the ordered sequence of workflow node states executed for this run.",
+        "operationId": "get_execution_trace_api_v1_executions__execution_id__trace_get",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "execution_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Execution Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TraceResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/incidents/{sys_id}/executions": {
+      "get": {
+        "tags": [
+          "Executions"
+        ],
+        "summary": "List all executions for a ServiceNow incident",
+        "description": "Fetch all execution audit runs associated with a 32-hex incident sys_id.",
+        "operationId": "list_incident_executions_api_v1_incidents__sys_id__executions_get",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "sys_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sys Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IncidentExecutionsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/approvals": {
+      "get": {
+        "tags": [
+          "Approvals"
+        ],
+        "summary": "List all approval decisions",
+        "description": "Fetch recorded human approval decisions, optionally filtered by execution ID or deciding operator.",
+        "operationId": "list_approvals_api_v1_approvals_get",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "execution_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional filter by execution ID",
+              "title": "Execution Id"
+            },
+            "description": "Optional filter by execution ID"
+          },
+          {
+            "name": "decided_by",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional filter by deciding operator user ID",
+              "title": "Decided By"
+            },
+            "description": "Optional filter by deciding operator user ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ApprovalResponse"
+                  },
+                  "title": "Response List Approvals Api V1 Approvals Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/approvals/{id}": {
+      "get": {
+        "tags": [
+          "Approvals"
+        ],
+        "summary": "Get approval details by ID",
+        "description": "Fetch a specific human approval record by its unique ID.",
+        "operationId": "get_approval_api_v1_approvals__id__get",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/approvals/{id}/decide": {
+      "post": {
+        "tags": [
+          "Approvals"
+        ],
+        "summary": "Submit human operator approval decision",
+        "description": "Record or submit a human operator decision ('approved', 'rejected', 'cancelled', 'expired') for an approval request.",
+        "operationId": "decide_approval_api_v1_approvals__id__decide_post",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApprovalDecisionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config": {
+      "get": {
+        "tags": [
+          "Configuration"
+        ],
+        "summary": "Get sanitized runtime configuration",
+        "description": "Retrieve application runtime configuration with all sensitive secrets redacted.",
+        "operationId": "get_config_api_v1_config_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RedactedConfigResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ApprovalDecisionRequest": {
+        "properties": {
+          "decision": {
+            "type": "string",
+            "enum": [
+              "approved",
+              "rejected",
+              "cancelled",
+              "expired"
+            ],
+            "title": "Decision",
+            "description": "Decision: 'approved', 'rejected', 'cancelled', or 'expired'"
+          },
+          "decided_by": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Decided By",
+            "description": "Identity of the deciding operator"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason",
+            "description": "Optional justification, feedback, or remediation note"
+          },
+          "evidence": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence",
+            "description": "Optional structured evidence or parameter overrides"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "decision",
+          "decided_by"
+        ],
+        "title": "ApprovalDecisionRequest",
+        "description": "Schema for submitting a human operator approval decision."
+      },
+      "ApprovalResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id",
+            "description": "Primary key from approvals.id"
+          },
+          "execution_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Execution Id",
+            "description": "Foreign key to executions.execution_id"
+          },
+          "workflow_state_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workflow State Id",
+            "description": "Foreign key to workflow_state.id if associated with a specific node"
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "approved",
+              "rejected",
+              "cancelled",
+              "expired"
+            ],
+            "title": "Decision",
+            "description": "Decision outcome matching approvals.decision constraint"
+          },
+          "decided_by": {
+            "type": "string",
+            "maxLength": 255,
+            "title": "Decided By",
+            "description": "Identity of the operator or automated service that decided"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason",
+            "description": "Operator justification or explanation text"
+          },
+          "evidence": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence",
+            "description": "Structured context or parameters evaluated during decision"
+          },
+          "decided_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Decided At",
+            "description": "Timestamp when the decision was finalized"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "execution_id",
+          "decision",
+          "decided_by",
+          "decided_at"
+        ],
+        "title": "ApprovalResponse",
+        "description": "Schema representing an approval record from the 'approvals' table."
+      },
+      "ExecutionNodeStateResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id",
+            "description": "Primary key of workflow_state record"
+          },
+          "execution_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Execution Id",
+            "description": "Foreign key to executions.execution_id"
+          },
+          "sequence_number": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Sequence Number",
+            "description": "Sequence order of the node attempt (>= 1)"
+          },
+          "node_name": {
+            "type": "string",
+            "maxLength": 100,
+            "title": "Node Name",
+            "description": "Name of the workflow node"
+          },
+          "attempt": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Attempt",
+            "description": "Attempt count for this specific node (>= 1)",
+            "default": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "started",
+              "succeeded",
+              "failed",
+              "blocked",
+              "awaiting_approval",
+              "skipped"
+            ],
+            "title": "Status",
+            "description": "Node state status matching workflow_state.status constraint"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Started At",
+            "description": "Timestamp when node attempt started"
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At",
+            "description": "Timestamp when node attempt concluded"
+          },
+          "evidence": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Evidence",
+            "description": "Evidence array gathered during this node execution"
+          },
+          "decision": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision",
+            "description": "Node decision payload if applicable"
+          },
+          "state_snapshot": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State Snapshot",
+            "description": "State snapshot object if captured"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "execution_id",
+          "sequence_number",
+          "node_name",
+          "status",
+          "started_at"
+        ],
+        "title": "ExecutionNodeStateResponse",
+        "description": "Schema representing one node attempt from the 'workflow_state' table."
+      },
+      "ExecutionResponse": {
+        "properties": {
+          "execution_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Execution Id",
+            "description": "Primary key from executions.execution_id"
+          },
+          "event_record_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Event Record Id",
+            "description": "Foreign key to events.id"
+          },
+          "incident_sys_id": {
+            "type": "string",
+            "maxLength": 32,
+            "title": "Incident Sys Id",
+            "description": "ServiceNow incident 32-character sys_id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "accepted",
+              "queued",
+              "running",
+              "awaiting_approval",
+              "succeeded",
+              "failed",
+              "blocked",
+              "abandoned"
+            ],
+            "title": "Status",
+            "description": "Execution lifecycle status matching executions.status constraint"
+          },
+          "node_reached": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Reached",
+            "description": "Latest workflow node entered"
+          },
+          "model_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Name",
+            "description": "LLM model identifier used for this execution"
+          },
+          "agent_version": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Version",
+            "description": "Version string of the executing agent"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Started At",
+            "description": "Timestamp when execution started"
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At",
+            "description": "Timestamp when execution reached a terminal state"
+          },
+          "termination_cause": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Termination Cause",
+            "description": "Explanation when execution reached terminal status"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At",
+            "description": "Timestamp when execution record was last modified"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "execution_id",
+          "event_record_id",
+          "incident_sys_id",
+          "status",
+          "started_at",
+          "updated_at"
+        ],
+        "title": "ExecutionResponse",
+        "description": "Schema representing an execution record from the 'executions' table."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "IncidentExecutionsResponse": {
+        "properties": {
+          "incident_sys_id": {
+            "type": "string",
+            "maxLength": 32,
+            "title": "Incident Sys Id",
+            "description": "ServiceNow incident 32-character sys_id"
+          },
+          "executions": {
+            "items": {
+              "$ref": "#/components/schemas/ExecutionResponse"
+            },
+            "type": "array",
+            "title": "Executions",
+            "description": "List of executions associated with this incident"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "incident_sys_id"
+        ],
+        "title": "IncidentExecutionsResponse",
+        "description": "Collection of execution records for a specific ServiceNow incident."
+      },
+      "IncidentWebhookPayload": {
+        "properties": {
+          "event_id": {
+            "type": "string",
+            "title": "Event Id",
+            "description": "Unique identifier for the event."
+          },
+          "sys_id": {
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{32}$",
+            "title": "Sys Id",
+            "description": "The system identifier for the incident."
+          },
+          "number": {
+            "type": "string",
+            "maxLength": 32,
+            "pattern": "^INC\\d{7,}$",
+            "title": "Number",
+            "description": "The number of the incident."
+          },
+          "event_type": {
+            "type": "string",
+            "enum": [
+              "incident.created",
+              "incident.updated"
+            ],
+            "title": "Event Type",
+            "description": "The type of the event."
+          },
+          "contract_version": {
+            "type": "string",
+            "title": "Contract Version",
+            "description": "Contract version",
+            "default": "v1"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "event_id",
+          "sys_id",
+          "number",
+          "event_type"
+        ],
+        "title": "IncidentWebhookPayload",
+        "description": "Pydantic model for an inbound ServiceNow incident event payload."
+      },
+      "RedactedConfigResponse": {
+        "properties": {
+          "app_name": {
+            "type": "string",
+            "title": "App Name",
+            "description": "Application name"
+          },
+          "app_version": {
+            "type": "string",
+            "title": "App Version",
+            "description": "Semantic version of running application"
+          },
+          "environment": {
+            "type": "string",
+            "title": "Environment",
+            "description": "Runtime environment (development, staging, production)"
+          },
+          "log_level": {
+            "type": "string",
+            "title": "Log Level",
+            "description": "Configured logging level"
+          },
+          "bind_ip": {
+            "type": "string",
+            "title": "Bind Ip",
+            "description": "Bound IP address for listener"
+          },
+          "servicenow_instance_url": {
+            "type": "string",
+            "title": "Servicenow Instance Url",
+            "description": "Base ServiceNow instance URL"
+          },
+          "servicenow_client_id": {
+            "type": "string",
+            "title": "Servicenow Client Id",
+            "description": "ServiceNow OAuth client ID"
+          },
+          "servicenow_username": {
+            "type": "string",
+            "title": "Servicenow Username",
+            "description": "ServiceNow API username"
+          },
+          "client_secret": {
+            "type": "string",
+            "title": "Client Secret",
+            "description": "Redacted ServiceNow OAuth client secret",
+            "default": "***REDACTED***"
+          },
+          "servicenow_client_secret": {
+            "type": "string",
+            "title": "Servicenow Client Secret",
+            "description": "Redacted ServiceNow OAuth client secret",
+            "default": "***REDACTED***"
+          },
+          "servicenow_password": {
+            "type": "string",
+            "title": "Servicenow Password",
+            "description": "Redacted ServiceNow API user password",
+            "default": "***REDACTED***"
+          },
+          "servicenow_timeout_seconds": {
+            "type": "integer",
+            "title": "Servicenow Timeout Seconds",
+            "description": "Timeout in seconds for ServiceNow requests"
+          },
+          "servicenow_token_expiry_buffer_seconds": {
+            "type": "integer",
+            "title": "Servicenow Token Expiry Buffer Seconds",
+            "description": "Buffer seconds before token expiration to refresh"
+          },
+          "servicenow_kb_id": {
+            "type": "string",
+            "title": "Servicenow Kb Id",
+            "description": "Target knowledge base sys_id"
+          },
+          "webhook_auth_token": {
+            "type": "string",
+            "title": "Webhook Auth Token",
+            "description": "Redacted webhook bearer authentication secret",
+            "default": "***REDACTED***"
+          },
+          "postgres_host": {
+            "type": "string",
+            "title": "Postgres Host",
+            "description": "PostgreSQL server hostname"
+          },
+          "postgres_port": {
+            "type": "integer",
+            "title": "Postgres Port",
+            "description": "PostgreSQL server port"
+          },
+          "postgres_db": {
+            "type": "string",
+            "title": "Postgres Db",
+            "description": "Target database name"
+          },
+          "postgres_user": {
+            "type": "string",
+            "title": "Postgres User",
+            "description": "Database connection username"
+          },
+          "postgres_password": {
+            "type": "string",
+            "title": "Postgres Password",
+            "description": "Redacted PostgreSQL database password",
+            "default": "***REDACTED***"
+          },
+          "redis_host": {
+            "type": "string",
+            "title": "Redis Host",
+            "description": "Redis cache and queue hostname"
+          },
+          "redis_port": {
+            "type": "integer",
+            "title": "Redis Port",
+            "description": "Redis port"
+          },
+          "redis_password": {
+            "type": "string",
+            "title": "Redis Password",
+            "description": "Redacted Redis authentication password",
+            "default": "***REDACTED***"
+          },
+          "qdrant_url": {
+            "type": "string",
+            "title": "Qdrant Url",
+            "description": "Qdrant vector engine URL"
+          },
+          "qdrant_http_port": {
+            "type": "integer",
+            "title": "Qdrant Http Port",
+            "description": "Qdrant HTTP port"
+          },
+          "qdrant_grpc_port": {
+            "type": "integer",
+            "title": "Qdrant Grpc Port",
+            "description": "Qdrant gRPC port"
+          },
+          "qdrant_collection_name": {
+            "type": "string",
+            "title": "Qdrant Collection Name",
+            "description": "Active incident knowledge base collection name"
+          },
+          "qdrant_log_level": {
+            "type": "string",
+            "title": "Qdrant Log Level",
+            "description": "Qdrant logging verbosity"
+          },
+          "dense_embedding_model": {
+            "type": "string",
+            "title": "Dense Embedding Model",
+            "description": "Dense embedding transformer model identifier"
+          },
+          "sparse_embedding_model": {
+            "type": "string",
+            "title": "Sparse Embedding Model",
+            "description": "Sparse keyword model identifier"
+          },
+          "retrieval_mode": {
+            "$ref": "#/components/schemas/RetrievalMode",
+            "description": "Active retrieval strategy: 'dense_only', 'hybrid', or 'hybrid_reranked'",
+            "default": "hybrid"
+          },
+          "active_feature_flags": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "type": "object",
+            "title": "Active Feature Flags",
+            "description": "Active platform feature flag statuses"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "app_name",
+          "app_version",
+          "environment",
+          "log_level",
+          "bind_ip",
+          "servicenow_instance_url",
+          "servicenow_client_id",
+          "servicenow_username",
+          "servicenow_timeout_seconds",
+          "servicenow_token_expiry_buffer_seconds",
+          "servicenow_kb_id",
+          "postgres_host",
+          "postgres_port",
+          "postgres_db",
+          "postgres_user",
+          "redis_host",
+          "redis_port",
+          "qdrant_url",
+          "qdrant_http_port",
+          "qdrant_grpc_port",
+          "qdrant_collection_name",
+          "qdrant_log_level",
+          "dense_embedding_model",
+          "sparse_embedding_model"
+        ],
+        "title": "RedactedConfigResponse",
+        "description": "Schema representing runtime configuration with all sensitive secrets redacted."
+      },
+      "RetrievalMode": {
+        "type": "string",
+        "enum": [
+          "dense_only",
+          "hybrid",
+          "hybrid_reranked"
+        ],
+        "title": "RetrievalMode"
+      },
+      "TraceResponse": {
+        "properties": {
+          "execution_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Execution Id",
+            "description": "Unique execution identifier"
+          },
+          "incident_sys_id": {
+            "type": "string",
+            "maxLength": 32,
+            "title": "Incident Sys Id",
+            "description": "ServiceNow incident sys_id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "accepted",
+              "queued",
+              "running",
+              "awaiting_approval",
+              "succeeded",
+              "failed",
+              "blocked",
+              "abandoned"
+            ],
+            "title": "Status",
+            "description": "Current execution status"
+          },
+          "node_states": {
+            "items": {
+              "$ref": "#/components/schemas/ExecutionNodeStateResponse"
+            },
+            "type": "array",
+            "title": "Node States",
+            "description": "Ordered list of historical workflow node attempts from workflow_state"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "execution_id",
+          "incident_sys_id",
+          "status"
+        ],
+        "title": "TraceResponse",
+        "description": "Execution trace progression combining execution status and workflow node states."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "WebhookAcceptedResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "accepted"
+          },
+          "event_id": {
+            "type": "string",
+            "title": "Event Id"
+          },
+          "correlation_id": {
+            "type": "string",
+            "title": "Correlation Id"
+          },
+          "idempotent_replay": {
+            "type": "boolean",
+            "title": "Idempotent Replay",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "event_id",
+          "correlation_id"
+        ],
+        "title": "WebhookAcceptedResponse",
+        "description": "Response returned upon successful acceptance (HTTP 202) of an inbound incident event."
+      }
+    },
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "description": "Bearer token authentication. Enter your token (without 'Bearer ' prefix).",
+        "scheme": "bearer"
+      }
+    }
+  }
+}

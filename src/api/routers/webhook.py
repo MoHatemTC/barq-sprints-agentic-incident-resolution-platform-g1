@@ -2,24 +2,22 @@
 
 from __future__ import annotations
 
-import secrets
 from typing import Annotated
 
 import structlog
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, status
 from redis.asyncio import Redis
 
+from api.auth import verify_bearer_token
 from api.schemas.webhook import IncidentWebhookPayload, WebhookAcceptedResponse
 from app.api.dependencies import (
-    get_app_settings,
     get_redis,
     get_session_factory,
 )
-from app.core.config import Settings
 from app.core.correlation import get_correlation_id
 from app.db.redis.keys import INCIDENT_EVENTS_QUEUE
 from app.db.session import SessionFactory
-from app.exceptions.app_errors import AuthenticationError, ServiceUnavailableError
+from app.exceptions.app_errors import ServiceUnavailableError
 from app.repositories.idempotency import (
     EventAcceptanceStatus,
     InboundEvent,
@@ -28,7 +26,11 @@ from app.repositories.idempotency import (
 
 logger = structlog.getLogger("api.webhook")
 
-router = APIRouter(prefix="/api/v1/webhook", tags=["Webhook"])
+router = APIRouter(
+    prefix="/api/v1/webhook",
+    tags=["Webhook"],
+    dependencies=[Depends(verify_bearer_token)],
+)
 
 
 @router.post(
@@ -42,24 +44,13 @@ router = APIRouter(prefix="/api/v1/webhook", tags=["Webhook"])
 )
 async def ingest_incident_webhook(
     payload: IncidentWebhookPayload,
-    request: Request,
     session_factory: Annotated[SessionFactory, Depends(get_session_factory)],
     redis_client: Annotated[Redis, Depends(get_redis)],
-    settings: Annotated[Settings, Depends(get_app_settings)],
 ) -> WebhookAcceptedResponse:
     """Ingest, validate, persist, and queue an incoming ServiceNow incident event."""
     correlation_id = get_correlation_id()
 
-    # 1. Bearer Token Authentication
-    auth_header = request.headers.get("Authorization")
-    if not auth_header or not auth_header.startswith("Bearer "):
-        raise AuthenticationError("Missing or invalid Bearer token")
-
-    token = auth_header[7:]
-    if not secrets.compare_digest(token, settings.webhook_auth_token):
-        raise AuthenticationError("Invalid Bearer token")
-
-    # 2. Idempotent Database Persistence
+    # 1. Idempotent Database Persistence
     inbound = InboundEvent(
         event_id=payload.event_id,
         sys_id=payload.sys_id,

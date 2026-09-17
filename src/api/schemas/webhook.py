@@ -23,6 +23,7 @@ class IncidentWebhookPayload(BaseModel):
     number: str = Field(
         ...,
         pattern=r"^INC\d{7,}$",
+        max_length=32,
         description="The number of the incident.",
     )
     event_type: Literal["incident.created", "incident.updated"] = Field(

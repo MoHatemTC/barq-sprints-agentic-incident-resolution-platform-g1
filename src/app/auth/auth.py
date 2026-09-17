@@ -6,23 +6,29 @@ import secrets
 from collections.abc import Callable
 from typing import Annotated
 
-from fastapi import Depends, Header, Request
+from fastapi import Depends, Header
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.api.dependencies import get_app_settings
 from app.core.config import Settings
 from app.exceptions.app_errors import AuthenticationError, PermissionDeniedError
 
+http_bearer_scheme = HTTPBearer(
+    auto_error=False,
+    scheme_name="BearerAuth",
+    description="Bearer token authentication. Enter your token (without 'Bearer ' prefix).",
+)
+
 
 def verify_bearer_token(
-    request: Request,
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(http_bearer_scheme)],
     settings: Annotated[Settings, Depends(get_app_settings)],
 ) -> str:
     """Validate Bearer authentication header against configured webhook auth token."""
-    auth_header = request.headers.get("Authorization")
-    if not auth_header or not auth_header.startswith("Bearer "):
+    if not credentials or not credentials.credentials:
         raise AuthenticationError("Missing or invalid Bearer token")
 
-    token = auth_header[7:].strip()
+    token = credentials.credentials.strip()
     if not secrets.compare_digest(token, settings.webhook_auth_token):
         raise AuthenticationError("Invalid Bearer token")
 
