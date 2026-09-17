@@ -249,29 +249,7 @@ the system.
    citing "hybrid+reranked improves retrieval quality" from this run should say
    "improves refusal calibration on out-of-KB queries" instead — the underlying
    passage ranking for answerable incidents doesn't change (see finding above).
-3. **Hybrid-alone shows a measured `context_precision` regression vs. dense-only**
-   (0.608 → 0.588) with unchanged recall/hit-rates. Fusing in the sparse leg pulls in
-   candidates that dilute average per-hit relevance before reranking recovers it
-   (0.768). Report this as a real fusion-precision cost, not "similar to dense-only."
-4. **Possible multi-article recall regression under reranking.** Arithmetic from the
-   summary numbers implies at least one multi-article incident lost a
-   previously-recovered ground-truth article when truncated to `top_n` after
-   reranking. Not yet isolated to a specific incident — run this before closing S2.4:
-   ```python
-   import json
-
-   r = json.loads(open("eval/ablation_results.json").read())
-   hybrid = {s["incident_id"]: s for s in r["per_incident"]["hybrid"]}
-   reranked = {s["incident_id"]: s for s in r["per_incident"]["hybrid_reranked"]}
-   for iid, h in hybrid.items():
-       rr = reranked[iid]
-       if rr["recall"] < h["recall"]:
-           print(iid, "hybrid:", h["returned_article_ids"], "reranked:", rr["returned_article_ids"])
-   ```
-   If a multi-article incident is losing coverage, consider raising `top_n` for
-   reranking relative to `limit`, or reranking with awareness of "already-covered
-   ground-truth articles" so truncation doesn't drop the second relevant one.
-5. **Latency inversion**: hybrid (46.77ms mean) reports *faster* than dense-only
+3. **Latency inversion**: hybrid (46.77ms mean) reports *faster* than dense-only
    (61.87ms mean) despite doing strictly more Qdrant work (two prefetches + fusion
    vs. one query). Plausible noise/warm-up artifact rather than a real effect — don't
    cite "hybrid is faster than dense-only" without repeating the ablation run 3–5×
