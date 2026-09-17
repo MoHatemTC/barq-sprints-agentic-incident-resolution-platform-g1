@@ -48,6 +48,9 @@ async def ingest_incident_webhook(
 ) -> WebhookAcceptedResponse:
     """Ingest, validate, persist, and queue an incoming ServiceNow incident event."""
     correlation_id = get_correlation_id()
+    # Authenticate before tracing: an unauthenticated caller must not be able to
+    # create traces.
+    _authenticate(request, settings)
     tracer = get_tracer()
     with (
         tracer.span(
@@ -67,6 +70,17 @@ async def ingest_incident_webhook(
         return response
 
 
+def _authenticate(request: Request, settings: Settings) -> None:
+    """1. Bearer Token Authentication."""
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise AuthenticationError("Missing or invalid Bearer token")
+
+    token = auth_header[7:]
+    if not secrets.compare_digest(token, settings.webhook_auth_token):
+        raise AuthenticationError("Invalid Bearer token")
+
+
 async def _ingest(
     payload: IncidentWebhookPayload,
     request: Request,
@@ -75,15 +89,6 @@ async def _ingest(
     correlation_id: str,
 ) -> WebhookAcceptedResponse:
     tracer = get_tracer()
-
-    # 1. Bearer Token Authentication
-    auth_header = request.headers.get("Authorization")
-    if not auth_header or not auth_header.startswith("Bearer "):
-        raise AuthenticationError("Missing or invalid Bearer token")
-
-    token = auth_header[7:]
-    if not secrets.compare_digest(token, settings.webhook_auth_token):
-        raise AuthenticationError("Invalid Bearer token")
 
     # 2. Idempotent Database Persistence
     inbound = InboundEvent(

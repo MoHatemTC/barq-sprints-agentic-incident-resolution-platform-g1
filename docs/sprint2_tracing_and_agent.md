@@ -91,7 +91,7 @@ list prices, so Langfuse can total it) and the prompt name and version.
 
 | Traced | Not traced |
 |---|---|
-| webhook receipt and enqueue (API) | authentication failures before the handler runs |
+| webhook receipt and enqueue (API), after the bearer token is accepted | unauthenticated requests (checked before any span opens) |
 | worker pickup, one span per attempt, with the attempt number | Celery's internal broker traffic |
 | one span per node, in execution order | Postgres checkpoint writes (the rows are their own audit trail) |
 | every ServiceNow call, with its permitted-action name and risk class | ServiceNow response bodies (only `ok` / error type) |

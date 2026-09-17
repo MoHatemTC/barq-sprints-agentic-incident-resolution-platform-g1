@@ -177,6 +177,11 @@ the work note says approval is required. The Sprint 4 interrupt hooks onto the s
   `sprint2_tracing_and_agent.md` §4).
 - **"Ask" outcome:** the W0.3 set expects vague reports to be answered with a request
   for detail. Today they escalate as low confidence.
+- **Failed executions on the incident:** when the worker dead-letters an event
+  (retries exhausted or a terminal error), nothing is written back, so the incident stays
+  `pending`. Manual §11.4 expects "AI Status shows failed, with a reason". The fix is a
+  failure write-back (`ai_processing_state=failed` + `ai_failure_reason`) in the worker's
+  failure path. That path is S2.3's code, so the change needs its owner.
 - **Service tiers:** `load` reads the service from `business_service`, and only the
   display value names the tier. Reading with `sysparm_display_value` is a small S1.5
   client change. Without it, the Tier 1 rule relies on priority alone.

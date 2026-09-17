@@ -258,6 +258,39 @@ class TestCorrelation:
         assert by_id[enqueue.parent.span_id].name == "webhook.receipt"
         assert {format(s.context.trace_id, "032x") for s in spans} == {trace_id_for("corr-http-1")}
 
+    @pytest.mark.asyncio
+    async def test_unauthenticated_webhook_calls_are_not_traced(self) -> None:
+        from app.main import create_app
+        from tests.helpers import mock_settings
+
+        tracer, exporter = recording_tracer()
+        app = create_app(settings=mock_settings(webhook_auth_token="tok"))
+        app.state.engine = MagicMock()
+        app.state.session_factory = MagicMock()
+        app.state.redis = MagicMock()
+        payload = {
+            "event_id": "evt-x",
+            "sys_id": VPN["sys_id"],
+            "number": VPN["number"],
+            "event_type": "incident.created",
+        }
+        with (
+            patch("api.routers.webhook.get_tracer", return_value=tracer),
+            patch("api.routers.webhook.accept_inbound_event", new_callable=AsyncMock) as accept,
+        ):
+            async with AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://test"
+            ) as client:
+                missing = await client.post("/api/v1/webhook/incident", json=payload)
+                wrong = await client.post(
+                    "/api/v1/webhook/incident",
+                    json=payload,
+                    headers={"Authorization": "Bearer nope"},
+                )
+        assert (missing.status_code, wrong.status_code) == (401, 401)
+        accept.assert_not_called()
+        assert finished(tracer, exporter) == []
+
     def test_celery_request_exposes_the_header(self) -> None:
         from app.workers.tasks import correlation_id_from
 
