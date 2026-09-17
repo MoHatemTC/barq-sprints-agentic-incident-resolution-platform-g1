@@ -262,6 +262,16 @@ ServiceNow evaluates the ACL on the server for every write, against the stored r
 
 The integration role cannot clear the lock itself: `incident.x_2215032_ai_inc_0_ai_human_lock` has its own write ACL for `admin` only (`LOCK-01`). The role choice is recorded in the S1.1 field model (#69).
 
+Who can set the two human-controlled fields, checked on `dev434590` on 2026-09-17 against incident `INC0008001`:
+
+| Identity | `ai_human_lock` | `ai_enabled` | `ai_retry_count` | Incident record |
+|---|---|---|---|---|
+| `admin` | writes (REST `PATCH` stored `true`/`false`, then restored) | writes | writes | writes |
+| `itil` (stock demo user) | refused | refused | refused | writes |
+| `ai_orchestrator_svc` | refused | refused | refused | writes while unlocked |
+
+The `admin` row is a real `PATCH` over the Table API. The other two rows come from `GlideRecordSecure.canWrite()` in a background script that impersonates each user. The harness covers the `ai_orchestrator_svc` row (`LOCK-01`, `LOCK-02`, `DENY-06`). It has no admin credential by design, so the `admin` row is recorded here rather than tested by the harness.
+
 > [!NOTE]
 > **Why not a Business Rule.** The first version used a `before update` Business Rule calling `current.setAbortAction(true)`. Built inside the app scope, that rule fires but cannot abort a write to the Global `incident` table: on `dev434590` the rule ran, its conditions were all true, and the work note was still written. The earlier export worked around this by shipping the rule in the Global scope, which a clean install refuses to commit (#48). The ACL condition needs neither.
 
@@ -404,5 +414,7 @@ if (br.get('2f5038f9475f8b10c148497f316d43f5')) { br.deleteRecord(); }
     if (custom.get(id)) { custom.deleteRecord(); }
 });
 ```
+
+Step 4 also deletes a duplicate `admin` role link on the Human Lock write ACL (`c3f8aba4…`); the re-exported S1.2 set no longer contains it.
 
 The other three Global ACLs in the earlier export (`a2a3e94e…`, `91b7ec2c…`, `66f0fbc6…`) match the platform baseline in content and need no change. Afterwards, re-run the harness: `DENY-07` fails on `dev407364` until the journal changes are in place.

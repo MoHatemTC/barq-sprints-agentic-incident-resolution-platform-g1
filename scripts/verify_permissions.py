@@ -1149,7 +1149,7 @@ def _test_ai_enabled(client: httpx.Client, hdrs: dict[str, str], inc_sys_id: str
 def _test_human_lock_safety_stop(
     client: httpx.Client, hdrs: dict[str, str], inc_sys_id: str
 ) -> TestResult:
-    """LOCK-03: When ai_human_lock is true, automated AI updates are aborted by Business Rule."""
+    """LOCK-03: With ai_human_lock set, the scoped incident write ACL refuses automated updates."""
     # Look for any incident where human lock is active
     locked_res = client.get(
         f"{TABLE_API_BASE}/incident?sysparm_query={HUMAN_LOCK_FIELD}=true&sysparm_limit=1",
@@ -1189,7 +1189,7 @@ def _test_human_lock_safety_stop(
         return TestResult(
             test_id="LOCK-03",
             category="Human Lock",
-            name="Platform Business Rule enforces safety stop on locked incident",
+            name="Server refuses automated update on locked incident",
             operation="PATCH",
             target=f"incident/{target_id}",
             expected="HTTP 400/403 abort + 0 journal entries",
@@ -1197,7 +1197,7 @@ def _test_human_lock_safety_stop(
             observed=f"HTTP {patch_r.status_code} | journal_count={journal_count}",
             persisted_change=(journal_count > 0),
             verdict="PASS" if aborted else "FAIL",
-            notes=f"Locked incident {target_num}: Business rule aborted automated update."
+            notes=f"Locked incident {target_num}: server refused the automated update."
             if aborted
             else f"SECURITY FAILURE: Automated update persisted on locked incident {target_num}!",
         )
@@ -1205,7 +1205,7 @@ def _test_human_lock_safety_stop(
         return TestResult(
             test_id="LOCK-03",
             category="Human Lock",
-            name="Platform Business Rule enforces safety stop on locked incident",
+            name="Server refuses automated update on locked incident",
             operation="PATCH",
             target=f"incident ({HUMAN_LOCK_FIELD}=true)",
             expected="Active locked incident tested and aborted",

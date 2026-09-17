@@ -523,4 +523,29 @@
 <update_set display_value=""/>
 <view/>
 </sys_update_xml>
-</unload>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>DELETE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_security_acl_role_c3f8aba4475f4310c148497f316d4323</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_security_acl_role"><sys_security_acl_role action="DELETE"><sys_class_name>sys_security_acl_role</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-10 08:51:55</sys_created_on><sys_id>c3f8aba4475f4310c148497f316d4323</sys_id><sys_mod_count>0</sys_mod_count><sys_name>.admin</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_security_acl display_value="incident.x_2215032_ai_inc_0_ai_human_lock">9dd8efa4475f4310c148497f316d43bc</sys_security_acl><sys_update_name>sys_security_acl_role_c3f8aba4475f4310c148497f316d4323</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-10 08:51:55</sys_updated_on><sys_user_role display_value="admin" name="admin">2831a114c611228501d4ea6c309d626d</sys_user_role></sys_security_acl_role></record_update>]]></payload>
+<payload_hash>1740225914</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.2 - Security fixes (#47 #48 #49 #50 #68 #100)">dd48383a731b4b102aedfed25ab8b74f</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-17 00:11:18</sys_created_on>
+<sys_id>3615f5fa73138b102aedfed25ab8b78b</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a0acb356740000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-17 00:11:18</sys_updated_on>
+<table>incident.x_2215032_ai_inc_0_ai_human_lock</table>
+<target_name>.admin</target_name>
+<type>Access Roles</type>
+<update_domain>global</update_domain>
+<update_guid>32e431fa9c138b10aaeae2ca45afaa17</update_guid>
+<update_guid_history>32e431fa9c138b10aaeae2ca45afaa17:1740225914,0929abe47d5f4310c9690951ad6fba09:10144784</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml></unload>
