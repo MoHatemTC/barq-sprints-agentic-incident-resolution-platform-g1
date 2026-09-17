@@ -284,8 +284,7 @@ just worker                                                # or the whole pipeli
 
 `scripts/run_agent_live.py --scenario …` ran each case with real Gemini
 (`gemini/gemini-3.5-flash` via LiteLLM), the real corpus in Qdrant and real Langfuse
-Cloud. ServiceNow was in-memory for these runs, because no incident on the shared
-instance has AI Enabled yet. Every trace arrived in Langfuse (read back through
+Cloud. ServiceNow was in-memory for these first runs; the real-ServiceNow runs follow. Every trace arrived in Langfuse (read back through
 `GET /api/public/v2/observations`) with the incident number as its session.
 
 | Scenario | Outcome | Path | Spans | Model time | Cost (LiteLLM) | Trace |
@@ -295,6 +294,67 @@ instance has AI Enabled yet. Every trace arrived in Langfuse (read back through
 | INC0010052 P1 order-processing | `escalated_high_risk` | load → validate → classify → determine_risk → act | 9 | 3.3 s | $0.0032 | `09f9b2980649a8ff0c8dc0cd2d5f5d00` |
 | INC0010047 printer | `escalated_no_evidence` (no hardware article at `internal`) | … → retrieve → act | 10 | 3.4 s | $0.0026 | `7905ad8c9865a92830ad9b4b2bfde2e2` |
 | W0.3 leave request | `escalated_no_evidence` (label `other`, no search) | … → retrieve → act | 10 | 2.7 s | $0.0027 | `10100e82a815acabce9422c6d1a7f782` |
+
+### Real ServiceNow (PDI `dev434590`, integration user `ai_orchestrator_svc`)
+
+An admin created four AI-enabled test incidents; the admin login was used for that
+setup only. The agent read and wrote them as the non-admin integration user, with
+OAuth. Reading the records back as admin confirmed the following:
+
+- every write is attributed to `ai_orchestrator_svc`;
+- Human Review Required = true and the state is `awaiting_approval`;
+- the incident's own state is unchanged (New);
+- there are no customer comments, only work notes.
+
+| Incident | How it ran | Outcome on the record | Trace |
+|---|---|---|---|
+| INC0010022 VPN after password reset | `run_agent_live.py` | 5-step draft from KB0001 §Resolution, confidence 0.95, model `gemini/gemini-3.5-flash`, version `s2.5-graph-1.0.0` | `e9b06a0524e2b312a6304503f4505573` |
+| INC0010023 P1 order-processing | `run_agent_live.py` | no draft; work note "risk assessed as high before retrieval — Priority 1 …" | `79faed09b14a3ca1423328cd9ccc8497` |
+| INC0010024 printer grinding | `run_agent_live.py` | no draft; work note "Searched published hardware articles: nothing matched." | `343eed699ff290d84a13796c31ec3349` |
+| **INC0010025 Outlook disconnected** | **full pipeline** (below) | 5-step draft from KB0002 §Resolution, confidence 0.90 | **`15d029ef3b0b58eec7ac4a76a7443eee`** |
+
+### Full pipeline, one trace
+
+INC0010025 ran the complete path:
+
+1. **Webhook:** `POST /api/v1/webhook/incident` (uvicorn) returned 202, and a
+   duplicate post returned 202 with `idempotent_replay: true`.
+2. **Queue:** the event went to Redis.
+3. **Worker:** the Celery worker (`AGENT_GRAPH_BACKEND=langgraph`) ran the graph with
+   Postgres checkpoints and finished with `succeeded` in 19.2 s.
+
+Postgres holds one `events` row, the execution (`succeeded`, `node_reached=act`), and
+13 `workflow_state` rows (`__input__`, `__start__`, the 11 nodes, and `act` as
+`awaiting_approval`).
+
+Langfuse holds **one trace with 20 observations**, session `INC0010025`, in this order:
+
+- `webhook.receipt` → `queue.enqueue` → the duplicate's `webhook.receipt`;
+- `worker.pickup` (19.1 s);
+- `node.load` with `servicenow.read_incident`;
+- `node.validate`;
+- `node.classify` with `llm.classify` (4.3 s);
+- `node.determine_risk`;
+- `node.retrieve` (0.19 s);
+- `node.diagnose` with `llm.diagnose` (2.9 s);
+- `node.generate` with `llm.generate` (9.1 s);
+- the three gates;
+- `node.act` with `servicenow.write_ai_fields`.
+
+Model cost for the whole run: $0.032. The correlation id travelled from the HTTP
+header, through the Celery message header, to the worker.
+
+**Secret scan of what Langfuse actually stored.** All 137 observations stored in the
+project, read back with inputs, outputs and metadata, were checked against the ten real
+credential values in use:
+
+- LiteLLM key;
+- Langfuse secret;
+- both ServiceNow passwords and client secrets;
+- webhook token;
+- Postgres and Redis passwords.
+
+None appears. No e-mail address appears either, and the redaction markers are present.
 
 What the numbers mean:
 
