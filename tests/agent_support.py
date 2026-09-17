@@ -175,7 +175,7 @@ class FakeLLM:
 
     answers: dict[str, Any] = field(default_factory=dict)
     calls: list[dict[str, str]] = field(default_factory=list)
-    model_name: str = "claude-opus-5"
+    model_name: str = "gemini/gemini-3.5-flash"
 
     def structured(self, *, purpose: str, system: str, prompt: str, schema: type[Any]) -> Any:
         self.calls.append({"purpose": purpose, "system": system, "prompt": prompt})
@@ -225,41 +225,65 @@ def vpn_answers(confidence: float = 0.82) -> dict[str, Any]:
     }
 
 
-class FakeAnthropicSDK:
-    """Stands in for ``anthropic.Anthropic``: ``beta.messages.parse`` answers from a
-    script keyed by output schema, so the real :class:`AnthropicLLM` (and its
-    Langfuse generations) run without a network."""
+class FakeOpenAISDK:
+    """Stands in for ``openai.OpenAI`` pointed at the LiteLLM proxy:
+    ``chat.completions.with_raw_response.parse`` answers from a script keyed by
+    output schema, so the real :class:`LiteLLMClient` (and its Langfuse
+    generations) run without a network."""
 
-    def __init__(self, answers: dict[str, Any]) -> None:
+    SCHEMA_PURPOSE = {
+        "ClassifyOutput": "classify",
+        "DiagnoseOutput": "diagnose",
+        "GenerateOutput": "generate",
+    }
+
+    def __init__(
+        self,
+        answers: dict[str, Any],
+        *,
+        finish_reason: str = "stop",
+        refusal: str | None = None,
+        cost: str | None = "0.0016455",
+    ) -> None:
         self.answers = answers
+        self.finish_reason = finish_reason
+        self.refusal = refusal
+        self.cost = cost
         self.requests: list[dict[str, Any]] = []
-        self.beta = SimpleNamespace(messages=SimpleNamespace(parse=self._parse))
+        raw = SimpleNamespace(parse=self._parse)
+        self.chat = SimpleNamespace(completions=SimpleNamespace(with_raw_response=raw))
 
     def _parse(self, **request: Any) -> Any:
         self.requests.append(request)
-        purpose = {
-            "ClassifyOutput": "classify",
-            "DiagnoseOutput": "diagnose",
-            "GenerateOutput": "generate",
-        }[request["output_format"].__name__]
-        answer = self.answers[purpose]
+        answer = self.answers[self.SCHEMA_PURPOSE[request["response_format"].__name__]]
         if isinstance(answer, BaseException):
             raise answer
-        return SimpleNamespace(
+        completion = SimpleNamespace(
+            id="chatcmpl-test",
             model=request["model"],
-            stop_reason="end_turn",
             usage=SimpleNamespace(
-                input_tokens=900, output_tokens=150, cache_read_input_tokens=None
+                prompt_tokens=900,
+                completion_tokens=150,
+                completion_tokens_details=SimpleNamespace(reasoning_tokens=40),
+                prompt_tokens_details=None,
             ),
-            parsed_output=answer,
-            _request_id="req_test",
+            choices=[
+                SimpleNamespace(
+                    finish_reason=self.finish_reason,
+                    message=SimpleNamespace(parsed=answer, refusal=self.refusal),
+                )
+            ],
         )
+        headers = {"x-litellm-response-cost": self.cost} if self.cost else {}
+        return SimpleNamespace(headers=headers, parse=lambda: completion)
 
 
 def sdk_llm(tracer: Tracer, answers: dict[str, Any] | None = None) -> Any:
-    from agent.llm import AnthropicLLM
+    from agent.llm import LiteLLMClient
 
-    return AnthropicLLM(AgentSettings(), tracer, client=FakeAnthropicSDK(answers or vpn_answers()))
+    return LiteLLMClient(
+        AgentSettings(_env_file=None), tracer, client=FakeOpenAISDK(answers or vpn_answers())
+    )
 
 
 @dataclass
@@ -269,9 +293,22 @@ class FakeRetriever:
     error: BaseException | None = None
 
     def search(
-        self, query: str, *, classification: Classification, top_k: int, threshold: float
+        self,
+        query: str,
+        *,
+        classification: Classification,
+        top_k: int,
+        threshold: float,
+        incident_category: str | None = None,
     ) -> RetrievalResult:
-        self.calls.append({"query": query, "classification": classification, "top_k": top_k})
+        self.calls.append(
+            {
+                "query": query,
+                "classification": classification,
+                "top_k": top_k,
+                "incident_category": incident_category,
+            }
+        )
         if self.error is not None:
             raise self.error
         best = max((h.relevance for h in self.hits), default=0.0)
@@ -327,7 +364,7 @@ def make_deps(
     tracer = tracer or Tracer(None)
     backend = servicenow or FakeServiceNow()
     return AgentDependencies(
-        settings=AgentSettings(agent_checkpointer_backend="memory", **settings),
+        settings=AgentSettings(_env_file=None, agent_checkpointer_backend="memory", **settings),
         llm=llm or FakeLLM(vpn_answers()),
         retriever=retriever or FakeRetriever(),
         servicenow=IncidentGateway(lambda: backend, tracer, runner=shared_runner()),

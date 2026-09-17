@@ -47,12 +47,19 @@ webhook.receipt ──┐
   `get_agent_dependencies()` and `get_runtime()` are `lru_cache` singletons. Nothing is
   built at import, so each prefork child creates its own clients after the fork, once.
   Tests inject every dependency through `AgentDependencies`.
-- **LLM** — Claude (`claude-opus-5`) through the official `anthropic` SDK:
-  `beta.messages.parse` with a Pydantic output schema, adaptive thinking, effort `high`
-  and the server-side refusal fallback (`fallbacks="default"`). Rate limits, 5xx and
-  connection errors become `RetryableError`; other 4xx, refusals, truncation and
-  missing structured output become `TerminalError`, so S2.3's retry policy applies
-  unchanged.
+- **LLM** — **Gemini through the Sprints LiteLLM proxy**, the programme's mandated
+  model path (`LITELLM_BASE_URL`, per-learner `LITELLM_API_KEY`, only `gemini/…` names
+  allowed, $10/day). The default model is `gemini/gemini-3.5-flash`, the fastest of the
+  models tested. The proxy speaks the OpenAI API, so the client is the official `openai`
+  SDK: `chat.completions.parse` with a Pydantic `response_format` gives schema-validated
+  output. The cost LiteLLM reports in `x-litellm-response-cost` is recorded on every
+  generation. Error handling:
+  - rate limits, 408, 5xx and connection errors become `RetryableError`;
+  - other 4xx, content-filter refusals, truncation and schema failures become
+    `TerminalError`.
+
+  S2.3's retry policy therefore applies unchanged. Embeddings stay local (FastEmbed),
+  because S1.4 built the index with them.
 - **ServiceNow** — the S1.5 async client runs on one private event loop per worker
   process, so its HTTP pool and OAuth token cache survive across tasks. Every call goes
   through `IncidentGateway`, which refuses anything outside the manual's permitted
@@ -98,8 +105,8 @@ output and metadata value before export. It applies two layers:
 
 - **Keys:** anything under a secret-looking key (`password`, `client_secret`,
   `authorization`, `token` and similar) is replaced.
-- **Patterns:** bearer and basic credentials, JWTs, Anthropic, Langfuse, GitHub, AWS and
-  Slack keys, PEM private keys, `user:pass@` URLs, `password=` pairs, e-mail addresses and
+- **Patterns:** bearer and basic credentials, JWTs, `sk-`/`pk-` provider keys (LiteLLM,
+  Langfuse, Anthropic), GitHub, AWS and Slack keys, PEM private keys, `user:pass@` URLs, `password=` pairs, e-mail addresses and
   phone numbers of 8 or more digits.
 
 Incident numbers, sys_ids and timestamps pass through unchanged. The same redaction runs
@@ -108,7 +115,7 @@ on incident text before it reaches the model, with a length bound (manual §11.6
 **Verified secret scan** — `tests/test_tracing.py::TestSecretScan`:
 
 1. Runs the full graph on an incident whose description contains a password, a bearer
-   JWT, an Anthropic key, an e-mail address and a phone number.
+   JWT, an API key, an e-mail address and a phone number.
 2. Exports the spans through the real Langfuse client into memory.
 3. Asserts that none of those strings appear in any span attribute or event, in any
    model prompt, or in the JSON logs. The Langfuse secret key and ServiceNow credentials
@@ -187,13 +194,17 @@ What this shows, and what the code does about it:
    whose *symptom* matches. When it names none, the graph escalates before generating
    anything (the `diagnose → act` edge).
 4. **With these rules, the manual's 0.55 separates every case in the sample.**
-5. **Corpus gap — needs an owner decision.** KB0004 (print queues), KB0007 (endpoint),
+5. **The model's label and the incident's category can disagree.** In the live run,
+   Gemini labelled the VPN failure `access` (corpus category `inquiry`), while KB0001 is
+   filed under `network`. Retrieval therefore searches the model's category *and* the
+   incident's own ServiceNow category (`search_categories`).
+6. **Corpus gap — needs an owner decision.** KB0004 (print queues), KB0007 (endpoint),
    KB0008 (SAP) and KB0010 (order service) are tagged `restricted`. S1.4's default
    audience (#45) is `internal`, because the draft lands in a field every support user
    can read. Every hardware incident therefore escalates today. Raising
    `AGENT_MAX_SECURITY_LEVEL` or re-tagging the articles is a decision for S1.4 and the
    reviewer, not for this task.
-6. **The "vague email" case passes the gate.** The W0.3 set expects the agent to *ask*
+7. **The "vague email" case passes the gate.** The W0.3 set expects the agent to *ask*
    for detail. "Ask" is not an outcome in this sprint; a low-confidence diagnosis sends
    it to `escalated_low_confidence`.
 
@@ -258,7 +269,36 @@ uv run python scripts/calibrate_retrieval_threshold.py
 uv run python scripts/render_graph_diagram.py    # regenerates graph_state_diagram.png
 ```
 
-To run the full pipeline, set `ANTHROPIC_API_KEY` (or use an `ant auth login` profile)
-and `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` / `LANGFUSE_BASE_URL`, plus the S1.2
-integration-user credentials. Then start the worker (`just worker`) and post an event
-to the webhook.
+To run against real services, put `LITELLM_BASE_URL`, `LITELLM_API_KEY`,
+`LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` and `LANGFUSE_BASE_URL`, plus the S1.2
+integration-user credentials, in `.env`. Then:
+
+```bash
+uv run python scripts/seed_qdrant.py                       # corpus → local Qdrant
+uv run python scripts/run_agent_live.py --scenario vpn     # real Gemini + Qdrant + Langfuse
+uv run python scripts/run_agent_live.py --number INC00…    # also real ServiceNow
+just worker                                                # or the whole pipeline via the webhook
+```
+
+## 8. Live runs (2026-09-17)
+
+`scripts/run_agent_live.py --scenario …` ran each case with real Gemini
+(`gemini/gemini-3.5-flash` via LiteLLM), the real corpus in Qdrant and real Langfuse
+Cloud. ServiceNow was in-memory for these runs, because no incident on the shared
+instance has AI Enabled yet. Every trace arrived in Langfuse (read back through
+`GET /api/public/v2/observations`) with the incident number as its session.
+
+| Scenario | Outcome | Path | Spans | Model time | Cost (LiteLLM) | Trace |
+|---|---|---|---|---|---|---|
+| INC0010023 VPN | `suggested`, 5 cited steps from KB0001 §Resolution, confidence 0.95 | all 11 nodes | 17 | 15.4 s | $0.0269 | `b3e121cd81da22ab7c8595ed55aa8987` |
+| INC0010064 MFA on identity | `suggested`, awaiting approval (Tier 1 + MFA reset), KB0006 | all 11 nodes | 17 | 23.7 s | $0.0495 | `7c8e97a3c0c5380dcfb662e0149e3757` |
+| INC0010052 P1 order-processing | `escalated_high_risk` | load → validate → classify → determine_risk → act | 9 | 3.3 s | $0.0032 | `09f9b2980649a8ff0c8dc0cd2d5f5d00` |
+| INC0010047 printer | `escalated_no_evidence` (no hardware article at `internal`) | … → retrieve → act | 10 | 3.4 s | $0.0026 | `7905ad8c9865a92830ad9b4b2bfde2e2` |
+| W0.3 leave request | `escalated_no_evidence` (label `other`, no search) | … → retrieve → act | 10 | 2.7 s | $0.0027 | `10100e82a815acabce9422c6d1a7f782` |
+
+What the numbers mean:
+
+- **Latency:** a full draft takes 15–25 s of model time, inside the 90 s p95 budget
+  (NFR-02). Escalating a P1 costs one classification call.
+- **Budget:** at $0.03–0.05 per full run, the $10/day key covers roughly 200–350 full
+  runs a day.

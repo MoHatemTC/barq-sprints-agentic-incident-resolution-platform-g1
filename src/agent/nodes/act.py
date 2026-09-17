@@ -72,6 +72,26 @@ def _blocked_gate(state: AgentState) -> GateResult | None:
     return None
 
 
+def _search_finding(retrieval: RetrievalResult, classification: str | None) -> str:
+    """What was searched and what was found, in the manual's run-log wording."""
+    if retrieval.category_filter is None:
+        return (
+            f"The classification '{classification or 'unknown'}' has no knowledge-base "
+            "category, so no search was run."
+        )
+    scope = retrieval.category_filter.replace(",", ", ")
+    best = max(retrieval.hits, key=lambda h: h.relevance, default=None)
+    if best is None:
+        return f"Searched published {scope} articles: nothing matched."
+    found = (
+        f"Searched published {scope} articles. Best match {best.article_number} "
+        f"v{best.version} ({best.title}) scored {best.relevance:.2f}"
+    )
+    if retrieval.sufficient:
+        return f"{found}, but none of the retrieved articles describes this fault."
+    return f"{found} against a threshold of {retrieval.threshold:.2f}."
+
+
 def compose(state: AgentState, outcome: Outcome) -> FinalOutput:
     classification = (
         ClassificationResult.model_validate(state["classification"]).label.value
@@ -102,23 +122,11 @@ def compose(state: AgentState, outcome: Outcome) -> FinalOutput:
             processing_state=PAUSED,
         )
     if outcome is Outcome.ESCALATED_NO_EVIDENCE:
-        retrieval = RetrievalResult.model_validate(state["retrieval"])
-        best = max(retrieval.hits, key=lambda h: h.relevance, default=None)
-        best_text = (
-            f"Best match {best.article_number} v{best.version} ({best.title}) at "
-            f"{best.relevance:.2f}"
-            if best
-            else "No published article matched"
+        note = f"{PREFIX}: no matching knowledge article found. " + _search_finding(
+            RetrievalResult.model_validate(state["retrieval"]),
+            classification,
         )
-        scope = retrieval.category_filter or "all"
-        if retrieval.sufficient:
-            finding = f"{best_text}, but none of the retrieved articles describes this fault"
-        else:
-            finding = f"{best_text}, below the {retrieval.threshold:.2f} threshold"
-        note = (
-            f"{PREFIX}: no matching knowledge article found. Searched published "
-            f"'{scope}' articles. {finding}. No draft written. Escalated for human handling."
-        )
+        note += " No draft written. Escalated for human handling."
         return FinalOutput(
             outcome=outcome,
             summary=note,

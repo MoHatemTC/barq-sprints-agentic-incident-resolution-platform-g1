@@ -53,7 +53,7 @@ _CREDENTIAL_RULES: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"(?i)\b(bearer|basic)\s+[A-Za-z0-9\-._~+/]{8,}=*"), rf"\1 {REDACTED}"),
     # JSON Web Tokens
     (re.compile(r"\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}"), REDACTED),
-    # Provider keys: Anthropic, Langfuse / OpenAI-style, GitHub, AWS, Slack
+    # Provider keys: Anthropic, sk-/pk- style (LiteLLM, Langfuse, OpenAI), GitHub, AWS, Slack
     (re.compile(r"\bsk-ant-[A-Za-z0-9_-]{8,}"), REDACTED),
     (re.compile(r"\b(?:sk|pk)-(?:lf-)?[A-Za-z0-9_-]{16,}"), REDACTED),
     (re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}"), REDACTED),

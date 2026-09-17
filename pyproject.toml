@@ -7,8 +7,6 @@ requires-python = ">=3.12"
 
 dependencies = [
     "alembic>=1.14,<2",
-    # S2.5: Claude client for the classify / diagnose / generate nodes.
-    "anthropic>=1.6,<2",
     "asyncpg>=0.30,<1",
     # Imported directly by src/app/retrieval/extraction.py. It arrived only as a
     # markdownify transitive before, so a markdownify change could have broken imports.
@@ -38,6 +36,7 @@ dependencies = [
     # S2.5: the state machine and its tracing. langgraph-sdk caps websockets below 17.
     "langfuse>=4.15,<5",
     "langgraph>=1.2,<2",
+    "openai>=2,<3",
 ]
 
 [dependency-groups]

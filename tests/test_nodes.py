@@ -285,6 +285,7 @@ class TestRetrieve:
         call = retriever.calls[0]
         assert call["classification"] is Classification.NETWORK
         assert call["top_k"] == 5
+        assert call["incident_category"] == "network"
         assert "***PHONE***" in call["query"]
 
     def test_below_threshold_is_insufficient(self) -> None:
@@ -470,7 +471,7 @@ class TestAct:
         assert body["x_2215032_ai_inc_0_ai_processing_start"].startswith("2026-09-08")
         assert output["approval_required"] is False
         assert body["x_2215032_ai_inc_0_ai_confidence"] == "0.82"
-        assert body["x_2215032_ai_inc_0_ai_model_name"] == "claude-opus-5"
+        assert body["x_2215032_ai_inc_0_ai_model_name"] == "gemini/gemini-3.5-flash"
         assert body["x_2215032_ai_inc_0_ai_classification"] == "network"
         assert body["work_notes"].startswith("AI Suggested Response drafted. Confidence 0.82.")
         # Nothing outside §11.6 is ever called.
@@ -501,9 +502,41 @@ class TestAct:
         output = act(state, deps)["output"]
         assert output["outcome"] == "escalated_no_evidence"
         assert (
-            "Best match KB0004 v2 (Print queue) at 0.31, below the 0.55 threshold"
-            in (output["work_note"])
+            "Best match KB0004 v2 (Print queue) scored 0.31 against a threshold of 0.55."
+            in output["work_note"]
         )
+
+    @pytest.mark.parametrize(
+        ("retrieval", "expected"),
+        [
+            (
+                {"category_filter": None, "hits": []},
+                "The classification 'other' has no knowledge-base category, so no search was run.",
+            ),
+            (
+                {"category_filter": "hardware", "hits": []},
+                "Searched published hardware articles: nothing matched.",
+            ),
+            (
+                {"category_filter": "inquiry,network", "hits": [], "sufficient": False},
+                "Searched published inquiry, network articles: nothing matched.",
+            ),
+        ],
+    )
+    def test_no_evidence_note_wording(self, retrieval: dict[str, Any], expected: str) -> None:
+        state = base_state(incident=snapshot(LEAVE), classification=classification("other"))
+        state["eligibility"] = {"eligible": True, "reasons": []}
+        state |= determine_risk(state, make_deps())
+        state["retrieval"] = {
+            "query": "q",
+            "best_relevance": 0.0,
+            "threshold": 0.55,
+            "sufficient": False,
+            "latency_ms": 0.0,
+            **retrieval,
+        }
+        output = act(state, make_deps())["output"]
+        assert expected in output["work_note"]
 
     def test_elevated_risk_suggestion_awaits_approval(self) -> None:
         state = reasoned_state(incident=snapshot(MFA), classification=classification("access"))

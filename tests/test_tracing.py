@@ -56,7 +56,7 @@ from tests.agent_support import (
 SECRET_TEXTS = {
     "password": "Hunter2-Winter!",
     "bearer": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhZG1pbiJ9.c2lnbmF0dXJlLXZhbHVl",
-    "anthropic_key": "sk-ant-api03-ZZZZZZZZZZZZZZZZZZZZ",
+    "litellm_key": "sk-FAKElitellmKEY00000000",
     "email": "mariam.fouad@barq.example",
     "phone": "+971 50 123 4567",
     "langfuse_secret": "sk-lf-00000000-1111-2222-3333-444444444444",
@@ -66,6 +66,7 @@ SECRET_TEXTS = {
 def recording_tracer(**overrides: Any) -> tuple[Tracer, InMemorySpanExporter]:
     exporter = InMemorySpanExporter()
     settings = TracingSettings(
+        _env_file=None,
         tracing_enabled=True,
         langfuse_public_key=f"pk-lf-test-{uuid.uuid4()}",
         langfuse_secret_key=SECRET_TEXTS["langfuse_secret"],
@@ -179,34 +180,20 @@ class TestCorrelation:
         assert "incident-execution" in dumped
 
     def test_generation_records_model_usage_cost_and_prompt_version(self) -> None:
-        from agent.config import AgentSettings
-        from agent.llm import AnthropicLLM
         from agent.prompts import ClassifyOutput
 
         tracer, exporter = recording_tracer()
-        fake_sdk = MagicMock()
-        fake_sdk.beta.messages.parse.return_value = MagicMock(
-            model="claude-opus-5",
-            stop_reason="end_turn",
-            usage=MagicMock(
-                input_tokens=1200,
-                output_tokens=300,
-                cache_read_input_tokens=0,
-                cache_creation_input_tokens=0,
-            ),
-            parsed_output=ClassifyOutput(label="network", rationale="r", confidence=0.9),
-        )
-        llm = AnthropicLLM(AgentSettings(), tracer, client=fake_sdk)
+        llm = sdk_llm(tracer)
         with tracer.span("worker.pickup", correlation_id="corr-gen"):
             llm.structured(purpose="classify", system="s", prompt="p", schema=ClassifyOutput)
         span = next(s for s in finished(tracer, exporter) if s.name == "llm.classify")
         attrs = span.attributes or {}
         assert attrs["langfuse.observation.type"] == "generation"
-        assert attrs["langfuse.observation.model.name"] == "claude-opus-5"
+        assert attrs["langfuse.observation.model.name"] == "gemini/gemini-3.5-flash"
         usage = json.loads(str(attrs["langfuse.observation.usage_details"]))
-        assert usage == {"input": 1200, "output": 300}
+        assert usage == {"input": 900, "output": 150, "reasoning_tokens": 40}
         cost = json.loads(str(attrs["langfuse.observation.cost_details"]))
-        assert cost["total"] == pytest.approx(1200 * 5e-6 + 300 * 25e-6)
+        assert cost == {"total": pytest.approx(0.0016455)}
         assert attrs["langfuse.version"] == "v1"
         assert "prompt_version" in str(attrs)
 
@@ -294,7 +281,7 @@ class TestSecretScan:
             "description": (
                 f"VPN says invalid credentials. My password is {SECRET_TEXTS['password']}. "
                 f"Header was Authorization: Bearer {SECRET_TEXTS['bearer']}. "
-                f"Key {SECRET_TEXTS['anthropic_key']}. Reach me at {SECRET_TEXTS['email']} "
+                f"Key {SECRET_TEXTS['litellm_key']}. Reach me at {SECRET_TEXTS['email']} "
                 f"or {SECRET_TEXTS['phone']}."
             ),
         }
@@ -440,6 +427,7 @@ class TestInducedFailure:
     def test_unreachable_langfuse_does_not_change_the_result(self) -> None:
         # Real OTLP exporter pointed at a closed port.
         settings = TracingSettings(
+            _env_file=None,
             tracing_enabled=True,
             langfuse_public_key=f"pk-lf-test-{uuid.uuid4()}",
             langfuse_secret_key="sk-lf-x",
@@ -453,7 +441,7 @@ class TestInducedFailure:
 
     def test_client_construction_failure_disables_tracing(self) -> None:
         settings = TracingSettings(
-            tracing_enabled=True, langfuse_public_key="pk", langfuse_secret_key="sk"
+            _env_file=None, tracing_enabled=True, langfuse_public_key="pk", langfuse_secret_key="sk"
         )
         with patch("langfuse.Langfuse", side_effect=RuntimeError("bad config")):
             tracer = build_tracer(settings)
@@ -478,11 +466,14 @@ class TestInducedFailure:
         assert (span.attributes or {}).get("langfuse.observation.level") == "ERROR"
 
     def test_missing_keys_mean_tracing_off(self) -> None:
-        assert build_tracer(TracingSettings(tracing_enabled=True)).enabled is False
+        assert build_tracer(TracingSettings(_env_file=None, tracing_enabled=True)).enabled is False
         assert (
             build_tracer(
                 TracingSettings(
-                    tracing_enabled=False, langfuse_public_key="p", langfuse_secret_key="s"
+                    _env_file=None,
+                    tracing_enabled=False,
+                    langfuse_public_key="p",
+                    langfuse_secret_key="s",
                 )
             ).enabled
             is False

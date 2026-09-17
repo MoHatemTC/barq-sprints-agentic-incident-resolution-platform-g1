@@ -110,7 +110,9 @@ class EvidenceItem(_Section):
 
 class RetrievalResult(_Section):
     query: str
-    category_filter: str | None
+    category_filter: str | None = Field(
+        description="Comma-separated corpus categories searched; None = no search."
+    )
     hits: list[EvidenceItem]
     best_relevance: float
     threshold: float

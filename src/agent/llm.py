@@ -3,15 +3,17 @@
 Nodes depend on the :class:`LLMClient` protocol, never on the SDK, so the unit
 tests inject a scripted fake and the graph never needs a network in CI.
 
-The production client calls Claude through the official ``anthropic`` SDK with
-structured outputs (``messages.parse`` + a Pydantic schema), adaptive thinking and
-the server-side refusal fallback. Every call is a Langfuse *generation* carrying
-the model actually served, token usage, cost and the prompt version.
+The production client calls **Gemini through the Sprints LiteLLM proxy** — the
+programme's mandated model path (Ahmed Mansour, 2026-09-17: "we will use gemini
+models only"). The proxy speaks the OpenAI API, so the official ``openai`` SDK is
+the client: ``chat.completions.parse`` with a Pydantic ``response_format`` gives
+schema-validated structured output. Every call is a Langfuse *generation* with the
+model that served it, token usage, the cost LiteLLM reports, and the prompt version.
+Embeddings stay local (FastEmbed): the S1.4 index was built with them.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from functools import lru_cache
 from typing import Any, Protocol, TypeVar
 
@@ -25,20 +27,12 @@ from observability.tracing import Tracer, get_tracer
 
 M = TypeVar("M", bound=BaseModel)
 
-#: USD per million tokens (input, output) — Anthropic list prices. Cost is recorded
-#: on each generation so Langfuse can total it even for models it has no price for.
-MODEL_PRICES_PER_MTOK: Mapping[str, tuple[float, float]] = {
-    "claude-opus-5": (5.00, 25.00),
-    "claude-opus-4-8": (5.00, 25.00),
-    "claude-sonnet-5": (2.00, 10.00),
-    "claude-haiku-4-5": (1.00, 5.00),
-}
-
-REFUSAL_FALLBACK_BETA = "server-side-fallback-2026-07-01"
+#: Response header in which the LiteLLM proxy reports the USD cost of the call.
+COST_HEADER = "x-litellm-response-cost"
 
 
 class ModelRefusalError(TerminalError):
-    """The model (and its fallback chain) declined the request."""
+    """The model declined the request (content filter)."""
 
 
 class LLMClient(Protocol):
@@ -51,46 +45,44 @@ class LLMClient(Protocol):
 
 
 def usage_details(usage: Any) -> dict[str, int]:
+    """OpenAI-shaped usage → Langfuse usage details."""
+    if usage is None:
+        return {}
     details = {
-        "input": int(getattr(usage, "input_tokens", 0) or 0),
-        "output": int(getattr(usage, "output_tokens", 0) or 0),
+        "input": int(getattr(usage, "prompt_tokens", 0) or 0),
+        "output": int(getattr(usage, "completion_tokens", 0) or 0),
     }
-    for field, key in (
-        ("cache_read_input_tokens", "cache_read_input_tokens"),
-        ("cache_creation_input_tokens", "cache_creation_input_tokens"),
-    ):
-        value = getattr(usage, field, None)
-        if value:
-            details[key] = int(value)
+    reasoning = getattr(getattr(usage, "completion_tokens_details", None), "reasoning_tokens", 0)
+    if reasoning:
+        details["reasoning_tokens"] = int(reasoning)
+    cached = getattr(getattr(usage, "prompt_tokens_details", None), "cached_tokens", 0)
+    if cached:
+        details["cached_tokens"] = int(cached)
     return details
 
 
-def cost_details(model: str, usage: Mapping[str, int]) -> dict[str, float] | None:
-    prices = MODEL_PRICES_PER_MTOK.get(model)
-    if prices is None:
+def cost_details(header_value: str | None) -> dict[str, float] | None:
+    """The proxy's own cost figure, if it sent one."""
+    try:
+        return {"total": float(header_value)} if header_value else None
+    except ValueError:
         return None
-    input_cost = usage.get("input", 0) * prices[0] / 1_000_000
-    output_cost = usage.get("output", 0) * prices[1] / 1_000_000
-    return {"input": input_cost, "output": output_cost, "total": input_cost + output_cost}
 
 
-class AnthropicLLM:
-    """Claude via the Anthropic SDK (sync client; the worker is sync)."""
+class LiteLLMClient:
+    """Gemini via the LiteLLM proxy, through the OpenAI SDK (sync; the worker is sync)."""
 
     def __init__(self, settings: AgentSettings, tracer: Tracer, client: Any | None = None) -> None:
         self._settings = settings
         self._tracer = tracer
         if client is None:
-            import anthropic
+            import openai
 
-            # An empty ANTHROPIC_API_KEY= line means "unset", not "the empty key".
-            api_key = (
-                settings.anthropic_api_key.get_secret_value()
-                if settings.anthropic_api_key is not None
-                else None
-            ) or None
-            client = anthropic.Anthropic(
-                api_key=api_key,
+            if settings.litellm_api_key is None or not settings.litellm_api_key.get_secret_value():
+                raise TerminalError("LITELLM_API_KEY is not configured")
+            client = openai.OpenAI(
+                base_url=settings.litellm_base_url,
+                api_key=settings.litellm_api_key.get_secret_value(),
                 timeout=settings.agent_llm_timeout_seconds,
                 max_retries=settings.agent_llm_max_retries,
             )
@@ -101,63 +93,62 @@ class AnthropicLLM:
         return self._settings.agent_llm_model
 
     def structured(self, *, purpose: str, system: str, prompt: str, schema: type[M]) -> M:
-        import anthropic
+        import openai
 
         settings = self._settings
+        options: dict[str, Any] = {"max_completion_tokens": settings.agent_llm_max_tokens}
+        if settings.agent_llm_reasoning_effort:
+            options["reasoning_effort"] = settings.agent_llm_reasoning_effort
         with self._tracer.span(
             f"llm.{purpose}",
             as_type="generation",
             model=settings.agent_llm_model,
             input={"system": system, "prompt": prompt},
             version=settings.agent_prompt_version,
-            model_parameters={
-                "effort": settings.agent_llm_effort,
-                "max_tokens": settings.agent_llm_max_tokens,
-                "thinking": "adaptive",
-            },
+            model_parameters=options,
             metadata={"prompt_name": purpose, "prompt_version": settings.agent_prompt_version},
         ) as generation:
             try:
-                response = self._client.beta.messages.parse(
+                raw = self._client.chat.completions.with_raw_response.parse(
                     model=settings.agent_llm_model,
-                    max_tokens=settings.agent_llm_max_tokens,
-                    system=system,
-                    messages=[{"role": "user", "content": prompt}],
-                    thinking={"type": "adaptive"},
-                    output_config={"effort": settings.agent_llm_effort},
-                    output_format=schema,
-                    betas=[REFUSAL_FALLBACK_BETA],
-                    fallbacks="default",
+                    messages=[
+                        {"role": "system", "content": system},
+                        {"role": "user", "content": prompt},
+                    ],
+                    response_format=schema,
+                    **options,
                 )
-            except (
-                anthropic.RateLimitError,
-                anthropic.InternalServerError,
-                anthropic.APIConnectionError,
-            ) as exc:
+                completion = raw.parse()
+            except (openai.RateLimitError, openai.APIConnectionError) as exc:
                 raise RetryableError(
                     f"model call failed transiently: {type(exc).__name__}"
                 ) from exc
-            except anthropic.APIStatusError as exc:
-                if exc.status_code >= 500:
+            except openai.APIStatusError as exc:
+                if exc.status_code >= 500 or exc.status_code == 408:
                     raise RetryableError(f"model call failed: HTTP {exc.status_code}") from exc
                 raise TerminalError(f"model call rejected: HTTP {exc.status_code}") from exc
+            except (openai.LengthFinishReasonError, openai.ContentFilterFinishReasonError) as exc:
+                raise TerminalError(f"{purpose} output unusable: {type(exc).__name__}") from exc
+            except ValueError as exc:  # pydantic: the model broke the schema
+                raise TerminalError(f"{purpose} output failed validation") from exc
 
-            served_model = str(getattr(response, "model", settings.agent_llm_model))
-            usage = usage_details(response.usage)
+            choice = completion.choices[0] if completion.choices else None
             generation.update(
-                model=served_model,
-                usage_details=usage,
-                cost_details=cost_details(served_model, usage),
+                model=str(completion.model or settings.agent_llm_model),
+                usage_details=usage_details(completion.usage),
+                cost_details=cost_details(raw.headers.get(COST_HEADER)),
                 metadata={
-                    "stop_reason": response.stop_reason,
-                    "request_id": getattr(response, "_request_id", None),
+                    "finish_reason": getattr(choice, "finish_reason", None),
+                    "request_id": completion.id,
                 },
             )
-            if response.stop_reason == "refusal":
+            if choice is None:
+                raise TerminalError(f"{purpose} returned no choices")
+            if choice.finish_reason == "content_filter" or choice.message.refusal:
                 raise ModelRefusalError(f"model declined the {purpose} request")
-            if response.stop_reason == "max_tokens":
-                raise TerminalError(f"{purpose} output was truncated at max_tokens")
-            parsed = response.parsed_output
+            if choice.finish_reason == "length":
+                raise TerminalError(f"{purpose} output was truncated")
+            parsed = choice.message.parsed
             if parsed is None:
                 raise TerminalError(f"{purpose} returned no structured output")
             generation.update(output=parsed.model_dump(mode="json"))
@@ -176,7 +167,7 @@ def bounded(text: str, limit: int) -> str:
 @lru_cache
 def get_llm() -> LLMClient:
     """Process-wide LLM client singleton."""
-    return AnthropicLLM(get_agent_settings(), get_tracer())
+    return LiteLLMClient(get_agent_settings(), get_tracer())
 
 
 @lru_cache
@@ -188,9 +179,9 @@ def get_embedding_engine() -> EmbeddingEngine:
 
 
 __all__ = [
-    "MODEL_PRICES_PER_MTOK",
-    "AnthropicLLM",
+    "COST_HEADER",
     "LLMClient",
+    "LiteLLMClient",
     "ModelRefusalError",
     "bounded",
     "cost_details",

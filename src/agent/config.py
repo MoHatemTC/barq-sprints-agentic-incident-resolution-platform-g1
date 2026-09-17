@@ -35,12 +35,20 @@ class AgentSettings(BaseSettings):
     )
 
     # -- model -------------------------------------------------------------------
-    anthropic_api_key: SecretStr | None = Field(
-        default=None,
-        description="Unset → the SDK resolves credentials itself (env or `ant` profile).",
+    litellm_base_url: str = Field(
+        default="https://management.sprints.ai/litellm",
+        description="Sprints LiteLLM proxy (OpenAI-compatible).",
     )
-    agent_llm_model: str = "claude-opus-5"
-    agent_llm_effort: Literal["low", "medium", "high", "xhigh", "max"] = "high"
+    litellm_api_key: SecretStr | None = Field(
+        default=None, description="Per-learner LiteLLM key (Gemini models only)."
+    )
+    agent_llm_model: str = Field(
+        default="gemini/gemini-3.5-flash",
+        description="A model the key allows: names must start with 'gemini/'.",
+    )
+    agent_llm_reasoning_effort: Literal["low", "medium", "high"] | None = Field(
+        default=None, description="Unset = the model's default thinking level."
+    )
     agent_llm_max_tokens: int = Field(default=16000, gt=0)
     agent_llm_timeout_seconds: float = Field(default=60.0, gt=0)
     agent_llm_max_retries: int = Field(default=2, ge=0)

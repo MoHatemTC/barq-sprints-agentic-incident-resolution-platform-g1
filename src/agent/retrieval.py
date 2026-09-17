@@ -20,7 +20,7 @@ from collections.abc import Callable
 from typing import Any, Protocol
 
 from qdrant_client import QdrantClient
-from qdrant_client.models import FieldCondition, Filter, MatchValue
+from qdrant_client.models import FieldCondition, Filter, MatchAny
 
 from agent.state import EvidenceItem, RetrievalResult
 from app.clients.qdrant import DENSE_VECTOR_NAME
@@ -41,8 +41,33 @@ CLASSIFICATION_TO_CORPUS_CATEGORY: dict[Classification, str] = {
 
 class Retriever(Protocol):
     def search(
-        self, query: str, *, classification: Classification, top_k: int, threshold: float
+        self,
+        query: str,
+        *,
+        classification: Classification,
+        top_k: int,
+        threshold: float,
+        incident_category: str | None = None,
     ) -> RetrievalResult: ...
+
+
+def search_categories(classification: Classification, incident_category: str | None) -> list[str]:
+    """Corpus categories to search.
+
+    The model's label decides whether there can be evidence at all: ``security`` and
+    ``other`` have no corpus article. Otherwise the incident's own ServiceNow category
+    (already checked against the supported set) is searched too — a VPN failure that
+    the model calls ``access`` is still filed under ``network``, where KB0001 lives
+    (observed with Gemini on 2026-09-17).
+    """
+    mapped = CLASSIFICATION_TO_CORPUS_CATEGORY.get(classification)
+    if mapped is None:
+        return []
+    categories = [mapped]
+    corpus = set(CLASSIFICATION_TO_CORPUS_CATEGORY.values())
+    if incident_category in corpus and incident_category not in categories:
+        categories.append(incident_category)
+    return categories
 
 
 class _MemoEngine:
@@ -86,10 +111,16 @@ class QdrantRetriever:
         return self._client
 
     def search(
-        self, query: str, *, classification: Classification, top_k: int, threshold: float
+        self,
+        query: str,
+        *,
+        classification: Classification,
+        top_k: int,
+        threshold: float,
+        incident_category: str | None = None,
     ) -> RetrievalResult:
-        category = CLASSIFICATION_TO_CORPUS_CATEGORY.get(classification)
-        if category is None:
+        categories = search_categories(classification, incident_category)
+        if not categories:
             # No corpus category covers this label (security, other). An unfiltered
             # search would still return the "nearest" article — measured at 0.58 for
             # a leave request — so there is, by definition, no evidence.
@@ -102,7 +133,8 @@ class QdrantRetriever:
                 sufficient=False,
                 latency_ms=0.0,
             )
-        extra = Filter(must=[FieldCondition(key="category", match=MatchValue(value=category))])
+        category = ",".join(categories)
+        extra = Filter(must=[FieldCondition(key="category", match=MatchAny(any=categories))])
         engine = _MemoEngine(self._engine_factory())
         started = time.perf_counter()
         try:
@@ -191,4 +223,5 @@ __all__ = [
     "QdrantRetriever",
     "Retriever",
     "build_default_retriever",
+    "search_categories",
 ]

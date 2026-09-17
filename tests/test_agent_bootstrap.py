@@ -16,8 +16,8 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
-import anthropic
-import httpx2
+import httpx
+import openai
 import pytest
 from langgraph.checkpoint.memory import InMemorySaver
 from qdrant_client import QdrantClient
@@ -28,15 +28,18 @@ from agent import runtime as runtime_module
 from agent.checkpointer import WorkflowStateSaver, build_checkpointer
 from agent.config import AGENT_VERSION, AgentSettings
 from agent.llm import (
-    REFUSAL_FALLBACK_BETA,
-    AnthropicLLM,
+    LiteLLMClient,
     ModelRefusalError,
     bounded,
     cost_details,
     usage_details,
 )
 from agent.prompts import ClassifyOutput
-from agent.retrieval import CLASSIFICATION_TO_CORPUS_CATEGORY, QdrantRetriever
+from agent.retrieval import (
+    CLASSIFICATION_TO_CORPUS_CATEGORY,
+    QdrantRetriever,
+    search_categories,
+)
 from agent.runtime import build_runtime, invoke_incident_graph
 from agent.state import AgentState, EventPayload, initial_state
 from app.models.knowledge import Classification, SecurityLevel
@@ -51,7 +54,7 @@ from observability.tracing import Tracer
 from tests.agent_support import (
     EXECUTION_ID,
     VPN,
-    FakeAnthropicSDK,
+    FakeOpenAISDK,
     event_for,
     make_deps,
     vpn_answers,
@@ -62,14 +65,15 @@ from tests.agent_support import (
 
 class TestSettings:
     def test_defaults_are_the_manual_11_7_values(self) -> None:
-        settings = AgentSettings()
+        settings = AgentSettings(_env_file=None)
         assert settings.agent_retrieval_top_k == 5
         assert settings.agent_retrieval_threshold == 0.55
         assert settings.agent_confidence_floor == 0.45
         assert settings.agent_risk_priorities == [1]
         assert settings.agent_supported_categories == ["network", "software", "hardware", "inquiry"]
         assert settings.agent_max_security_level == "internal"
-        assert settings.agent_llm_model == "claude-opus-5"
+        assert settings.agent_llm_model == "gemini/gemini-3.5-flash"
+        assert settings.litellm_base_url == "https://management.sprints.ai/litellm"
         assert settings.agent_graph_backend == "langgraph"
         assert settings.agent_version == AGENT_VERSION
 
@@ -77,14 +81,14 @@ class TestSettings:
         monkeypatch.setenv("AGENT_RETRIEVAL_THRESHOLD", "0.6")
         monkeypatch.setenv("AGENT_RISK_PRIORITIES", "[1, 2]")
         monkeypatch.setenv("AGENT_GRAPH_BACKEND", "stub")
-        settings = AgentSettings()
+        settings = AgentSettings(_env_file=None)
         assert settings.agent_retrieval_threshold == 0.6
         assert settings.agent_risk_priorities == [1, 2]
         assert settings.agent_graph_backend == "stub"
 
     def test_out_of_range_values_are_rejected(self) -> None:
         with pytest.raises(ValueError):
-            AgentSettings(agent_confidence_floor=1.5)
+            AgentSettings(_env_file=None, agent_confidence_floor=1.5)
 
 
 def test_state_schema_is_json_only() -> None:
@@ -112,13 +116,21 @@ def test_state_schema_is_json_only() -> None:
 class TestProviders:
     def test_llm_is_a_process_singleton(self) -> None:
         llm_module.get_llm.cache_clear()
-        with patch("anthropic.Anthropic") as sdk:
+        with (
+            patch("openai.OpenAI") as sdk,
+            patch.object(
+                llm_module,
+                "get_agent_settings",
+                return_value=AgentSettings(_env_file=None, litellm_api_key="k"),
+            ),
+        ):
             first = llm_module.get_llm()
             second = llm_module.get_llm()
         llm_module.get_llm.cache_clear()
         assert first is second
         sdk.assert_called_once()
         assert sdk.call_args.kwargs["max_retries"] == 2
+        assert sdk.call_args.kwargs["base_url"] == "https://management.sprints.ai/litellm"
 
     def test_embedding_engine_is_a_process_singleton(self) -> None:
         llm_module.get_embedding_engine.cache_clear()
@@ -158,91 +170,108 @@ class TestProviders:
         assert isinstance(saver, WorkflowStateSaver)
 
 
-# -- the Claude client ------------------------------------------------------------------------
+# -- the Gemini client (LiteLLM proxy) -----------------------------------------------------
 
 
-def _status_error(cls: type[anthropic.APIStatusError], status: int) -> anthropic.APIStatusError:
-    request = httpx2.Request("POST", "https://api.anthropic.com/v1/messages")
-    return cls("err", response=httpx2.Response(status, request=request), body=None)
+def _status_error(cls: type[openai.APIStatusError], status: int) -> openai.APIStatusError:
+    request = httpx.Request("POST", "https://management.sprints.ai/litellm/chat/completions")
+    return cls("err", response=httpx.Response(status, request=request), body=None)
 
 
-class TestAnthropicLLM:
-    def _llm(self, sdk: Any) -> AnthropicLLM:
-        return AnthropicLLM(AgentSettings(), Tracer(None), client=sdk)
+class TestLiteLLMClient:
+    def _llm(self, sdk: Any) -> LiteLLMClient:
+        return LiteLLMClient(AgentSettings(_env_file=None), Tracer(None), client=sdk)
 
     def test_request_shape(self) -> None:
-        sdk = FakeAnthropicSDK(vpn_answers())
+        sdk = FakeOpenAISDK(vpn_answers())
         answer = self._llm(sdk).structured(
             purpose="classify", system="sys", prompt="the incident", schema=ClassifyOutput
         )
         assert answer.label == "network"
         request = sdk.requests[0]
-        assert request["model"] == "claude-opus-5"
-        assert request["thinking"] == {"type": "adaptive"}
-        assert request["output_config"] == {"effort": "high"}
-        assert request["output_format"] is ClassifyOutput
-        assert request["betas"] == [REFUSAL_FALLBACK_BETA]
-        assert request["fallbacks"] == "default"
-        assert request["system"] == "sys"
-        assert request["messages"] == [{"role": "user", "content": "the incident"}]
-        assert "budget_tokens" not in json.dumps(request, default=str)
+        assert request["model"] == "gemini/gemini-3.5-flash"
+        assert request["model"].startswith("gemini/")  # the only models the key allows
+        assert request["response_format"] is ClassifyOutput
+        assert request["messages"] == [
+            {"role": "system", "content": "sys"},
+            {"role": "user", "content": "the incident"},
+        ]
+        assert request["max_completion_tokens"] == 16000
+        assert "reasoning_effort" not in request
+
+    def test_reasoning_effort_is_passed_when_set(self) -> None:
+        sdk = FakeOpenAISDK(vpn_answers())
+        llm = LiteLLMClient(
+            AgentSettings(_env_file=None, agent_llm_reasoning_effort="low"),
+            Tracer(None),
+            client=sdk,
+        )
+        llm.structured(purpose="classify", system="s", prompt="p", schema=ClassifyOutput)
+        assert sdk.requests[0]["reasoning_effort"] == "low"
 
     @pytest.mark.parametrize(
-        ("stop_reason", "parsed", "error"),
+        ("kwargs", "error"),
         [
-            ("refusal", None, ModelRefusalError),
-            ("max_tokens", None, TerminalError),
-            ("end_turn", None, TerminalError),
+            ({"finish_reason": "content_filter"}, ModelRefusalError),
+            ({"refusal": "I can't help with that"}, ModelRefusalError),
+            ({"finish_reason": "length"}, TerminalError),
         ],
     )
     def test_unusable_answers_are_terminal(
-        self, stop_reason: str, parsed: Any, error: type[Exception]
+        self, kwargs: dict[str, Any], error: type[Exception]
     ) -> None:
-        sdk = MagicMock()
-        sdk.beta.messages.parse.return_value = MagicMock(
-            stop_reason=stop_reason, parsed_output=parsed, model="claude-opus-5"
-        )
+        sdk = FakeOpenAISDK(vpn_answers(), **kwargs)
         with pytest.raises(error):
+            self._llm(sdk).structured(purpose="x", system="s", prompt="p", schema=ClassifyOutput)
+
+    def test_missing_structured_output_is_terminal(self) -> None:
+        sdk = FakeOpenAISDK({"classify": None})  # type: ignore[dict-item]
+        sdk.answers["classify"] = None
+        with pytest.raises(TerminalError):
             self._llm(sdk).structured(purpose="x", system="s", prompt="p", schema=ClassifyOutput)
 
     @pytest.mark.parametrize(
         ("exc", "expected"),
         [
-            (_status_error(anthropic.RateLimitError, 429), RetryableError),
-            (_status_error(anthropic.InternalServerError, 500), RetryableError),
-            (_status_error(anthropic.APIStatusError, 529), RetryableError),
-            (_status_error(anthropic.BadRequestError, 400), TerminalError),
-            (_status_error(anthropic.AuthenticationError, 401), TerminalError),
+            (_status_error(openai.RateLimitError, 429), RetryableError),
+            (_status_error(openai.InternalServerError, 500), RetryableError),
+            (_status_error(openai.APIStatusError, 503), RetryableError),
+            (_status_error(openai.APIStatusError, 408), RetryableError),
+            (_status_error(openai.BadRequestError, 400), TerminalError),
+            (_status_error(openai.AuthenticationError, 401), TerminalError),
+            (_status_error(openai.PermissionDeniedError, 403), TerminalError),
             (
-                anthropic.APIConnectionError(
-                    request=httpx2.Request("POST", "https://api.anthropic.com")
+                openai.APIConnectionError(
+                    request=httpx.Request("POST", "https://management.sprints.ai/litellm")
                 ),
                 RetryableError,
             ),
+            (ValueError("schema mismatch"), TerminalError),
         ],
     )
     def test_error_mapping(self, exc: Exception, expected: type[Exception]) -> None:
-        sdk = MagicMock()
-        sdk.beta.messages.parse.side_effect = exc
+        sdk = FakeOpenAISDK({"classify": exc})
         with pytest.raises(expected):
             self._llm(sdk).structured(purpose="x", system="s", prompt="p", schema=ClassifyOutput)
+
+    def test_missing_key_fails_fast(self) -> None:
+        with pytest.raises(TerminalError, match="LITELLM_API_KEY"):
+            LiteLLMClient(AgentSettings(_env_file=None, litellm_api_key=None), Tracer(None))
 
     def test_usage_and_cost(self) -> None:
         usage = usage_details(
             MagicMock(
-                input_tokens=1_000_000,
-                output_tokens=100_000,
-                cache_read_input_tokens=5,
-                cache_creation_input_tokens=None,
+                prompt_tokens=17,
+                completion_tokens=180,
+                completion_tokens_details=MagicMock(reasoning_tokens=120),
+                prompt_tokens_details=MagicMock(cached_tokens=0),
             )
         )
-        assert usage == {"input": 1_000_000, "output": 100_000, "cache_read_input_tokens": 5}
-        assert cost_details("claude-opus-5", usage) == {
-            "input": 5.0,
-            "output": 2.5,
-            "total": 7.5,
-        }
-        assert cost_details("unknown-model", usage) is None
+        assert usage == {"input": 17, "output": 180, "reasoning_tokens": 120}
+        assert usage_details(None) == {}
+        assert cost_details("0.0016455") == {"total": 0.0016455}
+        assert cost_details(None) is None
+        assert cost_details("n/a") is None
 
     def test_bounded_redacts_and_truncates(self) -> None:
         text = bounded("password=abc12345 " + "y" * 50, 20)
@@ -314,6 +343,41 @@ class TestQdrantRetriever:
         assert all(h.relevance > 0 for h in result.hits)
         assert result.best_relevance == max(h.relevance for h in result.hits)
         assert result.sufficient is True
+
+    def test_incident_category_is_searched_with_the_label(
+        self, corpus_qdrant: QdrantClient
+    ) -> None:
+        """Gemini labelled a VPN failure ``access`` (→ inquiry); KB0001 is ``network``."""
+        query = "VPN client authentication fails after a password change, invalid credentials"
+        label_only = self._retriever(corpus_qdrant).search(
+            query, classification=Classification.ACCESS, top_k=5, threshold=0.3
+        )
+        assert "KB0001" not in {h.article_number for h in label_only.hits}
+        both = self._retriever(corpus_qdrant).search(
+            query,
+            classification=Classification.ACCESS,
+            top_k=5,
+            threshold=0.3,
+            incident_category="network",
+        )
+        assert both.category_filter == "inquiry,network"
+        assert both.hits[0].article_number == "KB0001"
+
+    @pytest.mark.parametrize(
+        ("label", "incident_category", "expected"),
+        [
+            (Classification.NETWORK, "network", ["network"]),
+            (Classification.ACCESS, "network", ["inquiry", "network"]),
+            (Classification.SOFTWARE, "database", ["software"]),
+            (Classification.SOFTWARE, None, ["software"]),
+            (Classification.OTHER, "inquiry", []),
+            (Classification.SECURITY, "network", []),
+        ],
+    )
+    def test_search_categories(
+        self, label: Classification, incident_category: str | None, expected: list[str]
+    ) -> None:
+        assert search_categories(label, incident_category) == expected
 
     @pytest.mark.parametrize("label", [Classification.OTHER, Classification.SECURITY])
     def test_labels_without_corpus_coverage_have_no_evidence(
@@ -441,7 +505,7 @@ class TestWorkerWiring:
             patch.object(
                 tasks_module,
                 "get_agent_settings",
-                return_value=AgentSettings(agent_graph_backend="stub"),
+                return_value=AgentSettings(_env_file=None, agent_graph_backend="stub"),
             ),
             patch("agent.runtime.invoke_incident_graph") as run,
         ):
@@ -467,7 +531,9 @@ class TestWorkerWiring:
             return invoke_incident_graph(payload, runtime=runtime, **context)
 
         with (
-            patch.object(tasks_module, "get_agent_settings", return_value=AgentSettings()),
+            patch.object(
+                tasks_module, "get_agent_settings", return_value=AgentSettings(_env_file=None)
+            ),
             patch("agent.runtime.invoke_incident_graph", side_effect=spy),
         ):
             task = tasks_module.build_incident_task(app, settings, repo=repo, dlq_redis=MagicMock())

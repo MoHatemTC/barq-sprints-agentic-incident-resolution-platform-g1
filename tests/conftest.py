@@ -25,6 +25,15 @@ _REQUIRED_TEST_ENV = {
 for _key, _value in _REQUIRED_TEST_ENV.items():
     os.environ.setdefault(_key, _value)
 
+# S2.5: a developer .env holds real Langfuse keys; unit tests must never trace to
+# them. Tests that need tracing build their own client explicitly.
+for _key, _value in {
+    "TRACING_ENABLED": "false",
+    "LANGFUSE_PUBLIC_KEY": "",
+    "LANGFUSE_SECRET_KEY": "",
+}.items():
+    os.environ.setdefault(_key, _value)
+
 
 @pytest.fixture
 def settings():

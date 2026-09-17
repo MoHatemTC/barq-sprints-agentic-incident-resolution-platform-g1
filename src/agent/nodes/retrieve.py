@@ -24,5 +24,6 @@ def retrieve(state: AgentState, deps: AgentDependencies) -> dict[str, Any]:
         classification=classification.label,
         top_k=deps.settings.agent_retrieval_top_k,
         threshold=deps.settings.agent_retrieval_threshold,
+        incident_category=incident.category or None,
     )
     return {"retrieval": result.model_dump(mode="json")}
