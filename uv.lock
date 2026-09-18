@@ -220,7 +220,6 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "alembic", specifier = ">=1.14,<2" },
-    { name = "asyncpg", specifier = ">=0.29.0" },
     { name = "asyncpg", specifier = ">=0.30,<1" },
     { name = "beautifulsoup4", specifier = ">=4.12.3" },
     { name = "celery", extras = ["redis"], specifier = ">=5.6,<6" },

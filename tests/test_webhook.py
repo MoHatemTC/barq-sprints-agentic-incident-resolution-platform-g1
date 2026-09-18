@@ -71,10 +71,13 @@ async def client(app_with_mocks):
 
 async def _post_valid(client: AsyncClient):
     """POST the valid payload with the persistence primitive mocked to accept."""
-    with patch(
-        "api.routers.webhook.accept_inbound_event",
-        new_callable=AsyncMock,
-        return_value=_accepted(),
+    with (
+        patch(
+            "api.routers.webhook.accept_inbound_event",
+            new_callable=AsyncMock,
+            return_value=_accepted(),
+        ),
+        patch("api.routers.webhook.send_incident_event"),
     ):
         return await client.post("/api/v1/webhook/incident", json=VALID_PAYLOAD, headers=AUTH)
 
@@ -212,10 +215,13 @@ async def test_non_string_event_id_must_return_422(client) -> None:
 
 @pytest.mark.asyncio
 async def test_arbitrary_string_event_id_is_accepted(client) -> None:
-    with patch(
-        "api.routers.webhook.accept_inbound_event",
-        new_callable=AsyncMock,
-        return_value=_accepted(),
+    with (
+        patch(
+            "api.routers.webhook.accept_inbound_event",
+            new_callable=AsyncMock,
+            return_value=_accepted(),
+        ),
+        patch("api.routers.webhook.send_incident_event"),
     ):
         payload = {**VALID_PAYLOAD, "event_id": "custom-string-evt-999"}
         resp = await client.post("/api/v1/webhook/incident", json=payload, headers=AUTH)
@@ -240,8 +246,11 @@ async def test_valid_payload_returns_202_with_documented_ack_schema(client) -> N
 
 @pytest.mark.asyncio
 async def test_event_persisted_and_enqueued_to_barq_incident_events(app_with_mocks) -> None:
-    app, _, mock_redis = app_with_mocks
-    with patch("api.routers.webhook.accept_inbound_event", new_callable=AsyncMock) as mock_accept:
+    app, _, _ = app_with_mocks
+    with (
+        patch("api.routers.webhook.accept_inbound_event", new_callable=AsyncMock) as mock_accept,
+        patch("api.routers.webhook.send_incident_event") as mock_producer,
+    ):
         mock_accept.return_value = _accepted()
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             resp = await ac.post("/api/v1/webhook/incident", json=VALID_PAYLOAD, headers=AUTH)
@@ -257,11 +266,10 @@ async def test_event_persisted_and_enqueued_to_barq_incident_events(app_with_moc
         VALID_PAYLOAD["event_type"],
     )
 
-    # Exactly one LPUSH on the documented queue with the matching payload.
-    mock_redis.lpush.assert_awaited_once()
-    queue_name, raw_payload = mock_redis.lpush.await_args.args
-    assert queue_name == "barq:incident:events"
-    assert json.loads(raw_payload) == {**VALID_PAYLOAD}
+    # Exactly one Celery task enqueue on the documented queue with the matching payload.
+    mock_producer.assert_called_once()
+    payload_arg, _ = mock_producer.call_args[0]
+    assert payload_arg == {**VALID_PAYLOAD}
 
 
 @pytest.mark.asyncio
@@ -274,6 +282,7 @@ async def test_zero_downstream_execution_on_request_thread(app_with_mocks) -> No
             new_callable=AsyncMock,
             return_value=_accepted(),
         ),
+        patch("api.routers.webhook.send_incident_event"),
         patch("app.clients.qdrant.get_qdrant_client") as mock_qdrant,
         patch("app.retrieval.search.retrieve_knowledge") as mock_retrieve,
         patch("app.clients.servicenow_client.ServiceNowClient") as mock_servicenow,
@@ -297,13 +306,14 @@ async def test_zero_downstream_execution_on_request_thread(app_with_mocks) -> No
 # ---------------------------------------------------------------------------
 @pytest.mark.asyncio
 async def test_db_failure_returns_503_and_skips_enqueue(app_with_mocks) -> None:
-    app, _, mock_redis = app_with_mocks
+    app, _, _ = app_with_mocks
     with (
         patch(
             "api.routers.webhook.accept_inbound_event",
             new_callable=AsyncMock,
             side_effect=SQLAlchemyError("DB connection dropped"),
         ),
+        patch("api.routers.webhook.send_incident_event") as mock_producer,
         patch("api.routers.webhook.logger"),
     ):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
@@ -311,13 +321,13 @@ async def test_db_failure_returns_503_and_skips_enqueue(app_with_mocks) -> None:
 
     assert resp.status_code == 503, "must fail closed, never a false 202"
     assert resp.json()["error"]["code"] == "SERVICE_UNAVAILABLE"
-    mock_redis.lpush.assert_not_called()
+    mock_producer.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_endpoint_waits_for_delayed_persistence_before_responding(app_with_mocks) -> None:
     """The 202 may only be returned after the (bounded) persistence completes."""
-    app, _, mock_redis = app_with_mocks
+    app, _, _ = app_with_mocks
     order: list[str] = []
 
     async def slow_persist(session_factory, inbound):
@@ -326,25 +336,31 @@ async def test_endpoint_waits_for_delayed_persistence_before_responding(app_with
         order.append("persist:end")
         return _accepted()
 
-    with patch("api.routers.webhook.accept_inbound_event", new_callable=AsyncMock) as mock_accept:
+    with (
+        patch("api.routers.webhook.accept_inbound_event", new_callable=AsyncMock) as mock_accept,
+        patch("api.routers.webhook.send_incident_event") as mock_producer,
+    ):
         mock_accept.side_effect = slow_persist
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             resp = await ac.post("/api/v1/webhook/incident", json=VALID_PAYLOAD, headers=AUTH)
 
     assert resp.status_code == 202
     assert order == ["persist:start", "persist:end"]
-    mock_redis.lpush.assert_awaited_once()
+    mock_producer.assert_called_once()
 
 
 @pytest.mark.asyncio
 async def test_redis_enqueue_failure_returns_503_never_202(app_with_mocks) -> None:
-    app, _, mock_redis = app_with_mocks
-    mock_redis.lpush = AsyncMock(side_effect=RuntimeError("Redis connection broken"))
+    app, _, _ = app_with_mocks
     with (
         patch(
             "api.routers.webhook.accept_inbound_event",
             new_callable=AsyncMock,
             return_value=_accepted(),
+        ),
+        patch(
+            "api.routers.webhook.send_incident_event",
+            side_effect=RuntimeError("Redis connection broken"),
         ),
         patch("api.routers.webhook.logger"),
     ):
@@ -358,8 +374,7 @@ async def test_redis_enqueue_failure_returns_503_never_202(app_with_mocks) -> No
 @pytest.mark.asyncio
 async def test_redis_enqueue_failure_compensates_database_claim(app_with_mocks) -> None:
     """Ensure database claim is compensated if Redis enqueue fails."""
-    app, mock_session_factory, mock_redis = app_with_mocks
-    mock_redis.lpush = AsyncMock(side_effect=RuntimeError("Redis connection broken"))
+    app, mock_session_factory, _ = app_with_mocks
     accepted_result = _accepted()
 
     with (
@@ -367,6 +382,10 @@ async def test_redis_enqueue_failure_compensates_database_claim(app_with_mocks) 
             "api.routers.webhook.accept_inbound_event",
             new_callable=AsyncMock,
             return_value=accepted_result,
+        ),
+        patch(
+            "api.routers.webhook.send_incident_event",
+            side_effect=RuntimeError("Redis connection broken"),
         ),
         patch("api.routers.webhook.logger"),
     ):
@@ -428,26 +447,27 @@ async def test_webhook_programming_errors_not_masked(app_with_mocks) -> None:
 # ---------------------------------------------------------------------------
 @pytest.mark.asyncio
 async def test_duplicate_delivery_returns_202_replay_without_reenqueue(client) -> None:
-    app: object = client._transport.app  # type: ignore[attr-defined]
-    mock_redis = app.state.redis
-    with patch(
-        "api.routers.webhook.accept_inbound_event",
-        new_callable=AsyncMock,
-        side_effect=[_accepted(), _duplicate()],
+    with (
+        patch(
+            "api.routers.webhook.accept_inbound_event",
+            new_callable=AsyncMock,
+            side_effect=[_accepted(), _duplicate()],
+        ),
+        patch("api.routers.webhook.send_incident_event") as mock_producer,
     ):
         first = await client.post("/api/v1/webhook/incident", json=VALID_PAYLOAD, headers=AUTH)
         second = await client.post("/api/v1/webhook/incident", json=VALID_PAYLOAD, headers=AUTH)
 
     assert first.status_code == 202 and first.json()["idempotent_replay"] is False
     assert second.status_code == 202 and second.json()["idempotent_replay"] is True
-    # Exactly one Redis enqueue for two deliveries of the same event_id.
-    assert mock_redis.lpush.await_count == 1
+    # Exactly one Celery enqueue for two deliveries of the same event_id.
+    mock_producer.assert_called_once()
 
 
 @pytest.mark.asyncio
 async def test_ten_concurrent_duplicates_produce_single_enqueue(app_with_mocks) -> None:
     """EC-01: simultaneous same-event_id requests must collapse to one enqueue."""
-    app, _, mock_redis = app_with_mocks
+    app, _, _ = app_with_mocks
     lock = asyncio.Lock()
     accepted_seen = 0
 
@@ -460,7 +480,10 @@ async def test_ten_concurrent_duplicates_produce_single_enqueue(app_with_mocks) 
                 return _accepted()
             return _duplicate()
 
-    with patch("api.routers.webhook.accept_inbound_event", new_callable=AsyncMock) as mock_accept:
+    with (
+        patch("api.routers.webhook.accept_inbound_event", new_callable=AsyncMock) as mock_accept,
+        patch("api.routers.webhook.send_incident_event") as mock_producer,
+    ):
         mock_accept.side_effect = arbitrating_accept
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             responses = await asyncio.gather(
@@ -473,7 +496,7 @@ async def test_ten_concurrent_duplicates_produce_single_enqueue(app_with_mocks) 
     assert all(r.status_code == 202 for r in responses), [r.status_code for r in responses]
     replays = [r.json()["idempotent_replay"] for r in responses]
     assert replays.count(True) == 9 and replays.count(False) == 1, replays
-    assert mock_redis.lpush.await_count == 1
+    assert mock_producer.call_count == 1
 
 
 # ---------------------------------------------------------------------------

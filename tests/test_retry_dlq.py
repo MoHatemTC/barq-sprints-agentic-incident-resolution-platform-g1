@@ -286,13 +286,15 @@ def test_dead_lettered_event_replays_successfully_when_issue_clears() -> None:
         def __init__(self):
             self.lists = {
                 INCIDENT_DLQ_QUEUE: [
-                    json.dumps({
-                        "event_id": event_id,
-                        "payload": payload,
-                        "failure_reason": "temporary outage",
-                        "retry_count": 5,
-                        "failed_at": "2026-09-18T06:00:00Z",
-                    })
+                    json.dumps(
+                        {
+                            "event_id": event_id,
+                            "payload": payload,
+                            "failure_reason": "temporary outage",
+                            "retry_count": 5,
+                            "failed_at": "2026-09-18T06:00:00Z",
+                        }
+                    )
                 ]
             }
 
@@ -331,4 +333,3 @@ def test_dead_lettered_event_replays_successfully_when_issue_clears() -> None:
     exec_result = _run_incident(clean_task, payload, str(exec_id), CFG, repo)
     assert exec_result["status"] == "succeeded"
     assert repo.get_status(exec_id) == "succeeded"
-

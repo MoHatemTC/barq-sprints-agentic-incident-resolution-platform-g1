@@ -3,21 +3,21 @@
 from __future__ import annotations
 
 from app.workers.retry_policy import (
-    DEFAULT_CONFIG,
-    BackoffPolicy,
+    RETRYABLE_BUILTINS,
     RetryableError,
     RetryConfig,
     TerminalError,
+    backoff_delay,
     build_retry_config,
-    calculate_backoff,
+    classify,
 )
 
 __all__ = [
-    "DEFAULT_CONFIG",
-    "BackoffPolicy",
+    "RETRYABLE_BUILTINS",
     "RetryConfig",
     "RetryableError",
     "TerminalError",
+    "backoff_delay",
     "build_retry_config",
-    "calculate_backoff",
+    "classify",
 ]

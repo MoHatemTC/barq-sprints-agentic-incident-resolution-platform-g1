@@ -64,6 +64,4 @@ class CorrelationIdMiddleware(BaseHTTPMiddleware):
 
 def register_middlewares(app: FastAPI, header_name: str = CORRELATION_ID_HEADER) -> None:
     """Register all API middlewares on the FastAPI application."""
-    # Starlette's _MiddlewareFactory protocol doesn't match its own
-    # add_middleware signature; the call is correct at runtime.
-    app.add_middleware(CorrelationIdMiddleware, header_name=header_name)  # type: ignore[arg-type]
+    app.add_middleware(CorrelationIdMiddleware, header_name=header_name)
