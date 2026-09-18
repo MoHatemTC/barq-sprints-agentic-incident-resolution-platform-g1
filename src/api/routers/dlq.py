@@ -106,7 +106,7 @@ async def replay_dlq_event(
     event_id: str = Path(
         ..., description="The unique event ID of the dead-lettered event to replay"
     ),
-    redis_client: Annotated[Redis, Depends(get_redis)] = None,
+    redis_client: Annotated[Redis | None, Depends(get_redis)] = None,
 ) -> DLQReplayResponse:
     """Replay a DLQ event back into the processing queue.
 
@@ -123,7 +123,7 @@ async def replay_dlq_event(
             raw_events = await lrange_res if inspect.isawaitable(lrange_res) else (lrange_res or [])
             if isinstance(raw_events, list):
                 for raw in raw_events:
-                    raw_str = raw.decode("utf-8") if isinstance(raw, bytes) else raw
+                    raw_str = raw.decode("utf-8") if isinstance(raw, bytes) else str(raw)
                     data = json.loads(raw_str) if isinstance(raw_str, str) else raw_str
                     if isinstance(data, dict) and str(data.get("event_id")) == event_id:
                         original_payload = data.get("payload", data)
@@ -140,7 +140,7 @@ async def replay_dlq_event(
                             if inspect.isawaitable(pipe):
                                 pipe = await pipe
                             pipe.lpush(INCIDENT_EVENTS_QUEUE, payload_json)
-                            pipe.lrem(INCIDENT_DLQ_QUEUE, 1, raw)
+                            pipe.lrem(INCIDENT_DLQ_QUEUE, 1, raw_str)
                             exec_res = pipe.execute()
                             if inspect.isawaitable(exec_res):
                                 await exec_res
@@ -148,7 +148,7 @@ async def replay_dlq_event(
                             lpush_res = redis_client.lpush(INCIDENT_EVENTS_QUEUE, payload_json)
                             if inspect.isawaitable(lpush_res):
                                 await lpush_res
-                            lrem_res = redis_client.lrem(INCIDENT_DLQ_QUEUE, 1, raw)
+                            lrem_res = redis_client.lrem(INCIDENT_DLQ_QUEUE, 1, raw_str)
                             if inspect.isawaitable(lrem_res):
                                 await lrem_res
 

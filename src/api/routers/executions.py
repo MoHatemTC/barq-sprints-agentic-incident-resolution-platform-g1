@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, cast
 from uuid import UUID
 
 import structlog
@@ -15,6 +15,7 @@ from api.auth import verify_bearer_token
 from api.schemas.executions import (
     ExecutionNodeStateResponse,
     ExecutionResponse,
+    ExecutionStatus,
     IncidentExecutionsResponse,
     TraceResponse,
 )
@@ -104,7 +105,7 @@ async def get_execution_trace(
     return TraceResponse(
         execution_id=execution.execution_id,
         incident_sys_id=execution.incident_sys_id,
-        status=execution.status,
+        status=cast(ExecutionStatus, execution.status),
         node_states=node_states,
     )
 

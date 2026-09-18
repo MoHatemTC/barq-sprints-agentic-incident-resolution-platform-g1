@@ -5,6 +5,7 @@ from collections.abc import Callable
 import structlog
 from fastapi import FastAPI, Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.types import ASGIApp
 
 from app.core.correlation import clear_correlation_id, set_correlation_id
 
@@ -18,7 +19,7 @@ class CorrelationIdMiddleware(BaseHTTPMiddleware):
     binds it to structlog contextvars, and injects it into the response.
     """
 
-    def __init__(self, app: FastAPI, header_name: str = CORRELATION_ID_HEADER) -> None:
+    def __init__(self, app: ASGIApp, header_name: str = CORRELATION_ID_HEADER) -> None:
         super().__init__(app)
         self.header_name = header_name
 

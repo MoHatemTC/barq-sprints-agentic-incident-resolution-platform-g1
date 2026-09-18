@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 import structlog
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -81,6 +83,6 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException) 
 
 def register_exception_handlers(app: FastAPI) -> None:
     """Register unified exception handlers on the FastAPI application."""
-    app.add_exception_handler(AgenticPlatformError, platform_error_handler)
-    app.add_exception_handler(RequestValidationError, validation_error_handler)
-    app.add_exception_handler(StarletteHTTPException, http_exception_handler)
+    app.add_exception_handler(AgenticPlatformError, cast(Any, platform_error_handler))
+    app.add_exception_handler(RequestValidationError, cast(Any, validation_error_handler))
+    app.add_exception_handler(StarletteHTTPException, cast(Any, http_exception_handler))
