@@ -61,9 +61,11 @@ class MockCeleryTask:
     def __init__(self, retries: int = 0) -> None:
         self.request = mock.MagicMock(retries=retries)
         self.retry_called = False
+        self.last_countdown: float | None = None
 
     def retry(self, exc: Exception | None = None, countdown: float | None = None):
         self.retry_called = True
+        self.last_countdown = countdown
         raise Retry(exc=exc, when=None)
 
 
@@ -225,3 +227,108 @@ def test_transient_failure_exhausts_retry_budget_then_lands_in_redis_dlq() -> No
     assert "forced transient failure" in record["failure_reason"]
     assert record["retry_count"] == 5
     assert record["failed_at"] is not None
+
+
+def test_retry_intervals_match_expected_backoff_timing() -> None:
+    """Verify that actual retry intervals and Celery countdowns match the expected
+    exponential backoff formula: delay = min(base * 2^(attempt-1), max)."""
+    cfg = RetryConfig(max_retries=5, backoff_base=1.0, backoff_max=16.0, jitter=False)
+    repo = InMemoryRepo()
+    exec_id = uuid4()
+    repo.seed_execution(exec_id, status="queued")
+
+    expected_intervals = [1.0, 2.0, 4.0, 8.0]  # 2^0, 2^1, 2^2, 2^3
+
+    for retries, expected_delay in enumerate(expected_intervals):
+        task = MockCeleryTask(retries=retries)
+        with pytest.raises(Retry):
+            _run_incident(task, PAYLOAD_TRANSIENT, str(exec_id), cfg, repo)
+
+        # Assert countdown passed to Celery retry matches exact expected backoff
+        assert task.last_countdown == expected_delay
+
+        # Assert DB snapshot records the same retry interval
+        snapshot = repo.get_retry_state(exec_id)
+        assert snapshot["attempt_count"] == retries + 1
+        assert snapshot["state"] == "scheduled"
+        assert snapshot["next_retry_at"] is not None
+
+
+def test_dead_lettered_event_replays_successfully_when_issue_clears() -> None:
+    """Verify that a dead-lettered event can be replayed from the DLQ, removing it
+    from the DLQ list, resetting its execution state, and succeeding once the issue clears."""
+    from app.workers.replay import replay_event
+
+    repo = InMemoryRepo()
+    exec_id = uuid4()
+    event_id = "evt-dlq-replay-100"
+    payload = {
+        "event_id": event_id,
+        "sys_id": "0123456789abcdef0123456789abcdef",
+        "number": "INC_REPLAY_TEST_100",
+        "event_type": "incident.created",
+    }
+
+    # 1. Seed as a failed execution parked in DLQ
+    repo.seed_execution(exec_id, status="failed", event_id=event_id, payload=payload)
+    repo.ensure_retry_state(exec_id, max_attempts=5)
+    fail_id = repo.log_failure(
+        execution_id=exec_id,
+        attempt=5,
+        failure_type="transient",
+        message="outage",
+        retryable=False,
+    )
+    repo.mark_exhausted(exec_id, max_attempts=5, last_failure_id=fail_id)
+
+    # Fake Redis DLQ list
+    class FakeDlqRedis:
+        def __init__(self):
+            self.lists = {
+                INCIDENT_DLQ_QUEUE: [
+                    json.dumps({
+                        "event_id": event_id,
+                        "payload": payload,
+                        "failure_reason": "temporary outage",
+                        "retry_count": 5,
+                        "failed_at": "2026-09-18T06:00:00Z",
+                    })
+                ]
+            }
+
+        def lrange(self, key, start, stop):
+            return list(self.lists.get(key, []))
+
+        def lrem(self, key, count, value):
+            items = self.lists.get(key, [])
+            kept = [item for item in items if item != value]
+            self.lists[key] = kept
+            return len(items) - len(kept)
+
+    fake_redis = FakeDlqRedis()
+
+    # 2. Trigger replay with send_incident_event patched
+    with mock.patch("app.workers.replay.send_incident_event") as mock_producer:
+        result = replay_event(repo, fake_redis, event_id, max_attempts=5)
+        assert result.replayed is True
+        assert result.event_id == event_id
+        assert result.execution_id == exec_id
+
+        # 3. Assert removed from Redis DLQ and enqueued via producer
+        assert len(fake_redis.lrange(INCIDENT_DLQ_QUEUE, 0, -1)) == 0
+        mock_producer.assert_called_once()
+        assert mock_producer.call_args[0][0] == payload
+        assert mock_producer.call_args[0][1] == exec_id
+
+    # 4. Assert DB state was reset for replay
+    assert repo.get_status(exec_id) == "queued"
+    snapshot = repo.get_retry_state(exec_id)
+    assert snapshot["state"] == "ready"
+    assert snapshot["attempt_count"] == 0
+
+    # 5. Worker processes the replayed task now that the issue cleared -> Succeeded!
+    clean_task = MockCeleryTask(retries=0)
+    exec_result = _run_incident(clean_task, payload, str(exec_id), CFG, repo)
+    assert exec_result["status"] == "succeeded"
+    assert repo.get_status(exec_id) == "succeeded"
+
