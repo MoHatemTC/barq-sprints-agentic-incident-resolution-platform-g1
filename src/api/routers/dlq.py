@@ -5,7 +5,7 @@ from __future__ import annotations
 import inspect
 import json
 from datetime import UTC, datetime
-from typing import Annotated
+from typing import Annotated, Any
 
 import structlog
 from fastapi import APIRouter, Depends, Path, status
@@ -13,10 +13,22 @@ from redis.asyncio import Redis
 
 from api.auth import require_role, verify_bearer_token
 from api.schemas.dlq import DLQEventResponse, DLQReplayResponse
-from app.api.dependencies import get_redis
+from app.api.dependencies import (
+    get_app_settings,
+    get_redis,
+    get_sync_redis,
+    get_sync_worker_repo,
+)
+from app.core.config import Settings
 from app.core.correlation import get_correlation_id
-from app.db.redis.keys import INCIDENT_DLQ_QUEUE, INCIDENT_EVENTS_QUEUE
-from app.exceptions.app_errors import ServiceUnavailableError
+from app.db.redis.keys import INCIDENT_DLQ_QUEUE
+from app.exceptions.app_errors import (
+    ConflictError,
+    ResourceNotFoundError,
+    ServiceUnavailableError,
+)
+from app.workers.db import WorkerRepo
+from app.workers.replay import replay_event
 
 logger = structlog.getLogger("api.dlq")
 
@@ -102,76 +114,49 @@ async def list_dlq_events(
     description="Replay a poisoned or failed event from the DLQ. Enforces Operator Role RBAC.",
     dependencies=[Depends(require_role("operator"))],
 )
-async def replay_dlq_event(
-    event_id: str = Path(
-        ..., description="The unique event ID of the dead-lettered event to replay"
-    ),
-    redis_client: Annotated[Redis | None, Depends(get_redis)] = None,
+def replay_dlq_event(
+    event_id: Annotated[
+        str,
+        Path(description="The unique event ID of the dead-lettered event to replay"),
+    ],
+    repo: Annotated[WorkerRepo, Depends(get_sync_worker_repo)],
+    redis_client: Annotated[Any, Depends(get_sync_redis)],
+    settings: Annotated[Settings, Depends(get_app_settings)],
 ) -> DLQReplayResponse:
     """Replay a DLQ event back into the processing queue.
 
-    Enforces Operator Role RBAC ('X-User-Role: operator'). Pops the event from the dead-letter
-    queue and re-enqueues it into the active incident events queue.
+    Enforces Operator Role RBAC ('X-User-Role: operator').
+    Executes synchronously in AnyIO worker threadpool without blocking the event loop.
+    Resets PostgreSQL retry-state, clears DLQ Redis records, and safely re-enqueues
+    using the validated Celery task envelope.
     """
     correlation_id = get_correlation_id()
     logger.info("dlq_event_replay_accepted", event_id=event_id, correlation_id=correlation_id)
 
-    replayed = False
-    if redis_client is not None:
-        try:
-            lrange_res = redis_client.lrange(INCIDENT_DLQ_QUEUE, 0, -1)
-            raw_events = await lrange_res if inspect.isawaitable(lrange_res) else (lrange_res or [])
-            if isinstance(raw_events, list):
-                for raw in raw_events:
-                    raw_str = raw.decode("utf-8") if isinstance(raw, bytes) else str(raw)
-                    data = json.loads(raw_str) if isinstance(raw_str, str) else raw_str
-                    if isinstance(data, dict) and str(data.get("event_id")) == event_id:
-                        original_payload = data.get("payload", data)
-                        payload_json = (
-                            json.dumps(original_payload)
-                            if not isinstance(original_payload, str)
-                            else original_payload
-                        )
+    try:
+        outcome = replay_event(
+            repo=repo,
+            redis_client=redis_client,
+            event_id=event_id,
+            max_attempts=settings.worker_max_retries,
+        )
+    except (ResourceNotFoundError, ConflictError, ServiceUnavailableError):
+        raise
+    except Exception as exc:
+        logger.error("dlq_replay_failed", event_id=event_id, error=str(exc))
+        raise ServiceUnavailableError("Redis queue service unavailable for DLQ replay.") from exc
 
-                        # Atomic Redis transaction: LPUSH and LREM execute
-                        # together atomically (MULTI/EXEC)
-                        if hasattr(redis_client, "pipeline"):
-                            pipe = redis_client.pipeline(transaction=True)
-                            if inspect.isawaitable(pipe):
-                                pipe = await pipe
-                            pipe.lpush(INCIDENT_EVENTS_QUEUE, payload_json)
-                            pipe.lrem(INCIDENT_DLQ_QUEUE, 1, raw_str)
-                            exec_res = pipe.execute()
-                            if inspect.isawaitable(exec_res):
-                                await exec_res
-                        else:
-                            lpush_res = redis_client.lpush(INCIDENT_EVENTS_QUEUE, payload_json)
-                            if inspect.isawaitable(lpush_res):
-                                await lpush_res
-                            lrem_res = redis_client.lrem(INCIDENT_DLQ_QUEUE, 1, raw_str)
-                            if inspect.isawaitable(lrem_res):
-                                await lrem_res
-
-                        replayed = True
-                        logger.info("dlq_event_re_enqueued", event_id=event_id)
-                        break
-        except ServiceUnavailableError:
-            raise
-        except Exception as exc:
-            logger.error("dlq_replay_redis_error", event_id=event_id, error=str(exc))
-            raise ServiceUnavailableError(
-                "Redis queue service unavailable for DLQ replay."
-            ) from exc
-
-    message = (
-        f"Event '{event_id}' replayed from DLQ into active queue."
-        if replayed
-        else f"Event '{event_id}' accepted for DLQ replay."
-    )
+    if not outcome.replayed:
+        reason = outcome.reason or "unknown"
+        if "unknown event_id" in reason:
+            raise ResourceNotFoundError(f"DLQ event not found: {event_id}")
+        if "no execution exists" in reason:
+            raise ResourceNotFoundError(f"No execution found for event: {event_id}")
+        raise ConflictError(reason)
 
     return DLQReplayResponse(
         event_id=event_id,
         status="accepted",
         correlation_id=correlation_id,
-        message=message,
+        message=f"Event '{event_id}' replayed from DLQ into active queue.",
     )
