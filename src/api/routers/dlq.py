@@ -16,6 +16,7 @@ from api.schemas.dlq import DLQEventResponse, DLQReplayResponse
 from app.api.dependencies import get_redis
 from app.core.correlation import get_correlation_id
 from app.db.redis.keys import INCIDENT_DLQ_QUEUE, INCIDENT_EVENTS_QUEUE
+from app.exceptions.app_errors import ServiceUnavailableError
 
 logger = structlog.getLogger("api.dlq")
 
@@ -122,23 +123,35 @@ async def replay_dlq_event(
                     raw_str = raw.decode("utf-8") if isinstance(raw, bytes) else raw
                     data = json.loads(raw_str) if isinstance(raw_str, str) else raw_str
                     if isinstance(data, dict) and str(data.get("event_id")) == event_id:
-                        # Remove from DLQ
-                        lrem_res = redis_client.lrem(INCIDENT_DLQ_QUEUE, 1, raw)
-                        if inspect.isawaitable(lrem_res):
-                            await lrem_res
-
-                        # Re-enqueue original payload into active incident events queue
                         original_payload = data.get("payload", data)
                         payload_json = json.dumps(original_payload) if not isinstance(original_payload, str) else original_payload
-                        lpush_res = redis_client.lpush(INCIDENT_EVENTS_QUEUE, payload_json)
-                        if inspect.isawaitable(lpush_res):
-                            await lpush_res
+
+                        # Atomic Redis transaction: LPUSH and LREM execute together atomically (MULTI/EXEC)
+                        if hasattr(redis_client, "pipeline"):
+                            pipe = redis_client.pipeline(transaction=True)
+                            if inspect.isawaitable(pipe):
+                                pipe = await pipe
+                            pipe.lpush(INCIDENT_EVENTS_QUEUE, payload_json)
+                            pipe.lrem(INCIDENT_DLQ_QUEUE, 1, raw)
+                            exec_res = pipe.execute()
+                            if inspect.isawaitable(exec_res):
+                                await exec_res
+                        else:
+                            lpush_res = redis_client.lpush(INCIDENT_EVENTS_QUEUE, payload_json)
+                            if inspect.isawaitable(lpush_res):
+                                await lpush_res
+                            lrem_res = redis_client.lrem(INCIDENT_DLQ_QUEUE, 1, raw)
+                            if inspect.isawaitable(lrem_res):
+                                await lrem_res
 
                         replayed = True
                         logger.info("dlq_event_re_enqueued", event_id=event_id)
                         break
+        except ServiceUnavailableError:
+            raise
         except Exception as exc:
             logger.error("dlq_replay_redis_error", event_id=event_id, error=str(exc))
+            raise ServiceUnavailableError("Redis queue service unavailable for DLQ replay.") from exc
 
     message = (
         f"Event '{event_id}' replayed from DLQ into active queue."

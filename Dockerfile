@@ -28,7 +28,7 @@ RUN uv pip install --system --no-cache -r pyproject.toml
 
 # Copy application source code, configuration, and migrations
 COPY src/ /app/src/
-COPY alembic/ /app/alembic/
+COPY migrations/ /app/migrations/
 COPY alembic.ini /app/alembic.ini
 
 # Create non-root user for least-privilege security

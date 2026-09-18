@@ -362,6 +362,28 @@ async def test_redis_enqueue_failure_returns_503_never_202(app_with_mocks) -> No
     assert resp.json()["error"]["code"] == "SERVICE_UNAVAILABLE"
 
 
+@pytest.mark.asyncio
+async def test_redis_enqueue_failure_compensates_database_claim(app_with_mocks) -> None:
+    """Ensure database claim is compensated if Redis enqueue fails, so client retries are not stranded."""
+    app, mock_session_factory, mock_redis = app_with_mocks
+    mock_redis.lpush = AsyncMock(side_effect=RuntimeError("Redis connection broken"))
+    accepted_result = _accepted()
+
+    with (
+        patch(
+            "api.routers.webhook.accept_inbound_event",
+            new_callable=AsyncMock,
+            return_value=accepted_result,
+        ),
+        patch("api.routers.webhook.logger"),
+    ):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            resp = await ac.post("/api/v1/webhook/incident", json=VALID_PAYLOAD, headers=AUTH)
+
+    assert resp.status_code == 503
+    mock_session_factory.assert_called()
+
+
 # ---------------------------------------------------------------------------
 # Idempotency
 # ---------------------------------------------------------------------------

@@ -288,7 +288,8 @@ async def test_decide_approval_stub_fallback(app_with_db) -> None:
 
 
 @pytest.mark.asyncio
-async def test_decide_approval_updates_existing_approval(app_with_db) -> None:
+async def test_decide_approval_rejects_mutation_of_existing_approval(app_with_db) -> None:
+    """Ensure deciding an already-decided approval returns 409 Conflict due to audit immutability."""
     app, mock_session = app_with_db
     approval_id = uuid4()
     execution_id = uuid4()
@@ -324,12 +325,11 @@ async def test_decide_approval_updates_existing_approval(app_with_db) -> None:
             headers=AUTH_HEADERS,
         )
 
-    assert resp.status_code == 200
-    mock_session.commit.assert_awaited_once()
-    mock_session.refresh.assert_awaited_once_with(existing_approval)
-    assert existing_approval.decision == "approved"
-    assert existing_approval.decided_by == "lead_operator"
-    assert existing_approval.reason == "Manual override approved"
+    assert resp.status_code == 409
+    body = resp.json()
+    assert body["error"]["code"] == "RESOURCE_CONFLICT"
+    assert f"Approval '{approval_id}' has already been decided" in body["error"]["message"]
+    mock_session.commit.assert_not_awaited()
 
 
 @pytest.mark.asyncio

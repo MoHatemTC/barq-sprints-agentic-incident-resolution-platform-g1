@@ -20,6 +20,7 @@ from api.schemas.approvals import (
 from app.api.dependencies import get_db_session
 from app.db.models import Approval, Execution
 from app.exceptions.app_errors import (
+    ConflictError,
     ResourceNotFoundError,
     ServiceUnavailableError,
 )
@@ -121,47 +122,42 @@ async def decide_approval(
 
     try:
         # 1. Check if an approval record with this ID already exists
+        # Approvals are immutable audit records protected by trg_approvals_immutable trigger.
         approval = await db.get(Approval, id)
         if approval:
-            approval.decision = payload.decision
-            approval.decided_by = payload.decided_by
-            approval.reason = payload.reason
-            approval.evidence = payload.evidence
-            approval.decided_at = datetime.now(timezone.utc)
+            logger.warning(
+                "approval_already_decided",
+                approval_id=str(id),
+                decision=approval.decision,
+            )
+            raise ConflictError(
+                f"Approval '{id}' has already been decided ('{approval.decision}') and is immutable."
+            )
+
+        # 2. Check if this ID corresponds to an existing Execution
+        execution = await db.get(Execution, id)
+        if execution:
+            new_approval = Approval(
+                id=uuid4(),
+                execution_id=execution.execution_id,
+                decision=payload.decision,
+                decided_by=payload.decided_by,
+                reason=payload.reason,
+                evidence=payload.evidence,
+                decided_at=datetime.now(timezone.utc),
+            )
+            db.add(new_approval)
             await db.commit()
-            await db.refresh(approval)
+            await db.refresh(new_approval)
             logger.info(
-                "approval_updated",
-                approval_id=str(approval.id),
+                "approval_created_for_execution",
+                approval_id=str(new_approval.id),
+                execution_id=str(execution.execution_id),
                 decision=payload.decision,
                 decided_by=payload.decided_by,
             )
-            resolved_approval = approval
-        else:
-            # 2. Check if this ID corresponds to an existing Execution
-            execution = await db.get(Execution, id)
-            if execution:
-                new_approval = Approval(
-                    id=uuid4(),
-                    execution_id=execution.execution_id,
-                    decision=payload.decision,
-                    decided_by=payload.decided_by,
-                    reason=payload.reason,
-                    evidence=payload.evidence,
-                    decided_at=datetime.now(timezone.utc),
-                )
-                db.add(new_approval)
-                await db.commit()
-                await db.refresh(new_approval)
-                logger.info(
-                    "approval_created_for_execution",
-                    approval_id=str(new_approval.id),
-                    execution_id=str(execution.execution_id),
-                    decision=payload.decision,
-                    decided_by=payload.decided_by,
-                )
-                resolved_approval = new_approval
-    except MissingGreenlet:
+            resolved_approval = new_approval
+    except (ConflictError, MissingGreenlet):
         raise
     except SQLAlchemyError as exc:
         logger.error("database_operation_failed", approval_id=str(id), error=str(exc))

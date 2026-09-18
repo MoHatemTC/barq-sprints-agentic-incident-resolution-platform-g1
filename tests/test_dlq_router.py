@@ -135,9 +135,9 @@ async def test_list_dlq_returns_items_from_redis(app_instance) -> None:
 
 @pytest.mark.asyncio
 async def test_replay_dlq_moves_event_from_dlq_to_events_queue(app_instance) -> None:
-    """Ensure POST /api/v1/dlq/{event_id}/replay pops from DLQ and enqueues to incident events queue."""
+    """Ensure POST /api/v1/dlq/{event_id}/replay pops from DLQ and enqueues to incident events queue atomically."""
     import json
-    from unittest.mock import AsyncMock
+    from unittest.mock import AsyncMock, MagicMock
     from app.db.redis.keys import INCIDENT_DLQ_QUEUE, INCIDENT_EVENTS_QUEUE
 
     fake_dlq_item = json.dumps({
@@ -148,6 +148,9 @@ async def test_replay_dlq_moves_event_from_dlq_to_events_queue(app_instance) -> 
     })
     mock_redis = AsyncMock()
     mock_redis.lrange.return_value = [fake_dlq_item]
+    mock_pipe = MagicMock()
+    mock_pipe.execute = AsyncMock()
+    mock_redis.pipeline.return_value = mock_pipe
     app_instance.state.redis = mock_redis
 
     async with AsyncClient(transport=ASGITransport(app=app_instance), base_url="http://test") as client:
@@ -160,7 +163,35 @@ async def test_replay_dlq_moves_event_from_dlq_to_events_queue(app_instance) -> 
     data = resp.json()
     assert data["event_id"] == "evt-dlq-replay-123"
     assert "replayed" in data["message"]
-    # Verify Redis interactions
-    mock_redis.lrem.assert_awaited_once_with(INCIDENT_DLQ_QUEUE, 1, fake_dlq_item)
-    mock_redis.lpush.assert_awaited_once()
-    assert mock_redis.lpush.call_args[0][0] == INCIDENT_EVENTS_QUEUE
+    # Verify atomic transaction interactions
+    mock_pipe.lpush.assert_called_once_with(INCIDENT_EVENTS_QUEUE, json.dumps({"number": "INC009", "sys_id": "sys999"}))
+    mock_pipe.lrem.assert_called_once_with(INCIDENT_DLQ_QUEUE, 1, fake_dlq_item)
+    mock_pipe.execute.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_replay_dlq_redis_failure_returns_503(app_instance) -> None:
+    """Ensure Redis failure during replay raises 503 instead of reporting false success."""
+    import json
+    from unittest.mock import AsyncMock, MagicMock
+
+    fake_dlq_item = json.dumps({
+        "event_id": "evt-dlq-err-456",
+        "payload": {"number": "INC010", "sys_id": "sys888"},
+    })
+    mock_redis = AsyncMock()
+    mock_redis.lrange.return_value = [fake_dlq_item]
+    mock_pipe = MagicMock()
+    mock_pipe.execute = AsyncMock(side_effect=RuntimeError("Redis connection lost"))
+    mock_redis.pipeline.return_value = mock_pipe
+    app_instance.state.redis = mock_redis
+
+    async with AsyncClient(transport=ASGITransport(app=app_instance), base_url="http://test") as client:
+        resp = await client.post(
+            "/api/v1/dlq/evt-dlq-err-456/replay",
+            headers=OPERATOR_HEADERS,
+        )
+
+    assert resp.status_code == 503
+    body = resp.json()
+    assert body["error"]["code"] == "SERVICE_UNAVAILABLE"

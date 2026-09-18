@@ -8,6 +8,8 @@ import structlog
 from fastapi import APIRouter, Depends, status
 from redis.asyncio import Redis
 
+from sqlalchemy import delete
+
 from api.auth import verify_bearer_token
 from api.schemas.webhook import IncidentWebhookPayload, WebhookAcceptedResponse
 from app.api.dependencies import (
@@ -15,6 +17,7 @@ from app.api.dependencies import (
     get_session_factory,
 )
 from app.core.correlation import get_correlation_id
+from app.db.models import Event
 from app.db.redis.keys import INCIDENT_EVENTS_QUEUE
 from app.db.session import SessionFactory
 from app.exceptions.app_errors import ServiceUnavailableError
@@ -90,6 +93,25 @@ async def ingest_incident_webhook(
                 event_id=payload.event_id,
                 error=str(exc),
             )
+            # Compensate database persistence so client retry after 503 is not blocked as a false duplicate
+            if acceptance.event_record_id:
+                try:
+                    async with session_factory() as cleanup_session:
+                        await cleanup_session.execute(
+                            delete(Event).where(Event.id == acceptance.event_record_id)
+                        )
+                        await cleanup_session.commit()
+                    logger.info(
+                        "database_claim_compensated",
+                        event_id=payload.event_id,
+                        event_record_id=str(acceptance.event_record_id),
+                    )
+                except Exception as cleanup_exc:
+                    logger.warning(
+                        "database_compensation_failed",
+                        event_id=payload.event_id,
+                        error=str(cleanup_exc),
+                    )
             raise ServiceUnavailableError("Event queue unavailable.") from exc
 
     # 4. Immediate HTTP 202 Response
