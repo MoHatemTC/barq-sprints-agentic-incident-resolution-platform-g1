@@ -282,6 +282,8 @@ def build_incident_task(
         base=IncidentTask,
         max_retries=cfg.max_retries,
         autoretry_for=(),
+        soft_time_limit=settings.worker_soft_time_limit,
+        time_limit=settings.worker_time_limit,
     )
     def process_incident(self: IncidentTask, payload: dict[str, Any], execution_id: str) -> dict:
         self.settings = settings
