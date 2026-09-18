@@ -405,3 +405,32 @@ Merging #110 into a scratch copy of this branch fails
 `tests/test_config_router.py::test_config_redacts_all_runtime_secrets`: #110 changes the
 default `retrieval_mode` to `hybrid_reranked` and S2.1's test asserts `hybrid`. That
 collision is between S2.1 and S2.4 and is untouched here.
+
+## 10. Live re-verification after the review fixes (2026-09-18)
+
+The §8 runs predate the §9 fixes, so the whole path was re-run on the current code.
+Instance: PDI `dev434590`, as the non-admin integration user `ai_orchestrator_svc`.
+
+| Run | Outcome | Nodes in `path` | Observations | Trace |
+|---|---|---|---|---|
+| **Live `INC0010026`** (created for this run, AI Enabled) | `suggested`, cited draft from KB0001 v2.0, written back | all 11 | 17 | `b1ee51e681c81ef96e82e42d034ba06c` |
+| **`--scenario p1`** (high risk) | `escalated_high_risk` | 5 — `load, validate, classify, determine_risk, act` | 9 | `a5771edb2cf2c21a91a841066867a778` |
+| **`--scenario vpn`** | `suggested` | all 11 | — | `6c566948bc5e9d001a2a4c41dde030d1` |
+| **`INC0010023` `--dry-run`** | `skipped_ineligible` (already processed) | 3 | — | `f69543440f070249fb3ea28a100ecbe1` |
+
+**FR-13 is visible in the trace itself.** The high-risk trace holds no `node.retrieve` and
+no `node.generate` span — 9 observations against the full run's 17. The escalation happens
+at `determine_risk`, before any search or draft.
+
+**Write-back confirmed on the instance.** `INC0010026` afterwards reads
+`ai_processing_state=awaiting_approval`, `ai_classification=access`, `ai_confidence=1`,
+`ai_model_name=gemini/gemini-3.5-flash`, `ai_agent_version=s2.5-graph-1.0.0`,
+`ai_human_review_required=true`.
+
+**Secret scan of the new data.** All four traces were read back and checked against the
+nine real credential values in use (LiteLLM key, Langfuse secret, both ServiceNow
+passwords and client secrets, webhook token, Postgres and Redis passwords). None appears,
+and no e-mail address or phone number appears. No redaction marker appears either, because
+these incidents carry no personal data — the redactor itself is proven by
+`tests/test_tracing.py::TestSecretScan`, which feeds it real credential shapes, including
+the `status_message` path fixed in §9.
