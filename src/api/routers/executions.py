@@ -6,7 +6,7 @@ from typing import Annotated
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Path, status
 from sqlalchemy import select
 from sqlalchemy.exc import MissingGreenlet, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -115,7 +115,7 @@ async def get_execution_trace(
     description="Fetch all execution audit runs associated with a 32-hex incident sys_id.",
 )
 async def list_incident_executions(
-    sys_id: str,
+    sys_id: Annotated[str, Path(max_length=32, description="ServiceNow incident 32-character sys_id")],
     db: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> IncidentExecutionsResponse:
     """Retrieve all executions for a given incident_sys_id."""

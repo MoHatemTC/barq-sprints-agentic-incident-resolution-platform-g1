@@ -50,8 +50,14 @@ build_postgres_url = build_database_url
 
 
 def create_database_engine(database_url: str | URL, *, echo: bool = False) -> AsyncEngine:
-    """Create a lazy async engine; no connection is opened until first use."""
-    return create_async_engine(database_url, echo=echo, pool_pre_ping=True)
+    """Create an async engine configured for high concurrent throughput."""
+    return create_async_engine(
+        database_url,
+        echo=echo,
+        pool_size=50,
+        max_overflow=25,
+        pool_pre_ping=False,
+    )
 
 
 def create_db_engine(settings: PostgreSQLSettings) -> AsyncEngine:

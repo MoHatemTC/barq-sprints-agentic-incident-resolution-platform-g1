@@ -1,4 +1,17 @@
+from __future__ import annotations
+
+import contextlib
+from io import StringIO
+from typing import Any
+from sqlalchemy.engine import URL
+from unittest.mock import MagicMock
+
+import structlog
+import logging
+import importlib
+
 from app.core.config import Settings
+from app.core.logging import redact_sensitive_data
 
 
 def mock_settings(**overrides: object) -> Settings:
@@ -21,3 +34,140 @@ def mock_settings(**overrides: object) -> Settings:
     }
     defaults.update(overrides)
     return Settings(**defaults)  # type: ignore[arg-type]
+
+
+# ---------------------------------------------------------------------------
+# Shared S2.1 HTTP-boundary test constants and builders
+# ---------------------------------------------------------------------------
+WEBHOOK_TOKEN = "s21-test-bearer-token-7f3a"
+AUTH_HEADERS = {"Authorization": f"Bearer {WEBHOOK_TOKEN}"}
+OPERATOR_HEADERS = {**AUTH_HEADERS, "X-User-Role": "operator"}
+
+VALID_SYS_ID = "a1b2c3d4e5f60718293a4b5c6d7e8f90"
+VALID_NUMBER = "INC0014231"
+
+
+def make_incident_payload(**overrides: Any) -> dict[str, Any]:
+    """Return a valid Outbound Event Contract v1 payload with optional field overrides."""
+    payload: dict[str, Any] = {
+        "event_id": "0b78b3f6-9a51-4f2f-8f10-3b0f9bc82f1a",
+        "sys_id": VALID_SYS_ID,
+        "number": VALID_NUMBER,
+        "event_type": "incident.created",
+        "contract_version": "v1",
+    }
+    payload.update(overrides)
+    return payload
+
+
+def build_session_factory(session: Any) -> Any:
+    """Wrap a fake AsyncSession in the async-context-manager shape get_db_session expects."""
+
+    class _SessionContext:
+        async def __aenter__(self) -> Any:
+            return session
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+    factory = MagicMock(return_value=_SessionContext())
+    return factory
+
+
+def build_database_url_for_db(settings: Settings, database_name: str) -> Any:
+    """Build a postgresql+asyncpg URL for an arbitrary database name from settings."""
+
+    password = (
+        settings.postgres_password.get_secret_value()
+        if settings.postgres_password is not None
+        else None
+    )
+    return URL.create(
+        drivername="postgresql+asyncpg",
+        username=settings.postgres_user,
+        password=password,
+        host=settings.postgres_host,
+        port=settings.postgres_port,
+        database=database_name,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Structured log capture wired through the real production processor chain
+# ---------------------------------------------------------------------------
+@contextlib.contextmanager
+def capture_json_logs(level: str = "INFO"):
+    """Capture rendered structlog output through the production processor chain.
+
+    Reconfigures structlog with the same processors ``configure_logging`` installs for
+    the production environment (contextvars merge, log level, timestamp, secret
+    redaction, exc info, JSON rendering) but writes into an in-memory buffer.
+
+    Module-level loggers (``api.access``, ``api.errors``, router loggers, ...) may
+    already be cached against the stdout factory from earlier use, so each known
+    module logger is rebound to a fresh proxy for the duration of the context and
+    restored afterwards.
+    """
+
+    buffer = StringIO()
+    processors = [
+        structlog.contextvars.merge_contextvars,
+        structlog.stdlib.add_log_level,
+        structlog.processors.TimeStamper(fmt="iso", utc=True),
+        redact_sensitive_data,
+        structlog.processors.format_exc_info,
+        structlog.processors.JSONRenderer(),
+    ]
+    structlog.configure(
+        processors=processors,
+        wrapper_class=structlog.make_filtering_bound_logger(
+            logging.getLevelNamesMapping()[level.upper()]
+        ),
+        logger_factory=structlog.PrintLoggerFactory(file=buffer),
+        cache_logger_on_first_use=False,
+    )
+
+    rebound_modules = [
+        "app.middlewares.correlation",
+        "app.exceptions.handlers",
+        "api.routers.webhook",
+        "api.routers.executions",
+        "api.routers.approvals",
+        "api.routers.dlq",
+        "api.routers.eval",
+        "api.routers.config",
+    ]
+    originals: list[tuple[Any, str, Any]] = []
+    for module_name in rebound_modules:
+        try:
+            module = importlib.import_module(module_name)
+        except ImportError:  # pragma: no cover - module always exists in this repo
+            continue
+        logger_attr = getattr(module, "logger", None)
+        if logger_attr is None:
+            continue
+        fresh = structlog.getLogger(module_name)
+        originals.append((module, "logger", logger_attr))
+        setattr(module, "logger", fresh)
+    try:
+        yield buffer
+    finally:
+        for module, attr, value in originals:
+            setattr(module, attr, value)
+        structlog.reset_defaults()
+
+
+def parse_json_log_lines(buffer: StringIO) -> list[dict[str, Any]]:
+    """Parse each non-empty line of a captured buffer as a JSON log event."""
+    import json
+
+    events: list[dict[str, Any]] = []
+    for line in buffer.getvalue().splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            events.append(json.loads(line))
+        except json.JSONDecodeError:
+            events.append({"_unparseable": line})
+    return events

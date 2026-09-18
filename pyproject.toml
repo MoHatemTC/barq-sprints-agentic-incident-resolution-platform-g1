@@ -72,6 +72,11 @@ indent-style = "space"
 testpaths = ["tests"]
 asyncio_mode = "auto"
 pythonpath = ["src"]
+markers = [
+    "unit: fast isolated tests using mocks/fakes (default suite)",
+    "integration: exercises real PostgreSQL/Redis; skips when infrastructure is unreachable",
+    "load: latency/load benchmarks; run explicitly via tests/load/run_load_test.py",
+]
 
 [tool.mypy]
 python_version = "3.12"
