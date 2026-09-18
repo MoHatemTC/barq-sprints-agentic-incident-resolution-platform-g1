@@ -3,21 +3,17 @@
 from __future__ import annotations
 
 import asyncio
-import secrets
 from typing import Annotated
 
 import structlog
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, status
 
+from api.auth import verify_bearer_token
 from api.schemas.webhook import IncidentWebhookPayload, WebhookAcceptedResponse
-from app.api.dependencies import (
-    get_app_settings,
-    get_session_factory,
-)
-from app.core.config import Settings
+from app.api.dependencies import get_session_factory
 from app.core.correlation import get_correlation_id
 from app.db.session import SessionFactory
-from app.exceptions.app_errors import AuthenticationError, ServiceUnavailableError
+from app.exceptions.app_errors import ServiceUnavailableError
 from app.repositories.idempotency import (
     EventAcceptanceStatus,
     InboundEvent,
@@ -28,7 +24,14 @@ from observability.tracing import get_tracer
 
 logger = structlog.getLogger("api.webhook")
 
-router = APIRouter(prefix="/api/v1/webhook", tags=["Webhook"])
+# The bearer check is a router-level dependency, so FastAPI resolves it before the
+# handler body runs. That ordering is load-bearing: an unauthenticated caller must
+# never reach the tracer and create a trace.
+router = APIRouter(
+    prefix="/api/v1/webhook",
+    tags=["Webhook"],
+    dependencies=[Depends(verify_bearer_token)],
+)
 
 
 @router.post(
@@ -42,15 +45,10 @@ router = APIRouter(prefix="/api/v1/webhook", tags=["Webhook"])
 )
 async def ingest_incident_webhook(
     payload: IncidentWebhookPayload,
-    request: Request,
     session_factory: Annotated[SessionFactory, Depends(get_session_factory)],
-    settings: Annotated[Settings, Depends(get_app_settings)],
 ) -> WebhookAcceptedResponse:
     """Ingest, validate, persist, and queue an incoming ServiceNow incident event."""
     correlation_id = get_correlation_id()
-    # Authenticate before tracing: an unauthenticated caller must not be able to
-    # create traces.
-    _authenticate(request, settings)
     tracer = get_tracer()
     with (
         tracer.span(
@@ -65,32 +63,19 @@ async def ingest_incident_webhook(
         ) as receipt,
         tracer.trace_attributes(correlation_id=correlation_id, incident_number=payload.number),
     ):
-        response = await _ingest(payload, request, session_factory, settings, correlation_id)
+        response = await _ingest(payload, session_factory, correlation_id)
         receipt.update(output=response.model_dump(mode="json"))
         return response
 
 
-def _authenticate(request: Request, settings: Settings) -> None:
-    """1. Bearer Token Authentication."""
-    auth_header = request.headers.get("Authorization")
-    if not auth_header or not auth_header.startswith("Bearer "):
-        raise AuthenticationError("Missing or invalid Bearer token")
-
-    token = auth_header[7:]
-    if not secrets.compare_digest(token, settings.webhook_auth_token):
-        raise AuthenticationError("Invalid Bearer token")
-
-
 async def _ingest(
     payload: IncidentWebhookPayload,
-    request: Request,
     session_factory: SessionFactory,
-    settings: Settings,
     correlation_id: str,
 ) -> WebhookAcceptedResponse:
     tracer = get_tracer()
 
-    # 2. Idempotent Database Persistence
+    # 1. Idempotent Database Persistence
     inbound = InboundEvent(
         event_id=payload.event_id,
         sys_id=payload.sys_id,

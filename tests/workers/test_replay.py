@@ -146,3 +146,19 @@ def test_load_dead_letters_reads_newest_first_and_skips_garbage() -> None:
     records = load_dead_letters(redis)
 
     assert [record["event_id"] for record in records] == ["evt-new", "evt-old"]
+
+
+def test_replay_succeeds_when_redis_has_no_records_for_event() -> None:
+    """an operator might flush Redis or the record was already cleaned.
+    Replay should still succeed (Postgres is the truth) — just 0 records removed."""
+    repo = _parked_repo(state="exhausted")
+    redis = FakeListRedis()
+    # No DLQ records seeded — Redis is empty for this event.
+    producer = MagicMock()
+
+    with patch("app.workers.replay.send_incident_event", producer):
+        outcome = replay_event(repo, redis, EVENT_PAYLOAD["event_id"], max_attempts=5)
+
+    assert outcome.replayed is True
+    assert outcome.removed_records == 0  # nothing to clean, that's fine
+    producer.assert_called_once()  # event was still re-enqueued

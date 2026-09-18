@@ -7,6 +7,11 @@ from api.schemas.approvals import (
     ApprovalDecisionRequest,
     ApprovalResponse,
 )
+from api.schemas.config import (
+    REDACTED_SENTINEL,
+    RedactedConfigResponse,
+    RetrievalMode,
+)
 from api.schemas.dlq import (
     DLQEventResponse,
     DLQReplayResponse,
@@ -46,6 +51,9 @@ __all__ = [
     "IncidentExecutionsResponse",
     "IncidentWebhookPayload",
     "NodeStateStatus",
+    "REDACTED_SENTINEL",
+    "RedactedConfigResponse",
+    "RetrievalMode",
     "TraceResponse",
     "WebhookAcceptedResponse",
 ]

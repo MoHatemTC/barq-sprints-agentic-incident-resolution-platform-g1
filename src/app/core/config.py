@@ -12,6 +12,12 @@ class Environment(StrEnum):
     PRODUCTION = "production"
 
 
+class RetrievalMode(StrEnum):
+    DENSE_ONLY = "dense_only"
+    HYBRID = "hybrid"
+    HYBRID_RERANKED = "hybrid_reranked"
+
+
 def _get_version() -> str:
     try:
         return version("barq-sprints-agentic-incident-resolution-platform-g1")
@@ -36,6 +42,7 @@ class RetrievalSettings(BaseSettings):
     # Embedding Models
     dense_embedding_model: str = "BAAI/bge-small-en-v1.5"
     sparse_embedding_model: str = "Qdrant/bm25"
+    retrieval_mode: RetrievalMode = RetrievalMode.HYBRID
 
 
 class Settings(RetrievalSettings):
@@ -43,6 +50,16 @@ class Settings(RetrievalSettings):
     app_version: str = Field(default_factory=_get_version)
     log_level: str = "INFO"
     environment: Environment = Environment.DEVELOPMENT
+
+    # Feature Flags
+    active_feature_flags: dict[str, bool] = Field(
+        default_factory=lambda: {
+            "hitl_approvals": True,
+            "dlq_replay": True,
+            "eval_benchmarks": False,
+            "auto_remediation": False,
+        }
+    )
 
     # Host & Network Binding (Security)
     bind_ip: str = "127.0.0.1"
@@ -97,9 +114,12 @@ class Settings(RetrievalSettings):
     )
     worker_max_retries: int = Field(
         default=5,
+        ge=1,
         description="Maximum total attempts per event (initial + retries) before "
         "dead-lettering; also written to retry_state.max_attempts so the database "
-        "enforces the same budget: attempt_count may never exceed it",
+        "enforces the same budget: attempt_count may never exceed it. "
+        "NOTE: a value of 1 means ONE attempt with ZERO retries — the event "
+        "dead-letters on the first failure.",
     )
     worker_backoff_base: float = Field(
         default=1.0,
