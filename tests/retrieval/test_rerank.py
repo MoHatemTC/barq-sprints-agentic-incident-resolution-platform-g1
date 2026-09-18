@@ -113,7 +113,7 @@ def test_top_n_negative_raises():
         reranker.rerank("query", hits, top_n=-1)
 
 
-def test_rerank_replaces_score_and_sorts_descending():
+def test_rerank_normalizes_scores_and_sorts_descending():
     hits = [
         _make_hit("KB0001-v1.0", 0, 0.9, "irrelevant text"),
         _make_hit("KB0002-v1.0", 0, 0.1, "highly relevant text"),
@@ -124,8 +124,8 @@ def test_rerank_replaces_score_and_sorts_descending():
     result = reranker.rerank("query", hits, top_n=2)
 
     assert [h.article_id for h in result] == ["KB0002-v1.0", "KB0001-v1.0"]
-    assert result[0].score == 0.9
-    assert result[1].score == 0.1
+    assert result[0].score == pytest.approx(0.7109495026)
+    assert result[1].score == pytest.approx(0.5249791875)
 
 
 def test_rerank_truncates_to_top_n():
@@ -136,8 +136,25 @@ def test_rerank_truncates_to_top_n():
     result = reranker.rerank("query", hits, top_n=2)
 
     assert len(result) == 2
-    assert result[0].score == 0.9
-    assert result[1].score == 0.7
+    assert result[0].score == pytest.approx(0.7109495026)
+    assert result[1].score == pytest.approx(0.6681877722)
+
+
+def test_rerank_normalizes_cross_encoder_logits():
+    hits = [
+        _make_hit("KB0001-v1.0", 0, 0.5),
+        _make_hit("KB0002-v1.0", 0, 0.5),
+    ]
+    _FakeTextCrossEncoder.next_scores = [-10.03, 10.03]
+
+    reranker = CrossEncoderReranker()
+    result = reranker.rerank("query", hits, top_n=2)
+
+    assert result[0].article_id == "KB0002-v1.0"
+    assert result[0].score == pytest.approx(0.999956)
+
+    assert result[1].article_id == "KB0001-v1.0"
+    assert result[1].score == pytest.approx(0.000044, abs=1e-7)
 
 
 def test_rerank_tie_break_uses_article_id_then_chunk_index():
