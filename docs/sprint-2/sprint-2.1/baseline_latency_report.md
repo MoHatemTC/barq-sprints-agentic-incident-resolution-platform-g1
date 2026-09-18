@@ -47,10 +47,9 @@ python tests/load/run_load_test.py --depths 0 1000 10000 \
   --requests-per-depth 500 --concurrency 50
 ```
 
-Optionally, open-ended exploratory load with Locust:
+Optionally, run with higher concurrency or depth:
 
-```bash
-uv pip install locust
-locust -f tests/load/locustfile.py --host http://127.0.0.1:8431 \
-  --users 50 --spawn-rate 10 --run-time 60s
+```powershell
+uv run python tests/load/run_load_test.py --base-url http://127.0.0.1:8000 `
+  --depths 0 1000 10000 --requests-per-depth 1000 --concurrency 100
 ```

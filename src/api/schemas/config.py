@@ -89,6 +89,20 @@ class RedactedConfigResponse(BaseModel):
         description="Active platform feature flag statuses",
     )
 
+    # Langfuse Tracing
+    langfuse_host: str = Field(
+        default="https://cloud.langfuse.com",
+        description="Langfuse server URL",
+    )
+    langfuse_public_key: str | None = Field(
+        default=None,
+        description="Langfuse public key (None when tracing is disabled)",
+    )
+    langfuse_secret_key: str = Field(
+        default=REDACTED_SENTINEL,
+        description="Redacted Langfuse secret key",
+    )
+
     @classmethod
     def from_settings(cls, settings: Settings) -> RedactedConfigResponse:
         """Construct a sanitized RedactedConfigResponse directly from runtime application settings."""
@@ -125,4 +139,7 @@ class RedactedConfigResponse(BaseModel):
             sparse_embedding_model=settings.sparse_embedding_model,
             retrieval_mode=getattr(settings, "retrieval_mode", RetrievalMode.HYBRID),
             active_feature_flags=dict(getattr(settings, "active_feature_flags", {})),
+            langfuse_host=settings.langfuse_host,
+            langfuse_public_key=settings.langfuse_public_key,
+            langfuse_secret_key=REDACTED_SENTINEL,
         )

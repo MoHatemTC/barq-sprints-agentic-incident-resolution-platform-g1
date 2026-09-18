@@ -217,8 +217,11 @@
             "required": true,
             "schema": {
               "type": "string",
+              "maxLength": 32,
+              "description": "ServiceNow incident 32-character sys_id",
               "title": "Sys Id"
-            }
+            },
+            "description": "ServiceNow incident 32-character sys_id"
           }
         ],
         "responses": {
@@ -1505,6 +1508,30 @@
             "type": "object",
             "title": "Active Feature Flags",
             "description": "Active platform feature flag statuses"
+          },
+          "langfuse_host": {
+            "type": "string",
+            "title": "Langfuse Host",
+            "description": "Langfuse server URL",
+            "default": "https://cloud.langfuse.com"
+          },
+          "langfuse_public_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Langfuse Public Key",
+            "description": "Langfuse public key (None when tracing is disabled)"
+          },
+          "langfuse_secret_key": {
+            "type": "string",
+            "title": "Langfuse Secret Key",
+            "description": "Redacted Langfuse secret key",
+            "default": "***REDACTED***"
           }
         },
         "additionalProperties": false,

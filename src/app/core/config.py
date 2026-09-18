@@ -106,6 +106,20 @@ class Settings(RetrievalSettings):
     redis_port: int = 6379
     redis_password: SecretStr | None = None
 
+    # Langfuse Tracing (optional — integration is disabled when keys are absent)
+    langfuse_public_key: str | None = Field(
+        default=None,
+        description="Langfuse project public key (tracing disabled when absent)",
+    )
+    langfuse_secret_key: SecretStr | None = Field(
+        default=None,
+        description="Langfuse project secret key (tracing disabled when absent)",
+    )
+    langfuse_host: str = Field(
+        default="https://cloud.langfuse.com",
+        description="Langfuse server URL",
+    )
+
     @field_validator("servicenow_instance_url")
     @classmethod
     def validate_instance_url(cls, v: str) -> str:
