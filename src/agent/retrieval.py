@@ -22,7 +22,7 @@ from collections.abc import Callable
 from typing import Any, Protocol
 
 from qdrant_client import QdrantClient
-from qdrant_client.models import FieldCondition, Filter, MatchAny
+from qdrant_client.models import Condition, FieldCondition, Filter, MatchAny, MatchValue
 
 from agent.state import EvidenceItem, RetrievalResult
 from app.clients.qdrant import DENSE_VECTOR_NAME
@@ -217,7 +217,7 @@ class QdrantRetriever:
                 max_security_level=self._max_security_level,
                 engine=engine,
             )
-            relevance = self._dense_scores(client, engine.embed_query(query), extra, top_k)
+            relevance = self._dense_scores(client, engine.embed_query(query), extra, list(hits))
         except ValueError as exc:
             # Malformed payloads violate the ingestion contract: retrying cannot help.
             raise TerminalError(f"retrieval contract violated: {exc}") from exc
@@ -252,14 +252,41 @@ class QdrantRetriever:
         )
 
     def _dense_scores(
-        self, client: QdrantClient, embedded: EmbeddedText, extra: Filter, top_k: int
+        self, client: QdrantClient, embedded: EmbeddedText, extra: Filter, hits: list[Any]
     ) -> dict[tuple[str, int], float]:
+        """Dense cosine for exactly the chunks ``hits`` contains.
+
+        Scoping this to the returned chunks rather than taking a dense top-N is
+        what keeps every hit's relevance real. A fused hit that falls outside the
+        dense top-N — routine once S2.4's reranker reorders the candidates, but
+        possible with RRF alone — otherwise scored 0.0 by default and could drag
+        ``best_relevance`` under the §11.7 threshold, escalating "no evidence" for
+        an incident that had evidence.
+        """
+        if not hits:
+            return {}
+        chunk_clauses: list[Condition] = [
+            Filter(
+                must=[
+                    FieldCondition(
+                        key="article_number", match=MatchValue(value=hit.article_number)
+                    ),
+                    FieldCondition(key="version", match=MatchValue(value=hit.version)),
+                    FieldCondition(key="chunk_index", match=MatchValue(value=hit.chunk_index)),
+                ]
+            )
+            for hit in hits
+        ]
+        # Nest rather than splice: the mandatory filter keeps whatever shape S2.4
+        # gives it, and the chunk clauses stay a self-contained "any of these".
+        mandatory = _mandatory_filter(extra, self._max_security_level)
+        scoped = Filter(must=[mandatory, Filter(should=chunk_clauses)])
         response = client.query_points(
             collection_name=self._collection_name or _get_default_collection_name(),
             query=embedded.dense,
             using=DENSE_VECTOR_NAME,
-            query_filter=_mandatory_filter(extra, self._max_security_level),
-            limit=max(top_k * 4, 20),
+            query_filter=scoped,
+            limit=len(hits),
             with_payload=["article_number", "version", "chunk_index"],
         )
         scores: dict[tuple[str, int], float] = {}
