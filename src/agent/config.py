@@ -13,7 +13,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 AGENT_VERSION = "s2.5-graph-1.0.0"
@@ -53,6 +53,21 @@ class AgentSettings(BaseSettings):
     agent_llm_timeout_seconds: float = Field(default=60.0, gt=0)
     agent_llm_max_retries: int = Field(default=2, ge=0)
     agent_prompt_version: str = "v1"
+
+    @field_validator("agent_llm_model")
+    @classmethod
+    def _gemini_only(cls, value: str) -> str:
+        """Hold the field to the promise its description makes.
+
+        The programme's LiteLLM key is provisioned for Gemini only. Without this,
+        an environment value such as ``openai/gpt-4`` is passed straight through to
+        the proxy, so the restriction would live in a docstring rather than in code.
+        """
+        if not value.startswith("gemini/"):
+            raise ValueError(
+                f"agent_llm_model must name a Gemini model ('gemini/…'); got {value!r}"
+            )
+        return value
 
     # -- manual §11.7: search ------------------------------------------------------
     agent_retrieval_top_k: int = Field(default=5, gt=0)

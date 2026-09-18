@@ -19,6 +19,9 @@ from agent.state import (
 )
 from app.models.knowledge import Classification
 
+#: Incident fields that may carry the affected service, most specific first.
+_SERVICE_KEYS: tuple[str, ...] = ("business_service", "service", "u_service", "cmdb_ci")
+
 #: Manual §5.2 service catalogue → criticality tier.
 SERVICE_TIERS: Mapping[str, int] = {
     "order-processing": 1,
@@ -71,15 +74,35 @@ def service_name(raw: Mapping[str, Any]) -> str | None:
     ``business_service`` is a reference field: without ``sysparm_display_value`` it
     arrives as ``{"value": sys_id, "link": …}``, which carries no name. Only a
     display value (or a plain string) is used; an unresolvable reference yields
-    ``None`` and the risk rules treat the tier as unknown.
+    ``None``, and :func:`service_reference_unresolved` reports that separately so
+    the risk rules can fail closed instead of reading it as "no service".
     """
-    for key in ("business_service", "service", "u_service", "cmdb_ci"):
+    for key in _SERVICE_KEYS:
         value = raw.get(key)
         if isinstance(value, Mapping):
             value = value.get("display_value")
         if isinstance(value, str) and value.strip():
             return value.strip().lower()
     return None
+
+
+def service_reference_unresolved(raw: Mapping[str, Any]) -> bool:
+    """True when a service is set on the record but its name could not be read.
+
+    ``get_incident`` does not pass ``sysparm_display_value``, so a populated
+    reference field arrives as ``{"value": sys_id, "link": …}``. Treating that as
+    "no service" would silently skip the Tier 1 approval rule (§11.1) for exactly
+    the incidents it exists to catch, so it is surfaced and failed closed instead.
+    """
+    if service_name(raw) is not None:
+        return False
+    for key in _SERVICE_KEYS:
+        value = raw.get(key)
+        if isinstance(value, Mapping) and str(value.get("value") or "").strip():
+            return True
+        if isinstance(value, str) and value.strip():
+            return True
+    return False
 
 
 def snapshot_incident(raw: Mapping[str, Any]) -> IncidentSnapshot:
@@ -97,6 +120,7 @@ def snapshot_incident(raw: Mapping[str, Any]) -> IncidentSnapshot:
         category=str(raw.get("category") or "").strip().lower(),
         subcategory=str(raw.get("subcategory") or "").strip().lower(),
         service=service_name(raw),
+        service_unresolved=service_reference_unresolved(raw),
         active=bool(raw.get("active", True)),
         ai_enabled=bool(raw.get("ai_enabled", False)),
         ai_human_lock=lock if isinstance(lock, bool) else None,
@@ -168,6 +192,10 @@ def assess_risk(
         high.append("suspected security incident: goes to Security, never drafted (§6)")
     if tier == 1:
         elevated.append(f"Tier 1 service '{incident.service}': no action without approval (§11.1)")
+    elif incident.service_unresolved:
+        # A service is set but its name did not resolve, so we cannot rule out
+        # Tier 1. Fail closed rather than default the tier to "not critical".
+        elevated.append("affected service could not be resolved, so its tier is unknown (§11.1)")
     text = f"{incident.short_description}\n{incident.description}"
     if _HIGH_RISK_IDENTITY_ACTION.search(text):
         elevated.append("MFA reset is a high-risk identity action that needs approval (§6)")

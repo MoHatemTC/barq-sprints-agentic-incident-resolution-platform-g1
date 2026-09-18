@@ -68,6 +68,10 @@ class IncidentSnapshot(_Section):
     category: str = ""
     subcategory: str = ""
     service: str | None = None
+    #: True when the record names a service but the reference could not be
+    #: resolved to a name, so its criticality tier is unknowable. Distinct from
+    #: ``service is None`` with this False, which means no service was set at all.
+    service_unresolved: bool = False
     active: bool = True
     ai_enabled: bool = False
     ai_human_lock: bool | None = None

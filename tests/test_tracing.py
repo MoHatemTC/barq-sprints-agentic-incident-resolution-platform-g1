@@ -329,6 +329,25 @@ class TestSecretScan:
         for kind, secret in SECRET_TEXTS.items():
             assert secret not in dumped, f"{kind} leaked into a span"
 
+    def test_no_secret_in_a_failed_span_status_message(self) -> None:
+        """``status_message`` is outside the mask hook, so ``fail`` must redact it.
+
+        A pydantic ValidationError quotes the values it rejected, so an exception
+        message is a real export path for credentials and personal data.
+        """
+        tracer, exporter = recording_tracer()
+        leaky = (
+            f"rejected record: password={SECRET_TEXTS['password']} "
+            f"token={SECRET_TEXTS['bearer']} key={SECRET_TEXTS['litellm_key']} "
+            f"contact={SECRET_TEXTS['email']} / {SECRET_TEXTS['phone']}"
+        )
+        with tracer.span("node.generate") as span:
+            span.fail(ValueError(leaky))
+
+        dumped = everything_exported(finished(tracer, exporter))
+        for kind, secret in SECRET_TEXTS.items():
+            assert secret not in dumped, f"{kind} leaked via status_message"
+
     def test_no_secret_reaches_the_model_prompt(self) -> None:
         tracer, _ = recording_tracer()
         llm = FakeLLM(vpn_answers())

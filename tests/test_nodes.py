@@ -25,7 +25,7 @@ from agent.nodes import (
     validate,
     verify_evidence,
 )
-from agent.nodes.act import decide_outcome
+from agent.nodes.act import compose, decide_outcome
 from agent.nodes.confidence_check import score
 from agent.policy import (
     assess_risk,
@@ -233,6 +233,38 @@ class TestDetermineRisk:
             "approval_required": False,
             "service_tier": 2,
         }
+
+    def test_unresolved_service_reference_fails_closed(self) -> None:
+        """A bare reference means the tier is unknowable, so it must not read as LOW.
+
+        ``get_incident`` does not request display values, so a populated
+        ``business_service`` arrives as ``{"value": sys_id, "link": …}``. Defaulting
+        that to "no service" would skip the §11.1 Tier 1 approval rule for a
+        non-P1 incident on order-processing, identity or sap-erp.
+        """
+        bare_reference = {
+            "value": "0c5f3cec1449",
+            "link": "https://example.service-now.com/api/now/table/cmdb_ci_service/0c5f3cec1449",
+        }
+        snap = snapshot(VPN, business_service=bare_reference)
+        assert snap["service"] is None
+        assert snap["service_unresolved"] is True
+
+        state = base_state(incident=snap, classification=classification())
+        risk = determine_risk(state, make_deps())["risk"]
+        assert risk["level"] == "elevated"
+        assert risk["approval_required"] is True
+        assert any("could not be resolved" in r for r in risk["reasons"])
+
+    def test_absent_service_still_allows_low(self) -> None:
+        """No service set at all is not the same as an unresolved one."""
+        snap = snapshot(VPN, business_service=None)
+        assert snap["service"] is None
+        assert snap["service_unresolved"] is False
+        state = base_state(incident=snap, classification=classification())
+        risk = determine_risk(state, make_deps())["risk"]
+        assert risk["level"] == "low"
+        assert risk["approval_required"] is False
 
     def test_mfa_reset_on_identity_is_elevated_and_needs_approval(self) -> None:
         state = base_state(incident=snapshot(MFA), classification=classification("access"))
@@ -603,6 +635,7 @@ class TestAct:
         ({"diagnosis": None}, Outcome.ESCALATED_NO_EVIDENCE),
         ({"verification": None}, Outcome.ESCALATED_BLOCKED),
         ({"confidence": None}, Outcome.ESCALATED_LOW_CONFIDENCE),
+        ({"draft": None}, Outcome.ESCALATED_NO_EVIDENCE),
     ],
 )
 def test_decide_outcome_fails_closed_on_missing_sections(
@@ -615,6 +648,30 @@ def test_decide_outcome_fails_closed_on_missing_sections(
         else:
             state[key] = value
     assert decide_outcome(state) is expected
+
+
+@pytest.mark.parametrize(
+    "missing",
+    ["eligibility", "risk", "retrieval", "diagnosis", "verification", "confidence", "draft"],
+)
+def test_compose_survives_the_state_that_selected_the_outcome(missing: str) -> None:
+    """The fail-closed decision has to be composable, not just decidable.
+
+    ``decide_outcome`` handles each section being absent, so ``compose`` must
+    build the escalation note from the same state. Indexing a section that is
+    missing turned the escalation into a KeyError and the incident was left with
+    no work note at all.
+    """
+    state = reasoned_state(incident=snapshot(VPN))
+    state.pop(missing)
+
+    outcome = decide_outcome(state)
+    output = compose(state, outcome)
+
+    assert output.outcome is outcome
+    if outcome is not Outcome.SKIPPED_INELIGIBLE:
+        assert output.work_note, "an escalation must still leave a work note"
+        assert output.human_review_required is True
 
 
 # -- policy helpers -------------------------------------------------------------------------

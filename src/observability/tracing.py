@@ -25,7 +25,8 @@ exceptions raised by the traced code itself always propagate unchanged
 
 **Nothing secret reaches Langfuse.** The client is created with
 :func:`observability.redaction.langfuse_mask`, which redacts every input, output and
-metadata value before export (``tests/test_tracing.py::TestSecretScan``).
+metadata value before export (``tests/test_tracing.py::TestSecretScan``). The mask hook
+only covers those three, so :meth:`Span.fail` redacts its ``status_message`` itself.
 """
 
 from __future__ import annotations
@@ -40,7 +41,7 @@ import structlog
 from pydantic import AliasChoices, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from observability.redaction import langfuse_mask
+from observability.redaction import langfuse_mask, redact_text
 
 if TYPE_CHECKING:
     from langfuse import Langfuse
@@ -135,7 +136,12 @@ class Span:
             _report(self._tracer, "span_update_failed", exc)
 
     def fail(self, exc: BaseException) -> None:
-        self.update(level="ERROR", status_message=f"{type(exc).__name__}: {exc}"[:500])
+        # ``status_message`` is not an input/output/metadata field, so the client's
+        # mask hook never sees it. Redact here or an exception that quotes request
+        # data (a pydantic ValidationError echoes the offending values) exports
+        # verbatim.
+        message = redact_text(f"{type(exc).__name__}: {exc}")
+        self.update(level="ERROR", status_message=message[:500])
 
 
 NOOP_SPAN = Span()

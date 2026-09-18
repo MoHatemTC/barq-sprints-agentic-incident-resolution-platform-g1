@@ -61,6 +61,10 @@ def decide_outcome(state: AgentState) -> Outcome:
     confidence = state.get("confidence")
     if confidence is None or not ConfidenceResult.model_validate(confidence).passed:
         return Outcome.ESCALATED_LOW_CONFIDENCE
+    if state.get("draft") is None:
+        # Every other section is present and passing but generate recorded no
+        # draft, so there is nothing to suggest. Escalate instead of claiming one.
+        return Outcome.ESCALATED_NO_EVIDENCE
     return Outcome.SUGGESTED
 
 
@@ -122,10 +126,15 @@ def compose(state: AgentState, outcome: Outcome) -> FinalOutput:
             processing_state=PAUSED,
         )
     if outcome is Outcome.ESCALATED_NO_EVIDENCE:
-        note = f"{PREFIX}: no matching knowledge article found. " + _search_finding(
-            RetrievalResult.model_validate(state["retrieval"]),
-            classification,
-        )
+        # decide_outcome selects this outcome precisely when the retrieval section
+        # is missing, so it must not be indexed here: that would turn the
+        # fail-closed route into a KeyError.
+        retrieval = state.get("retrieval")
+        if retrieval is not None:
+            finding = _search_finding(RetrievalResult.model_validate(retrieval), classification)
+            note = f"{PREFIX}: no matching knowledge article found. {finding}"
+        else:
+            note = f"{PREFIX}: no search result was recorded, so no evidence was considered."
         note += " No draft written. Escalated for human handling."
         return FinalOutput(
             outcome=outcome,
@@ -147,22 +156,32 @@ def compose(state: AgentState, outcome: Outcome) -> FinalOutput:
             human_review_required=True,
             processing_state=PAUSED,
         )
-    confidence = ConfidenceResult.model_validate(state["confidence"])
+    # Same reasoning as the retrieval section above: a missing confidence check is
+    # itself what selects ESCALATED_LOW_CONFIDENCE, so read it defensively.
+    recorded_confidence = state.get("confidence")
+    confidence = (
+        ConfidenceResult.model_validate(recorded_confidence) if recorded_confidence else None
+    )
     if outcome is Outcome.ESCALATED_LOW_CONFIDENCE:
-        note = (
-            f"{PREFIX}: draft withheld — confidence {confidence.score:.2f} is below the "
-            f"{confidence.floor:.2f} floor. Escalated for human handling."
-        )
+        if confidence is not None:
+            detail = f"confidence {confidence.score:.2f} is below the {confidence.floor:.2f} floor"
+        else:
+            detail = "no confidence check was recorded"
+        note = f"{PREFIX}: draft withheld — {detail}. Escalated for human handling."
         return FinalOutput(
             outcome=outcome,
             summary=note,
-            confidence=confidence.score,
+            confidence=confidence.score if confidence else None,
             classification=classification,
             work_note=note,
             human_review_required=True,
             processing_state=PAUSED,
         )
 
+    # Only SUGGESTED reaches here, and decide_outcome returns it only once the
+    # confidence and draft sections are both present and passing.
+    if confidence is None:
+        raise ValueError("SUGGESTED outcome without a recorded confidence check")
     draft = Draft.model_validate(state["draft"])
     approval = bool(risk and risk.approval_required)
     note = (
