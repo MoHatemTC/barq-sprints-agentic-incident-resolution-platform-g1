@@ -13,6 +13,7 @@ from uuid import uuid4
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy.exc import SQLAlchemyError
 
 import tests.helpers as h
 from app.core.logging import REDACTED, SENSITIVE_KEYS, redact_sensitive_data
@@ -113,7 +114,7 @@ async def test_error_path_logs_do_not_dump_secrets_or_headers(app) -> None:
         patch(
             "api.routers.webhook.accept_inbound_event",
             new_callable=AsyncMock,
-            side_effect=RuntimeError("DB connection dropped"),
+            side_effect=SQLAlchemyError("DB connection dropped"),
         ),
     ):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:

@@ -172,7 +172,8 @@ All exceptions return a uniform, structured JSON error envelope across the entir
 | **401 Unauthorized** | `AUTHENTICATION_FAILED` | Missing, expired, or invalid Bearer token |
 | **403 Forbidden** | `PERMISSION_DENIED` | Missing required `X-User-Role` (e.g. non-operator calling DLQ replay) |
 | **404 Not Found** | `RESOURCE_NOT_FOUND` | Execution, Approval, or Incident sys_id does not exist |
-| **409 Conflict** | `CONFLICT` | Concurrent state transition conflict |
-| **422 Unprocessable** | `VALIDATION_ERROR` | Pydantic schema validation failure or invalid `contract_version` |
+| **409 Conflict** | `RESOURCE_CONFLICT` | Concurrent state transition conflict or attempting to mutate immutable approval |
+| **422 Unprocessable** | `CONTRACT_VALIDATION_FAILED` / `UNKNOWN_CONTRACT_VERSION` | Pydantic schema validation failure / invalid `contract_version` |
 | **500 Server Error** | `INTERNAL_SERVER_ERROR` | Unhandled internal runtime exception (trace logged, secrets masked) |
+| **501 Not Implemented** | `NOT_IMPLEMENTED` | Stubbed endpoint returning documented contract response |
 | **503 Unavailable** | `SERVICE_UNAVAILABLE` | PostgreSQL or Redis connection failure |

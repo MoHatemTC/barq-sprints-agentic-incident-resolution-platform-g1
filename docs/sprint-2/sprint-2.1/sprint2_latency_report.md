@@ -1,6 +1,6 @@
 # Sprint 2 — Ingestion Latency / Load Report (NFR-01)
 
-Generated: 2026-09-18 07:53 UTC by `tests/load/run_load_test.py`
+Generated: 2026-09-18 13:22 UTC by `tests/load/run_load_test.py`
 
 ## Environment
 
@@ -14,20 +14,20 @@ Generated: 2026-09-18 07:53 UTC by `tests/load/run_load_test.py`
 
 | Queue depth | Requests | Success | Failures | Min (ms) | p50 (ms) | p95 (ms) | p99 (ms) | Max (ms) | Throughput (rps) |
 |---|---|---|---|---|---|---|---|---|---|
-| 0 | 500 | 500 | 0 | 28.8 | 280.2 | 368.2 | 384.1 | 390.6 | 171.0 |
-| 1,000 | 500 | 500 | 0 | 40.8 | 262.0 | 291.5 | 321.4 | 328.0 | 191.4 |
-| 10,000 | 500 | 500 | 0 | 37.2 | 325.7 | 386.3 | 442.6 | 455.9 | 152.1 |
+| 0 | 500 | 500 | 0 | 45.8 | 184.0 | 403.7 | 407.5 | 417.1 | 234.8 |
+| 1,000 | 500 | 500 | 0 | 37.4 | 190.7 | 269.1 | 275.6 | 279.3 | 249.1 |
+| 10,000 | 500 | 500 | 0 | 36.5 | 182.9 | 237.8 | 269.4 | 279.0 | 258.2 |
 
 ## Acceptance (NFR-01)
 
 - Budget: p95 < 500 ms at every queue depth, zero failed requests.
-- depth 0: p95 = 368.2 ms, failures = 0 — **PASS**
-- depth 1,000: p95 = 291.5 ms, failures = 0 — **PASS**
-- depth 10,000: p95 = 386.3 ms, failures = 0 — **PASS**
+- depth 0: p95 = 403.7 ms, failures = 0 — **PASS**
+- depth 1,000: p95 = 269.1 ms, failures = 0 — **PASS**
+- depth 10,000: p95 = 237.8 ms, failures = 0 — **PASS**
 
 ## Conclusion
 
-All depths satisfy p95 < 500 ms. Worst-case p95 was 386.3 ms at depth 10,000; acknowledgement latency is driven by the O(1) Redis LPUSH and bounded PostgreSQL insert, not by the number of queued work items.
+All depths satisfy p95 < 500 ms. Worst-case p95 was 403.7 ms at depth 0; acknowledgement latency is driven by the O(1) Redis LPUSH and bounded PostgreSQL insert, not by the number of queued work items.
 
 ## Reproducing
 
@@ -47,9 +47,10 @@ python tests/load/run_load_test.py --depths 0 1000 10000 \
   --requests-per-depth 500 --concurrency 50
 ```
 
-Optionally, run with higher concurrency or depth:
+Optionally, open-ended exploratory load with Locust:
 
-```powershell
-uv run python tests/load/run_load_test.py --base-url http://127.0.0.1:8000 `
-  --depths 0 1000 10000 --requests-per-depth 1000 --concurrency 100
+```bash
+uv pip install locust
+locust -f tests/load/locustfile.py --host http://127.0.0.1:8431 \
+  --users 50 --spawn-rate 10 --run-time 60s
 ```

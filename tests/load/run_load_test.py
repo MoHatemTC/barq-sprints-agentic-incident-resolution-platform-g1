@@ -23,12 +23,12 @@ import asyncio
 import json
 import os
 import platform
-import statistics
 import sys
 import time
+import urllib.parse
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
@@ -70,35 +70,42 @@ def _env(key: str, default: str = "") -> str:
     return {**dotenv_values(REPO_ROOT / ".env"), **os.environ}.get(key, default)
 
 
-async def _prefill_queue(redis, depth: int) -> int:
+async def _prefill_queue(redis, depth: int, queue_name: str = QUEUE) -> int:
     """LPUSH dummy items until the queue holds ``depth`` entries; returns added count."""
-    current = await redis.llen(QUEUE)
+    current = await redis.llen(queue_name)
     added = 0
     dummy = json.dumps({"marker": PREFILL_MARKER})
     while current + added < depth:
         batch = min(2000, depth - current - added)
         pipeline = redis.pipeline(transaction=False)
         for _ in range(batch):
-            pipeline.lpush(QUEUE, dummy)
+            pipeline.lpush(queue_name, dummy)
         await pipeline.execute()
         added += batch
     return added
 
 
-async def _cleanup_queue(redis, prefill_added: int, event_ids: list[str]) -> None:
+async def _cleanup_queue(
+    redis, prefill_added: int, event_ids: list[str], queue_name: str = QUEUE
+) -> None:
     if prefill_added:
-        await redis.lrem(QUEUE, 0, json.dumps({"marker": PREFILL_MARKER}))
+        await redis.lrem(queue_name, 0, json.dumps({"marker": PREFILL_MARKER}))
     for event_id in event_ids:
-        await redis.lrem(QUEUE, 0, event_id)
+        await redis.lrem(queue_name, 0, event_id)
 
 
 async def _run_depth(
-    base_url: str, redis, depth: int, total_requests: int, concurrency: int
+    base_url: str,
+    redis,
+    depth: int,
+    total_requests: int,
+    concurrency: int,
+    queue_name: str = QUEUE,
 ) -> DepthResult:
-    await redis.delete(QUEUE)
+    await redis.delete(queue_name)
     if depth > 0:
-        await _prefill_queue(redis, depth)
-    observed_depth = await redis.llen(QUEUE)
+        await _prefill_queue(redis, depth, queue_name)
+    observed_depth = await redis.llen(queue_name)
 
     payload_template = {
         "sys_id": VALID_SYS_ID,
@@ -141,7 +148,8 @@ async def _run_depth(
                         pushed_event_ids.append(event_id)
                     else:
                         failures += 1
-                        print(f"    ! depth={depth}: unexpected {resp.status_code}: {resp.text[:120]}")
+                        msg = resp.text[:120]
+                        print(f"    ! depth={depth}: unexpected {resp.status_code}: {msg}")
                 except Exception as exc:  # noqa: BLE001
                     failures += 1
                     print(f"    ! depth={depth}: request failed: {exc}")
@@ -164,7 +172,7 @@ async def _run_depth(
         throughput_rps=total_requests / wall_s if wall_s else float("nan"),
     )
 
-    await redis.delete(QUEUE)
+    await redis.delete(queue_name)
     return result
 
 
@@ -188,8 +196,33 @@ async def main() -> int:
     parser.add_argument("--depths", nargs="+", type=int, default=[0, 1000, 10000])
     parser.add_argument("--requests-per-depth", type=int, default=500)
     parser.add_argument("--concurrency", type=int, default=50)
-    parser.add_argument("--report", default=str(REPO_ROOT / "docs" / "sprint-2" / "sprint-2.1" /"sprint2_latency_report.md"))
+    parser.add_argument(
+        "--queue", default=QUEUE, help="Target Redis queue key (default: barq:incident:events)"
+    )
+    parser.add_argument(
+        "--allow-non-local",
+        action="store_true",
+        help="Explicitly permit running destructive benchmark against non-localhost target",
+    )
+    parser.add_argument(
+        "--report",
+        default=str(REPO_ROOT / "docs" / "sprint-2" / "sprint-2.1" / "sprint2_latency_report.md"),
+    )
     args = parser.parse_args()
+
+    # Safety guard: prevent accidental execution against production or shared remote targets
+    parsed_target = urllib.parse.urlparse(args.base_url)
+    is_local_target = parsed_target.hostname in (
+        "localhost", "127.0.0.1", "::1", "0.0.0.0", "testserver"
+    )
+    if not is_local_target and not args.allow_non_local:
+        print(
+            f"LOAD TEST SAFETY ERROR: Target '{args.base_url}' is not a local test environment.\n"
+            "This benchmark clears and mutates the Redis queue. To prevent discarding queued "
+            "production/shared incidents, execution is refused on remote targets. "
+            "Pass --allow-non-local to override."
+        )
+        return 2
 
     # Fail clearly when infrastructure is unavailable (never silently pass).
     try:
@@ -209,13 +242,20 @@ async def main() -> int:
         print(f"LOAD TEST FAILURE: Redis not reachable ({exc}). Start docker compose redis.")
         return 2
 
-    print(f"Load target: {args.base_url}  concurrency={args.concurrency}  "
+    print(f"Load target: {args.base_url}  queue={args.queue}  concurrency={args.concurrency}  "
           f"requests/depth={args.requests_per_depth} (warmed up)")
     results: list[DepthResult] = []
     for depth in args.depths:
         print(f"  depth={depth:>6} ... running")
         results.append(
-            await _run_depth(args.base_url, redis, depth, args.requests_per_depth, args.concurrency)
+            await _run_depth(
+                args.base_url,
+                redis,
+                depth,
+                args.requests_per_depth,
+                args.concurrency,
+                queue_name=args.queue,
+            )
         )
         r = results[-1]
         print(
@@ -240,7 +280,7 @@ async def main() -> int:
 
 
 def _render_report(args: argparse.Namespace, results: list[DepthResult]) -> str:
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
     lines = [
         "# Sprint 2 — Ingestion Latency / Load Report (NFR-01)",
         "",

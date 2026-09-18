@@ -21,10 +21,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 # Copy dependency specifications first for optimal layer caching
-COPY pyproject.toml uv.lock* /app/
+COPY pyproject.toml uv.lock /app/
 
-# Install application dependencies into system environment
-RUN uv pip install --system --no-cache -r pyproject.toml
+# Install locked application dependencies into system environment
+RUN uv export --frozen --no-dev --no-hashes --no-emit-project -o /tmp/requirements.txt && \
+    uv pip install --system --no-cache -r /tmp/requirements.txt && \
+    rm /tmp/requirements.txt
 
 # Copy application source code, configuration, and migrations
 COPY src/ /app/src/

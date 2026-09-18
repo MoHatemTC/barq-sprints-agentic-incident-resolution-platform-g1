@@ -16,6 +16,7 @@ _REQUIRED_TEST_ENV = {
     "SERVICENOW_CLIENT_SECRET": "test-client-secret",
     "SERVICENOW_USERNAME": "test_service_account",
     "SERVICENOW_PASSWORD": "test-password",
+    "WEBHOOK_AUTH_TOKEN": "dev-webhook-secret-token",
 }
 
 for _key, _value in _REQUIRED_TEST_ENV.items():

@@ -20,6 +20,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy.exc import SQLAlchemyError
 
 import tests.helpers as h
 from app.db.redis.keys import INCIDENT_EVENTS_QUEUE
@@ -307,7 +308,7 @@ async def test_db_failure_returns_503_and_skips_enqueue(app_with_mocks) -> None:
         patch(
             "api.routers.webhook.accept_inbound_event",
             new_callable=AsyncMock,
-            side_effect=RuntimeError("DB connection dropped"),
+            side_effect=SQLAlchemyError("DB connection dropped"),
         ),
         patch("api.routers.webhook.logger"),
     ):
@@ -382,6 +383,52 @@ async def test_redis_enqueue_failure_compensates_database_claim(app_with_mocks) 
 
     assert resp.status_code == 503
     mock_session_factory.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_webhook_database_failure_returns_503(app_with_mocks) -> None:
+    """Concrete SQLAlchemy or connection failure during persistence returns 503."""
+    from sqlalchemy.exc import OperationalError
+
+    app, _, _ = app_with_mocks
+    with patch(
+        "api.routers.webhook.accept_inbound_event",
+        new_callable=AsyncMock,
+        side_effect=OperationalError("connection lost", None, Exception("socket error")),
+    ):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            resp = await ac.post("/api/v1/webhook/incident", json=VALID_PAYLOAD, headers=AUTH)
+
+    assert resp.status_code == 503
+    assert resp.json()["error"]["code"] == "SERVICE_UNAVAILABLE"
+
+
+@pytest.mark.asyncio
+async def test_webhook_programming_errors_not_masked(app_with_mocks) -> None:
+    """Programming defects (MissingGreenlet, AttributeError) must bubble up as 500, not 503."""
+    from sqlalchemy.exc import MissingGreenlet
+
+    app, _, _ = app_with_mocks
+
+    # MissingGreenlet should bubble up as 500, not 503
+    with patch(
+        "api.routers.webhook.accept_inbound_event",
+        new_callable=AsyncMock,
+        side_effect=MissingGreenlet("async greenlet violation"),
+    ):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            with pytest.raises(MissingGreenlet):
+                await ac.post("/api/v1/webhook/incident", json=VALID_PAYLOAD, headers=AUTH)
+
+    # AttributeError should bubble up as 500, not 503
+    with patch(
+        "api.routers.webhook.accept_inbound_event",
+        new_callable=AsyncMock,
+        side_effect=AttributeError("'NoneType' object has no attribute 'val'"),
+    ):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            with pytest.raises(AttributeError):
+                await ac.post("/api/v1/webhook/incident", json=VALID_PAYLOAD, headers=AUTH)
 
 
 # ---------------------------------------------------------------------------

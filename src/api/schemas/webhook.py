@@ -36,7 +36,7 @@ class IncidentWebhookPayload(BaseModel):
     @classmethod
     def validate_version(cls, value: str) -> str:
         if value != "v1":
-            raise UnknownContractVersionError(
+            raise UnknownContractVersionError(  
                 f"Unsupported contract version: '{value}'. Supported versions: ['v1']"
             )
         return value

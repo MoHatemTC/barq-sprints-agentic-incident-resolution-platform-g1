@@ -90,7 +90,7 @@ class Settings(RetrievalSettings):
 
     # WebHook
     webhook_auth_token: str = Field(
-        ...,
+        default="dev-webhook-secret-token",
         description="Bearer token for webhook authentication",
     )
 

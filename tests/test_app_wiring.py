@@ -17,9 +17,9 @@ from httpx import ASGITransport, AsyncClient
 import tests.helpers as h
 from api.dependencies import get_app_settings, get_db_session, get_redis
 from api.lifespan import lifespan
-from tests.helpers import mock_settings
-
+from app.exceptions.app_errors import ServiceUnavailableError
 from app.main import create_app
+from tests.helpers import mock_settings
 
 
 # ---------------------------------------------------------------------------
@@ -332,10 +332,11 @@ async def test_get_db_session_raises_503_when_uninitialized() -> None:
     request = MagicMock(spec=Request)
     request.app.state.session_factory = None
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(ServiceUnavailableError) as exc_info:
         async for _ in get_db_session(request):
             pass
     assert exc_info.value.status_code == 503
+    assert exc_info.value.code == "SERVICE_UNAVAILABLE"
 
 
 def test_get_redis_dependency() -> None:
@@ -350,9 +351,10 @@ def test_get_redis_raises_503_when_uninitialized() -> None:
     request = MagicMock(spec=Request)
     request.app.state.redis = None
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(ServiceUnavailableError) as exc_info:
         get_redis(request)
     assert exc_info.value.status_code == 503
+    assert exc_info.value.code == "SERVICE_UNAVAILABLE"
 
 
 def test_get_app_settings_dependency() -> None:
@@ -522,3 +524,22 @@ async def test_langfuse_outage_fails_open(monkeypatch: pytest.MonkeyPatch) -> No
 
     assert resp.status_code == 202, resp.text
     assert health.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_uninitialized_dependencies_return_503_service_unavailable() -> None:
+    """Uninitialized infrastructure dependencies must return SERVICE_UNAVAILABLE, not raw HTTP_503."""
+    app = _build_app()
+    app.state.session_factory = None
+    app.state.redis = None
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post(
+            "/api/v1/webhook/incident",
+            json=h.make_incident_payload(),
+            headers=h.AUTH_HEADERS,
+        )
+
+    assert resp.status_code == 503
+    assert resp.json()["error"]["code"] == "SERVICE_UNAVAILABLE"
+    assert "Database session factory is not initialized" in resp.json()["error"]["message"]

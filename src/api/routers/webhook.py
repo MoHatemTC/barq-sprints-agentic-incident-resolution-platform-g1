@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, status
 from redis.asyncio import Redis
 
 from sqlalchemy import delete
+from sqlalchemy.exc import MissingGreenlet, SQLAlchemyError
 
 from api.auth import verify_bearer_token
 from api.schemas.webhook import IncidentWebhookPayload, WebhookAcceptedResponse
@@ -63,7 +64,9 @@ async def ingest_incident_webhook(
 
     try:
         acceptance = await accept_inbound_event(session_factory, inbound)
-    except Exception as exc:
+    except MissingGreenlet:
+        raise
+    except (SQLAlchemyError, ConnectionError, TimeoutError, OSError) as exc:
         logger.error(
             "database_persistence_failed",
             event_id=payload.event_id,

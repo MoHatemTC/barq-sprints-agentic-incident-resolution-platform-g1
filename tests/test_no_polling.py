@@ -114,12 +114,20 @@ def scan_source_for_polling(source: str, file: Path) -> list[Violation]:
         # Scheduler / cron registration imports.
         if isinstance(node, ast.Import):
             for alias in node.names:
-                if alias.name.split(".")[0] in SCHEDULER_MODULES or alias.name in SCHEDULER_MODULES:
+                if (
+                    alias.name in SCHEDULER_MODULES
+                    or alias.name.split(".")[0] in SCHEDULER_MODULES
+                    or any(alias.name.startswith(f"{m}.") for m in SCHEDULER_MODULES)
+                ):
                     violations.append(
                         Violation(file, node.lineno, f"scheduler import '{alias.name}'")
                     )
         elif isinstance(node, ast.ImportFrom) and node.module:
-            if node.module.split(".")[0] in SCHEDULER_MODULES:
+            if (
+                node.module in SCHEDULER_MODULES
+                or node.module.split(".")[0] in SCHEDULER_MODULES
+                or any(node.module.startswith(f"{m}.") for m in SCHEDULER_MODULES)
+            ):
                 violations.append(
                     Violation(file, node.lineno, f"scheduler import from '{node.module}'")
                 )
@@ -191,6 +199,20 @@ def test_scan_detects_a_real_polling_loop() -> None:
     assert violations, "detector must flag a while-True + sleep + ServiceNow fetch loop"
     assert violations[0].line == 3
     assert "while True" in violations[0].construct
+
+
+def test_scan_detects_prohibited_scheduler_imports() -> None:
+    """Detector self-test: prohibited scheduler imports (e.g. celery.schedules) must be caught."""
+    sources = [
+        "from celery.schedules import crontab\n",
+        "import apscheduler\n",
+        "import schedule\n",
+        "from crontab import CronTab\n",
+    ]
+    for source in sources:
+        violations = scan_source_for_polling(source, Path("fake_scheduler.py"))
+        assert violations, f"detector must flag scheduler import: {source.strip()}"
+        assert "scheduler import" in violations[0].construct
 
 
 def test_scan_ignores_legitimate_loops() -> None:
