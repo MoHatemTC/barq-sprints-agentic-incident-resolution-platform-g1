@@ -9,13 +9,12 @@ scope per the S2.1 boundary: stubs must be schema-valid and must not crash.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from pydantic import ValidationError
 
 import tests.helpers as h
 from api.schemas.approvals import ApprovalResponse
@@ -33,7 +32,7 @@ AUTH = h.AUTH_HEADERS
 
 
 def _execution_row(**overrides) -> Execution:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     defaults: dict = dict(
         execution_id=uuid4(),
         event_record_id=uuid4(),
@@ -49,7 +48,7 @@ def _execution_row(**overrides) -> Execution:
 
 
 def _node_row(execution_id) -> ExecutionNodeState:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return ExecutionNodeState(
         id=uuid4(),
         execution_id=execution_id,
@@ -179,9 +178,7 @@ async def test_execution_endpoints_schema_valid_404_and_422(app, client) -> None
     assert got.status_code == 200
     ExecutionResponse.model_validate(got.json())
 
-    trace = await client.get(
-        f"/api/v1/executions/{execution.execution_id}/trace", headers=AUTH
-    )
+    trace = await client.get(f"/api/v1/executions/{execution.execution_id}/trace", headers=AUTH)
     assert trace.status_code == 200
     trace_body = TraceResponse.model_validate(trace.json())
     assert len(trace_body.node_states) == 1
@@ -241,9 +238,7 @@ async def test_approvals_list_and_decide_stub_contract(app, client) -> None:
     assert listed.status_code == 200
     assert listed.json() == []
 
-    filtered = await client.get(
-        f"/api/v1/approvals?execution_id={uuid4()}", headers=AUTH
-    )
+    filtered = await client.get(f"/api/v1/approvals?execution_id={uuid4()}", headers=AUTH)
     assert filtered.status_code == 200
 
     approval_id = uuid4()
@@ -263,14 +258,10 @@ async def test_approvals_list_and_decide_stub_contract(app, client) -> None:
         {"decision": "approved", "decided_by": "x", "extra": 1},
     ]
     for body_ in invalid_bodies:
-        resp = await client.post(
-            f"/api/v1/approvals/{uuid4()}/decide", json=body_, headers=AUTH
-        )
+        resp = await client.post(f"/api/v1/approvals/{uuid4()}/decide", json=body_, headers=AUTH)
         assert resp.status_code == 422, f"{body_} must return 422"
 
-    bad_uuid = await client.post(
-        "/api/v1/approvals/not-a-uuid/decide", json=decision, headers=AUTH
-    )
+    bad_uuid = await client.post("/api/v1/approvals/not-a-uuid/decide", json=decision, headers=AUTH)
     assert bad_uuid.status_code == 422
 
 
@@ -293,18 +284,14 @@ async def test_dlq_list_contract_and_replay_rbac_matrix(client) -> None:
 
     # 2/3. Authenticated normal user or invalid role -> 403 FORBIDDEN.
     for role_header in ({}, {"X-User-Role": "user"}, {"X-User-Role": "viewer"}):
-        resp = await client.post(
-            f"/api/v1/dlq/{event_id}/replay", headers={**AUTH, **role_header}
-        )
+        resp = await client.post(f"/api/v1/dlq/{event_id}/replay", headers={**AUTH, **role_header})
         assert resp.status_code == 403, f"role={role_header or 'none'} must be 403"
         body = resp.json()
         assert body["error"]["code"] == "PERMISSION_DENIED"
         assert "role" in body["error"]["message"].lower()
 
     # 4. Operator -> documented accepted stub response (202).
-    replayed = await client.post(
-        f"/api/v1/dlq/{event_id}/replay", headers=h.OPERATOR_HEADERS
-    )
+    replayed = await client.post(f"/api/v1/dlq/{event_id}/replay", headers=h.OPERATOR_HEADERS)
     assert replayed.status_code == 202
     validated = DLQReplayResponse.model_validate(replayed.json())
     assert validated.event_id == event_id
@@ -331,9 +318,7 @@ async def test_eval_run_and_results_stub_contract(client) -> None:
     assert isinstance(entries, list) and entries
     EvalResultResponse.model_validate(entries[0])
 
-    filtered = await client.get(
-        "/api/v1/eval/results?run_id=eval-x", headers=AUTH
-    )
+    filtered = await client.get("/api/v1/eval/results?run_id=eval-x", headers=AUTH)
     assert filtered.status_code == 200
     assert filtered.json()[0]["run_id"] == "eval-x"
 
@@ -422,10 +407,19 @@ def test_error_taxonomy_status_mapping() -> None:
         ContractValidationError: 422,
         ServiceUnavailableError: 503,
         NotImplementedStubError: 501,
-    } == {k: v for k, v in ERROR_STATUS_MAP.items() if k in (
-        AuthenticationError, PermissionDeniedError, ResourceNotFoundError,
-        ContractValidationError, ServiceUnavailableError, NotImplementedStubError,
-    )}
+    } == {
+        k: v
+        for k, v in ERROR_STATUS_MAP.items()
+        if k
+        in (
+            AuthenticationError,
+            PermissionDeniedError,
+            ResourceNotFoundError,
+            ContractValidationError,
+            ServiceUnavailableError,
+            NotImplementedStubError,
+        )
+    }
 
 
 @pytest.mark.asyncio

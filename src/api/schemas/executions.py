@@ -1,4 +1,7 @@
-"""Pydantic V2 schemas matching the PostgreSQL operational-state models (Execution, ExecutionNodeState)."""
+"""Pydantic V2 schemas matching PostgreSQL operational-state models.
+
+Covers Execution and ExecutionNodeState.
+"""
 
 from __future__ import annotations
 

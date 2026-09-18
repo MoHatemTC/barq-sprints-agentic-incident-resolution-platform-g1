@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import uuid4
 
 import structlog
@@ -40,7 +40,7 @@ async def trigger_eval_run(
     with a uniquely generated run_id.
     """
     run_id = f"eval-{uuid4().hex[:12]}"
-    now_iso = datetime.now(timezone.utc).isoformat()
+    now_iso = datetime.now(UTC).isoformat()
     logger.info(
         "eval_run_triggered",
         run_id=run_id,
@@ -75,7 +75,7 @@ async def get_eval_results(
     logger.info("eval_results_queried", run_id=run_id)
 
     target_run_id = run_id or "eval-baseline-sample-001"
-    now_iso = datetime.now(timezone.utc).isoformat()
+    now_iso = datetime.now(UTC).isoformat()
 
     return [
         EvalResultResponse(

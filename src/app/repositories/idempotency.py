@@ -84,23 +84,25 @@ async def accept_inbound_event(
             async with session.begin():
                 event_record_id = uuid4()
                 execution_id = uuid4()
-                session.add_all([
-                    IdempotencyKey(event_id=inbound_event.event_id),
-                    Event(
-                        id=event_record_id,
-                        event_id=inbound_event.event_id,
-                        incident_sys_id=inbound_event.sys_id,
-                        incident_number=inbound_event.number,
-                        event_type=inbound_event.event_type,
-                        contract_version="v1",
-                    ),
-                    Execution(
-                        execution_id=execution_id,
-                        event_record_id=event_record_id,
-                        incident_sys_id=inbound_event.sys_id,
-                        status="accepted",
-                    ),
-                ])
+                session.add_all(
+                    [
+                        IdempotencyKey(event_id=inbound_event.event_id),
+                        Event(
+                            id=event_record_id,
+                            event_id=inbound_event.event_id,
+                            incident_sys_id=inbound_event.sys_id,
+                            incident_number=inbound_event.number,
+                            event_type=inbound_event.event_type,
+                            contract_version="v1",
+                        ),
+                        Execution(
+                            execution_id=execution_id,
+                            event_record_id=event_record_id,
+                            incident_sys_id=inbound_event.sys_id,
+                            status="accepted",
+                        ),
+                    ]
+                )
 
                 accepted_result = EventAcceptanceResult(
                     status=EventAcceptanceStatus.ACCEPTED,
@@ -109,7 +111,10 @@ async def accept_inbound_event(
                     execution_id=execution_id,
                 )
         except IntegrityError as error:
-            if _postgres_constraint_name(error) in (IDEMPOTENCY_CONSTRAINT_NAME, "uq_events_event_id"):
+            if _postgres_constraint_name(error) in (
+                IDEMPOTENCY_CONSTRAINT_NAME,
+                "uq_events_event_id",
+            ):
                 return EventAcceptanceResult(
                     status=EventAcceptanceStatus.DUPLICATE,
                     event_id=inbound_event.event_id,

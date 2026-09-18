@@ -9,7 +9,6 @@ any known fake secret value appears anywhere in the captured log output.
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
-from uuid import uuid4
 
 import pytest
 from httpx import ASGITransport, AsyncClient

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
@@ -114,8 +114,8 @@ async def test_get_execution_success_and_not_found(app_with_db) -> None:
         event_record_id=uuid4(),
         incident_sys_id="0123456789abcdef0123456789abcdef",
         status="running",
-        started_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        started_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
     # Success
@@ -142,8 +142,8 @@ async def test_get_execution_trace_success_and_not_found(app_with_db) -> None:
         event_record_id=uuid4(),
         incident_sys_id="0123456789abcdef0123456789abcdef",
         status="succeeded",
-        started_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        started_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     node_id = uuid4()
     sample_node = ExecutionNodeState(
@@ -153,7 +153,7 @@ async def test_get_execution_trace_success_and_not_found(app_with_db) -> None:
         status="succeeded",
         sequence_number=1,
         attempt=1,
-        started_at=datetime.now(timezone.utc),
+        started_at=datetime.now(UTC),
         evidence=[],
     )
 
@@ -188,8 +188,8 @@ async def test_list_incident_executions(app_with_db) -> None:
         event_record_id=uuid4(),
         incident_sys_id=sys_id,
         status="succeeded",
-        started_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        started_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
     mock_result = MagicMock()
@@ -234,8 +234,8 @@ async def test_executions_db_failure_returns_503(app_with_db) -> None:
         event_record_id=uuid4(),
         incident_sys_id=sys_id,
         status="succeeded",
-        started_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        started_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     mock_session.get.side_effect = None
     mock_session.get.return_value = sample_exec

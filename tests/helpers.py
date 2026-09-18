@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 import contextlib
+import importlib
+import logging
 from io import StringIO
 from typing import Any
-from sqlalchemy.engine import URL
 from unittest.mock import MagicMock
 
 import structlog
-import logging
-import importlib
+from sqlalchemy.engine import URL
 
 from app.core.config import Settings
 from app.core.logging import redact_sensitive_data
@@ -148,7 +148,7 @@ def capture_json_logs(level: str = "INFO"):
             continue
         fresh = structlog.getLogger(module_name)
         originals.append((module, "logger", logger_attr))
-        setattr(module, "logger", fresh)
+        module.logger = fresh
     try:
         yield buffer
     finally:

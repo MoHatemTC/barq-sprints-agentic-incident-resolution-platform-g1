@@ -7,7 +7,6 @@ from typing import Annotated
 import structlog
 from fastapi import APIRouter, Depends, status
 from redis.asyncio import Redis
-
 from sqlalchemy import delete
 from sqlalchemy.exc import MissingGreenlet, SQLAlchemyError
 
@@ -96,7 +95,8 @@ async def ingest_incident_webhook(
                 event_id=payload.event_id,
                 error=str(exc),
             )
-            # Compensate database persistence so client retry after 503 is not blocked as a false duplicate
+            # Compensate database persistence so client retry after 503
+            # is not blocked as a false duplicate
             if acceptance.event_record_id:
                 try:
                     async with session_factory() as cleanup_session:

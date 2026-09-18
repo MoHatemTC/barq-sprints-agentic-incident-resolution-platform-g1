@@ -213,7 +213,11 @@ async def main() -> int:
     # Safety guard: prevent accidental execution against production or shared remote targets
     parsed_target = urllib.parse.urlparse(args.base_url)
     is_local_target = parsed_target.hostname in (
-        "localhost", "127.0.0.1", "::1", "0.0.0.0", "testserver"
+        "localhost",
+        "127.0.0.1",
+        "::1",
+        "0.0.0.0",
+        "testserver",
     )
     if not is_local_target and not args.allow_non_local:
         print(
@@ -242,8 +246,10 @@ async def main() -> int:
         print(f"LOAD TEST FAILURE: Redis not reachable ({exc}). Start docker compose redis.")
         return 2
 
-    print(f"Load target: {args.base_url}  queue={args.queue}  concurrency={args.concurrency}  "
-          f"requests/depth={args.requests_per_depth} (warmed up)")
+    print(
+        f"Load target: {args.base_url}  queue={args.queue}  concurrency={args.concurrency}  "
+        f"requests/depth={args.requests_per_depth} (warmed up)"
+    )
     results: list[DepthResult] = []
     for depth in args.depths:
         print(f"  depth={depth:>6} ... running")

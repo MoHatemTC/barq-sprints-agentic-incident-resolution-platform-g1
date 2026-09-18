@@ -69,7 +69,9 @@ class PollingScanResult:
     files_scanned: int = 0
 
     def report(self) -> str:
-        lines = [f"FR-05 no-polling scan failed ({self.violations} hits in {self.files_scanned} files):"]
+        lines = [
+            f"FR-05 no-polling scan failed ({self.violations} hits in {self.files_scanned} files):"
+        ]
         lines += [f"  - {v}" for v in self.violations]
         return "\n".join(lines)
 
@@ -170,9 +172,7 @@ def scan_tree(root: Path) -> PollingScanResult:
         if "__pycache__" in path.parts:
             continue
         result.files_scanned += 1
-        result.violations.extend(
-            scan_source_for_polling(path.read_text(encoding="utf-8"), path)
-        )
+        result.violations.extend(scan_source_for_polling(path.read_text(encoding="utf-8"), path))
     return result
 
 

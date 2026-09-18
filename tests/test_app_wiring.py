@@ -11,7 +11,7 @@ import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, Request
 from httpx import ASGITransport, AsyncClient
 
 import tests.helpers as h
@@ -20,7 +20,6 @@ from api.lifespan import lifespan
 from app.exceptions.app_errors import ServiceUnavailableError
 from app.main import create_app
 from tests.helpers import mock_settings
-
 
 # ---------------------------------------------------------------------------
 # Expected HTTP surface: every router create_app must mount
@@ -135,8 +134,10 @@ def _mock_engine(ping_ok: bool = True) -> MagicMock:
     engine = MagicMock()
     engine.dispose = AsyncMock()
     conn = MagicMock()
-    conn.execute = AsyncMock(return_value="1") if ping_ok else AsyncMock(
-        side_effect=RuntimeError("SELECT 1 failed: connection refused")
+    conn.execute = (
+        AsyncMock(return_value="1")
+        if ping_ok
+        else AsyncMock(side_effect=RuntimeError("SELECT 1 failed: connection refused"))
     )
 
     class _ConnCtx:
@@ -262,7 +263,7 @@ async def test_lifespan_fails_closed_when_engine_factory_raises() -> None:
         "api.lifespan.create_db_engine",
         side_effect=RuntimeError("invalid database url"),
     ):
-        with pytest.raises(Exception):
+        with pytest.raises((RuntimeError, AttributeError)):
             async with lifespan(app):
                 pass
 
@@ -528,7 +529,7 @@ async def test_langfuse_outage_fails_open(monkeypatch: pytest.MonkeyPatch) -> No
 
 @pytest.mark.asyncio
 async def test_uninitialized_dependencies_return_503_service_unavailable() -> None:
-    """Uninitialized infrastructure dependencies must return SERVICE_UNAVAILABLE, not raw HTTP_503."""
+    """Uninitialized dependencies must return SERVICE_UNAVAILABLE, not raw HTTP_503."""
     app = _build_app()
     app.state.session_factory = None
     app.state.redis = None

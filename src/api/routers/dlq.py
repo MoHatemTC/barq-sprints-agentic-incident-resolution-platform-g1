@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import inspect
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Annotated
 
 import structlog
@@ -65,16 +65,17 @@ async def list_dlq_events(
                     try:
                         failed_at_dt = datetime.fromisoformat(failed_at)
                     except ValueError:
-                        failed_at_dt = datetime.now(timezone.utc)
+                        failed_at_dt = datetime.now(UTC)
                 elif isinstance(failed_at, datetime):
                     failed_at_dt = failed_at
                 else:
-                    failed_at_dt = datetime.now(timezone.utc)
+                    failed_at_dt = datetime.now(UTC)
 
                 payload = data.get("payload")
                 if not isinstance(payload, dict):
                     payload = {
-                        k: v for k, v in data.items()
+                        k: v
+                        for k, v in data.items()
                         if k not in ("failure_reason", "retry_count", "failed_at")
                     }
 
@@ -102,7 +103,9 @@ async def list_dlq_events(
     dependencies=[Depends(require_role("operator"))],
 )
 async def replay_dlq_event(
-    event_id: str = Path(..., description="The unique event ID of the dead-lettered event to replay"),
+    event_id: str = Path(
+        ..., description="The unique event ID of the dead-lettered event to replay"
+    ),
     redis_client: Annotated[Redis, Depends(get_redis)] = None,
 ) -> DLQReplayResponse:
     """Replay a DLQ event back into the processing queue.
@@ -124,9 +127,14 @@ async def replay_dlq_event(
                     data = json.loads(raw_str) if isinstance(raw_str, str) else raw_str
                     if isinstance(data, dict) and str(data.get("event_id")) == event_id:
                         original_payload = data.get("payload", data)
-                        payload_json = json.dumps(original_payload) if not isinstance(original_payload, str) else original_payload
+                        payload_json = (
+                            json.dumps(original_payload)
+                            if not isinstance(original_payload, str)
+                            else original_payload
+                        )
 
-                        # Atomic Redis transaction: LPUSH and LREM execute together atomically (MULTI/EXEC)
+                        # Atomic Redis transaction: LPUSH and LREM execute
+                        # together atomically (MULTI/EXEC)
                         if hasattr(redis_client, "pipeline"):
                             pipe = redis_client.pipeline(transaction=True)
                             if inspect.isawaitable(pipe):
@@ -151,7 +159,9 @@ async def replay_dlq_event(
             raise
         except Exception as exc:
             logger.error("dlq_replay_redis_error", event_id=event_id, error=str(exc))
-            raise ServiceUnavailableError("Redis queue service unavailable for DLQ replay.") from exc
+            raise ServiceUnavailableError(
+                "Redis queue service unavailable for DLQ replay."
+            ) from exc
 
     message = (
         f"Event '{event_id}' replayed from DLQ into active queue."

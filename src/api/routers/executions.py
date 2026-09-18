@@ -95,7 +95,9 @@ async def get_execution_trace(
         raise
     except SQLAlchemyError as exc:
         logger.error("database_query_failed", execution_id=str(execution_id), error=str(exc))
-        raise ServiceUnavailableError("Database unavailable to retrieve execution trace nodes.") from exc
+        raise ServiceUnavailableError(
+            "Database unavailable to retrieve execution trace nodes."
+        ) from exc
 
     node_states = [ExecutionNodeStateResponse.model_validate(row) for row in rows]
 
@@ -115,7 +117,9 @@ async def get_execution_trace(
     description="Fetch all execution audit runs associated with a 32-hex incident sys_id.",
 )
 async def list_incident_executions(
-    sys_id: Annotated[str, Path(max_length=32, description="ServiceNow incident 32-character sys_id")],
+    sys_id: Annotated[
+        str, Path(max_length=32, description="ServiceNow incident 32-character sys_id")
+    ],
     db: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> IncidentExecutionsResponse:
     """Retrieve all executions for a given incident_sys_id."""

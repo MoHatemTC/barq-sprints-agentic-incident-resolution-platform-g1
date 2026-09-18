@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Annotated
 from uuid import UUID, uuid4
 
@@ -39,18 +39,25 @@ router = APIRouter(
     response_model=list[ApprovalResponse],
     status_code=status.HTTP_200_OK,
     summary="List all approval decisions",
-    description="Fetch recorded human approval decisions, optionally filtered by execution ID or deciding operator.",
+    description=(
+        "Fetch recorded human approval decisions, "
+        "optionally filtered by execution ID or deciding operator."
+    ),
 )
 async def list_approvals(
     db: Annotated[AsyncSession, Depends(get_db_session)],
-    execution_id: UUID | None = Query(
-        default=None,
-        description="Optional filter by execution ID",
-    ),
-    decided_by: str | None = Query(
-        default=None,
-        description="Optional filter by deciding operator user ID",
-    ),
+    execution_id: Annotated[
+        UUID | None,
+        Query(
+            description="Optional filter by execution ID",
+        ),
+    ] = None,
+    decided_by: Annotated[
+        str | None,
+        Query(
+            description="Optional filter by deciding operator user ID",
+        ),
+    ] = None,
 ) -> list[ApprovalResponse]:
     """Retrieve all approval records from PostgreSQL approvals table."""
     query = select(Approval).order_by(Approval.decided_at.desc())
@@ -103,8 +110,8 @@ async def get_approval(
     status_code=status.HTTP_200_OK,
     summary="Submit human operator approval decision",
     description=(
-        "Record or submit a human operator decision ('approved', 'rejected', 'cancelled', 'expired') "
-        "for an approval request."
+        "Record or submit a human operator decision "
+        "('approved', 'rejected', 'cancelled', 'expired') for an approval request."
     ),
 )
 async def decide_approval(
@@ -131,7 +138,8 @@ async def decide_approval(
                 decision=approval.decision,
             )
             raise ConflictError(
-                f"Approval '{id}' has already been decided ('{approval.decision}') and is immutable."
+                f"Approval '{id}' has already been decided "
+                f"('{approval.decision}') and is immutable."
             )
 
         # 2. Check if this ID corresponds to an existing Execution
@@ -144,7 +152,7 @@ async def decide_approval(
                 decided_by=payload.decided_by,
                 reason=payload.reason,
                 evidence=payload.evidence,
-                decided_at=datetime.now(timezone.utc),
+                decided_at=datetime.now(UTC),
             )
             db.add(new_approval)
             await db.commit()
@@ -181,5 +189,5 @@ async def decide_approval(
         decided_by=payload.decided_by,
         reason=payload.reason,
         evidence=payload.evidence,
-        decided_at=datetime.now(timezone.utc),
+        decided_at=datetime.now(UTC),
     )

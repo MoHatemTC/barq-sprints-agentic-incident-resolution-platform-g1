@@ -102,9 +102,7 @@ async def test_invalid_bearer_tokens_return_401(client) -> None:
         {"Authorization": "Basic dXNlcjpwYXNz"},
     ]
     for headers in invalid_headers:
-        resp = await client.post(
-            "/api/v1/webhook/incident", json=VALID_PAYLOAD, headers=headers
-        )
+        resp = await client.post("/api/v1/webhook/incident", json=VALID_PAYLOAD, headers=headers)
         assert resp.status_code == 401, f"{headers} must be rejected with 401"
         assert resp.json()["error"]["code"] == "AUTHENTICATION_FAILED"
 
@@ -160,9 +158,7 @@ async def test_invalid_json_bodies_return_422(client) -> None:
             content=b"",
             headers={**AUTH, "Content-Type": "application/json"},
         ),
-        "array": await client.post(
-            "/api/v1/webhook/incident", json=[VALID_PAYLOAD], headers=AUTH
-        ),
+        "array": await client.post("/api/v1/webhook/incident", json=[VALID_PAYLOAD], headers=AUTH),
     }
     for label, resp in responses.items():
         assert resp.status_code == 422, f"{label} body must return 422"
@@ -245,9 +241,7 @@ async def test_valid_payload_returns_202_with_documented_ack_schema(client) -> N
 @pytest.mark.asyncio
 async def test_event_persisted_and_enqueued_to_barq_incident_events(app_with_mocks) -> None:
     app, _, mock_redis = app_with_mocks
-    with patch(
-        "api.routers.webhook.accept_inbound_event", new_callable=AsyncMock
-    ) as mock_accept:
+    with patch("api.routers.webhook.accept_inbound_event", new_callable=AsyncMock) as mock_accept:
         mock_accept.return_value = _accepted()
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             resp = await ac.post("/api/v1/webhook/incident", json=VALID_PAYLOAD, headers=AUTH)
@@ -332,9 +326,7 @@ async def test_endpoint_waits_for_delayed_persistence_before_responding(app_with
         order.append("persist:end")
         return _accepted()
 
-    with patch(
-        "api.routers.webhook.accept_inbound_event", new_callable=AsyncMock
-    ) as mock_accept:
+    with patch("api.routers.webhook.accept_inbound_event", new_callable=AsyncMock) as mock_accept:
         mock_accept.side_effect = slow_persist
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             resp = await ac.post("/api/v1/webhook/incident", json=VALID_PAYLOAD, headers=AUTH)
@@ -365,7 +357,7 @@ async def test_redis_enqueue_failure_returns_503_never_202(app_with_mocks) -> No
 
 @pytest.mark.asyncio
 async def test_redis_enqueue_failure_compensates_database_claim(app_with_mocks) -> None:
-    """Ensure database claim is compensated if Redis enqueue fails, so client retries are not stranded."""
+    """Ensure database claim is compensated if Redis enqueue fails."""
     app, mock_session_factory, mock_redis = app_with_mocks
     mock_redis.lpush = AsyncMock(side_effect=RuntimeError("Redis connection broken"))
     accepted_result = _accepted()
@@ -468,9 +460,7 @@ async def test_ten_concurrent_duplicates_produce_single_enqueue(app_with_mocks) 
                 return _accepted()
             return _duplicate()
 
-    with patch(
-        "api.routers.webhook.accept_inbound_event", new_callable=AsyncMock
-    ) as mock_accept:
+    with patch("api.routers.webhook.accept_inbound_event", new_callable=AsyncMock) as mock_accept:
         mock_accept.side_effect = arbitrating_accept
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             responses = await asyncio.gather(
@@ -564,7 +554,9 @@ def _integration_settings():
             postgres_host=real.postgres_host,
             postgres_port=real.postgres_port,
             postgres_user=real.postgres_user,
-            postgres_password=real.postgres_password.get_secret_value() if real.postgres_password else "",
+            postgres_password=real.postgres_password.get_secret_value()
+            if real.postgres_password
+            else "",
             postgres_db=TEST_DB_NAME,
             redis_host=real.redis_host,
             redis_port=real.redis_port,
@@ -621,9 +613,7 @@ def _run_migrations(settings) -> None:
     from alembic import command
     from alembic.config import Config
 
-    url = h.build_database_url_for_db(settings, TEST_DB_NAME).render_as_string(
-        hide_password=False
-    )
+    url = h.build_database_url_for_db(settings, TEST_DB_NAME).render_as_string(hide_password=False)
     previous = os.environ.get("BARQ_DATABASE_URL")
     os.environ["BARQ_DATABASE_URL"] = url
     try:
@@ -729,8 +719,8 @@ async def test_integration_event_persisted_and_enqueued_end_to_end(integration_a
             )
         ).fetchall()
         execution_statuses = (
-            await conn.execute(sa.text("SELECT status FROM executions"))
-        ).scalars().all()
+            (await conn.execute(sa.text("SELECT status FROM executions"))).scalars().all()
+        )
         key_count = await conn.scalar(sa.text("SELECT COUNT(*) FROM idempotency_keys"))
 
     assert event_row == [

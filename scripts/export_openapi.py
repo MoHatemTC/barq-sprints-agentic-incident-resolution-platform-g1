@@ -63,8 +63,10 @@ def main() -> int:
         return 1
 
     target.write_text(rendered, encoding="utf-8")
-    print(f"Wrote {target} ({len(rendered)} bytes). "
-          f"Verify with: python scripts/export_openapi.py --check")
+    print(
+        f"Wrote {target} ({len(rendered)} bytes). "
+        f"Verify with: python scripts/export_openapi.py --check"
+    )
     return 0
 
 
