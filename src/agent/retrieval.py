@@ -1,8 +1,10 @@
 """Evidence retrieval for the ``retrieve`` node (S2.5 ↔ S2.4 seam).
 
-The node depends on the :class:`Retriever` protocol. The default implementation
-uses the hybrid entry point on ``main`` (``app.retrieval.search.retrieve_knowledge``:
-dense + BM25 fused with RRF, published-only, security-tier filtered).
+The node depends on the :class:`Retriever` protocol. The default implementation uses
+S2.4's hybrid entry point — dense + BM25 fused with RRF, published-only, security-tier
+filtered — reached through :func:`_run_search`, which accepts either
+``app.retrieval.search.retrieve_knowledge`` (pre-#110) or
+``app.retrieval.hybrid_search.hybrid_search`` (#110 onwards).
 
 **Why a second score.** RRF scores are rank sums: the top hit of *any* query scores
 the same whether or not it is relevant, so they cannot answer "is there evidence at
@@ -30,8 +32,75 @@ from app.models.knowledge import (
     SecurityLevel,
 )
 from app.retrieval.embedding import EmbeddedText, EmbeddingEngine
-from app.retrieval.search import _build_filter, retrieve_knowledge
 from app.workers.retry_policy import RetryableError, TerminalError
+
+# S2.4 (#110) replaces app.retrieval.search with the hybrid_search/filters pair and
+# deletes the old module. #110 is approved and will land independently of this branch,
+# so both spellings are supported until it does. Drop this block and the two helpers
+# below once #110 is on main. The hit model is identical across both for every field
+# read here, so only the call shape differs.
+try:
+    from app.retrieval.filters import (  # type: ignore[import-untyped]
+        MetadataFilterBuilder,
+        build_metadata_filter,
+    )
+    from app.retrieval.hybrid_search import (  # type: ignore[import-untyped]
+        _get_default_collection_name,
+        hybrid_search,
+    )
+
+    _HAS_S24_QUERY_ENGINE = True
+except ImportError:  # pragma: no cover — whichever branch is absent is untaken
+    from app.retrieval.search import (
+        _build_filter,
+        _get_default_collection_name,
+        retrieve_knowledge,
+    )
+
+    _HAS_S24_QUERY_ENGINE = False
+
+
+def _run_search(
+    client: QdrantClient,
+    query: str,
+    *,
+    collection_name: str | None,
+    limit: int,
+    extra_filter: Filter,
+    max_security_level: SecurityLevel,
+    engine: EmbeddingEngine,
+) -> list[Any]:
+    """Hybrid search through whichever S2.4 entry point this tree carries."""
+    if _HAS_S24_QUERY_ENGINE:
+        return hybrid_search(
+            client,
+            query,
+            collection_name=collection_name,
+            limit=limit,
+            metadata=MetadataFilterBuilder(max_security_level=max_security_level),
+            extra_filter=extra_filter,
+            engine=engine,
+        )
+    return retrieve_knowledge(
+        client,
+        query,
+        collection_name=collection_name,
+        limit=limit,
+        extra_filter=extra_filter,
+        max_security_level=max_security_level,
+        engine=engine,
+    )
+
+
+def _mandatory_filter(extra: Filter, max_security_level: SecurityLevel) -> Filter:
+    """The published-only, security-tiered filter, plus ``extra``."""
+    if _HAS_S24_QUERY_ENGINE:
+        return build_metadata_filter(
+            metadata=MetadataFilterBuilder(max_security_level=max_security_level),
+            extra=extra,
+        )
+    return _build_filter(extra, max_security_level)
+
 
 #: Classification label → corpus category (inverse of the S1.4 mapping, #70).
 CLASSIFICATION_TO_CORPUS_CATEGORY: dict[Classification, str] = {
@@ -139,7 +208,7 @@ class QdrantRetriever:
         started = time.perf_counter()
         try:
             client = self._qdrant()
-            hits = retrieve_knowledge(
+            hits = _run_search(
                 client,
                 query,
                 collection_name=self._collection_name,
@@ -185,13 +254,11 @@ class QdrantRetriever:
     def _dense_scores(
         self, client: QdrantClient, embedded: EmbeddedText, extra: Filter, top_k: int
     ) -> dict[tuple[str, int], float]:
-        from app.retrieval.search import _get_default_collection_name
-
         response = client.query_points(
             collection_name=self._collection_name or _get_default_collection_name(),
             query=embedded.dense,
             using=DENSE_VECTOR_NAME,
-            query_filter=_build_filter(extra, self._max_security_level),
+            query_filter=_mandatory_filter(extra, self._max_security_level),
             limit=max(top_k * 4, 20),
             with_payload=["article_number", "version", "chunk_index"],
         )
