@@ -164,6 +164,27 @@ the work note says approval is required. The Sprint 4 interrupt hooks onto the s
   node, and a finished thread is never run again.
 - **Path:** `path` accumulates the visited nodes, which the tests use to assert every
   route.
+- **Execution summary:** on success the worker writes the graph's outcome onto the
+  `executions` row — `termination_cause` takes the outcome (for example
+  `escalated_high_risk`), with `node_reached` and `agent_version`. `workflow_state`
+  remains the authoritative per-node history; this row is the one-line answer to "what
+  did the agent decide about this incident", which previously read `completed` for every
+  run including a high-risk escalation. No schema change: S2.2 already declared these
+  columns.
+
+### Fail-closed reading of the state
+
+Each routing decision is taken from a state section that may be absent after a
+malformed or partial checkpoint, so `decide_outcome` maps every missing section to an
+escalation. `compose` must then build that escalation from the *same* state — reading a
+section it has just been told is missing turns the fail-closed route into a `KeyError`,
+which leaves the incident with no work note at all. `test_compose_survives_the_state_
+that_selected_the_outcome` drives every single-section-missing state through both.
+
+The service tier follows the same rule. `get_incident` does not request display values,
+so a populated `business_service` arrives as a bare reference. An unresolved reference is
+recorded separately from an absent one: absent still allows LOW, unresolved fails closed
+to ELEVATED, because a tier that cannot be read cannot be ruled Tier 1 (§11.1).
 
 ## 5. Open items for Sprint 3 and 4
 
@@ -171,8 +192,23 @@ the work note says approval is required. The Sprint 4 interrupt hooks onto the s
   `safety_check` (output schema, action allowlist, secret scan of the draft), plus input
   screening for embedded instructions (manual §11.6). Add the approval interrupt on
   `risk.approval_required`.
-- **S2.4 (#110):** swap `QdrantRetriever` onto the reranked hybrid search once it
-  merges. The evidence gate can then use the reranker's calibrated score.
+- **S2.4 (#110):** `QdrantRetriever` already calls whichever entry point the tree
+  carries (`_run_search`); once #110 is on `main`, delete the try/except shim in
+  `agent/retrieval.py` and import `hybrid_search` directly. The evidence gate cannot
+  simply adopt the reranker's score: `CrossEncoderReranker` writes raw ms-marco logits
+  into `hit.score` (values from about −11 to +11, negative for a poor match), which are
+  not comparable to the calibrated 0–1 §11.7 threshold. Either normalise them or keep
+  the separate dense cosine, which is what happens today.
+- **Write-back is not idempotent across a hard kill.** `act` PATCHes ServiceNow before
+  LangGraph commits its checkpoint. If the worker is SIGKILLed — or hits Celery's
+  `soft_time_limit` — in that window, the retry resumes before `act` and sends the PATCH
+  again; because `work_notes` is append-only, the note is duplicated. The window is
+  narrow but real, and the existing resume test only fails at `generate`, so it does not
+  cover it. Closing it properly needs a write-back marker keyed by execution id,
+  recorded before the call and checked on resume, which means giving
+  `AgentDependencies` a database session it does not currently have. Deferred rather
+  than rushed: with `AGENT_WRITE_BACK_ENABLED` false — the default, and the setting used
+  for review — no PATCH is issued at all.
 - **Corpus:** decide on the `restricted` tags that exclude every hardware article (see
   `sprint2_tracing_and_agent.md` §4).
 - **"Ask" outcome:** the W0.3 set expects vague reports to be answered with a request

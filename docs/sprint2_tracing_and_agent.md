@@ -373,3 +373,35 @@ What the numbers mean:
   (NFR-02). Escalating a P1 costs one classification call.
 - **Budget:** at $0.03–0.05 per full run, the $10/day key covers roughly 200–350 full
   runs a day.
+
+## 9. Review fixes (2026-09-18)
+
+Five findings were raised on #129 and four were reachable; each has a test that fails
+without its fix. Verified by reverting the fix and watching the test fail.
+
+| Finding | Effect | Fix |
+|---|---|---|
+| `service_name` returns `None` for a bare reference | `get_incident` sends no `sysparm_display_value`, so the tier never resolved and §11.1 Tier 1 approval never fired | absent and unresolved are now distinct; unresolved fails closed to ELEVATED |
+| `Span.fail` wrote raw exception text | `status_message` is outside the Langfuse mask hook, so a `ValidationError` quoting rejected values exported passwords, tokens, keys, e-mails and phone numbers | redacted with the same `redact_text` |
+| `compose` indexed sections `decide_outcome` allows to be missing | the fail-closed escalation raised `KeyError`, leaving the incident with no work note | read defensively; a missing draft now escalates instead of claiming a suggestion |
+| `agent_llm_model` accepted any model | the Gemini-only rule lived only in the field description | validated |
+| write-back precedes the checkpoint commit | duplicate work note if the worker dies in the window | **not fixed** — disclosed in `sprint3_graph_design.md` §5 |
+
+Two further defects were found while verifying the above:
+
+- **Relevance was only scored for the dense top-N.** A fused hit outside it defaulted to
+  `0.0`, which is indistinguishable from a genuinely poor match and can drag
+  `best_relevance` under the §11.7 threshold — escalating "no evidence" for an incident
+  that had evidence. Possible with RRF alone; routine once #110's reranker reorders the
+  candidates, which is where it surfaced. The dense query is now scoped to exactly the
+  chunks retrieval returned.
+- **`src/workers/retry_policy.py` re-exported three names that do not exist**, so
+  `import workers.retry_policy` raised `ImportError`. It is one of the brief's named
+  paths.
+
+### Cross-PR note
+
+Merging #110 into a scratch copy of this branch fails
+`tests/test_config_router.py::test_config_redacts_all_runtime_secrets`: #110 changes the
+default `retrieval_mode` to `hybrid_reranked` and S2.1's test asserts `hybrid`. That
+collision is between S2.1 and S2.4 and is untouched here.
