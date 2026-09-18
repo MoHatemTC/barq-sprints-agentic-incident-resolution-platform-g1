@@ -477,6 +477,7 @@ async def test_ingestion_succeeds_without_any_tracing_backend() -> None:
             new_callable=AsyncMock,
             return_value=MagicMock(status=MagicMock(value="accepted"), execution_id="e"),
         ) as mock_accept,
+        patch("api.routers.webhook.send_incident_event"),
     ):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.post(
@@ -514,6 +515,7 @@ async def test_langfuse_outage_fails_open(monkeypatch: pytest.MonkeyPatch) -> No
             new_callable=AsyncMock,
             return_value=MagicMock(status=MagicMock(value="accepted"), execution_id="e"),
         ),
+        patch("api.routers.webhook.send_incident_event"),
     ):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.post(
