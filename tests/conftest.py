@@ -19,8 +19,9 @@ _REQUIRED_TEST_ENV = {
     "WEBHOOK_AUTH_TOKEN": "dev-webhook-secret-token",
 }
 
-for _key, _value in _REQUIRED_TEST_ENV.items():
-    os.environ.setdefault(_key, _value)
+if os.environ.get("SERVICENOW_LIVE_TESTS") != "1":
+    for _key, _value in _REQUIRED_TEST_ENV.items():
+        os.environ.setdefault(_key, _value)
 
 
 @pytest.fixture
