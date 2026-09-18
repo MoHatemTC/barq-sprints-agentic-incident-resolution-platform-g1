@@ -21,6 +21,7 @@ import openai
 import pytest
 from langgraph.checkpoint.memory import InMemorySaver
 from qdrant_client import QdrantClient
+from qdrant_client.models import FieldCondition, Filter, MatchAny
 
 from agent import dependencies as dependencies_module
 from agent import llm as llm_module
@@ -38,6 +39,8 @@ from agent.prompts import ClassifyOutput
 from agent.retrieval import (
     CLASSIFICATION_TO_CORPUS_CATEGORY,
     QdrantRetriever,
+    _MemoEngine,
+    _run_search,
     search_categories,
 )
 from agent.runtime import build_runtime, invoke_incident_graph
@@ -340,9 +343,43 @@ class TestQdrantRetriever:
         )
         assert result.category_filter == "network"
         assert result.hits and result.hits[0].article_number == "KB0001"
-        assert all(h.relevance > 0 for h in result.hits)
+        # Not `all(relevance > 0)`: a weak chunk can legitimately score a negative
+        # cosine, which the clamp floors to 0.0. S2.4's reranker admits exactly such
+        # a chunk (KB0003 at a raw logit of -10). What matters is that the match the
+        # answer rests on is scored, and that the gate is decided from it.
+        assert result.hits[0].relevance > 0
         assert result.best_relevance == max(h.relevance for h in result.hits)
         assert result.sufficient is True
+
+    def test_every_returned_chunk_is_scored(self, corpus_qdrant: QdrantClient) -> None:
+        """No hit may fall back to a defaulted relevance.
+
+        A fused hit outside the dense top-N used to get 0.0 because it was absent
+        from the score lookup, which is indistinguishable from a genuinely poor
+        match and can escalate "no evidence" for an incident that had evidence.
+        """
+        retriever = self._retriever(corpus_qdrant)
+        query = "VPN client authentication fails after a password change"
+        engine = _MemoEngine(HashingEngine())
+        extra = Filter(must=[FieldCondition(key="category", match=MatchAny(any=["network"]))])
+        hits = _run_search(
+            corpus_qdrant,
+            query,
+            collection_name="agent_test",
+            limit=5,
+            extra_filter=extra,
+            max_security_level=SecurityLevel.INTERNAL,
+            engine=engine,
+        )
+        assert hits, "fixture should return hits"
+
+        scores = retriever._dense_scores(corpus_qdrant, engine.embed_query(query), extra, hits)
+        missing = [
+            (h.article_id, h.chunk_index)
+            for h in hits
+            if (h.article_id, h.chunk_index) not in scores
+        ]
+        assert not missing, f"unscored chunks fall back to 0.0: {missing}"
 
     def test_incident_category_is_searched_with_the_label(
         self, corpus_qdrant: QdrantClient
