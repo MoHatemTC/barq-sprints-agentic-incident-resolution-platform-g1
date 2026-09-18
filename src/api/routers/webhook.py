@@ -3,18 +3,14 @@
 from __future__ import annotations
 
 import asyncio
-import secrets
 from typing import Annotated
 
 import structlog
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, status
 
 from api.auth import verify_bearer_token
 from api.schemas.webhook import IncidentWebhookPayload, WebhookAcceptedResponse
-from app.api.dependencies import (
-    get_app_settings,
-    get_session_factory,
-)
+from app.api.dependencies import get_session_factory
 from app.core.correlation import get_correlation_id
 from app.db.session import SessionFactory
 from app.exceptions.app_errors import ServiceUnavailableError
@@ -46,7 +42,6 @@ router = APIRouter(
 async def ingest_incident_webhook(
     payload: IncidentWebhookPayload,
     session_factory: Annotated[SessionFactory, Depends(get_session_factory)],
-    settings: Annotated[Settings, Depends(get_app_settings)],
 ) -> WebhookAcceptedResponse:
     """Ingest, validate, persist, and queue an incoming ServiceNow incident event."""
     correlation_id = get_correlation_id()
