@@ -1,7 +1,7 @@
 {
     "schema_version": "1.0.0",
     "generated_from": "data/coverage_matrix.csv",
-    "description": "Sprint 2 (S2.4) retrieval evaluation set, derived 1:1 from the S1.4 coverage matrix. 13 manual (real incident) scenarios + 12 synthetic scenarios (7 multi-article, 5 unanswerable synthetic + 1 unanswerable manual = 6 unanswerable total).",
+    "description": "Sprint 2 (S2.4) retrieval evaluation set, derived 1:1 from the S1.4 coverage matrix. 13 manual (real incident) scenarios + 14 synthetic scenarios (7 multi-article, 5 unanswerable synthetic + 1 unanswerable manual = 6 unanswerable total).",
     "scoring_contract": {
         "primary_hit": 1.0,
         "acceptable_hit": 0.5,
@@ -295,7 +295,7 @@
         },
         {
             "incident_id": "SYN_SPARSE_1",
-            "query": "Fix RFC_ERROR_COMMUNICATION",
+            "query": "RFC_ERROR_COMMUNICATION",
             "primary_article_ids": [
                 "KB0008-v1.0"
             ],
@@ -306,7 +306,7 @@
         },
         {
             "incident_id": "SYN_SPARSE_2",
-            "query": "KB0010",
+            "query": "MIR-2026-03",
             "primary_article_ids": [
                 "KB0010-v2.0"
             ],

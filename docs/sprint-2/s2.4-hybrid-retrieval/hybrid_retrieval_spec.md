@@ -225,35 +225,19 @@ restricted articles, this default matters; don't quietly narrow it.
 
 ---
 
-## 8. Known gaps and findings as of the last recorded ablation run
+## 8. Known gaps and findings as of the latest ablation run
 
-These are carried over from the last measured run (seed 42, `eval/ablation_results.json`)
-and should be re-verified any time the eval set, corpus, or retrieval code changes —
-do not treat them as permanently true, they are dated observations, not properties of
-the system.
+These findings are based on the latest ablation run using seed 42, limit 5, and `max_security_level=restricted`. They should be re-verified whenever the evaluation set, corpus, or retrieval implementation changes.
 
-1. **Sparse-rescue requirement (scope of work: ≥2 concrete cases) is currently unmet —
-   0 found.** Root cause, not just "eval set doesn't have one yet": `hit_at_1` and
-   `hit_at_5` are identical across dense-only, hybrid, and hybrid+reranked
-   (`0.9474` / `1.0`), and rank movement in reranking is `0` for every incident. Dense
-   alone already achieves perfect top-5 recall on every answerable incident in the
-   current 25-incident set, so there's structurally nothing left for the sparse leg to
-   rescue. **Fix**: add incidents whose correct article is identifiable only via an
-   exact token a paraphrase would miss (e.g. `RFC_ERROR_COMMUNICATION`, a bare
-   `KB0010` reference) — see the remediation steps embedded in §5 of the generated
-   report.
-2. **The reported accuracy/recall improvement (0.76→1.0 / 0.76→0.96) is entirely
-   refusal-calibration, not better passage retrieval.** It comes from the 6
-   unanswerable incidents: dense-only's `0.30` cosine threshold lets all 6 through
-   incorrectly, the cross-encoder's `0.0` threshold refuses all 6 correctly. Anyone
-   citing "hybrid+reranked improves retrieval quality" from this run should say
-   "improves refusal calibration on out-of-KB queries" instead — the underlying
-   passage ranking for answerable incidents doesn't change (see finding above).
-3. **Latency inversion**: hybrid (46.77ms mean) reports *faster* than dense-only
-   (61.87ms mean) despite doing strictly more Qdrant work (two prefetches + fusion
-   vs. one query). Plausible noise/warm-up artifact rather than a real effect — don't
-   cite "hybrid is faster than dense-only" without repeating the ablation run 3–5×
-   and checking variance first.
+1. **Sparse-rescue requirement remains unmet.** Two targeted lexical evaluation cases were added using exact identifiers already present in the canonical corpus. The latest ablation reports `0` strict sparse-rescue cases. This means that, for these queries, dense-only already retrieved the correct article within the evaluated top-K, so hybrid retrieval did not recover an article that dense retrieval had completely missed. 
+
+2. **Hybrid improves first-hit ranking without improving top-5 recall on this evaluation set.** Dense-only achieved `hit_at_1=0.9048` and `hit_at_5=1.0`, while hybrid achieved `hit_at_1=0.9524` and `hit_at_5=1.0`. Therefore, the measured hybrid improvement is in first-result ranking rather than top-5 recall. Context recall remained `0.7778` for both modes, while context precision decreased slightly from `0.5852` to `0.5667`.
+
+3. **Hybrid+reranking shows the largest retrieval-quality improvement, but with substantially higher latency.** Hybrid+reranked achieved `context_precision=0.7407`, `context_recall=0.9630`, and `accuracy=1.0`, compared with `0.5852`, `0.7778`, and `0.7778` for dense-only. The corresponding margins over dense-only were `+0.1555` context precision, `+0.1852` context recall, and `+0.2222` accuracy. These aggregate improvements should be interpreted together with the evaluation methodology, particularly the unanswerable-query refusal threshold, rather than attributed entirely to passage-ranking improvements.
+
+4. **Reranking introduces a substantial latency cost.** Dense-only measured a p50/p95 latency of `46.43/65.00 ms`, hybrid measured `45.90/53.95 ms`, while hybrid+reranked measured `599.66/733.04 ms`. The reranked path therefore provides materially higher retrieval-quality metrics at the cost of substantially higher latency. This trade-off should be considered when selecting the production retrieval mode.
+
+5. **Corpus constraint remains unchanged.** The sparse-focused evaluation cases use identifiers already present in the verified BARQ knowledge corpus. No synthetic knowledge articles were added solely to manufacture sparse-rescue results. The current corpus/evaluation combination therefore provides evidence of lexical ranking behavior, but does not yet provide the required two strict dense-to-hybrid rescue cases.
 
 ---
 

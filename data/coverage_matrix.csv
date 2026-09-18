@@ -24,3 +24,5 @@ INC0010099,Follow-me print queue stalls and mapped drives disappear after networ
 INC0010100,Laptop degradation after system update causing SAP GUI timeouts during month-end close,KB0007-v2.0;KB0008-v1.0,,true,synthetic,
 INC0010101,Building B passenger elevator stuck between floors with occupants inside,,,false,synthetic,
 INC0010102,Payroll system displays incorrect salary amount for employee after compensation review,,,false,synthetic,
+SYN_SPARSE_1,Fix RFC_ERROR_COMMUNICATION,KB0008-v1.0,,true,synthetic,
+SYN_SPARSE_2,MIR-2026-03,KB0010-v2.0,,true,synthetic,KB0010-v1.0

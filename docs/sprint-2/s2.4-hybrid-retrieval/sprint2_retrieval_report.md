@@ -10,25 +10,25 @@ Hybrid-plus-reranked outperforms the dense-only baseline on context recall and o
 
 | Metric | Dense-Only | Hybrid | Hybrid + Reranked |
 |---|---|---|---|
-| context_precision | 0.5926 | 0.5741 | 0.7407 |
-| context_recall | 0.7778 | 0.7778 | 0.963 |
-| accuracy | 0.7778 | 0.7778 | 1.0 |
-| hit_at_1 | 0.9048 | 0.9048 | 0.9524 |
+| context_precision | 0.5655 | 0.5483 | 0.7034 |
+| context_recall | 0.7931 | 0.7931 | 0.9655 |
+| accuracy | 0.7931 | 0.7931 | 1.0 |
+| hit_at_1 | 0.8696 | 0.9565 | 0.9565 |
 | hit_at_5 | 1 | 1 | 1 |
 
 ## 2. Margin Over Dense-Only Baseline (hybrid + reranked)
 
-- **context_precision_margin**: +0.1481
-- **context_recall_margin**: +0.1852
-- **accuracy_margin**: +0.2222
+- **context_precision_margin**: +0.1379
+- **context_recall_margin**: +0.1724
+- **accuracy_margin**: +0.2069
 
 ## 3. Latency Profile (milliseconds)
 
 | Mode | p50 | p95 | mean |
 |---|---|---|---|
-| Dense-Only (baseline) | 48.7 | 82.24 | 52.08 |
-| Hybrid (dense + sparse, RRF) | 51.46 | 58.78 | 49.94 |
-| Hybrid + Reranked (cross-encoder) | 725.24 | 1018.3 | 778.46 |
+| Dense-Only (baseline) | 50.34 | 68.69 | 51.63 |
+| Hybrid (dense + sparse, RRF) | 44.63 | 52.47 | 44.28 |
+| Hybrid + Reranked (cross-encoder) | 580.6 | 622.68 | 585.12 |
 
 ## 4. Cross-Encoder Rank Movement (hybrid -> hybrid+reranked)
 
@@ -54,7 +54,9 @@ Hybrid-plus-reranked outperforms the dense-only baseline on context recall and o
 | INC0010099 | 1 | 1 | 0 |
 | INC0010100 | 1 | 1 | 0 |
 | SYN_SPARSE_1 | 1 | 1 | 0 |
-| SYN_SPARSE_2 | 3 | 1 | 2 |
+| SYN_SPARSE_2 | 1 | 1 | 0 |
+| SYN_SPARSE_3 | 1 | 1 | 0 |
+| SYN_SPARSE_4 | 1 | 1 | 0 |
 
 ## 5. Sparse-Rescue Cases (dense-only failed, hybrid succeeded)
 
