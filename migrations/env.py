@@ -10,13 +10,16 @@ from alembic import context
 from dotenv import load_dotenv
 from sqlalchemy.engine import URL, make_url
 
+# Alembic is invoked as a script, and the imports below read configuration that
+# the dotenv file supplies, so the load has to happen between the import groups.
+# E402 is silenced rather than the call moved, to keep that ordering.
 load_dotenv()
 
-from sqlalchemy.ext.asyncio import create_async_engine
-from sqlalchemy.pool import NullPool
+from sqlalchemy.ext.asyncio import create_async_engine  # noqa: E402
+from sqlalchemy.pool import NullPool  # noqa: E402
 
-from app.db import models as canonical_models  # noqa: F401
-from app.db.base import Base
+from app.db import models as canonical_models  # noqa: E402, F401
+from app.db.base import Base  # noqa: E402
 
 config = context.config
 
