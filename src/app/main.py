@@ -1,5 +1,10 @@
 from fastapi import FastAPI
 
+from api.routers.approvals import router as approvals_router
+from api.routers.config import router as config_router
+from api.routers.dlq import router as dlq_router
+from api.routers.eval import router as eval_router
+from api.routers.executions import router as executions_router
 from api.routers.health import router as health_router
 from api.routers.webhook import router as webhook_router
 from app.core.config import Settings, get_settings
@@ -42,6 +47,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # Register routers
     app.include_router(health_router)
     app.include_router(webhook_router)
+    app.include_router(executions_router)
+    app.include_router(approvals_router)
+    app.include_router(config_router)
+    app.include_router(dlq_router)
+    app.include_router(eval_router)
 
     return app
 
