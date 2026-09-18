@@ -7,11 +7,14 @@ from typing import Annotated
 
 import structlog
 from fastapi import APIRouter, Depends, status
+from sqlalchemy import delete
+from sqlalchemy.exc import MissingGreenlet, SQLAlchemyError
 
 from api.auth import verify_bearer_token
 from api.schemas.webhook import IncidentWebhookPayload, WebhookAcceptedResponse
 from app.api.dependencies import get_session_factory
 from app.core.correlation import get_correlation_id
+from app.db.models import Event
 from app.db.session import SessionFactory
 from app.exceptions.app_errors import ServiceUnavailableError
 from app.repositories.idempotency import (
@@ -56,7 +59,9 @@ async def ingest_incident_webhook(
 
     try:
         acceptance = await accept_inbound_event(session_factory, inbound)
-    except Exception as exc:
+    except MissingGreenlet:
+        raise
+    except (SQLAlchemyError, ConnectionError, TimeoutError, OSError) as exc:
         logger.error(
             "database_persistence_failed",
             event_id=payload.event_id,
@@ -92,6 +97,26 @@ async def ingest_incident_webhook(
                 event_id=payload.event_id,
                 error=str(exc),
             )
+            # Compensate database persistence so client retry after 503
+            # is not blocked as a false duplicate
+            if acceptance.event_record_id:
+                try:
+                    async with session_factory() as cleanup_session:
+                        await cleanup_session.execute(
+                            delete(Event).where(Event.id == acceptance.event_record_id)
+                        )
+                        await cleanup_session.commit()
+                    logger.info(
+                        "database_claim_compensated",
+                        event_id=payload.event_id,
+                        event_record_id=str(acceptance.event_record_id),
+                    )
+                except Exception as cleanup_exc:
+                    logger.warning(
+                        "database_compensation_failed",
+                        event_id=payload.event_id,
+                        error=str(cleanup_exc),
+                    )
             raise ServiceUnavailableError("Event queue unavailable.") from exc
 
     # 4. Immediate HTTP 202 Response

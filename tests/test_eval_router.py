@@ -29,7 +29,9 @@ def app_instance():
 @pytest.mark.asyncio
 async def test_eval_endpoints_require_auth(app_instance) -> None:
     """Ensure both eval endpoints reject unauthorized calls with 401."""
-    async with AsyncClient(transport=ASGITransport(app=app_instance), base_url="http://test") as client:
+    async with AsyncClient(
+        transport=ASGITransport(app=app_instance), base_url="http://test"
+    ) as client:
         resp_post = await client.post("/api/v1/eval/run", json={"dataset_name": "bench-v1"})
         assert resp_post.status_code == 401
 
@@ -40,7 +42,9 @@ async def test_eval_endpoints_require_auth(app_instance) -> None:
 @pytest.mark.asyncio
 async def test_eval_run_validates_contract(app_instance) -> None:
     """Ensure POST /api/v1/eval/run rejects payloads missing dataset_name with 422."""
-    async with AsyncClient(transport=ASGITransport(app=app_instance), base_url="http://test") as client:
+    async with AsyncClient(
+        transport=ASGITransport(app=app_instance), base_url="http://test"
+    ) as client:
         # Missing required dataset_name
         resp = await client.post("/api/v1/eval/run", json={"sample_size": 10}, headers=AUTH_HEADERS)
     assert resp.status_code == 422
@@ -50,7 +54,9 @@ async def test_eval_run_validates_contract(app_instance) -> None:
 @pytest.mark.asyncio
 async def test_eval_run_rejects_extra_fields(app_instance) -> None:
     """Ensure POST /api/v1/eval/run rejects extra fields due to extra='forbid'."""
-    async with AsyncClient(transport=ASGITransport(app=app_instance), base_url="http://test") as client:
+    async with AsyncClient(
+        transport=ASGITransport(app=app_instance), base_url="http://test"
+    ) as client:
         resp = await client.post(
             "/api/v1/eval/run",
             json={"dataset_name": "bench-v1", "unexpected_field": "disallowed"},
@@ -63,7 +69,9 @@ async def test_eval_run_rejects_extra_fields(app_instance) -> None:
 @pytest.mark.asyncio
 async def test_eval_run_succeeds(app_instance) -> None:
     """Ensure POST /api/v1/eval/run accepts valid requests with 202 Accepted."""
-    async with AsyncClient(transport=ASGITransport(app=app_instance), base_url="http://test") as client:
+    async with AsyncClient(
+        transport=ASGITransport(app=app_instance), base_url="http://test"
+    ) as client:
         resp = await client.post(
             "/api/v1/eval/run",
             json={"dataset_name": "incident-corpus-gold-v1", "sample_size": 50},
@@ -80,7 +88,9 @@ async def test_eval_run_succeeds(app_instance) -> None:
 @pytest.mark.asyncio
 async def test_eval_results_returns_metrics(app_instance) -> None:
     """Ensure GET /api/v1/eval/results returns 200 with schema-valid metrics."""
-    async with AsyncClient(transport=ASGITransport(app=app_instance), base_url="http://test") as client:
+    async with AsyncClient(
+        transport=ASGITransport(app=app_instance), base_url="http://test"
+    ) as client:
         resp = await client.get("/api/v1/eval/results?run_id=eval-run-456", headers=AUTH_HEADERS)
 
     assert resp.status_code == 200

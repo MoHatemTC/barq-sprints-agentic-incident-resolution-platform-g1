@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import ClassVar
-
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.config import RetrievalMode, Settings
@@ -19,7 +17,9 @@ class RedactedConfigResponse(BaseModel):
     # Metadata
     app_name: str = Field(..., description="Application name")
     app_version: str = Field(..., description="Semantic version of running application")
-    environment: str = Field(..., description="Runtime environment (development, staging, production)")
+    environment: str = Field(
+        ..., description="Runtime environment (development, staging, production)"
+    )
     log_level: str = Field(..., description="Configured logging level")
     bind_ip: str = Field(..., description="Bound IP address for listener")
 
@@ -39,7 +39,9 @@ class RedactedConfigResponse(BaseModel):
         default=REDACTED_SENTINEL,
         description="Redacted ServiceNow API user password",
     )
-    servicenow_timeout_seconds: int = Field(..., description="Timeout in seconds for ServiceNow requests")
+    servicenow_timeout_seconds: int = Field(
+        ..., description="Timeout in seconds for ServiceNow requests"
+    )
     servicenow_token_expiry_buffer_seconds: int = Field(
         ...,
         description="Buffer seconds before token expiration to refresh",
@@ -74,9 +76,13 @@ class RedactedConfigResponse(BaseModel):
     qdrant_url: str = Field(..., description="Qdrant vector engine URL")
     qdrant_http_port: int = Field(..., description="Qdrant HTTP port")
     qdrant_grpc_port: int = Field(..., description="Qdrant gRPC port")
-    qdrant_collection_name: str = Field(..., description="Active incident knowledge base collection name")
+    qdrant_collection_name: str = Field(
+        ..., description="Active incident knowledge base collection name"
+    )
     qdrant_log_level: str = Field(..., description="Qdrant logging verbosity")
-    dense_embedding_model: str = Field(..., description="Dense embedding transformer model identifier")
+    dense_embedding_model: str = Field(
+        ..., description="Dense embedding transformer model identifier"
+    )
     sparse_embedding_model: str = Field(..., description="Sparse keyword model identifier")
     retrieval_mode: RetrievalMode = Field(
         default=RetrievalMode.HYBRID,
@@ -89,9 +95,23 @@ class RedactedConfigResponse(BaseModel):
         description="Active platform feature flag statuses",
     )
 
+    # Langfuse Tracing
+    langfuse_host: str = Field(
+        default="https://cloud.langfuse.com",
+        description="Langfuse server URL",
+    )
+    langfuse_public_key: str | None = Field(
+        default=None,
+        description="Langfuse public key (None when tracing is disabled)",
+    )
+    langfuse_secret_key: str = Field(
+        default=REDACTED_SENTINEL,
+        description="Redacted Langfuse secret key",
+    )
+
     @classmethod
     def from_settings(cls, settings: Settings) -> RedactedConfigResponse:
-        """Construct a sanitized RedactedConfigResponse directly from runtime application settings."""
+        """Construct a sanitized RedactedConfigResponse directly from settings."""
         return cls(
             app_name=settings.app_name,
             app_version=settings.app_version,
@@ -125,4 +145,7 @@ class RedactedConfigResponse(BaseModel):
             sparse_embedding_model=settings.sparse_embedding_model,
             retrieval_mode=getattr(settings, "retrieval_mode", RetrievalMode.HYBRID),
             active_feature_flags=dict(getattr(settings, "active_feature_flags", {})),
+            langfuse_host=settings.langfuse_host,
+            langfuse_public_key=settings.langfuse_public_key,
+            langfuse_secret_key=REDACTED_SENTINEL,
         )

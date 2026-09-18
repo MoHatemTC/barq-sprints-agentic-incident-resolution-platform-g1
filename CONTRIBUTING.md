@@ -14,9 +14,21 @@ Branch naming follows the type of change: `feat/`, `fix/`, `chore/`, `docs/`.
 just check   # lint, format check, type-check, tests — the same commands CI runs
 ```
 
-Tests must pass on a clean clone with no `.env`. `tests/conftest.py` injects fake
-ServiceNow settings so the suite never depends on local developer state; if you add a
-required setting, add it there too or you will break everyone else's checkout.
+Tests must pass on a clean clone with no `.env`, **and must also pass with an
+arbitrary `.env` present** — unit tests run with `.env` loading disabled
+(`app/core/config.py`), so nothing in a developer's local `.env` can leak into or
+break the suite. `tests/conftest.py` backfills fake ServiceNow settings for ordinary
+runs only; if you add a required setting, add it there too or you will break everyone else's checkout.
+
+Live ServiceNow tests require an explicit process-level opt-in and should be run separately:
+
+```bash
+SERVICENOW_LIVE_TESTS=1 uv run pytest tests/clients/test_servicenow_integration.py
+```
+
+The required ServiceNow credentials and `SERVICENOW_TEST_INCIDENT_SYS_ID` may come
+from `.env` or the process environment; process values take precedence. Missing or
+invalid live configuration skips the module instead of starting a partial live run.
 
 ## Commit messages
 
@@ -66,3 +78,12 @@ paste the checklist into it. The template pre-fills automatically only in the we
 Copilot reviews every pull request automatically. Address its findings or say why you
 disagree — do not merge over an unaddressed one. Requirement-level review belongs to
 the workstream owner listed in [CODEOWNERS](.github/CODEOWNERS).
+
+### Dismissing a change request
+
+Only the reviewer who requested changes should dismiss their own review. If a review is
+blocking you, push the fix and re-request review rather than dismissing it or merging
+around it.
+
+If the reviewer cannot re-review (for example, an automated reviewer), a dismissal must
+say who dismissed it and why, and point to the check that shows each finding is fixed.

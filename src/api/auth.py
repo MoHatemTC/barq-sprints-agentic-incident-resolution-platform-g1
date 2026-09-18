@@ -13,4 +13,3 @@ __all__ = [
     "require_role",
     "verify_bearer_token",
 ]
-

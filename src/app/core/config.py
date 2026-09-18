@@ -1,3 +1,5 @@
+import os
+import sys
 from enum import StrEnum
 from functools import lru_cache
 from importlib.metadata import PackageNotFoundError, version
@@ -25,11 +27,17 @@ def _get_version() -> str:
         return "0.1.0"
 
 
+_RUNNING_UNDER_PYTEST = "pytest" in sys.modules
+_IGNORE_DOTENV = _RUNNING_UNDER_PYTEST and os.environ.get("SERVICENOW_LIVE_TESTS") != "1"
+_ENV_FILE = None if _IGNORE_DOTENV else ".env"
+
+
 class RetrievalSettings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=_ENV_FILE,
         env_file_encoding="utf-8",
         extra="ignore",
+        hide_input_in_errors=True,
     )
 
     # Qdrant
@@ -46,6 +54,12 @@ class RetrievalSettings(BaseSettings):
 
 
 class Settings(RetrievalSettings):
+    # No model_config here on purpose. It is inherited from RetrievalSettings, and
+    # re-declaring it hard-codes env_file=".env" on the subclass. #77 makes the base
+    # class use env_file=None under pytest so unit tests cannot read a developer's
+    # .env; a subclass override wins over that, so Settings would still load .env
+    # during tests and silently undo #77's isolation. hide_input_in_errors, which is
+    # what this PR needs, applies from the base class.
     app_name: str = "incident-resolution-platform"
     app_version: str = Field(default_factory=_get_version)
     log_level: str = "INFO"
@@ -90,7 +104,7 @@ class Settings(RetrievalSettings):
 
     # WebHook
     webhook_auth_token: str = Field(
-        ...,
+        default="dev-webhook-secret-token",
         description="Bearer token for webhook authentication",
     )
 
@@ -152,6 +166,19 @@ class Settings(RetrievalSettings):
     worker_repo_backend: str = Field(
         default="postgres",
         description="Worker repository backend: 'postgres' or 'memory' (tests/stand-in)",
+    )
+    # Langfuse Tracing (optional — integration is disabled when keys are absent)
+    langfuse_public_key: str | None = Field(
+        default=None,
+        description="Langfuse project public key (tracing disabled when absent)",
+    )
+    langfuse_secret_key: SecretStr | None = Field(
+        default=None,
+        description="Langfuse project secret key (tracing disabled when absent)",
+    )
+    langfuse_host: str = Field(
+        default="https://cloud.langfuse.com",
+        description="Langfuse server URL",
     )
 
     @field_validator("servicenow_instance_url")

@@ -62,7 +62,7 @@ If dynamic configuration via ServiceNow System Properties is preferred:
      ```
    - Loaded in `src/app/core/config.py` as a `SecretStr`.
 
-2. **Endpoint Enforcement (`src/app/api/routers/webhook.py`)**:
+2. **Endpoint Enforcement (`src/api/routers/webhook.py`)**:
    - Extracts `Authorization: Bearer <token>`.
    - Performs constant-time comparison against `settings.webhook_auth_token.get_secret_value()`.
    - If missing or mismatched ➔ Raises `AuthenticationError` returning:

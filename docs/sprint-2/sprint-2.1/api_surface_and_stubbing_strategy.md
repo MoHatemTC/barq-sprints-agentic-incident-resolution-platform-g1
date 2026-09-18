@@ -18,20 +18,22 @@ To respect sprint boundaries and teammate workstream ownership, endpoints are ca
 +---------------------------------------------------------------------------------------------------+
 | • POST /api/v1/webhook/incident : Complete Bearer auth, Contract v1 validation, PostgreSQL        |
 |                                   atomic idempotency, Redis queueing, and immediate 202 Accepted. |
-| • GET /health                   : Process liveness probe (HTTP 200).                              |
-| • GET /ready                    : Live dependency readiness checking PostgreSQL and Redis.       |
+| • GET /health, /ready          : Process liveness + readiness probes (PostgreSQL + Redis).       |
 | • Execution Endpoints           : Reads live data from the operational database schema            |
 |   (GET /executions/{id})          established by Ahmed in S2.2.                                   |
+| • HITL Approvals                : Real PostgreSQL reads/writes on the approvals table.            |
+|   (GET /approvals, GET /approvals/{id}, POST /approvals/{id}/decide)                              |
+| • DLQ Management                : Real Redis list/replay logic with Operator RBAC.               |
+|   (GET /dlq, POST /dlq/{event_id}/replay)                                                        |
+| • GET /api/v1/config            : Live settings inspection with all secrets redacted.             |
+| • Langfuse Tracing              : Initialised on startup; fails gracefully when unreachable.      |
 +---------------------------------------------------------------------------------------------------+
                                                   │
                                                   ▼
 +---------------------------------------------------------------------------------------------------+
 | TIER 2: SPRINTS 3–4 DOWNSTREAM ENDPOINTS (Strict Contract Stubs)                                  |
 +---------------------------------------------------------------------------------------------------+
-| • HITL Approvals (GET /approvals, POST /approvals/{id}/decide)                                    |
-| • DLQ Management (GET /dlq, POST /dlq/{event_id}/replay with Operator RBAC)                       |
-| • Evaluation & Benchmarking (GET /eval/results, POST /eval/run)                                    |
-| • Runtime Config (GET /config with secrets redacted)                                              |
+| • Evaluation & Benchmarking (GET /eval/results, POST /eval/run)                                   |
 |                                                                                                   |
 | Strategy: Implemented with strict Pydantic V2 request & response validation (extra="forbid")      |
 | and valid mock/placeholder responses, but WITHOUT deep backend execution logic.                   |
@@ -49,13 +51,13 @@ To respect sprint boundaries and teammate workstream ownership, endpoints are ca
 
 ### 3.2. HITL Approvals (`src/api/routers/approvals.py`)
 * **Schemas**: `ApprovalResponse`, `ApprovalDecisionRequest` in [src/api/schemas/approvals.py](file:///d:/spritns/barq-sprints-agentic-incident-resolution-platform-g1/src/api/schemas/approvals.py).
-* **Business Logic Status**: **Contract Stub (Validation & Typed Response Only)**.
-* **Rationale**: Automated remediation proposal generation and LangGraph human-in-the-loop interruption are scheduled for **Sprint 3–4**. In Sprint 2, the endpoints validate input structure (`approved` | `rejected`, operator credentials) and return schema-compliant records, enabling the frontend dashboard team to develop the review UI ahead of time.
+* **Business Logic Status**: **Real Database Logic**.
+* **Rationale**: `GET /approvals` and `GET /approvals/{id}` query the live PostgreSQL `approvals` table. `POST /approvals/{id}/decide` writes or updates an approval record. Falls back to a schema-valid stub response only when no pre-seeded record exists, ensuring the frontend can build against the contract before Sprint 3 HITL state machine is completed.
 
 ### 3.3. Dead-Letter Queue (DLQ) Management (`src/api/routers/dlq.py`)
 * **Schemas**: `DLQEventResponse`, `DLQReplayResponse` in [src/api/schemas/dlq.py](file:///d:/spritns/barq-sprints-agentic-incident-resolution-platform-g1/src/api/schemas/dlq.py).
-* **Business Logic Status**: **Contract Stub + RBAC Enforcement**.
-* **Rationale**: Dead-letter task routing and worker retry algorithms are owned by Teammate A (Celery background worker pipeline). In Sprint 2, the endpoint enforces strict **Operator Role RBAC** (returning `403 PERMISSION_DENIED` for unauthorized users) and returns valid replay response envelopes without executing the actual background retry daemon.
+* **Business Logic Status**: **Real Redis Logic + RBAC Enforcement**.
+* **Rationale**: `GET /dlq` reads all events from the `barq:incident:dlq` Redis key via `LRANGE`. `POST /dlq/{event_id}/replay` pops the matching event from the DLQ and re-pushes it to `barq:incident:events` for reprocessing. Both endpoints enforce strict **Operator Role RBAC** (`X-User-Role: operator`) returning `403 PERMISSION_DENIED` for unauthorized users.
 
 ### 3.4. Evaluation & Benchmarking (`src/api/routers/eval.py`)
 * **Schemas**: `EvalRunRequest`, `EvalRunResponse`, `EvalResultResponse` in [src/api/schemas/eval.py](file:///d:/spritns/barq-sprints-agentic-incident-resolution-platform-g1/src/api/schemas/eval.py).

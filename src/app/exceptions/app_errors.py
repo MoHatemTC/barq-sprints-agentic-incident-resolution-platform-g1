@@ -78,6 +78,12 @@ class ResourceNotFoundError(_PlatformHTTPError):
     default_message = "Resource not found."
 
 
+class ConflictError(_PlatformHTTPError):
+    code = "RESOURCE_CONFLICT"
+    default_status_code = 409
+    default_message = "Resource conflict."
+
+
 class ContractValidationError(_PlatformHTTPError):
     code = "CONTRACT_VALIDATION_FAILED"
     default_status_code = 422

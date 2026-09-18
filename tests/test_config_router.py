@@ -119,7 +119,7 @@ async def test_config_correlation_id_propagated(app_with_secrets) -> None:
     ["dense_only", "hybrid", "hybrid_reranked"],
 )
 async def test_config_retrieval_mode_variants(mode: str) -> None:
-    """Ensure all RetrievalMode variants ('dense_only', 'hybrid', 'hybrid_reranked') are supported."""
+    """Ensure all RetrievalMode variants are supported."""
     from app.core.config import RetrievalMode
 
     settings = mock_settings(
@@ -137,4 +137,3 @@ async def test_config_retrieval_mode_variants(mode: str) -> None:
     assert resp.status_code == 200
     data = resp.json()
     assert data["retrieval_mode"] == mode
-

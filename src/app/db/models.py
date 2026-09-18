@@ -234,8 +234,8 @@ class ExecutionNodeState(Base):
     evidence: Mapped[list[dict[str, Any]]] = mapped_column(
         JSONB, nullable=False, server_default=text("'[]'::jsonb")
     )
-    decision: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
-    state_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    decision: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
+    state_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
 
     execution: Mapped[Execution] = relationship(back_populates="node_states")
     approvals: Mapped[list[Approval]] = relationship(
@@ -286,7 +286,7 @@ class Approval(Base):
     decision: Mapped[str] = mapped_column(String(16), nullable=False)
     decided_by: Mapped[str] = mapped_column(String(255), nullable=False)
     reason: Mapped[str | None] = mapped_column(Text)
-    evidence: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    evidence: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
     decided_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -336,7 +336,7 @@ class Failure(Base):
     failure_type: Mapped[str] = mapped_column(String(100), nullable=False)
     error_code: Mapped[str | None] = mapped_column(String(100))
     message: Mapped[str] = mapped_column(Text, nullable=False)
-    details: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    details: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
     retryable: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     occurred_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()

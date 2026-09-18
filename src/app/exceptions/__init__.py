@@ -2,6 +2,7 @@ from app.core.constants import ERROR_STATUS_MAP
 from app.exceptions.app_errors import (
     AgenticPlatformError,
     AuthenticationError,
+    ConflictError,
     ContractValidationError,
     NotImplementedStubError,
     PermissionDeniedError,
@@ -29,6 +30,7 @@ __all__ = [
     "ERROR_STATUS_MAP",
     "AgenticPlatformError",
     "AuthenticationError",
+    "ConflictError",
     "ContractValidationError",
     "NotImplementedStubError",
     "PermissionDeniedError",

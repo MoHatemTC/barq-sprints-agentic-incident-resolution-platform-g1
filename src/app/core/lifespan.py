@@ -13,6 +13,36 @@ from app.db.session import create_db_engine, create_session_factory
 logger = structlog.getLogger(__name__)
 
 
+def _init_langfuse(settings: Settings):
+    """Initialise Langfuse client, returning None if keys are absent or unreachable."""
+    if not settings.langfuse_public_key or not settings.langfuse_secret_key:
+        logger.info("langfuse_tracing_disabled", reason="keys_not_configured")
+        return None
+    try:
+        from langfuse import Langfuse  # noqa: PLC0415
+
+        secret = settings.langfuse_secret_key.get_secret_value()
+        client = Langfuse(
+            public_key=settings.langfuse_public_key,
+            secret_key=secret,
+            host=settings.langfuse_host,
+        )
+        # Quick connectivity check (raises on auth/network failure)
+        client.auth_check()
+        logger.info(
+            "langfuse_tracing_enabled",
+            host=settings.langfuse_host,
+        )
+        return client
+    except Exception as exc:
+        logger.warning(
+            "langfuse_init_failed_gracefully",
+            error=str(exc),
+            host=settings.langfuse_host,
+        )
+        return None
+
+
 def create_redis_client(settings: Settings) -> aioredis.Redis:
     """Create an async Redis client instance."""
     password = settings.redis_password.get_secret_value() if settings.redis_password else None
@@ -79,12 +109,27 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         except Exception as exc:
             logger.warning("redis_ping_failed_on_startup", error=str(exc))
 
+    # 3. Initialize Langfuse Tracing (optional, fails gracefully)
+    if not hasattr(app.state, "langfuse") or app.state.langfuse is None:
+        app.state.langfuse = _init_langfuse(settings)
+
     logger.info("application_lifespan_started")
 
     yield
 
     # --- Shutdown ---
     logger.info("application_lifespan_stopping")
+
+    # Flush & shutdown Langfuse before closing infrastructure
+    if getattr(app.state, "langfuse", None) is not None:
+        try:
+            app.state.langfuse.flush()
+            app.state.langfuse.shutdown()
+            logger.info("langfuse_client_flushed")
+        except Exception as exc:
+            logger.warning("langfuse_flush_failed", error=str(exc))
+        finally:
+            app.state.langfuse = None
 
     if getattr(app.state, "redis", None) is not None:
         try:

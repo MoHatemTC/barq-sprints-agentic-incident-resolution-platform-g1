@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
@@ -138,7 +138,7 @@ async def test_list_approvals_with_records_and_filter(app_with_db) -> None:
         decided_by="lead_ops",
         reason="Verified safety constraints",
         evidence={"risk_score": 0.12},
-        decided_at=datetime.now(timezone.utc),
+        decided_at=datetime.now(UTC),
     )
 
     mock_result = MagicMock()
@@ -192,7 +192,7 @@ async def test_get_approval_by_id_success(app_with_db) -> None:
         decided_by="admin",
         reason="Remediation risky",
         evidence={"blast_radius": "high"},
-        decided_at=datetime.now(timezone.utc),
+        decided_at=datetime.now(UTC),
     )
     mock_session.get.return_value = sample_approval
 
@@ -288,7 +288,8 @@ async def test_decide_approval_stub_fallback(app_with_db) -> None:
 
 
 @pytest.mark.asyncio
-async def test_decide_approval_updates_existing_approval(app_with_db) -> None:
+async def test_decide_approval_rejects_mutation_of_existing_approval(app_with_db) -> None:
+    """Ensure deciding already-decided approval returns 409 Conflict due to audit immutability."""
     app, mock_session = app_with_db
     approval_id = uuid4()
     execution_id = uuid4()
@@ -301,7 +302,7 @@ async def test_decide_approval_updates_existing_approval(app_with_db) -> None:
         decided_by="system",
         reason=None,
         evidence=None,
-        decided_at=datetime.now(timezone.utc),
+        decided_at=datetime.now(UTC),
     )
 
     async def mock_get(model, pk):
@@ -324,12 +325,11 @@ async def test_decide_approval_updates_existing_approval(app_with_db) -> None:
             headers=AUTH_HEADERS,
         )
 
-    assert resp.status_code == 200
-    mock_session.commit.assert_awaited_once()
-    mock_session.refresh.assert_awaited_once_with(existing_approval)
-    assert existing_approval.decision == "approved"
-    assert existing_approval.decided_by == "lead_operator"
-    assert existing_approval.reason == "Manual override approved"
+    assert resp.status_code == 409
+    body = resp.json()
+    assert body["error"]["code"] == "RESOURCE_CONFLICT"
+    assert f"Approval '{approval_id}' has already been decided" in body["error"]["message"]
+    mock_session.commit.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -429,4 +429,3 @@ async def test_approvals_programming_errors_not_masked(app_with_db) -> None:
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         with pytest.raises(AttributeError):
             await client.get(f"/api/v1/approvals/{uuid4()}", headers=AUTH_HEADERS)
-
