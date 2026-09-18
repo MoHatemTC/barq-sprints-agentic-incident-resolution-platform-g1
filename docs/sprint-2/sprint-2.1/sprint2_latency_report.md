@@ -1,6 +1,6 @@
 # Sprint 2 — Ingestion Latency / Load Report (NFR-01)
 
-Generated: 2026-09-18 07:48 UTC by `tests/load/run_load_test.py`
+Generated: 2026-09-18 07:53 UTC by `tests/load/run_load_test.py`
 
 ## Environment
 
@@ -14,20 +14,20 @@ Generated: 2026-09-18 07:48 UTC by `tests/load/run_load_test.py`
 
 | Queue depth | Requests | Success | Failures | Min (ms) | p50 (ms) | p95 (ms) | p99 (ms) | Max (ms) | Throughput (rps) |
 |---|---|---|---|---|---|---|---|---|---|
-| 0 | 500 | 500 | 0 | 26.8 | 184.0 | 231.7 | 265.0 | 274.5 | 260.3 |
-| 1,000 | 500 | 500 | 0 | 25.9 | 186.7 | 253.9 | 291.2 | 312.4 | 253.0 |
-| 10,000 | 500 | 500 | 0 | 32.6 | 189.0 | 227.2 | 256.3 | 275.0 | 256.8 |
+| 0 | 500 | 500 | 0 | 28.8 | 280.2 | 368.2 | 384.1 | 390.6 | 171.0 |
+| 1,000 | 500 | 500 | 0 | 40.8 | 262.0 | 291.5 | 321.4 | 328.0 | 191.4 |
+| 10,000 | 500 | 500 | 0 | 37.2 | 325.7 | 386.3 | 442.6 | 455.9 | 152.1 |
 
 ## Acceptance (NFR-01)
 
 - Budget: p95 < 500 ms at every queue depth, zero failed requests.
-- depth 0: p95 = 231.7 ms, failures = 0 — **PASS**
-- depth 1,000: p95 = 253.9 ms, failures = 0 — **PASS**
-- depth 10,000: p95 = 227.2 ms, failures = 0 — **PASS**
+- depth 0: p95 = 368.2 ms, failures = 0 — **PASS**
+- depth 1,000: p95 = 291.5 ms, failures = 0 — **PASS**
+- depth 10,000: p95 = 386.3 ms, failures = 0 — **PASS**
 
 ## Conclusion
 
-All depths satisfy p95 < 500 ms. Worst-case p95 was 253.9 ms at depth 1,000; acknowledgement latency is driven by the O(1) Redis LPUSH and bounded PostgreSQL insert, not by the number of queued work items.
+All depths satisfy p95 < 500 ms. Worst-case p95 was 386.3 ms at depth 10,000; acknowledgement latency is driven by the O(1) Redis LPUSH and bounded PostgreSQL insert, not by the number of queued work items.
 
 ## Reproducing
 
