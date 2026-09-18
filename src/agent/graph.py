@@ -29,6 +29,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
 from agent import edges
+from agent.config import AGENT_VERSION
 from agent.dependencies import AgentDependencies
 from agent.nodes import NODE_ORDER, NODES
 from agent.servicenow import HumanLockedError
@@ -162,6 +163,7 @@ def _result(values: dict[str, Any], *, resumed: bool) -> dict[str, Any]:
     if output is None:
         raise TerminalError("graph ended without an output")
     parsed = FinalOutput.model_validate(output)
+    path = values.get("path", [])
     return {
         "outcome": parsed.outcome.value,
         "summary": parsed.summary,
@@ -169,7 +171,12 @@ def _result(values: dict[str, Any], *, resumed: bool) -> dict[str, Any]:
         "confidence": parsed.confidence,
         "processing_state": parsed.processing_state,
         "write_back": parsed.write_back,
-        "path": values.get("path", []),
+        "path": path,
+        # Carried so the worker can record the decision on the executions summary
+        # row: without it every run terminates as "completed", including a
+        # high-risk escalation. workflow_state remains the authoritative history.
+        "node_reached": path[-1] if path else None,
+        "agent_version": AGENT_VERSION,
         "resumed": resumed,
         "escalated": parsed.outcome.value.startswith("escalated"),
         "suggested": parsed.outcome is Outcome.SUGGESTED,

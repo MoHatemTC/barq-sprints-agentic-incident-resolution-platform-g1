@@ -587,6 +587,47 @@ class TestWorkerWiring:
             "attempt": 1,
         }
         assert repo.get_status(execution_id) == "succeeded"
+        # The outcome, not a bare "completed", so the executions row records what
+        # the graph decided (§FR-13 / FR-15 audit).
+        assert repo.get_termination_cause(execution_id) == "suggested"
+        assert repo.executions[execution_id]["node_reached"] == "act"
+        assert repo.executions[execution_id]["agent_version"] == AGENT_VERSION
+
+    def test_a_high_risk_escalation_is_recorded_on_the_executions_row(self, settings: Any) -> None:
+        """A P1 stops at determine_risk, and the execution row has to say so.
+
+        The row previously read termination_cause="completed" for this, which is
+        indistinguishable from a drafted suggestion — the one outcome an auditor
+        most needs to tell apart.
+        """
+        from celery import Celery
+
+        from tests.agent_support import ORDER_P1
+
+        app = Celery("eager-risk-test")
+        app.conf.task_always_eager = True
+        repo = InMemoryRepo()
+        execution_id = uuid4()
+        repo.seed_execution(execution_id, status="queued")
+        runtime = build_runtime(make_deps(), checkpointer=InMemorySaver())
+
+        with (
+            patch.object(
+                tasks_module, "get_agent_settings", return_value=AgentSettings(_env_file=None)
+            ),
+            patch(
+                "agent.runtime.invoke_incident_graph",
+                side_effect=lambda payload, **ctx: invoke_incident_graph(
+                    payload, runtime=runtime, **ctx
+                ),
+            ),
+        ):
+            task = tasks_module.build_incident_task(app, settings, repo=repo, dlq_redis=MagicMock())
+            outcome = task.apply(args=[event_for(ORDER_P1), str(execution_id)]).get()
+
+        assert outcome["result"]["outcome"] == "escalated_high_risk"
+        assert repo.get_termination_cause(execution_id) == "escalated_high_risk"
+        assert "retrieve" not in outcome["result"]["path"]
 
 
 class TestProducer:

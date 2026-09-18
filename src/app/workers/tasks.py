@@ -288,9 +288,31 @@ def _run_incident(
         logger.error("unclassified_failure", execution_id=execution_id, reason=str(exc))
         raise
 
-    repo.mark_succeeded(execution_uuid)
+    repo.mark_succeeded(execution_uuid, **_execution_summary(result))
     logger.info("incident_processed", execution_id=execution_id)
     return {"status": "succeeded", "execution_id": execution_id, "result": result}
+
+
+def _execution_summary(result: dict[str, Any]) -> dict[str, Any]:
+    """The graph's decision, projected onto the executions summary row.
+
+    The row would otherwise read ``completed`` for every run, including a
+    high-risk incident that was escalated without retrieval or a model call —
+    the outcome an auditor most needs to see, and the one FR-13 is about.
+    ``workflow_state`` stays the authoritative per-node history; this is the
+    summary the audit endpoint reads.
+    """
+    outcome = result.get("outcome")
+    if not outcome:
+        return {}
+    summary: dict[str, Any] = {"termination_cause": str(outcome)}
+    if node := result.get("node_reached"):
+        summary["node_reached"] = str(node)
+    if model := result.get("model_name"):
+        summary["model_name"] = str(model)
+    if version := result.get("agent_version"):
+        summary["agent_version"] = str(version)
+    return summary
 
 
 def build_incident_task(
