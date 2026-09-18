@@ -1,0 +1,171 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="1040" viewBox="0 0 1400 1040" role="img" aria-labelledby="title desc">
+  <title id="title">Sprint 2 PostgreSQL state schema ERD</title>
+  <desc id="desc">Seven-table entity relationship diagram for events, idempotency keys, executions, workflow state, approvals, failures, and retry state.</desc>
+  <defs>
+    <style>
+      .bg { fill: #f7f9fc; }
+      .box { fill: #ffffff; stroke: #253858; stroke-width: 2; rx: 10; }
+      .head { fill: #173b57; }
+      .title { fill: #ffffff; font: 700 18px Arial, sans-serif; }
+      .field { fill: #172b4d; font: 14px Consolas, monospace; }
+      .note { fill: #42526e; font: 13px Arial, sans-serif; }
+      .rel { fill: none; stroke: #216e9e; stroke-width: 2.5; marker-end: url(#arrow); }
+      .opt { fill: none; stroke: #7a5af8; stroke-width: 2.2; stroke-dasharray: 8 6; marker-end: url(#arrowOpt); }
+      .label { fill: #173b57; font: 700 13px Arial, sans-serif; paint-order: stroke; stroke: #f7f9fc; stroke-width: 5px; stroke-linejoin: round; }
+      .legend { fill: #ffffff; stroke: #b3bdc7; stroke-width: 1.5; rx: 8; }
+    </style>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#216e9e"/>
+    </marker>
+    <marker id="arrowOpt" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#7a5af8"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" width="1400" height="1040"/>
+  <text x="700" y="38" text-anchor="middle" style="fill:#172b4d;font:700 26px Arial,sans-serif">BARQ Sprint 2 — PostgreSQL State Schema</text>
+  <text x="700" y="63" text-anchor="middle" class="note">PK = primary key · FK = foreign key · UQ = unique</text>
+
+  <!-- events -->
+  <g transform="translate(55 105)">
+    <rect class="box" width="335" height="220"/>
+    <path class="head" d="M10,0 H325 A10,10 0 0 1 335,10 V42 H0 V10 A10,10 0 0 1 10,0 Z"/>
+    <text class="title" x="18" y="28">events</text>
+    <text class="field" x="18" y="68">PK  id</text>
+    <text class="field" x="18" y="92">UQ  event_id</text>
+    <text class="field" x="18" y="116">    incident_sys_id</text>
+    <text class="field" x="18" y="140">    incident_number</text>
+    <text class="field" x="18" y="164">    event_type</text>
+    <text class="field" x="18" y="188">    contract_version</text>
+    <text class="field" x="18" y="212">    received_at</text>
+  </g>
+
+  <!-- idempotency -->
+  <g transform="translate(55 405)">
+    <rect class="box" width="335" height="132"/>
+    <path class="head" d="M10,0 H325 A10,10 0 0 1 335,10 V42 H0 V10 A10,10 0 0 1 10,0 Z"/>
+    <text class="title" x="18" y="28">idempotency_keys</text>
+    <text class="field" x="18" y="68">PK  id</text>
+    <text class="field" x="18" y="92">FK/UQ event_id → events.event_id</text>
+    <text class="field" x="18" y="116">      created_at</text>
+  </g>
+
+  <!-- executions -->
+  <g transform="translate(535 105)">
+    <rect class="box" width="365" height="292"/>
+    <path class="head" d="M10,0 H355 A10,10 0 0 1 365,10 V42 H0 V10 A10,10 0 0 1 10,0 Z"/>
+    <text class="title" x="18" y="28">executions</text>
+    <text class="field" x="18" y="68">PK  execution_id</text>
+    <text class="field" x="18" y="92">FK/UQ event_record_id → events.id</text>
+    <text class="field" x="18" y="116">      incident_sys_id</text>
+    <text class="field" x="18" y="140">      status</text>
+    <text class="field" x="18" y="164">      node_reached</text>
+    <text class="field" x="18" y="188">      model_name</text>
+    <text class="field" x="18" y="212">      agent_version</text>
+    <text class="field" x="18" y="236">      started_at / ended_at</text>
+    <text class="field" x="18" y="260">      termination_cause</text>
+    <text class="field" x="18" y="284">      updated_at</text>
+  </g>
+
+  <!-- workflow -->
+  <g transform="translate(1030 105)">
+    <rect class="box" width="320" height="316"/>
+    <path class="head" d="M10,0 H310 A10,10 0 0 1 320,10 V42 H0 V10 A10,10 0 0 1 10,0 Z"/>
+    <text class="title" x="18" y="28">workflow_state</text>
+    <text class="field" x="18" y="68">PK  id</text>
+    <text class="field" x="18" y="92">FK  execution_id</text>
+    <text class="field" x="18" y="116">UQ  execution_id + sequence_number</text>
+    <text class="field" x="18" y="140">UQ  execution_id + node_name + attempt</text>
+    <text class="field" x="18" y="164">    node_name / attempt / status</text>
+    <text class="field" x="18" y="188">    started_at / ended_at</text>
+    <text class="field" x="18" y="212">    evidence JSONB[]</text>
+    <text class="field" x="18" y="236">    decision JSONB object?</text>
+    <text class="field" x="18" y="260">    state_snapshot JSONB object?</text>
+    <text class="note" x="18" y="294">Ordered node-attempt history</text>
+  </g>
+
+  <!-- approvals -->
+  <g transform="translate(70 690)">
+    <rect class="box" width="355" height="250"/>
+    <path class="head" d="M10,0 H345 A10,10 0 0 1 355,10 V42 H0 V10 A10,10 0 0 1 10,0 Z"/>
+    <text class="title" x="18" y="28">approvals</text>
+    <text class="field" x="18" y="68">PK  id</text>
+    <text class="field" x="18" y="92">FK  execution_id</text>
+    <text class="field" x="18" y="116">FK? workflow_state_id</text>
+    <text class="field" x="18" y="140">    decision / decided_by</text>
+    <text class="field" x="18" y="164">    reason</text>
+    <text class="field" x="18" y="188">    evidence JSONB?</text>
+    <text class="field" x="18" y="212">    decided_at</text>
+    <text class="note" x="18" y="238">Immutable: UPDATE/DELETE rejected</text>
+  </g>
+
+  <!-- failures -->
+  <g transform="translate(525 690)">
+    <rect class="box" width="365" height="274"/>
+    <path class="head" d="M10,0 H355 A10,10 0 0 1 365,10 V42 H0 V10 A10,10 0 0 1 10,0 Z"/>
+    <text class="title" x="18" y="28">failures</text>
+    <text class="field" x="18" y="68">PK  failure_id</text>
+    <text class="field" x="18" y="92">FK  execution_id</text>
+    <text class="field" x="18" y="116">FK? workflow_state_id</text>
+    <text class="field" x="18" y="140">    attempt / failure_type</text>
+    <text class="field" x="18" y="164">    error_code / message</text>
+    <text class="field" x="18" y="188">    details JSONB?</text>
+    <text class="field" x="18" y="212">    retryable</text>
+    <text class="field" x="18" y="236">    occurred_at</text>
+    <text class="note" x="18" y="262">Append-oriented failure history</text>
+  </g>
+
+  <!-- retry -->
+  <g transform="translate(1000 655)">
+    <rect class="box" width="350" height="326"/>
+    <path class="head" d="M10,0 H340 A10,10 0 0 1 350,10 V42 H0 V10 A10,10 0 0 1 10,0 Z"/>
+    <text class="title" x="18" y="28">retry_state</text>
+    <text class="field" x="18" y="68">PK  retry_state_id</text>
+    <text class="field" x="18" y="92">FK/UQ execution_id</text>
+    <text class="field" x="18" y="116">FK? last_failure_id</text>
+    <text class="field" x="18" y="140">    state</text>
+    <text class="field" x="18" y="164">    attempt_count / max_attempts</text>
+    <text class="field" x="18" y="188">    next_retry_at</text>
+    <text class="field" x="18" y="212">    last_attempt_at</text>
+    <text class="field" x="18" y="236">    backoff_seconds</text>
+    <text class="field" x="18" y="260">    created_at / updated_at</text>
+    <text class="note" x="18" y="294">Current retry-control state</text>
+  </g>
+
+  <!-- relationships -->
+  <path class="rel" d="M390 185 H535"/>
+  <text class="label" x="460" y="174" text-anchor="middle">1 → 0..1</text>
+
+  <path class="rel" d="M222 325 V405"/>
+  <text class="label" x="246" y="370">1 → 0..1</text>
+
+  <path class="rel" d="M900 210 H1030"/>
+  <text class="label" x="965" y="199" text-anchor="middle">1 → 0..*</text>
+
+  <path class="rel" d="M625 397 V600 H247 V690"/>
+  <text class="label" x="435" y="590" text-anchor="middle">execution 1 → approvals 0..*</text>
+
+  <path class="rel" d="M718 397 V690"/>
+  <text class="label" x="730" y="550">1 → 0..*</text>
+
+  <path class="rel" d="M810 397 V570 H1175 V655"/>
+  <text class="label" x="1000" y="559" text-anchor="middle">execution 1 → retry 0..1</text>
+
+  <path class="opt" d="M1100 421 V520 H380 V690"/>
+  <text class="label" x="720" y="510" text-anchor="middle">optional same-execution workflow node</text>
+
+  <path class="opt" d="M1245 421 V610 H820 V690"/>
+  <text class="label" x="1030" y="600" text-anchor="middle">optional same-execution workflow node</text>
+
+  <path class="opt" d="M890 850 H1000"/>
+  <text class="label" x="945" y="839" text-anchor="middle">0..1 latest failure</text>
+
+  <!-- legend -->
+  <g transform="translate(440 985)">
+    <rect class="legend" width="520" height="42"/>
+    <path class="rel" d="M18 14 H90"/>
+    <text class="note" x="102" y="19">required ownership FK</text>
+    <path class="opt" d="M290 14 H362"/>
+    <text class="note" x="374" y="19">optional reference FK</text>
+  </g>
+</svg>
