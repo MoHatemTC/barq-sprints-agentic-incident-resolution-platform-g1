@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class OAuthTokenResponse(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     access_token: str
     token_type: str = "Bearer"
     expires_in: int

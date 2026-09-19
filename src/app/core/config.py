@@ -1,3 +1,5 @@
+import os
+import sys
 from enum import StrEnum
 from functools import lru_cache
 from importlib.metadata import PackageNotFoundError, version
@@ -12,6 +14,12 @@ class Environment(StrEnum):
     PRODUCTION = "production"
 
 
+class RetrievalMode(StrEnum):
+    DENSE_ONLY = "dense_only"
+    HYBRID = "hybrid"
+    HYBRID_RERANKED = "hybrid_reranked"
+
+
 def _get_version() -> str:
     try:
         return version("barq-sprints-agentic-incident-resolution-platform-g1")
@@ -19,11 +27,17 @@ def _get_version() -> str:
         return "0.1.0"
 
 
+_RUNNING_UNDER_PYTEST = "pytest" in sys.modules
+_IGNORE_DOTENV = _RUNNING_UNDER_PYTEST and os.environ.get("SERVICENOW_LIVE_TESTS") != "1"
+_ENV_FILE = None if _IGNORE_DOTENV else ".env"
+
+
 class RetrievalSettings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=_ENV_FILE,
         env_file_encoding="utf-8",
         extra="ignore",
+        hide_input_in_errors=True,
     )
 
     # Qdrant
@@ -37,12 +51,42 @@ class RetrievalSettings(BaseSettings):
     dense_embedding_model: str = "BAAI/bge-small-en-v1.5"
     sparse_embedding_model: str = "Qdrant/bm25"
 
+    # Retrieval
+    retrieval_mode: RetrievalMode = RetrievalMode.HYBRID_RERANKED
+    rerank_model: str = "Xenova/ms-marco-MiniLM-L-6-v2"
+    rerank_top_k: int = 5
+    rerank_candidate_limit: int = 20  # must be larger than rerank_top_k
+
+    @field_validator("rerank_candidate_limit")
+    @classmethod
+    def validate_candidate_limit(cls, v: int, info) -> int:
+        top_n = info.data.get("rerank_top_n", 5)
+        if v < top_n:
+            raise ValueError(f"rerank_candidate_limit ({v}) must be >= rerank_top_n ({top_n})")
+        return v
+
 
 class Settings(RetrievalSettings):
+    # No model_config here on purpose. It is inherited from RetrievalSettings, and
+    # re-declaring it hard-codes env_file=".env" on the subclass. #77 makes the base
+    # class use env_file=None under pytest so unit tests cannot read a developer's
+    # .env; a subclass override wins over that, so Settings would still load .env
+    # during tests and silently undo #77's isolation. hide_input_in_errors, which is
+    # what this PR needs, applies from the base class.
     app_name: str = "incident-resolution-platform"
     app_version: str = Field(default_factory=_get_version)
     log_level: str = "INFO"
     environment: Environment = Environment.DEVELOPMENT
+
+    # Feature Flags
+    active_feature_flags: dict[str, bool] = Field(
+        default_factory=lambda: {
+            "hitl_approvals": True,
+            "dlq_replay": True,
+            "eval_benchmarks": False,
+            "auto_remediation": False,
+        }
+    )
 
     # Host & Network Binding (Security)
     bind_ip: str = "127.0.0.1"
@@ -71,6 +115,12 @@ class Settings(RetrievalSettings):
         description="Target Knowledge Base sys_id for KB publishing",
     )
 
+    # WebHook
+    webhook_auth_token: str = Field(
+        default="dev-webhook-secret-token",
+        description="Bearer token for webhook authentication",
+    )
+
     # PostgreSQL
     postgres_host: str = "localhost"
     postgres_port: int = 5432
@@ -82,6 +132,20 @@ class Settings(RetrievalSettings):
     redis_host: str = "localhost"
     redis_port: int = 6379
     redis_password: SecretStr | None = None
+
+    # Langfuse Tracing (optional — integration is disabled when keys are absent)
+    langfuse_public_key: str | None = Field(
+        default=None,
+        description="Langfuse project public key (tracing disabled when absent)",
+    )
+    langfuse_secret_key: SecretStr | None = Field(
+        default=None,
+        description="Langfuse project secret key (tracing disabled when absent)",
+    )
+    langfuse_host: str = Field(
+        default="https://cloud.langfuse.com",
+        description="Langfuse server URL",
+    )
 
     @field_validator("servicenow_instance_url")
     @classmethod

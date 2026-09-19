@@ -57,63 +57,66 @@ class ServiceNowTokenManager:
 
     async def _fetch_access_token(self) -> None:
         """Fetches a new access token using the configured password grant."""
-        form = {
-            "grant_type": "password",
-            "client_id": self._settings.servicenow_client_id,
-            "client_secret": self._settings.servicenow_client_secret.get_secret_value(),
-            "username": self._settings.servicenow_username,
-            "password": self._settings.servicenow_password.get_secret_value(),
-        }
-        await self._send_token_request(form)
+        await self._send_token_request(grant_type="password")
 
     async def _refresh_access_token(self) -> None:
-        """
-        Refreshes the access token using the refresh token.
-        """
-        form = {
-            "grant_type": "refresh_token",
-            "client_id": self._settings.servicenow_client_id,
-            "client_secret": self._settings.servicenow_client_secret.get_secret_value(),
-            "refresh_token": self._refresh_token or "",
-        }
+        """Refreshes the access token using the refresh token."""
         try:
-            await self._send_token_request(form)
+            await self._send_token_request(grant_type="refresh_token")
         except ServiceNowAuthenticationError:
-            # If refresh fails, purge token state and surface auth error
             self._token = None
             self._refresh_token = None
             self._expires_at = None
             raise
 
-    async def _send_token_request(self, form: dict) -> None:
+    def _build_form_data(self, grant_type: str) -> dict[str, str]:
+        """Builds form payload without retaining secrets."""
+        if grant_type == "password":
+            return {
+                "grant_type": "password",
+                "client_id": self._settings.servicenow_client_id,
+                "client_secret": self._settings.servicenow_client_secret.get_secret_value(),
+                "username": self._settings.servicenow_username,
+                "password": self._settings.servicenow_password.get_secret_value(),
+            }
+        elif grant_type == "refresh_token":
+            return {
+                "grant_type": "refresh_token",
+                "client_id": self._settings.servicenow_client_id,
+                "client_secret": self._settings.servicenow_client_secret.get_secret_value(),
+                "refresh_token": self._refresh_token or "",
+            }
+        else:
+            raise ValueError(f"Unsupported grant_type: {grant_type!r}")
+
+    async def _send_token_request(self, *, grant_type: str) -> None:
         url = f"{self._settings.servicenow_instance_url}/oauth_token.do"
         try:
             response = await self._http.post(
                 url,
-                data=form,
+                data=self._build_form_data(grant_type),
                 headers={"Content-Type": "application/x-www-form-urlencoded"},
                 timeout=self._settings.servicenow_timeout_seconds,
             )
-        except httpx.TimeoutException as exc:
+        except httpx.TimeoutException:
             raise ServiceNowTimeoutError(
                 f"Timed out requesting OAuth token from {url} after "
                 f"{self._settings.servicenow_timeout_seconds} seconds"
-            ) from exc
-        except httpx.ConnectError as exc:
+            ) from None
+        except httpx.ConnectError:
             raise ServiceNowConnectionError(
                 "Could not connect to ServiceNow OAuth endpoint"
-            ) from exc
-        except httpx.TransportError as exc:
+            ) from None
+        except httpx.TransportError:
             raise ServiceNowConnectionError(
                 "Transport error while requesting OAuth token from ServiceNow"
-            ) from exc
+            ) from None
 
         if response.status_code != status.HTTP_200_OK:
             logger.error(
                 "ServiceNow OAuth token request failed",
                 status_code=response.status_code,
             )
-            # Secrets and response text excluded from exception to prevent log leaks
             raise ServiceNowAuthenticationError(
                 f"ServiceNow rejected OAuth token request with status {response.status_code}",
                 status_code=response.status_code,
@@ -128,7 +131,6 @@ class ServiceNowTokenManager:
             ) from exc
 
         self._token = token.access_token
-
         if token.refresh_token:
             self._refresh_token = token.refresh_token
         self._expires_at = token.expires_at
