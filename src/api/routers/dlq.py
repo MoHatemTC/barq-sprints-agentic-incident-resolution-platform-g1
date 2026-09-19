@@ -158,7 +158,7 @@ async def replay_dlq_event(
         except ServiceUnavailableError:
             raise
         except Exception as exc:
-            logger.error("dlq_replay_redis_error", event_id=event_id, error=str(exc))
+            logger.exception("dlq_replay_redis_error", event_id=event_id, error=str(exc))
             raise ServiceUnavailableError(
                 "Redis queue service unavailable for DLQ replay."
             ) from exc

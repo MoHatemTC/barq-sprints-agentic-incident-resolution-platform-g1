@@ -66,7 +66,7 @@ async def ingest_incident_webhook(
     except MissingGreenlet:
         raise
     except (SQLAlchemyError, ConnectionError, TimeoutError, OSError) as exc:
-        logger.error(
+        logger.exception(
             "database_persistence_failed",
             event_id=payload.event_id,
             error=str(exc),
@@ -90,7 +90,7 @@ async def ingest_incident_webhook(
         try:
             await redis_client.lpush(INCIDENT_EVENTS_QUEUE, payload.model_dump_json())
         except Exception as exc:
-            logger.error(
+            logger.exception(
                 "redis_enqueue_failed",
                 event_id=payload.event_id,
                 error=str(exc),

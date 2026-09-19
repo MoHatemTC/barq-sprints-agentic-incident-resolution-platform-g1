@@ -52,7 +52,7 @@ async def get_execution(
     except MissingGreenlet:
         raise
     except SQLAlchemyError as exc:
-        logger.error("database_query_failed", execution_id=str(execution_id), error=str(exc))
+        logger.exception("database_query_failed", execution_id=str(execution_id), error=str(exc))
         raise ServiceUnavailableError("Database unavailable to retrieve execution.") from exc
 
     if not execution:
@@ -78,7 +78,7 @@ async def get_execution_trace(
     except MissingGreenlet:
         raise
     except SQLAlchemyError as exc:
-        logger.error("database_query_failed", execution_id=str(execution_id), error=str(exc))
+        logger.exception("database_query_failed", execution_id=str(execution_id), error=str(exc))
         raise ServiceUnavailableError("Database unavailable to retrieve execution.") from exc
 
     if not execution:
@@ -95,7 +95,7 @@ async def get_execution_trace(
     except MissingGreenlet:
         raise
     except SQLAlchemyError as exc:
-        logger.error("database_query_failed", execution_id=str(execution_id), error=str(exc))
+        logger.exception("database_query_failed", execution_id=str(execution_id), error=str(exc))
         raise ServiceUnavailableError(
             "Database unavailable to retrieve execution trace nodes."
         ) from exc
@@ -135,7 +135,7 @@ async def list_incident_executions(
     except MissingGreenlet:
         raise
     except SQLAlchemyError as exc:
-        logger.error("database_query_failed", sys_id=sys_id, error=str(exc))
+        logger.exception("database_query_failed", sys_id=sys_id, error=str(exc))
         raise ServiceUnavailableError("Database unavailable to list incident executions.") from exc
 
     executions = [ExecutionResponse.model_validate(row) for row in rows]
