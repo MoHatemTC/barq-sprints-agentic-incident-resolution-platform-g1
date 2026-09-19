@@ -161,3 +161,94 @@ def test_journal_genuinely_blocked_still_passes() -> None:
 
     assert result.verdict == "PASS"
     assert result.persisted_change is False
+
+
+# ---------------------------------------------------------------------------
+# DENY-02: a reference field never reads back as the value that was sent
+# ---------------------------------------------------------------------------
+
+
+def test_scalar_reference_field_change_is_detected() -> None:
+    """A changed reference field is a FAIL even though it reads back as a sys_id."""
+    module = _load_module()
+    reads = iter(["", "6816f79cc0a8016401c5a33be04be441"])
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":
+            return httpx.Response(200, json={"result": {"assigned_to": next(reads)}})
+        return httpx.Response(200, json={"result": {}})
+
+    with _client(handler) as client:
+        result = module._forbidden_scalar(client, {}, INC, "DENY-02", "assigned_to", "admin")
+
+    assert result.verdict == "FAIL", "a persisted write must not be reported as blocked"
+    assert result.persisted_change is True
+    assert "SECURITY FAILURE" in result.notes
+
+
+def test_scalar_unchanged_reference_field_still_passes() -> None:
+    """A refused write is a PASS."""
+    module = _load_module()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":
+            return httpx.Response(200, json={"result": {"assigned_to": "unchanged"}})
+        return httpx.Response(403, json={"error": "ACL"})
+
+    with _client(handler) as client:
+        result = module._forbidden_scalar(client, {}, INC, "DENY-02", "assigned_to", "admin")
+
+    assert result.verdict == "PASS"
+    assert result.persisted_change is False
+
+
+# ---------------------------------------------------------------------------
+# LOG-05: a 404 on DELETE is what a *successful* delete looks like
+# ---------------------------------------------------------------------------
+
+
+def _log_handler(delete_status: int, verify_status: int) -> Any:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            return httpx.Response(201, json={"result": {"sys_id": "log-row-1"}})
+        if request.method == "DELETE":
+            return httpx.Response(delete_status, json={})
+        if verify_status == 200:
+            return httpx.Response(200, json={"result": {"sys_id": "log-row-1"}})
+        return httpx.Response(verify_status, json={"error": "not found"})
+
+    return handler
+
+
+def test_log_delete_that_removed_the_record_is_a_failure() -> None:
+    """The record is gone, so the delete was not blocked - whatever DELETE returned."""
+    module = _load_module()
+
+    with _client(_log_handler(delete_status=404, verify_status=404)) as client:
+        result = module._test_log_delete_forbidden(client, {}, INC)
+
+    assert result.verdict == "FAIL", "a 404 on DELETE is not evidence the ACL held"
+    assert "SECURITY FAILURE" in result.notes
+
+
+def test_log_delete_refused_with_record_present_passes() -> None:
+    """A 403 with the record still present is a PASS."""
+    module = _load_module()
+
+    with _client(_log_handler(delete_status=403, verify_status=200)) as client:
+        result = module._test_log_delete_forbidden(client, {}, INC)
+
+    assert result.verdict == "PASS"
+    assert "still present" in result.notes
+
+
+@pytest.mark.parametrize("verify_status", [401, 403, 500])
+def test_log_delete_unreadable_verification_is_a_failure(verify_status: int) -> None:
+    """Not being allowed to look is not evidence the record survived."""
+    module = _load_module()
+
+    with _client(_log_handler(delete_status=403, verify_status=verify_status)) as client:
+        result = module._test_log_delete_forbidden(client, {}, INC)
+
+    assert result.verdict == "FAIL"
+    assert "INCONCLUSIVE" in result.notes

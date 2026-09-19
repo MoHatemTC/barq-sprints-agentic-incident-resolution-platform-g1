@@ -6,20 +6,31 @@ readme = "README.md"
 requires-python = ">=3.12"
 
 dependencies = [
+    "alembic>=1.14,<2",
+    "asyncpg>=0.30,<1",
     # Imported directly by src/app/retrieval/extraction.py. It arrived only as a
     # markdownify transitive before, so a markdownify change could have broken imports.
+    "asyncpg>=0.29.0",
     "beautifulsoup4>=4.12.3",
     "fastapi>=0.141.1",
     "fastembed>=0.8.0",
+    # SQLAlchemy's implicit greenlet marker omits macOS arm64. Async engine/session
+    # cleanup still imports it, so declare the runtime dependency explicitly.
+    "greenlet>=3.2,<4",
     "httpx>=0.28.1",
     "langchain-text-splitters>=1.1.2",
     "markdownify>=1.2.3",
     "pydantic>=2.13.5",
     "pydantic-settings>=2.15.0",
     "python-dotenv>=1.2.3",
+    # Must match the Qdrant server image in docker-compose.yml; bump both together.
+    # Enforced by tests/repo/test_qdrant_client_server_pin.py.
     "qdrant-client>=1.14,<1.15",
+    "redis>=5.0.0",
+    "sqlalchemy>=2.0,<3",
     "structlog>=26.1.0",
     "uvicorn[standard]>=0.52.4",
+    "langfuse>=4.15.4",
 ]
 
 [dependency-groups]
@@ -43,7 +54,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/app", "src/retrieval"]
+packages = ["src/app", "src/retrieval", "src/api", "src/db"]
 
 [tool.ruff]
 line-length = 100
@@ -67,6 +78,11 @@ indent-style = "space"
 testpaths = ["tests"]
 asyncio_mode = "auto"
 pythonpath = ["src"]
+markers = [
+    "unit: fast isolated tests using mocks/fakes (default suite)",
+    "integration: exercises real PostgreSQL/Redis; skips when infrastructure is unreachable",
+    "load: latency/load benchmarks; run explicitly via tests/load/run_load_test.py",
+]
 
 [tool.mypy]
 python_version = "3.12"
@@ -79,4 +95,3 @@ source = ["src/app", "src/retrieval"]
 
 [tool.coverage.report]
 show_missing = true
-

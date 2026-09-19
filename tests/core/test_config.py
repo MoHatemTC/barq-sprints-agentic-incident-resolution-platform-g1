@@ -1,5 +1,7 @@
 """Tests for retrieval configuration independence (RetrievalSettings)."""
 
+import os
+
 import pytest
 from pydantic import ValidationError
 
@@ -24,14 +26,17 @@ def test_retrieval_settings_independent_of_servicenow() -> None:
     assert settings.qdrant_collection_name == "incident_knowledge_base"
 
 
-def test_retrieval_settings_ignores_local_dotenv(tmp_path, monkeypatch):
-    """A hostile .env in the repo root must not leak into unit-test settings."""
+def test_retrieval_settings_dotenv_policy(tmp_path, monkeypatch):
+    """Unit runs ignore a local .env; live runs (SERVICENOW_LIVE_TESTS=1) read it on purpose."""
     monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("QDRANT_COLLECTION_NAME", raising=False)
     (tmp_path / ".env").write_text("QDRANT_COLLECTION_NAME=team_kb_prod\n")
 
     settings = RetrievalSettings()
 
-    assert settings.qdrant_collection_name == "incident_knowledge_base"
+    live = os.environ.get("SERVICENOW_LIVE_TESTS") == "1"
+    expected = "team_kb_prod" if live else "incident_knowledge_base"
+    assert settings.qdrant_collection_name == expected
 
 
 def test_live_settings_with_incomplete_credentials_are_not_ready(tmp_path, monkeypatch) -> None:

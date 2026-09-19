@@ -64,9 +64,23 @@ class ServiceNowClient:
     async def __aexit__(self, *exc_info: object) -> None:
         await self.aclose()
 
+    @staticmethod
+    def _parse_incident(result: Any, sys_id: str) -> Incident:
+        """Validate a Table API record; raise ServiceNowValidationError if it does not fit."""
+        try:
+            return Incident.model_validate(result)
+        except ValidationError as exc:
+            raise ServiceNowValidationError(
+                f"Incident {sys_id} could not be parsed: the stored record does not "
+                f"match the expected field model ({exc.error_count()} validation "
+                "error(s)). The record may predate the current field model, or a "
+                "choice value may have been added on the instance.",
+                details={"sys_id": sys_id, "errors": exc.errors()},
+            ) from None
+
     async def get_incident(self, sys_id: str) -> Incident:
         result = await self._request("GET", f"/api/now/table/incident/{sys_id}")
-        return Incident.model_validate(result)
+        return self._parse_incident(result, sys_id)
 
     async def find_incident_by_number(self, number: str) -> Incident | None:
         if not _INCIDENT_NUMBER_RE.fullmatch(number):
@@ -86,7 +100,7 @@ class ServiceNowClient:
                 f"ServiceNow returned {len(incidents)}",
                 details={"number": number, "count": len(incidents)},
             )
-        return Incident.model_validate(incidents[0])
+        return self._parse_incident(incidents[0], str(incidents[0].get("sys_id", number)))
 
     async def update_incident(
         self,
@@ -107,6 +121,21 @@ class ServiceNowClient:
                 details={"sys_id": sys_id, "ai_human_lock": state},
             )
 
+        # Start and end are written in separate updates, so check end against the stored start.
+        if payload.ai_processing_end is not None and payload.ai_processing_start is None:
+            stored_start = current_incident.ai_processing_start
+            if stored_start is not None and payload.ai_processing_end < stored_start:
+                raise ServiceNowValidationError(
+                    f"Incident {sys_id}: ai_processing_end "
+                    f"{payload.ai_processing_end.isoformat()} precedes the stored "
+                    f"ai_processing_start {stored_start.isoformat()}.",
+                    details={
+                        "sys_id": sys_id,
+                        "ai_processing_end": payload.ai_processing_end.isoformat(),
+                        "stored_ai_processing_start": stored_start.isoformat(),
+                    },
+                )
+
         body = payload.to_table_api_body()
 
         result = await self._request(
@@ -115,7 +144,7 @@ class ServiceNowClient:
             json=body,
         )
 
-        returned_incident = Incident.model_validate(result)
+        returned_incident = self._parse_incident(result, sys_id)
 
         self._verify_write_persisted(
             requested=body,

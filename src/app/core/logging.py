@@ -41,6 +41,7 @@ def configure_logging(
     logging.basicConfig(level=logging.WARNING, format="%(message)s")
 
     processors: list[Processor] = [
+        structlog.contextvars.merge_contextvars,
         structlog.stdlib.add_log_level,
         structlog.processors.TimeStamper(fmt="iso", utc=True),
         redact_sensitive_data,
