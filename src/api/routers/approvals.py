@@ -72,7 +72,7 @@ async def list_approvals(
     except MissingGreenlet:
         raise
     except SQLAlchemyError as exc:
-        logger.error("database_query_failed", error=str(exc))
+        logger.exception("database_query_failed", error=str(exc))
         raise ServiceUnavailableError("Database unavailable to query approvals.") from exc
 
     return [ApprovalResponse.model_validate(row) for row in approvals]
@@ -95,7 +95,7 @@ async def get_approval(
     except MissingGreenlet:
         raise
     except SQLAlchemyError as exc:
-        logger.error("database_query_failed", approval_id=str(id), error=str(exc))
+        logger.exception("database_query_failed", approval_id=str(id), error=str(exc))
         raise ServiceUnavailableError("Database unavailable to retrieve approval.") from exc
 
     if not approval:
@@ -168,7 +168,7 @@ async def decide_approval(
     except (ConflictError, MissingGreenlet):
         raise
     except SQLAlchemyError as exc:
-        logger.error("database_operation_failed", approval_id=str(id), error=str(exc))
+        logger.exception("database_operation_failed", approval_id=str(id), error=str(exc))
         raise ServiceUnavailableError("Database unavailable to record approval decision.") from exc
 
     if resolved_approval is not None:

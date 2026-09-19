@@ -142,7 +142,7 @@ def replay_dlq_event(
     except (ResourceNotFoundError, ConflictError, ServiceUnavailableError):
         raise
     except Exception as exc:
-        logger.error("dlq_replay_failed", event_id=event_id, error=str(exc))
+        logger.exception("dlq_replay_failed", event_id=event_id, error=str(exc))
         raise ServiceUnavailableError("Redis queue service unavailable for DLQ replay.") from exc
 
     if not outcome.replayed:

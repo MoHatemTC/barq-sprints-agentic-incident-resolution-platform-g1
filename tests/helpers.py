@@ -31,6 +31,8 @@ def mock_settings(**overrides: object) -> Settings:
         "redis_host": "localhost",
         "redis_port": 6379,
         "redis_password": "test_redis_password",
+        "langfuse_public_key": None,
+        "langfuse_secret_key": None,
     }
     defaults.update(overrides)
     return Settings(**defaults)  # type: ignore[arg-type]

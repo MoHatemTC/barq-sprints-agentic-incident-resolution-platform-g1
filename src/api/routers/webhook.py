@@ -62,7 +62,7 @@ async def ingest_incident_webhook(
     except MissingGreenlet:
         raise
     except (SQLAlchemyError, ConnectionError, TimeoutError, OSError) as exc:
-        logger.error(
+        logger.exception(
             "database_persistence_failed",
             event_id=payload.event_id,
             error=str(exc),
@@ -92,7 +92,7 @@ async def ingest_incident_webhook(
                 str(acceptance.execution_id),
             )
         except Exception as exc:
-            logger.error(
+            logger.exception(
                 "event_enqueue_failed",
                 event_id=payload.event_id,
                 error=str(exc),
