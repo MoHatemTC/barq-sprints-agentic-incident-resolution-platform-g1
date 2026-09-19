@@ -83,7 +83,9 @@ async def _post_valid(client: AsyncClient):
 # Authentication
 # ---------------------------------------------------------------------------
 @pytest.mark.asyncio
-async def test_missing_authorization_returns_401_envelope_without_token_leak(client) -> None:
+async def test_missing_authorization_returns_401_envelope_without_token_leak(
+    client,
+) -> None:
     resp = await client.post("/api/v1/webhook/incident", json=VALID_PAYLOAD)
 
     assert resp.status_code == 401
@@ -191,7 +193,9 @@ async def test_extra_fields_are_rejected_not_silently_ignored(client) -> None:
 
 
 @pytest.mark.asyncio
-async def test_unsupported_contract_versions_rejected_with_distinct_code(client) -> None:
+async def test_unsupported_contract_versions_rejected_with_distinct_code(
+    client,
+) -> None:
     for version in ["v2", "v2-draft", "v1.1", "unknown", "", "V1"]:
         payload = {**VALID_PAYLOAD, "contract_version": version}
         resp = await client.post("/api/v1/webhook/incident", json=payload, headers=AUTH)
@@ -239,7 +243,9 @@ async def test_valid_payload_returns_202_with_documented_ack_schema(client) -> N
 
 
 @pytest.mark.asyncio
-async def test_event_persisted_and_enqueued_to_barq_incident_events(app_with_mocks) -> None:
+async def test_event_persisted_and_enqueued_to_barq_incident_events(
+    app_with_mocks,
+) -> None:
     app, _, mock_redis = app_with_mocks
     with patch("api.routers.webhook.accept_inbound_event", new_callable=AsyncMock) as mock_accept:
         mock_accept.return_value = _accepted()
@@ -275,7 +281,7 @@ async def test_zero_downstream_execution_on_request_thread(app_with_mocks) -> No
             return_value=_accepted(),
         ),
         patch("app.clients.qdrant.get_qdrant_client") as mock_qdrant,
-        patch("app.retrieval.search.retrieve_knowledge") as mock_retrieve,
+        patch("app.retrieval.hybrid_search.timed_hybrid_search") as mock_retrieve,
         patch("app.clients.servicenow_client.ServiceNowClient") as mock_servicenow,
     ):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
@@ -315,7 +321,9 @@ async def test_db_failure_returns_503_and_skips_enqueue(app_with_mocks) -> None:
 
 
 @pytest.mark.asyncio
-async def test_endpoint_waits_for_delayed_persistence_before_responding(app_with_mocks) -> None:
+async def test_endpoint_waits_for_delayed_persistence_before_responding(
+    app_with_mocks,
+) -> None:
     """The 202 may only be returned after the (bounded) persistence completes."""
     app, _, mock_redis = app_with_mocks
     order: list[str] = []
@@ -487,7 +495,9 @@ async def test_health_returns_200_liveness(client) -> None:
 
 
 @pytest.mark.asyncio
-async def test_ready_200_when_up_and_503_with_degraded_components(app_with_mocks) -> None:
+async def test_ready_200_when_up_and_503_with_degraded_components(
+    app_with_mocks,
+) -> None:
     app, _, mock_redis = app_with_mocks
 
     def _engine(healthy: bool) -> MagicMock:
@@ -524,7 +534,11 @@ async def test_ready_200_when_up_and_503_with_degraded_components(app_with_mocks
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         ok = await ac.get("/ready")
         assert ok.status_code == 200
-        assert ok.json() == {"status": "ready", "database": "connected", "redis": "connected"}
+        assert ok.json() == {
+            "status": "ready",
+            "database": "connected",
+            "redis": "connected",
+        }
 
         for label, (engine, redis, db_state, redis_state) in scenarios.items():
             app.state.engine = engine
@@ -554,13 +568,15 @@ def _integration_settings():
             postgres_host=real.postgres_host,
             postgres_port=real.postgres_port,
             postgres_user=real.postgres_user,
-            postgres_password=real.postgres_password.get_secret_value()
-            if real.postgres_password
-            else "",
+            postgres_password=(
+                real.postgres_password.get_secret_value() if real.postgres_password else ""
+            ),
             postgres_db=TEST_DB_NAME,
             redis_host=real.redis_host,
             redis_port=real.redis_port,
-            redis_password=real.redis_password.get_secret_value() if real.redis_password else None,
+            redis_password=(
+                real.redis_password.get_secret_value() if real.redis_password else None
+            ),
         )
     except Exception:
         return mock_settings(webhook_auth_token=h.WEBHOOK_TOKEN, postgres_db=TEST_DB_NAME)
@@ -599,7 +615,8 @@ async def _ensure_database(settings) -> None:
     try:
         async with engine.connect() as conn:
             exists = await conn.scalar(
-                text("SELECT 1 FROM pg_database WHERE datname = :name"), {"name": TEST_DB_NAME}
+                text("SELECT 1 FROM pg_database WHERE datname = :name"),
+                {"name": TEST_DB_NAME},
             )
             if not exists:
                 await conn.execute(text(f'CREATE DATABASE "{TEST_DB_NAME}"'))
@@ -699,7 +716,9 @@ def _integration_payload() -> dict:
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_integration_event_persisted_and_enqueued_end_to_end(integration_app) -> None:
+async def test_integration_event_persisted_and_enqueued_end_to_end(
+    integration_app,
+) -> None:
     client, engine, redis = integration_app
     payload = _integration_payload()
 
@@ -724,7 +743,13 @@ async def test_integration_event_persisted_and_enqueued_end_to_end(integration_a
         key_count = await conn.scalar(sa.text("SELECT COUNT(*) FROM idempotency_keys"))
 
     assert event_row == [
-        (payload["event_id"], payload["sys_id"], payload["number"], payload["event_type"], "v1")
+        (
+            payload["event_id"],
+            payload["sys_id"],
+            payload["number"],
+            payload["event_type"],
+            "v1",
+        )
     ]
     assert execution_statuses == ["accepted"]
     assert key_count == 1
@@ -736,7 +761,9 @@ async def test_integration_event_persisted_and_enqueued_end_to_end(integration_a
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_integration_concurrent_duplicates_single_row_single_enqueue(integration_app) -> None:
+async def test_integration_concurrent_duplicates_single_row_single_enqueue(
+    integration_app,
+) -> None:
     """EC-01 proof against real PostgreSQL: 10 concurrent same-event_id requests."""
     import sqlalchemy as sa
 
