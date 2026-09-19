@@ -73,14 +73,15 @@ def _mandatory_filter(extra: Filter | None, max_security_level: SecurityLevel) -
     )
 
 
-#: Extra relevance an out-of-category article must carry to be treated as evidence.
+#: Extra relevance an out-of-category article must carry to count as evidence.
 #:
-#: The fallback searches the whole corpus, so its best hit is by construction at
-#: least as strong as the category pass's — including for queries with no answer
-#: anywhere. Holding it to a stricter bar keeps the §11.7 evidence gate honest:
-#: recall improves for a misclassified incident without lowering the standard of
-#: proof for one that simply has no article.
-FALLBACK_EVIDENCE_MARGIN = 0.1
+#: Both searches run, so every incident now sees the whole corpus — including ones
+#: no article covers, whose nearest match is by construction stronger than it was
+#: under the category filter. Out-of-category hits therefore have to clear a higher
+#: bar before they satisfy the §11.7 gate. They are still handed to the model either
+#: way: being visible to ``verify_evidence`` is what fixes the misclassification, and
+#: the gate is what stops a junk match becoming a draft.
+OUT_OF_CATEGORY_EVIDENCE_MARGIN = 0.1
 
 #: Classification label → corpus category (inverse of the S1.4 mapping, #70).
 CLASSIFICATION_TO_CORPUS_CATEGORY: dict[Classification, str] = {
@@ -170,68 +171,64 @@ class QdrantRetriever:
     ) -> RetrievalResult:
         engine = _MemoEngine(self._engine_factory())
         started = time.perf_counter()
-        passes = self._passes(classification, incident_category)
+        categories = search_categories(classification, incident_category)
 
         def result(
-            label: str | None, items: list[EvidenceItem], best: float, *, sufficient: bool
+            label: str | None,
+            items: list[EvidenceItem],
+            *,
+            sufficient: bool,
         ) -> RetrievalResult:
             return RetrievalResult(
                 query=query,
                 category_filter=label,
                 hits=items,
-                best_relevance=best,
+                best_relevance=max((item.relevance for item in items), default=0.0),
                 threshold=threshold,
                 sufficient=sufficient,
                 latency_ms=round((time.perf_counter() - started) * 1000, 2),
             )
 
-        if not passes:
-            return result(None, [], 0.0, sufficient=False)
-
-        label, extra = passes[0]
-        items, best = self._one_pass(query, extra, top_k=top_k, engine=engine)
-        if items and best >= threshold:
-            return result(label, items, best, sufficient=True)
-
-        # The predicted category yielded nothing sufficient. Search the whole
-        # published, in-tier corpus before concluding there is no evidence.
-        wide_items, wide_best = self._one_pass(query, None, top_k=top_k, engine=engine)
-        if wide_items and wide_best >= threshold + FALLBACK_EVIDENCE_MARGIN:
-            return result(None, wide_items, wide_best, sufficient=True)
-
-        # Neither pass cleared its bar. Report the category pass: it is the
-        # search the classification asked for, and the wider one only confirmed
-        # that nothing better exists.
-        return result(label, items, best, sufficient=False)
-
-    def _passes(
-        self, classification: Classification, incident_category: str | None
-    ) -> list[tuple[str | None, Filter | None]]:
-        """The searches to try, in order, stopping at the first sufficient one.
-
-        The category pass goes first because it is the measured baseline: when the
-        label is right it is the most precise search we have. It is *not* the only
-        pass, because the label comes from the model. A misclassification used to
-        hide the correct article entirely — an Outlook fault labelled ``network``
-        returned KB0003 at 0.67 while KB0002 sat unreachable at 0.90 (observed on
-        dev407364, 2026-09-20). Topical metadata is a hint; only ``workflow_state``
-        and ``security_level`` are governance gates, and those stay mandatory on
-        every pass through :func:`_mandatory_filter`.
-        """
-        categories = search_categories(classification, incident_category)
         if not categories:
             # No corpus category covers this label (security, other). An unfiltered
             # search would still return the "nearest" article — measured at 0.58 for
             # a leave request — so there is, by definition, no evidence.
-            return []
-        return [
-            (
-                ",".join(categories),
-                Filter(must=[FieldCondition(key="category", match=MatchAny(any=categories))]),
-            ),
-            # Governance-only fallback: published and within tier, any category.
-            (None, None),
-        ]
+            return result(None, [], sufficient=False)
+
+        # Two searches, always, and the union of what they return.
+        #
+        # The category pass is the precise one and keeps the S2.4 baseline intact.
+        # It is not sufficient on its own: the category comes from the model, and a
+        # wrong label removes the right article before the search runs. Worse, the
+        # filtered pass can succeed *with the wrong article* — 'Outlook shows
+        # Disconnected' labelled 'network' returned KB0003 at 0.67, over the 0.55
+        # threshold, so no fallback keyed on "found nothing" would ever fire, while
+        # KB0002 sat unreachable (dev407364, 2026-09-20). Searching the whole
+        # published, in-tier corpus alongside it puts both candidates in front of the
+        # ranking and lets relevance decide.
+        extra = Filter(must=[FieldCondition(key="category", match=MatchAny(any=categories))])
+        scoped, _ = self._one_pass(query, extra, top_k=top_k, engine=engine)
+        wide, _ = self._one_pass(query, None, top_k=top_k, engine=engine)
+
+        in_category = {(item.article_id, item.chunk_index) for item in scoped}
+        merged: dict[tuple[str, int], EvidenceItem] = {}
+        for item in [*scoped, *wide]:
+            key = (item.article_id, item.chunk_index)
+            kept = merged.get(key)
+            if kept is None or item.relevance > kept.relevance:
+                merged[key] = item
+        items = sorted(merged.values(), key=lambda item: item.relevance, reverse=True)[:top_k]
+
+        sufficient = any(
+            item.relevance
+            >= (
+                threshold
+                if (item.article_id, item.chunk_index) in in_category
+                else threshold + OUT_OF_CATEGORY_EVIDENCE_MARGIN
+            )
+            for item in items
+        )
+        return result(",".join(categories), items, sufficient=sufficient)
 
     def _one_pass(
         self,
@@ -343,7 +340,7 @@ def build_default_retriever() -> Retriever:
 
 __all__ = [
     "CLASSIFICATION_TO_CORPUS_CATEGORY",
-    "FALLBACK_EVIDENCE_MARGIN",
+    "OUT_OF_CATEGORY_EVIDENCE_MARGIN",
     "QdrantRetriever",
     "Retriever",
     "build_default_retriever",

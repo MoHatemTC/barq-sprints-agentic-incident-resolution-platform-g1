@@ -38,6 +38,7 @@ from agent.llm import (
 from agent.prompts import ClassifyOutput
 from agent.retrieval import (
     CLASSIFICATION_TO_CORPUS_CATEGORY,
+    OUT_OF_CATEGORY_EVIDENCE_MARGIN,
     QdrantRetriever,
     _MemoEngine,
     _run_search,
@@ -384,12 +385,17 @@ class TestQdrantRetriever:
     def test_incident_category_is_searched_with_the_label(
         self, corpus_qdrant: QdrantClient
     ) -> None:
-        """Gemini labelled a VPN failure ``access`` (→ inquiry); KB0001 is ``network``."""
+        """Gemini labelled a VPN failure ``access`` (→ inquiry); KB0001 is ``network``.
+
+        The label alone used to hide KB0001 entirely. It no longer does — the
+        corpus-wide pass surfaces it — but the incident's own category is still
+        searched alongside the label, which is what puts KB0001 first.
+        """
         query = "VPN client authentication fails after a password change, invalid credentials"
         label_only = self._retriever(corpus_qdrant).search(
             query, classification=Classification.ACCESS, top_k=5, threshold=0.3
         )
-        assert "KB0001" not in {h.article_number for h in label_only.hits}
+        assert "KB0001" in {h.article_number for h in label_only.hits}
         both = self._retriever(corpus_qdrant).search(
             query,
             classification=Classification.ACCESS,
@@ -439,8 +445,11 @@ class TestQdrantRetriever:
             top_k=5,
             threshold=0.3,
         )
+        # The corpus-wide pass means an unrelated query now has the whole corpus
+        # to be nearest to, so its best score rises. What must not move is the
+        # verdict: nothing here is evidence, and the out-of-category margin is
+        # what keeps that true.
         assert result.category_filter == "software"
-        assert result.best_relevance < 0.3
         assert result.sufficient is False
 
     @staticmethod
@@ -460,47 +469,49 @@ class TestQdrantRetriever:
                     found.append(value)
         return found
 
-    def test_insufficient_category_pass_searches_the_whole_corpus(
-        self, corpus_qdrant: QdrantClient
-    ) -> None:
-        """A wrong label must not hide the right article.
+    def test_wrong_label_does_not_hide_the_right_article(self, corpus_qdrant: QdrantClient) -> None:
+        """The case seen live on dev407364, 2026-09-20.
 
-        Gemini labels an Outlook mail fault ``network`` (observed on dev407364,
-        2026-09-20). KB0002 is filed under ``software``, so the category pass can
-        never return it. When that pass finds no evidence, a second search must run
-        with no category filter at all — still published-only and within tier.
+        Gemini labels an Outlook mail fault ``network``. KB0002 is filed under
+        ``software``, so the category pass cannot return it — and it does not
+        come up empty either: it returns KB0003 at 0.67, over the 0.55 threshold,
+        so nothing keyed on "found nothing" would ever notice. Both searches run,
+        so KB0002 reaches the model regardless of the label.
         """
         client = MagicMock(wraps=corpus_qdrant)
         result = self._retriever(client).search(
             "Outlook shows Disconnected and no mail is delivered",
             classification=Classification.NETWORK,
             top_k=5,
-            threshold=0.99,
+            threshold=0.3,
         )
-        assert result.sufficient is False
+        assert "KB0002" in {hit.article_number for hit in result.hits}
 
-        filtered = [
+        filters = [
             call.kwargs["query_filter"]
             for call in client.query_points.call_args_list
             if "query_filter" in call.kwargs
         ]
-        assert filtered, "expected the retriever to query Qdrant"
-        constrained = [f for f in filtered if self._category_values(f)]
-        unconstrained = [f for f in filtered if not self._category_values(f)]
-        assert constrained, "the category pass should filter on the predicted category"
-        assert unconstrained, "the fallback pass should carry no category filter"
-        assert {"network"} == set(self._category_values(constrained[0]))
+        assert [f for f in filters if self._category_values(f)], "category pass must run"
+        assert [f for f in filters if not self._category_values(f)], "corpus pass must run"
 
-    def test_correct_label_never_reaches_the_fallback(self, corpus_qdrant: QdrantClient) -> None:
-        """A sufficient category pass stops there — the baseline is unchanged."""
-        result = self._retriever(corpus_qdrant).search(
-            "Outlook shows Disconnected and no mail is delivered",
-            classification=Classification.SOFTWARE,
-            top_k=5,
-            threshold=0.0,
+    def test_out_of_category_hit_needs_a_higher_score_to_be_evidence(
+        self, corpus_qdrant: QdrantClient
+    ) -> None:
+        """Widening the search must not lower the bar for "no evidence"."""
+        retriever = self._retriever(corpus_qdrant)
+        query = "Outlook shows Disconnected and no mail is delivered"
+        probe = retriever.search(
+            query, classification=Classification.NETWORK, top_k=5, threshold=0.0
         )
-        assert result.category_filter == "software"
-        assert result.sufficient is True
+        best = probe.best_relevance
+        # A threshold the best hit clears, but not by the out-of-category margin.
+        just_under = best - OUT_OF_CATEGORY_EVIDENCE_MARGIN / 2
+        result = retriever.search(
+            query, classification=Classification.NETWORK, top_k=5, threshold=just_under
+        )
+        assert result.best_relevance >= just_under
+        assert result.sufficient is False
 
     def test_restricted_and_retired_articles_are_never_returned(
         self, corpus_qdrant: QdrantClient
