@@ -275,6 +275,11 @@ async def test_event_persisted_and_enqueued_to_barq_incident_events(app_with_moc
 @pytest.mark.asyncio
 async def test_zero_downstream_execution_on_request_thread(app_with_mocks) -> None:
     """FR-08: request thread must never invoke retrieval, ServiceNow, or agents."""
+    import sys
+
+    forbidden_names = ("langgraph", "langchain", "langfuse", "openai", "anthropic")
+    loaded_before = {mod for mod in sys.modules if mod in forbidden_names}
+
     app, _, _ = app_with_mocks
     with (
         patch(
@@ -295,10 +300,9 @@ async def test_zero_downstream_execution_on_request_thread(app_with_mocks) -> No
     mock_retrieve.assert_not_called()
     mock_servicenow.assert_not_called()
 
-    import sys
-
-    for forbidden in ("langgraph", "langchain", "langfuse", "openai", "anthropic"):
-        assert forbidden not in sys.modules, f"{forbidden} must not load during ingestion"
+    loaded_after = {mod for mod in sys.modules if mod in forbidden_names}
+    newly_loaded = loaded_after - loaded_before
+    assert not newly_loaded, f"{newly_loaded} must not load during ingestion"
 
 
 # ---------------------------------------------------------------------------

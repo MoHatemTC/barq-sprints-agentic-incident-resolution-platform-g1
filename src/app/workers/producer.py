@@ -20,14 +20,27 @@ from app.workers.celery_app import celery_app
 # producer/worker name agreement is pinned by tests/workers/test_producer.py.
 PROCESS_INCIDENT_TASK = "app.workers.tasks.process_incident"
 
+#: Message header carrying the request's correlation id to the worker (S2.5). A
+#: header, not a task argument, so the task signature and the replay CLI are
+#: unchanged; a message without it is traced under its execution id.
+CORRELATION_HEADER = "x_correlation_id"
 
-def send_incident_event(payload: dict[str, Any], execution_id: str | UUID) -> None:
+
+def send_incident_event(
+    payload: dict[str, Any],
+    execution_id: str | UUID,
+    correlation_id: str | None = None,
+) -> None:
     """Enqueue one accepted incident event for worker processing."""
+    options: dict[str, Any] = {}
+    if correlation_id:
+        options["headers"] = {CORRELATION_HEADER: correlation_id}
     celery_app.send_task(
         PROCESS_INCIDENT_TASK,
         args=[payload, str(execution_id)],
         queue=INCIDENT_EVENTS_QUEUE,
+        **options,
     )
 
 
-__all__ = ["PROCESS_INCIDENT_TASK", "send_incident_event"]
+__all__ = ["CORRELATION_HEADER", "PROCESS_INCIDENT_TASK", "send_incident_event"]
