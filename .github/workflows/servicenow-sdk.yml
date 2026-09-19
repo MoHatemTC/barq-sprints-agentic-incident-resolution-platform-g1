@@ -115,6 +115,10 @@ jobs:
           fi
           echo "Working tree clean after build."
 
+      # S1.3 eligibility and retry tests. They read dist/app/update, so they run after the build.
+      - name: S1.3 eligibility and retry tests
+        run: npm test
+
       # The exported XML is the authoritative artifact: it is what was imported and
       # committed on dev434590 and dev204871. A clean tree alone would not catch a build
       # that regenerated keys.ts and then had its output committed, so compare the

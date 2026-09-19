@@ -8,6 +8,7 @@ and synchronizes version display records.
 
 from __future__ import annotations
 
+import html
 import re
 from typing import Any
 
@@ -69,6 +70,44 @@ _VERIFIED_FIELDS: tuple[str, ...] = (
     U_SECURITY_LEVEL_FIELD,
     U_ARTICLE_NUMBER_FIELD,
 )
+
+
+_IMMUTABLE_STATES: frozenset[str] = frozenset({"published", "retired"})
+
+
+def _unwrap(value: Any) -> Any:
+    """Return a Table API reference field's value; pass scalars through unchanged."""
+    if isinstance(value, dict) and "value" in value:
+        return value["value"]
+    return value
+
+
+_BETWEEN_TAGS = re.compile(r">\s+<")
+
+
+def _normalise_html(value: Any) -> Any:
+    """Canonicalise HTML so the instance's sanitiser rewrites are not a diff.
+
+    ServiceNow stores article HTML with entities decoded or re-encoded (``&middot;``
+    becomes ``·``, ``=`` becomes ``&#61;``) and whitespace between tags removed.
+    """
+    if isinstance(value, str):
+        text = _BETWEEN_TAGS.sub("><", html.unescape(value))
+        return " ".join(text.split())
+    return value
+
+
+def _diff_against_stored(stored: dict[str, Any], payload: dict[str, Any]) -> list[str]:
+    """Names of payload fields whose stored value differs from what would be sent."""
+    differing: list[str] = []
+    for field, sent in payload.items():
+        current = _unwrap(stored.get(field))
+        if field == "text":
+            if _normalise_html(current) != _normalise_html(sent):
+                differing.append(field)
+        elif current != sent:
+            differing.append(field)
+    return sorted(differing)
 
 
 class ServiceNowKBClient:
@@ -288,12 +327,13 @@ async def publish_article(
     kb_sys_id: str,
     category_mapping: dict[str, str] | None = None,
 ) -> str:
-    """Idempotently publish one article into ServiceNow; returns 'created' or 'updated'.
+    """Idempotently publish one article; returns 'created', 'updated' or 'unchanged'.
 
     Workflow:
     1. Constructs the Table API payload with metadata and converted HTML.
     2. Queries by stable `u_source_id` key scoped to target KB.
-    3. Creates new row or updates existing row in place.
+    3. Creates new row or updates existing row in place. A new row is created as a draft
+       and then moved to its target workflow state.
     4. Reads back the row and verifies stored values match sent values (fail-closed).
     5. Synchronizes the linked `kb_version` record so ServiceNow displays the true version.
     """
@@ -303,31 +343,35 @@ async def publish_article(
     if existing is None:
         sys_id = await client.create(payload)
         outcome = "created"
+        # The platform creates every article as a draft, so the target state is set by a
+        # follow-up update of that one field.
+        created = await client.get(sys_id)
+        if created.get("workflow_state") != payload["workflow_state"]:
+            await client.update(sys_id, {"workflow_state": payload["workflow_state"]})
     else:
         sys_id = str(existing["sys_id"])
-        # In ServiceNow with versioning enabled, retired articles are immutable (403 on PATCH).
-        # If the record is already retired, skip redundant PATCH and let read-back verify it.
-        if (
-            existing.get("workflow_state") == "retired"
-            and article.workflow_state.value == "retired"
-        ):
-            outcome = "updated"
+        stored_state = existing.get("workflow_state")
+        target_state = article.workflow_state.value
+        # The lookup returns only _LIST_FIELDS, so compare against the full record.
+        current = await client.get(sys_id)
+
+        # Nothing to write is reported as "unchanged" with no PATCH. When content
+        # differs the PATCH is attempted, and a refusal is raised, never swallowed.
+        differing = _diff_against_stored(current, payload)
+        if not differing and stored_state == target_state:
+            outcome = "unchanged"
         else:
             try:
                 await client.update(sys_id, payload)
-            except (ServiceNowRequestError, ServiceNowAccessError) as err:
-                # In ServiceNow, direct PATCH on published articles raises 403 ACL Exception
-                # for standard integration users without admin checkout.
-                # If the record is already published, let read-back verification confirm
-                # whether stored fields match the expected payload.
-                if (
-                    "403" in str(err)
-                    and existing.get("workflow_state") == "published"
-                    and article.workflow_state.value == "published"
-                ):
-                    pass
-                else:
-                    raise
+            except ServiceNowAccessError as err:
+                raise ServiceNowWriteRejectedError(
+                    f"{article.article_id!r} is {stored_state} and this account may not "
+                    f"modify it, but {differing or ['workflow_state']} differ from the "
+                    f"corpus, so the stored article is now stale. Publishing changed "
+                    f"content requires a version bump: the source id is "
+                    f"<number>-v<version>, so raising the version creates a new row "
+                    f"instead of editing a frozen one (sys_id={sys_id})."
+                ) from err
             outcome = "updated"
 
     stored = await client.get(sys_id)
@@ -361,10 +405,13 @@ def _verify_stored(
             "not an instance problem."
         )
 
-    for field in _VERIFIED_FIELDS:
-        stored_value = stored.get(field)
-        if isinstance(stored_value, dict) and "value" in stored_value:
-            stored_value = stored_value["value"]
+    # kb_category is only in the payload when the article's category has a mapping.
+    compared = list(_VERIFIED_FIELDS)
+    if "kb_category" in sent:
+        compared.append("kb_category")
+
+    for field in compared:
+        stored_value = _unwrap(stored.get(field))
         if stored_value != sent[field]:
             raise ServiceNowWriteRejectedError(
                 f"Read-back mismatch for {article_id!r}: field {field!r} sent as "

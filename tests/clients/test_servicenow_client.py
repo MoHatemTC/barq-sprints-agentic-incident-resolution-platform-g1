@@ -6,6 +6,8 @@ from unittest.mock import AsyncMock, patch
 
 import httpx
 import pytest
+import structlog
+import structlog.testing
 
 from app.auth.token_manager import ServiceNowTokenManager
 from app.clients.servicenow_client import ServiceNowClient
@@ -328,6 +330,66 @@ class TestFindIncidentByNumber:
         params = http.request.call_args.kwargs["params"]
         assert params["sysparm_query"] == "number=INC0010001"
         assert params["sysparm_limit"] == 2
+
+    async def test_rejects_injection_attempt_no_request_sent(self) -> None:
+        client, http, _ = _build_client()
+
+        with pytest.raises(ValueError, match="Invalid incident number format"):
+            await client.find_incident_by_number("INC_NOPE^NQsys_id=abc123")
+
+        http.request.assert_not_called()
+
+    async def test_rejects_new_or_query_injection(self) -> None:
+        client, http, _ = _build_client()
+
+        with pytest.raises(ValueError):
+            await client.find_incident_by_number("INC0010001^NQactive=true")
+
+        http.request.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "number",
+        [
+            "INC0010001\n",
+            "INC0010001\n^NQactive=true",
+            "INC0010001\r\n",
+        ],
+    )
+    async def test_rejects_trailing_newline(self, number: str) -> None:
+        """A regex "$" also matches just before a trailing newline.
+
+        With ``re.match`` the anchored pattern accepted ``"INC0010001\n"``, and the
+        newline was carried straight into ``sysparm_query``. ``fullmatch`` is what
+        actually rejects it. The second case shows why it matters: everything after
+        the newline would otherwise ride along into the encoded query.
+        """
+        client, http, _ = _build_client()
+
+        with pytest.raises(ValueError, match="Invalid incident number format"):
+            await client.find_incident_by_number(number)
+
+        http.request.assert_not_called()
+
+    async def test_rejects_lowercase(self) -> None:
+        client, http, _ = _build_client()
+        with pytest.raises(ValueError):
+            await client.find_incident_by_number("inc0010001")
+        http.request.assert_not_called()
+
+    async def test_rejects_empty_string(self) -> None:
+        client, http, _ = _build_client()
+        with pytest.raises(ValueError):
+            await client.find_incident_by_number("")
+        http.request.assert_not_called()
+
+    async def test_accepts_valid_number_format(self) -> None:
+        """Regression guard: legitimate numbers still work."""
+        resp = _api_response(result=[_incident_result()])
+        client, http, _ = _build_client(responses=[resp])
+
+        incident = await client.find_incident_by_number("INC0010001")
+        assert incident is not None
+        http.request.assert_called_once()
 
 
 class TestUpdateIncident:
@@ -658,12 +720,22 @@ class TestWriteExecutionLog:
         assert entry.execution_id == eid
 
     async def test_token_not_in_log_post_error(self) -> None:
-        """Bearer token must not appear in error details on log POST failure."""
+        """Bearer token must not appear in logs or error details on log POST failure."""
+        secret = "super_secret_token"  # noqa: S105 - deliberate sentinel
         resp = _api_response(status_code=404, result=None, text="Not found")
-        client, http, token_mgr = _build_client(token="super_secret_token", responses=[resp])
-        # The 404 raises inside _request, caught by write_execution_log
-        entry = await client.write_execution_log(_log_payload())
+        client, http, token_mgr = _build_client(token=secret, responses=[resp])
+
+        with structlog.testing.capture_logs() as captured:
+            entry = await client.write_execution_log(_log_payload())
+
         assert entry is None
+        assert captured, "the failure path must log something, or this proves nothing"
+
+        rendered = repr(captured)
+        assert secret not in rendered, f"bearer token leaked into structlog output: {rendered}"
+        for event in captured:
+            for key, value in event.items():
+                assert secret not in str(value), f"token leaked in log field {key!r}"
 
     async def test_write_log_handles_realistic_servicenow_reference_response(
         self,
@@ -985,3 +1057,99 @@ class TestRetryAfterDateForm:
             await client.get_incident("abc")
 
         assert exc_info.value.retry_after == 30.0
+
+
+class TestTransportErrorsDoNotChainTheBearerToken:
+    """A transport failure must not leave the Authorization header in the traceback.
+
+    ``_request`` builds ``headers`` with ``Bearer <token>`` and then calls httpx from
+    that same frame. Raising ``from exc`` keeps the httpx frame in the chain, so
+    ``pytest --showlocals`` or a rich traceback would render those locals and print
+    the token. The token manager already uses ``from None`` for exactly this; these
+    three handlers did not (NFR-06).
+    """
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("raised", "expected"),
+        [
+            (httpx.ConnectError("refused"), ServiceNowConnectionError),
+            (httpx.ReadError("reset"), ServiceNowConnectionError),
+            (httpx.ConnectTimeout("timed out"), ServiceNowTimeoutError),
+        ],
+    )
+    async def test_transport_error_is_not_chained(
+        self, raised: Exception, expected: type[Exception]
+    ) -> None:
+        secret = "super_secret_token"  # noqa: S105 - deliberate sentinel
+        client, http, _ = _build_client(token=secret)
+        http.request.side_effect = raised
+
+        with pytest.raises(expected) as exc_info:
+            await client.get_incident("abc")
+
+        err = exc_info.value
+        # The chain is severed, so no httpx frame carrying `headers` is reachable.
+        assert err.__cause__ is None
+        assert err.__suppress_context__ is True
+        assert secret not in str(err)
+        assert secret not in repr(err)
+
+
+class TestCrossWriteTimingAndParseErrors:
+    """Timing checks across separate writes, and typed parse errors."""
+
+    @pytest.mark.asyncio
+    async def test_end_before_stored_start_is_refused_without_patching(self) -> None:
+        """An end time earlier than the stored start is refused before any PATCH."""
+        stored = _incident_result()
+        stored["x_2215032_ai_inc_0_ai_processing_start"] = "2026-09-16 12:00:00"
+        stored["x_2215032_ai_inc_0_ai_human_lock"] = "false"
+        client, http, _ = _build_client(responses=[_api_response(result=stored)])
+
+        payload = IncidentUpdatePayload(
+            ai_processing_end=datetime(2026, 9, 16, 11, 0, tzinfo=UTC),  # an hour early
+        )
+
+        with pytest.raises(ServiceNowValidationError) as exc_info:
+            await client.update_incident("abc", payload)
+
+        assert "precedes the stored" in str(exc_info.value)
+        # One GET for the lock check, and no PATCH.
+        assert http.request.call_count == 1
+        assert http.request.call_args.args[0] == "GET"
+
+    @pytest.mark.asyncio
+    async def test_end_after_stored_start_still_writes(self) -> None:
+        """A valid end time is still written."""
+        stored = _incident_result()
+        stored["x_2215032_ai_inc_0_ai_processing_start"] = "2026-09-16 12:00:00"
+        stored["x_2215032_ai_inc_0_ai_human_lock"] = "false"
+        written = dict(stored)
+        written["x_2215032_ai_inc_0_ai_processing_end"] = "2026-09-16 13:00:00"
+        client, http, _ = _build_client(
+            responses=[_api_response(result=stored), _api_response(result=written)]
+        )
+
+        await client.update_incident(
+            "abc", IncidentUpdatePayload(ai_processing_end=datetime(2026, 9, 16, 13, 0, tzinfo=UTC))
+        )
+
+        assert http.request.call_count == 2  # GET then PATCH
+
+    @pytest.mark.asyncio
+    async def test_unparseable_record_raises_servicenow_error_not_validation_error(
+        self,
+    ) -> None:
+        """An unparseable record raises ServiceNowValidationError, a ServiceNowError."""
+        bad = _incident_result()
+        bad["x_2215032_ai_inc_0_ai_processing_state"] = "a_state_the_enum_does_not_know"
+        client, _, _ = _build_client(responses=[_api_response(result=bad)])
+
+        with pytest.raises(ServiceNowError) as exc_info:
+            await client.get_incident("abc")
+
+        assert isinstance(exc_info.value, ServiceNowValidationError)
+        assert exc_info.value.details["sys_id"] == "abc"
+        assert exc_info.value.details["errors"], "the underlying errors must be retained"
+        assert exc_info.value.__cause__ is None

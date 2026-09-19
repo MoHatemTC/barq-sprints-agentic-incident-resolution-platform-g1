@@ -30,7 +30,7 @@ class IncidentWebhookPayload(BaseModel):
         ...,
         description="The type of the event.",
     )
-    contract_version: str = Field(default="v1", description="Contract version")
+    contract_version: str = Field(..., description="Contract version")
 
     @field_validator("contract_version")
     @classmethod

@@ -15,15 +15,12 @@ _REQUIRED_TEST_ENV = {
     "SERVICENOW_CLIENT_ID": "test-client-id",
     "SERVICENOW_CLIENT_SECRET": "test-client-secret",
     "SERVICENOW_USERNAME": "test_service_account",
-    "SERVICENOW_PASSWORD": "test-password",
-    # Required by Settings but only read by the webhook router (tests that exercise
-    # it mock the settings object). Missing from .env, it otherwise breaks every
-    # get_settings() caller — including worker boot — unless exported manually.
-    "WEBHOOK_AUTH_TOKEN": "integration-test-token",
+    "WEBHOOK_AUTH_TOKEN": "dev-webhook-secret-token",
 }
 
-for _key, _value in _REQUIRED_TEST_ENV.items():
-    os.environ.setdefault(_key, _value)
+if os.environ.get("SERVICENOW_LIVE_TESTS") != "1":
+    for _key, _value in _REQUIRED_TEST_ENV.items():
+        os.environ.setdefault(_key, _value)
 
 # S2.5: a developer .env holds real Langfuse keys; unit tests must never trace to
 # them. Tests that need tracing build their own client explicitly.

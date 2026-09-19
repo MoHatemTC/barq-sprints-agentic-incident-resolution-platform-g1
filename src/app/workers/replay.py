@@ -73,15 +73,36 @@ def load_dead_letters(redis_client: Any) -> list[dict]:
 
 
 def _remove_event_records(redis_client: Any, event_id: str) -> int:
-    """LREM every record of this event by its exact stored string (count=0)."""
-    removed = 0
-    for raw in redis_client.lrange(INCIDENT_DLQ_QUEUE, 0, -1):
+    """LREM every record of this event by its exact stored string (count=0).
+
+    Uses a single-pass scan and batch pipeline to eliminate repetitive network round-trips.
+    """
+    raw_records = redis_client.lrange(INCIDENT_DLQ_QUEUE, 0, -1)
+    if not raw_records:
+        return 0
+
+    to_remove: list[str] = []
+    for raw in raw_records:
         try:
             record = json.loads(raw)
         except json.JSONDecodeError:
             continue
         if isinstance(record, dict) and record.get("event_id") == event_id:
-            removed += int(redis_client.lrem(INCIDENT_DLQ_QUEUE, 0, raw) or 0)
+            to_remove.append(raw)
+
+    if not to_remove:
+        return 0
+
+    if hasattr(redis_client, "pipeline") and callable(redis_client.pipeline):
+        pipe = redis_client.pipeline()
+        for raw in to_remove:
+            pipe.lrem(INCIDENT_DLQ_QUEUE, 0, raw)
+        results = pipe.execute()
+        return sum(int(r or 0) for r in results)
+
+    removed = 0
+    for raw in to_remove:
+        removed += int(redis_client.lrem(INCIDENT_DLQ_QUEUE, 0, raw) or 0)
     return removed
 
 

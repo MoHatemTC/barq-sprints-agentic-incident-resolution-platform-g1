@@ -110,7 +110,7 @@ Store screenshots under `docs/sprint-1/s1.1-scoped-app-and-field-model/screensho
 
 1. Review the working update set's Customer Updates.
 2. Check that the dictionary entries, choices, form/view records, validation rule, and application metadata are present.
-3. **Check for `Cross scope privilege` records, and treat every one as a defect until justified.** With `runtime_access_tracking=permissive` the platform grants access to Global APIs and tables automatically and records a `sys_scope_privilege` instead of refusing, so these accumulate silently from anything run in the scope — including background scripts used while testing. For each one, name the shipped script that needs it in `field-model.md`; if no shipped script needs it, delete it and re-export. See #56.
+3. **Check for `Cross scope privilege` records, and treat every one as a defect until justified.** The app runs with `runtime_access_tracking=enforcing`, so an unlisted Global API call is refused and appears as a `requested` privilege. Every `allowed` privilege must be in the list in the S1.2 doc (§2, Cross-Scope API Privileges) with the script that uses it; delete anything else and re-export. See #56.
 4. Publish **AI Incident Orchestrator** to an update set if the PDI provides that action; this captures the complete current application version.
 5. Set the final update set to Complete.
 6. Use **Export to XML**.

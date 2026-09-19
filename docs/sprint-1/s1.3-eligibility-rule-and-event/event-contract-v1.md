@@ -89,23 +89,12 @@ It serializes the payload with `JSON.stringify`, calls `setRequestBody`, then
 `execute()`. It logs transport success or failure and does not write Incident
 retry state.
 
-## Sprint 1 transport boundary
+## Transport and authentication
 
-The `post` method currently uses HTTP `POST`, `Content-Type: application/json`,
-and a **No Authentication** request-inspection endpoint for Sprint 1
-verification. This matches prior implementation guidance because the real
-downstream webhook is not introduced until Sprint 2, and Webhook.site cannot
-meaningfully validate the intended outbound OAuth flow. S1.2 OAuth controls
-inbound access into ServiceNow; it is not outbound OAuth from ServiceNow.
-
-The written S1.3 acceptance criterion and rubric Point 8 still reference
-outbound OAuth. Outbound OAuth has not been formally waived, retired, approved
-for deferral, or removed from S1.3.
-
-Point 8 is not currently met in Sprint 1. The current request-inspection
-transport uses No Authentication. Outbound OAuth deferral is pending formal
-mentor confirmation. If deferral is not approved, outbound OAuth must be
-implemented.
+The `post` method uses HTTP `POST` and `Content-Type: application/json`. The REST
+message authenticates with an OAuth 2.0 client-credentials profile, so every event
+carries `Authorization: Bearer <token>` issued by the backend's token endpoint. Setup
+and verification are in [outbound-oauth.md](outbound-oauth.md).
 
 No Basic Auth or administrative credentials are used, and no credentials are
 embedded in this contract or payload.

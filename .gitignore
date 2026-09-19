@@ -125,3 +125,5 @@ data/corpus/*
 
 src/app/ignored_folder
 .zcode/
+
+eval/ablation_results.json

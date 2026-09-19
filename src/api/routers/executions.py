@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, cast
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Path, status
 from sqlalchemy import select
 from sqlalchemy.exc import MissingGreenlet, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,6 +15,7 @@ from api.auth import verify_bearer_token
 from api.schemas.executions import (
     ExecutionNodeStateResponse,
     ExecutionResponse,
+    ExecutionStatus,
     IncidentExecutionsResponse,
     TraceResponse,
 )
@@ -51,7 +52,7 @@ async def get_execution(
     except MissingGreenlet:
         raise
     except SQLAlchemyError as exc:
-        logger.error("database_query_failed", execution_id=str(execution_id), error=str(exc))
+        logger.exception("database_query_failed", execution_id=str(execution_id), error=str(exc))
         raise ServiceUnavailableError("Database unavailable to retrieve execution.") from exc
 
     if not execution:
@@ -77,7 +78,7 @@ async def get_execution_trace(
     except MissingGreenlet:
         raise
     except SQLAlchemyError as exc:
-        logger.error("database_query_failed", execution_id=str(execution_id), error=str(exc))
+        logger.exception("database_query_failed", execution_id=str(execution_id), error=str(exc))
         raise ServiceUnavailableError("Database unavailable to retrieve execution.") from exc
 
     if not execution:
@@ -94,7 +95,7 @@ async def get_execution_trace(
     except MissingGreenlet:
         raise
     except SQLAlchemyError as exc:
-        logger.error("database_query_failed", execution_id=str(execution_id), error=str(exc))
+        logger.exception("database_query_failed", execution_id=str(execution_id), error=str(exc))
         raise ServiceUnavailableError(
             "Database unavailable to retrieve execution trace nodes."
         ) from exc
@@ -104,8 +105,7 @@ async def get_execution_trace(
     return TraceResponse(
         execution_id=execution.execution_id,
         incident_sys_id=execution.incident_sys_id,
-        # execution.status is validated against the same set the Literal encodes
-        status=execution.status,  # type: ignore[arg-type]
+        status=cast(ExecutionStatus, execution.status),
         node_states=node_states,
     )
 
@@ -118,7 +118,9 @@ async def get_execution_trace(
     description="Fetch all execution audit runs associated with a 32-hex incident sys_id.",
 )
 async def list_incident_executions(
-    sys_id: str,
+    sys_id: Annotated[
+        str, Path(max_length=32, description="ServiceNow incident 32-character sys_id")
+    ],
     db: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> IncidentExecutionsResponse:
     """Retrieve all executions for a given incident_sys_id."""
@@ -133,7 +135,7 @@ async def list_incident_executions(
     except MissingGreenlet:
         raise
     except SQLAlchemyError as exc:
-        logger.error("database_query_failed", sys_id=sys_id, error=str(exc))
+        logger.exception("database_query_failed", sys_id=sys_id, error=str(exc))
         raise ServiceUnavailableError("Database unavailable to list incident executions.") from exc
 
     executions = [ExecutionResponse.model_validate(row) for row in rows]

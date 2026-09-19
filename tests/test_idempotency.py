@@ -1,4 +1,4 @@
-"""Sequential idempotency behavior against isolated real PostgreSQL."""
+"""Sequential and concurrent idempotency behavior against real PostgreSQL."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import os
 from collections.abc import AsyncIterator, Iterator
 from dataclasses import fields
 from pathlib import Path
+from typing import cast
 
 import pytest
 import sqlalchemy as sa
@@ -14,12 +15,13 @@ from alembic import command
 from alembic.config import Config
 from sqlalchemy.engine import URL
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.pool import NullPool
 
 from app.db.models import Event, Execution, IdempotencyKey
 from app.db.session import SessionFactory, create_session_factory
 from app.repositories.idempotency import (
+    EventAcceptanceResult,
     EventAcceptanceStatus,
     InboundEvent,
     _postgres_constraint_name,
@@ -76,6 +78,42 @@ async def _counts(factory: SessionFactory) -> tuple[int, int, int]:
     return int(keys or 0), int(events or 0), int(executions or 0)
 
 
+async def _accept_concurrently(
+    factory: SessionFactory,
+    inbound_events: tuple[InboundEvent, ...],
+) -> tuple[list[EventAcceptanceResult], list[AsyncSession]]:
+    """Release independent workers together against one engine/sessionmaker.
+
+    PostgreSQL's unique index arbitrates the race: a conflicting insert may wait
+    for the owning transaction, then fails if it commits or proceeds if it rolls
+    back. The production code does not depend on which worker wins.
+    """
+    barrier = asyncio.Barrier(len(inbound_events) + 1)
+    created_sessions: list[AsyncSession] = []
+
+    def tracked_factory() -> AsyncSession:
+        session = factory()
+        created_sessions.append(session)
+        return session
+
+    shared_factory = cast(SessionFactory, tracked_factory)
+
+    async def worker(inbound_event: InboundEvent) -> EventAcceptanceResult:
+        await barrier.wait()
+        return await accept_inbound_event(shared_factory, inbound_event)
+
+    tasks = [asyncio.create_task(worker(inbound_event)) for inbound_event in inbound_events]
+    await barrier.wait()
+    results = list(await asyncio.gather(*tasks))
+    return results, created_sessions
+
+
+def _assert_independent_sessions(sessions: list[AsyncSession], expected_count: int) -> None:
+    assert len(sessions) == expected_count
+    assert len({id(session) for session in sessions}) == expected_count
+    assert len({id(session.bind) for session in sessions}) == 1
+
+
 def _event(event_id: str = "event-ABC") -> InboundEvent:
     return InboundEvent(
         event_id=event_id,
@@ -125,16 +163,110 @@ async def test_first_event_is_accepted_and_fully_persisted(
     assert execution.agent_version is None
 
 
-async def test_sequential_duplicate_returns_duplicate_without_new_rows(
+async def test_replay_returns_duplicate_without_new_rows_or_mutation(
     session_factory: SessionFactory,
 ) -> None:
-    first = await accept_inbound_event(session_factory, _event())
-    duplicate = await accept_inbound_event(session_factory, _event())
+    inbound_event = _event()
+    first = await accept_inbound_event(session_factory, inbound_event)
+    duplicate = await accept_inbound_event(session_factory, inbound_event)
 
     assert first.status is EventAcceptanceStatus.ACCEPTED
     assert duplicate.status is EventAcceptanceStatus.DUPLICATE
     assert duplicate.event_record_id is None
     assert duplicate.execution_id is None
+    assert await _counts(session_factory) == (1, 1, 1)
+
+    async with session_factory() as session:
+        persisted_event = (await session.scalars(sa.select(Event))).one()
+        persisted_execution = (await session.scalars(sa.select(Execution))).one()
+
+    assert persisted_event.id == first.event_record_id
+    assert persisted_event.event_id == inbound_event.event_id
+    assert persisted_event.incident_number == inbound_event.number
+    assert persisted_execution.execution_id == first.execution_id
+    assert persisted_execution.event_record_id == persisted_event.id
+
+
+async def test_two_simultaneous_workers_accept_exactly_one_event(
+    session_factory: SessionFactory,
+) -> None:
+    inbound_event = _event("event-concurrent-two-workers")
+
+    results, sessions = await _accept_concurrently(
+        session_factory,
+        (inbound_event, inbound_event),
+    )
+
+    assert [result.status for result in results].count(EventAcceptanceStatus.ACCEPTED) == 1
+    assert [result.status for result in results].count(EventAcceptanceStatus.DUPLICATE) == 1
+    _assert_independent_sessions(sessions, expected_count=2)
+    assert await _counts(session_factory) == (1, 1, 1)
+
+    async with session_factory() as session:
+        persisted_event = (await session.scalars(sa.select(Event))).one()
+        persisted_execution = (await session.scalars(sa.select(Execution))).one()
+
+    accepted = next(result for result in results if result.status is EventAcceptanceStatus.ACCEPTED)
+    duplicate = next(
+        result for result in results if result.status is EventAcceptanceStatus.DUPLICATE
+    )
+    assert persisted_event.id == accepted.event_record_id
+    assert persisted_event.event_id == inbound_event.event_id
+    assert persisted_event.incident_number == inbound_event.number
+    assert persisted_execution.execution_id == accepted.execution_id
+    assert persisted_execution.event_record_id == persisted_event.id
+    assert duplicate.event_record_id is None
+    assert duplicate.execution_id is None
+
+
+async def test_simultaneous_payload_variation_preserves_winning_payload(
+    session_factory: SessionFactory,
+) -> None:
+    original = _event("event-concurrent-payload")
+    variation = InboundEvent(
+        event_id=original.event_id,
+        sys_id=original.sys_id,
+        number="INC0099999",
+        event_type=original.event_type,
+    )
+    inbound_events = (original, variation)
+
+    results, sessions = await _accept_concurrently(session_factory, inbound_events)
+
+    statuses = [result.status for result in results]
+    assert statuses.count(EventAcceptanceStatus.ACCEPTED) == 1
+    assert statuses.count(EventAcceptanceStatus.DUPLICATE) == 1
+    _assert_independent_sessions(sessions, expected_count=2)
+    assert await _counts(session_factory) == (1, 1, 1)
+
+    accepted_index = statuses.index(EventAcceptanceStatus.ACCEPTED)
+    winning_event = inbound_events[accepted_index]
+    async with session_factory() as session:
+        persisted_event = (await session.scalars(sa.select(Event))).one()
+        persisted_execution = (await session.scalars(sa.select(Execution))).one()
+
+    assert persisted_event.id == results[accepted_index].event_record_id
+    assert persisted_event.event_id == winning_event.event_id
+    assert persisted_event.incident_number == winning_event.number
+    assert persisted_event.event_type == winning_event.event_type
+    assert persisted_execution.event_record_id == persisted_event.id
+
+
+async def test_five_simultaneous_workers_accept_exactly_one_event(
+    session_factory: SessionFactory,
+) -> None:
+    inbound_event = _event("event-concurrent-five-workers")
+    worker_count = 5
+
+    results, sessions = await _accept_concurrently(
+        session_factory,
+        (inbound_event,) * worker_count,
+    )
+
+    statuses = [result.status for result in results]
+    assert statuses.count(EventAcceptanceStatus.ACCEPTED) == 1
+    assert statuses.count(EventAcceptanceStatus.DUPLICATE) == worker_count - 1
+    _assert_independent_sessions(sessions, expected_count=worker_count)
     assert await _counts(session_factory) == (1, 1, 1)
 
 

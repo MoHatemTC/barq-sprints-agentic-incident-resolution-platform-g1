@@ -54,9 +54,19 @@ def build_sync_database_url(settings: SyncPostgreSQLSettings) -> URL:
     )
 
 
-def create_sync_engine(database_url: str | URL, *, echo: bool = False) -> Engine:
-    """Lazy sync engine; no connection is opened until first use."""
-    return create_engine(database_url, echo=echo, pool_pre_ping=True)
+def create_sync_engine(
+    database_url: str | URL,
+    *,
+    echo: bool = False,
+    connect_timeout_seconds: int = 5,
+) -> Engine:
+    """Lazy sync engine with a bounded initial PostgreSQL connection attempt."""
+    return create_engine(
+        database_url,
+        echo=echo,
+        pool_pre_ping=True,
+        connect_args={"connect_timeout": connect_timeout_seconds},
+    )
 
 
 def create_sync_session_factory(engine: Engine) -> SyncSessionFactory:

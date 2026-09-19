@@ -2,6 +2,7 @@ import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
+import redis as sync_redis_lib
 import redis.asyncio as aioredis
 import structlog
 from fastapi import FastAPI
@@ -9,21 +10,75 @@ from sqlalchemy import text
 
 from app.core.config import Settings, get_settings
 from app.db.session import create_db_engine, create_session_factory
+from app.workers.db import InMemoryRepo, PostgresRepo
+from app.workers.sync_engine import (
+    build_sync_database_url,
+    create_sync_engine,
+    create_sync_session_factory,
+)
 
 logger = structlog.getLogger(__name__)
+
+
+def _init_langfuse(settings: Settings):
+    """Initialise Langfuse client, returning None if keys are absent or unreachable."""
+    if not settings.langfuse_public_key or not settings.langfuse_secret_key:
+        logger.info("langfuse_tracing_disabled", reason="keys_not_configured")
+        return None
+    try:
+        from langfuse import Langfuse  # noqa: PLC0415
+
+        secret = settings.langfuse_secret_key.get_secret_value()
+        client = Langfuse(
+            public_key=settings.langfuse_public_key,
+            secret_key=secret,
+            host=settings.langfuse_host,
+        )
+        # Quick connectivity check (raises on auth/network failure)
+        client.auth_check()
+        logger.info(
+            "langfuse_tracing_enabled",
+            host=settings.langfuse_host,
+        )
+        return client
+    except Exception as exc:
+        logger.warning(
+            "langfuse_init_failed_gracefully",
+            error=str(exc),
+            host=settings.langfuse_host,
+        )
+        return None
 
 
 def create_redis_client(settings: Settings) -> aioredis.Redis:
     """Create an async Redis client instance."""
     password = settings.redis_password.get_secret_value() if settings.redis_password else None
+    timeout = getattr(settings, "redis_socket_timeout", 5.0)
     return aioredis.Redis(
         host=settings.redis_host,
         port=settings.redis_port,
         password=password,
         decode_responses=True,
-        socket_timeout=5.0,
-        socket_connect_timeout=5.0,
+        socket_timeout=timeout,
+        socket_connect_timeout=timeout,
     )
+
+
+def create_sync_redis_client(settings: Settings) -> sync_redis_lib.Redis:
+    """Create a thread-safe synchronous Redis client with connection pooling."""
+    password = settings.redis_password.get_secret_value() if settings.redis_password else None
+    timeout = getattr(settings, "redis_socket_timeout", 5.0)
+    max_conns = getattr(settings, "redis_pool_max_connections", 20)
+    pool = sync_redis_lib.ConnectionPool(
+        host=settings.redis_host,
+        port=settings.redis_port,
+        password=password,
+        decode_responses=True,
+        socket_timeout=timeout,
+        socket_connect_timeout=timeout,
+        max_connections=max_conns,
+    )
+    return sync_redis_lib.Redis(connection_pool=pool)
 
 
 def _resolve_engine_creator():
@@ -79,12 +134,67 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         except Exception as exc:
             logger.warning("redis_ping_failed_on_startup", error=str(exc))
 
+    # 3. Initialize Langfuse Tracing (optional, fails gracefully)
+    if not hasattr(app.state, "langfuse") or app.state.langfuse is None:
+        app.state.langfuse = _init_langfuse(settings)
+
+    # 4. Initialize Sync Engine & WorkerRepo (for threadpool/sync worker operations)
+    if not hasattr(app.state, "sync_worker_repo") or app.state.sync_worker_repo is None:
+        try:
+            if getattr(settings, "worker_repo_backend", "postgres") == "memory":
+                app.state.sync_worker_repo = InMemoryRepo()
+            else:
+                app.state.sync_engine = create_sync_engine(build_sync_database_url(settings))
+                sync_factory = create_sync_session_factory(app.state.sync_engine)
+                app.state.sync_worker_repo = PostgresRepo(sync_factory)
+            logger.info("sync_worker_repo_initialized")
+        except Exception as exc:
+            logger.warning("sync_worker_repo_init_failed", error=str(exc))
+
+    # 5. Initialize Sync Redis Client (with connection pool for threadpool operations)
+    if not hasattr(app.state, "sync_redis") or app.state.sync_redis is None:
+        try:
+            app.state.sync_redis = create_sync_redis_client(settings)
+            logger.info("sync_redis_client_initialized")
+        except Exception as exc:
+            logger.warning("sync_redis_init_failed", error=str(exc))
+
     logger.info("application_lifespan_started")
 
     yield
 
     # --- Shutdown ---
     logger.info("application_lifespan_stopping")
+
+    # Flush & shutdown Langfuse before closing infrastructure
+    if getattr(app.state, "langfuse", None) is not None:
+        try:
+            app.state.langfuse.flush()
+            app.state.langfuse.shutdown()
+            logger.info("langfuse_client_flushed")
+        except Exception as exc:
+            logger.warning("langfuse_flush_failed", error=str(exc))
+        finally:
+            app.state.langfuse = None
+
+    if getattr(app.state, "sync_redis", None) is not None:
+        try:
+            app.state.sync_redis.close()
+            logger.info("sync_redis_closed")
+        except Exception as exc:
+            logger.warning("sync_redis_close_failed", error=str(exc))
+        finally:
+            app.state.sync_redis = None
+
+    if getattr(app.state, "sync_engine", None) is not None:
+        try:
+            app.state.sync_engine.dispose()
+            logger.info("sync_postgres_engine_disposed")
+        except Exception as exc:
+            logger.warning("sync_postgres_engine_dispose_failed", error=str(exc))
+        finally:
+            app.state.sync_engine = None
+            app.state.sync_worker_repo = None
 
     if getattr(app.state, "redis", None) is not None:
         try:

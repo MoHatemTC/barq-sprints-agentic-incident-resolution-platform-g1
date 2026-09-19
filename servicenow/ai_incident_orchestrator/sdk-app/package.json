@@ -1,6 +1,6 @@
 {
     "name": "ai-incident-orchestrator",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "description": "Scoped ServiceNow application for AI-assisted incident processing, human review, auditability, and downstream orchestration.",
     "license": "UNLICENSED",
     "imports": {
@@ -8,6 +8,7 @@
     },
     "scripts": {
         "build": "now-sdk build",
+        "test": "node --test \"test/**/*.test.cjs\"",
         "deploy": "now-sdk install",
         "transform": "now-sdk transform",
         "types": "now-sdk dependencies"

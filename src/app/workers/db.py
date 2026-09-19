@@ -26,7 +26,11 @@ docs/sprint2_worker_topology.md):
 from __future__ import annotations
 
 import datetime as dt
+<<<<<<< HEAD
 from typing import Any, Protocol
+=======
+from typing import Protocol
+>>>>>>> origin/main
 from uuid import UUID, uuid4
 
 from sqlalchemy import select, update
@@ -130,6 +134,7 @@ class WorkerRepo(Protocol):
         model_name: str | None = None,
         agent_version: str | None = None,
     ) -> None: ...
+
 
     def get_termination_cause(self, execution_id: UUID) -> str | None: ...
 
@@ -354,6 +359,7 @@ class PostgresRepo:
             session.execute(
                 update(Execution).where(Execution.execution_id == execution_id).values(**summary)
             )
+
             session.execute(
                 update(RetryState)
                 .where(RetryState.execution_id == execution_id)
@@ -617,6 +623,7 @@ class InMemoryRepo:
             execution["model_name"] = model_name
         if agent_version is not None:
             execution["agent_version"] = agent_version
+
         row = self.retry_states[execution_id]
         row["state"] = "succeeded"
         row["next_retry_at"] = None

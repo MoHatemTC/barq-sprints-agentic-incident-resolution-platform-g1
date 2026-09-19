@@ -1,3 +1,4 @@
+import re
 import time
 from typing import Any
 
@@ -33,6 +34,12 @@ from app.utils.servicenow import parse_retry_after, values_equal
 
 logger = structlog.getLogger(__name__)
 
+# fullmatch, not match, is what enforces this at the call site below. In a regex "$"
+# also matches immediately before a trailing newline, so `re.match` accepts
+# "INC0010001\n" and the newline is carried into sysparm_query. The anchors are kept
+# so the intent stays readable even though fullmatch makes them redundant.
+_INCIDENT_NUMBER_RE = re.compile(r"^[A-Z]+[0-9]+$")
+
 
 class ServiceNowClient:
     def __init__(
@@ -57,11 +64,28 @@ class ServiceNowClient:
     async def __aexit__(self, *exc_info: object) -> None:
         await self.aclose()
 
+    @staticmethod
+    def _parse_incident(result: Any, sys_id: str) -> Incident:
+        """Validate a Table API record; raise ServiceNowValidationError if it does not fit."""
+        try:
+            return Incident.model_validate(result)
+        except ValidationError as exc:
+            raise ServiceNowValidationError(
+                f"Incident {sys_id} could not be parsed: the stored record does not "
+                f"match the expected field model ({exc.error_count()} validation "
+                "error(s)). The record may predate the current field model, or a "
+                "choice value may have been added on the instance.",
+                details={"sys_id": sys_id, "errors": exc.errors()},
+            ) from None
+
     async def get_incident(self, sys_id: str) -> Incident:
         result = await self._request("GET", f"/api/now/table/incident/{sys_id}")
-        return Incident.model_validate(result)
+        return self._parse_incident(result, sys_id)
 
     async def find_incident_by_number(self, number: str) -> Incident | None:
+        if not _INCIDENT_NUMBER_RE.fullmatch(number):
+            raise ValueError(f"Invalid incident number format: {number!r}")
+
         result = await self._request(
             "GET",
             "/api/now/table/incident",
@@ -76,7 +100,7 @@ class ServiceNowClient:
                 f"ServiceNow returned {len(incidents)}",
                 details={"number": number, "count": len(incidents)},
             )
-        return Incident.model_validate(incidents[0])
+        return self._parse_incident(incidents[0], str(incidents[0].get("sys_id", number)))
 
     async def update_incident(
         self,
@@ -97,6 +121,21 @@ class ServiceNowClient:
                 details={"sys_id": sys_id, "ai_human_lock": state},
             )
 
+        # Start and end are written in separate updates, so check end against the stored start.
+        if payload.ai_processing_end is not None and payload.ai_processing_start is None:
+            stored_start = current_incident.ai_processing_start
+            if stored_start is not None and payload.ai_processing_end < stored_start:
+                raise ServiceNowValidationError(
+                    f"Incident {sys_id}: ai_processing_end "
+                    f"{payload.ai_processing_end.isoformat()} precedes the stored "
+                    f"ai_processing_start {stored_start.isoformat()}.",
+                    details={
+                        "sys_id": sys_id,
+                        "ai_processing_end": payload.ai_processing_end.isoformat(),
+                        "stored_ai_processing_start": stored_start.isoformat(),
+                    },
+                )
+
         body = payload.to_table_api_body()
 
         result = await self._request(
@@ -105,7 +144,7 @@ class ServiceNowClient:
             json=body,
         )
 
-        returned_incident = Incident.model_validate(result)
+        returned_incident = self._parse_incident(result, sys_id)
 
         self._verify_write_persisted(
             requested=body,
@@ -211,17 +250,22 @@ class ServiceNowClient:
                 json=json,
                 timeout=self._settings.servicenow_timeout_seconds,
             )
-        except httpx.TimeoutException as exc:
+        # "from None", not "from exc", for the same reason as the token manager: the
+        # frame these are raised from holds `headers`, which carries the bearer token.
+        # Chaining the httpx error keeps that frame in the traceback, so pytest's
+        # --showlocals or a rich traceback would print the token. The transport error
+        # carries no diagnostic the message below does not already give.
+        except httpx.TimeoutException:
             raise ServiceNowTimeoutError(
                 f"Timed out requesting {method} {url} after "
                 f"{self._settings.servicenow_timeout_seconds} seconds"
-            ) from exc
-        except httpx.ConnectError as exc:
-            raise ServiceNowConnectionError(f"Failed to connect to {url}: {exc}") from exc
-        except httpx.TransportError as exc:
+            ) from None
+        except httpx.ConnectError:
+            raise ServiceNowConnectionError(f"Failed to connect to {url}") from None
+        except httpx.TransportError:
             raise ServiceNowConnectionError(
                 f"Transport error while requesting {method} {url}"
-            ) from exc
+            ) from None
 
         if response.status_code == status.HTTP_401_UNAUTHORIZED and _retry_on_auth_failure:
             logger.warning(

@@ -8,6 +8,7 @@ Flow per attempt:
    (``agent.runtime.invoke_incident_graph``) when ``AGENT_GRAPH_BACKEND=langgraph``
    (the default). ``stub`` keeps the simulated work and its forced-failure magic
    numbers for the failure-injection tests and demo.
+
 4. Exception handling, in exactly three branches:
    - ``(RetryableError, SoftTimeLimitExceeded)``: log the attempt, then either
      schedule a retry (explicit ``self.retry`` with THE delay — the same delay
@@ -91,6 +92,7 @@ def invoke_graph(
 def _stub_graph(payload: dict[str, Any]) -> dict[str, Any]:
     """Simulates the agent graph: takes ~0.1s, and raises the configured failure
     classes for the failure-injection demo numbers."""
+
     time.sleep(GRAPH_STUB_SLEEP_SECONDS)
 
     number = str(payload.get("number", ""))
@@ -218,6 +220,7 @@ def _run_incident(
             attempt=attempt,
             correlation_id=correlation_id,
         )
+
     except (RetryableError, SoftTimeLimitExceeded) as exc:
         if isinstance(exc, SoftTimeLimitExceeded):
             wrapped = RetryableError(f"soft time limit exceeded after {soft_time_limit_seconds}s")
@@ -324,6 +327,7 @@ def build_incident_task(
     """Build the task bound to a specific app/settings — the factory exists so
     tests (and alternative deployments) can inject configuration and backends."""
     graph_backend = get_agent_settings().agent_graph_backend
+
     cfg = build_retry_config(settings)
     repo = repo if repo is not None else build_worker_repo(settings)
     if dlq_redis is None:
@@ -418,3 +422,4 @@ __all__ = [
     "process_incident",
     "record_dead_letter",
 ]
+

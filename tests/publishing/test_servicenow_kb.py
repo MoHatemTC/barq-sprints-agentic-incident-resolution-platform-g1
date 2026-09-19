@@ -55,7 +55,8 @@ async def test_republish_updates_in_place_with_zero_duplicates(
 
         outcomes = [await publish_article(client, a, KB_SYS_ID) for a in sample_articles]
 
-        assert outcomes == ["updated"] * len(sample_articles)
+        # An identical re-publish has nothing to write.
+        assert outcomes == ["unchanged"] * len(sample_articles)
         assert len(fake.rows) == post_count, "re-run must never duplicate rows"
     finally:
         await client.aclose()
@@ -88,7 +89,7 @@ async def test_readback_mismatch_fails_loud(sample_articles: list[Article], fake
     client = fake.build_client()
     try:
         # instance returns invalid state to simulate tampering or write rejection
-        fake.tamper_next_readback = ("workflow_state", "corrupted_state")
+        fake.tamper_readback = ("workflow_state", "corrupted_state")
 
         with pytest.raises(ServiceNowWriteRejectedError, match="workflow_state"):
             await publish_article(client, sample_articles[0], KB_SYS_ID)
@@ -105,7 +106,7 @@ async def test_verify_stored_fails_when_article_stuck_in_draft(
     try:
         article = sample_articles[0]
         assert article.workflow_state.value == "published"
-        fake.tamper_next_readback = ("workflow_state", "draft")
+        fake.tamper_readback = ("workflow_state", "draft")
 
         with pytest.raises(ServiceNowWriteRejectedError, match="target workflow state"):
             await publish_article(client, article, KB_SYS_ID)
@@ -319,5 +320,101 @@ async def test_find_by_source_id_accepts_a_well_formed_id(fake: Any) -> None:
     client = fake.build_client()
     try:
         assert await client.find_by_source_id("KB0010-v2.0", kb_sys_id=KB_SYS_ID) is None
+    finally:
+        await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_refused_patch_on_changed_published_article_fails_loudly(
+    sample_articles: list[Article], fake: Any
+) -> None:
+    """A 403 on a changed published article raises instead of reporting 'updated'."""
+    client = fake.build_client()
+    try:
+        article = sample_articles[0]
+        assert article.workflow_state.value == "published"
+        await publish_article(client, article, KB_SYS_ID)
+
+        # The corpus gains a resolution step; the instance now refuses the write.
+        changed = article.model_copy(update={"body": article.body + "\n\n6. Restart the service."})
+        fake.refuse_patch = True
+
+        with pytest.raises(ServiceNowWriteRejectedError) as excinfo:
+            await publish_article(client, changed, KB_SYS_ID)
+
+        message = str(excinfo.value)
+        assert "text" in message, "the error must name the field that drifted"
+        assert "version" in message, "the error must point at the version-bump remedy"
+
+        # The stored body is unchanged.
+        stored = next(r for r in fake.rows if r[U_SOURCE_ID_FIELD] == article.article_id)
+        assert "Restart the service." not in stored["text"]
+    finally:
+        await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_identical_republish_reports_unchanged_without_patching(
+    sample_articles: list[Article], fake: Any
+) -> None:
+    """An identical re-publish reports 'unchanged' and sends no PATCH."""
+    client = fake.build_client()
+    try:
+        article = sample_articles[0]
+        assert await publish_article(client, article, KB_SYS_ID) == "created"
+
+        # Every PATCH now 403s. An identical re-publish must not need one.
+        fake.refuse_patch = True
+        assert await publish_article(client, article, KB_SYS_ID) == "unchanged"
+    finally:
+        await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_republish_is_unchanged_after_instance_html_sanitising(
+    sample_articles: list[Article], fake: Any
+) -> None:
+    """Entity and whitespace rewrites by the instance are not a content change."""
+    fake.sanitise_html = True
+    client = fake.build_client()
+    try:
+        article = sample_articles[0]
+        assert await publish_article(client, article, KB_SYS_ID) == "created"
+        stored = next(r for r in fake.rows if r[U_SOURCE_ID_FIELD] == article.article_id)
+        assert "&#61;" in stored["text"], "the fake must actually rewrite the HTML"
+
+        fake.refuse_patch = True
+        assert await publish_article(client, article, KB_SYS_ID) == "unchanged"
+    finally:
+        await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_new_article_is_moved_from_draft_to_its_target_state(
+    sample_articles: list[Article], fake: Any
+) -> None:
+    """The platform creates articles as drafts; the publisher sets the state afterwards."""
+    fake.force_draft_on_create = True
+    client = fake.build_client()
+    try:
+        article = sample_articles[0]
+        assert article.workflow_state.value == "published"
+        assert await publish_article(client, article, KB_SYS_ID) == "created"
+
+        stored = next(r for r in fake.rows if r[U_SOURCE_ID_FIELD] == article.article_id)
+        assert stored["workflow_state"] == "published"
+        assert {"workflow_state": "published"} in fake.patches
+    finally:
+        await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_no_state_update_when_the_create_already_has_the_target_state(
+    sample_articles: list[Article], fake: Any
+) -> None:
+    client = fake.build_client()
+    try:
+        assert await publish_article(client, sample_articles[0], KB_SYS_ID) == "created"
+        assert fake.patches == []
     finally:
         await client.aclose()

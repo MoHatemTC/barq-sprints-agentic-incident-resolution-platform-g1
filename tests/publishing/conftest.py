@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import html as _html
 import json as _json
+import re as _re
 from typing import Any
 
 import httpx
@@ -28,7 +30,20 @@ class FakeServiceNow:
         self.cat_returns_error = False
         self.kb_version_returns_error = False
         self.missing_schema_columns = False
-        self.tamper_next_readback: tuple[str, str] | None = None
+        self.tamper_readback: tuple[str, str] | None = None
+        # Simulates the 403 a real instance returns on PATCH of a published article.
+        self.refuse_patch = False
+        # Stores article HTML the way ServiceNow's sanitiser does.
+        self.sanitise_html = False
+        # Creates every article as a draft, as the platform does, whatever was sent.
+        self.force_draft_on_create = False
+        self.patches: list[dict[str, Any]] = []
+
+    def _store(self, body: dict[str, Any]) -> dict[str, Any]:
+        if self.sanitise_html and isinstance(body.get("text"), str):
+            text = _re.sub(r">\s+<", "><", _html.unescape(body["text"]))
+            body = {**body, "text": text.replace("=", "&#61;")}
+        return body
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         path = request.url.path
@@ -70,6 +85,10 @@ class FakeServiceNow:
                 if kb_id:
                     matches = [r for r in matches if r.get("kb_knowledge_base") == kb_id]
 
+            fields = params.get("sysparm_fields")
+            if fields:
+                wanted = fields.split(",")
+                matches = [{k: r[k] for k in wanted if k in r} for r in matches]
             return httpx.Response(200, json={"result": matches})
 
         if request.method == "POST" and path == f"/api/now/table/{KB_TABLE}":
@@ -77,18 +96,22 @@ class FakeServiceNow:
             row = {
                 "sys_id": f"sys{self.next_sys_id:011d}",
                 "version": {"value": f"ver{self.next_sys_id:011d}"},
-                **body,
+                **self._store(body),
+                **({"workflow_state": "draft"} if self.force_draft_on_create else {}),
             }
             self.next_sys_id += 1
             self.rows.append(row)
             return httpx.Response(201, json={"result": row})
 
         if request.method == "PATCH" and path.startswith(f"/api/now/table/{KB_TABLE}/"):
+            if self.refuse_patch:
+                return httpx.Response(403, json={"error": {"message": "ACL Exception"}})
             sys_id = path.rsplit("/", 1)[-1]
             body = _json.loads(request.read())
             for row in self.rows:
                 if row["sys_id"] == sys_id:
-                    row.update(body)
+                    self.patches.append(body)
+                    row.update(self._store(body))
                     return httpx.Response(200, json={"result": row})
             return httpx.Response(404, json={"error": "not found"})
 
@@ -97,10 +120,9 @@ class FakeServiceNow:
             for row in self.rows:
                 if row["sys_id"] == sys_id:
                     served = dict(row)
-                    if self.tamper_next_readback:
-                        field, value = self.tamper_next_readback
+                    if self.tamper_readback:
+                        field, value = self.tamper_readback
                         served[field] = value
-                        self.tamper_next_readback = None
                     return httpx.Response(200, json={"result": served})
             return httpx.Response(404, json={"error": "not found"})
 

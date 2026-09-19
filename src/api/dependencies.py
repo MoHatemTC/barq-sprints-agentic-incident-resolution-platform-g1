@@ -5,6 +5,8 @@ from app.api.dependencies import (
     get_db_session,
     get_redis,
     get_session_factory,
+    get_sync_redis,
+    get_sync_worker_repo,
 )
 from app.db.session import SessionFactory
 
@@ -14,4 +16,6 @@ __all__ = [
     "get_db_session",
     "get_redis",
     "get_session_factory",
+    "get_sync_redis",
+    "get_sync_worker_repo",
 ]
