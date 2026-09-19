@@ -30,11 +30,14 @@ class FakeServiceNow:
         self.cat_returns_error = False
         self.kb_version_returns_error = False
         self.missing_schema_columns = False
-        self.tamper_next_readback: tuple[str, str] | None = None
+        self.tamper_readback: tuple[str, str] | None = None
         # Simulates the 403 a real instance returns on PATCH of a published article.
         self.refuse_patch = False
         # Stores article HTML the way ServiceNow's sanitiser does.
         self.sanitise_html = False
+        # Creates every article as a draft, as the platform does, whatever was sent.
+        self.force_draft_on_create = False
+        self.patches: list[dict[str, Any]] = []
 
     def _store(self, body: dict[str, Any]) -> dict[str, Any]:
         if self.sanitise_html and isinstance(body.get("text"), str):
@@ -94,6 +97,7 @@ class FakeServiceNow:
                 "sys_id": f"sys{self.next_sys_id:011d}",
                 "version": {"value": f"ver{self.next_sys_id:011d}"},
                 **self._store(body),
+                **({"workflow_state": "draft"} if self.force_draft_on_create else {}),
             }
             self.next_sys_id += 1
             self.rows.append(row)
@@ -106,6 +110,7 @@ class FakeServiceNow:
             body = _json.loads(request.read())
             for row in self.rows:
                 if row["sys_id"] == sys_id:
+                    self.patches.append(body)
                     row.update(self._store(body))
                     return httpx.Response(200, json={"result": row})
             return httpx.Response(404, json={"error": "not found"})
@@ -115,10 +120,9 @@ class FakeServiceNow:
             for row in self.rows:
                 if row["sys_id"] == sys_id:
                     served = dict(row)
-                    if self.tamper_next_readback:
-                        field, value = self.tamper_next_readback
+                    if self.tamper_readback:
+                        field, value = self.tamper_readback
                         served[field] = value
-                        self.tamper_next_readback = None
                     return httpx.Response(200, json={"result": served})
             return httpx.Response(404, json={"error": "not found"})
 

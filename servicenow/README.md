@@ -38,6 +38,11 @@ When deploying to a fresh ServiceNow instance:
 
 ## 3. Register OAuth Endpoint on the New PDI
 
+Publishing runs as the dedicated `kb_publisher` user, never as admin or as the incident
+integration user. Import `ai_incident_orchestrator/ai_incident_orchestrator_s1_4_kb_publisher.xml`
+and create the user as described in
+[kb-publisher-identity.md](../docs/sprint-1/s1.4-knowledge-and-qdrant/kb-publisher-identity.md).
+
 The publishing pipeline authenticates via OAuth 2.0 Resource Owner Password Credentials (ROPC) grant with refresh tokens using `app.auth.token_manager.ServiceNowTokenManager`:
 
 1. In ServiceNow navigator, search for **Application Registry** (under **System OAuth**).
@@ -53,8 +58,10 @@ The publishing pipeline authenticates via OAuth 2.0 Resource Owner Password Cred
    SERVICENOW_INSTANCE_URL=https://<your-new-pdi>.service-now.com/
    SERVICENOW_CLIENT_ID=barq_oauth_client
    SERVICENOW_CLIENT_SECRET=<your-client-secret>
-   SERVICENOW_USERNAME=<your-user>
-   SERVICENOW_PASSWORD=<your-password>
+   SERVICENOW_USERNAME=ai_orchestrator_svc
+   SERVICENOW_PASSWORD=<integration-user-password>
+   SERVICENOW_KB_USERNAME=kb_publisher
+   SERVICENOW_KB_PASSWORD=<kb-publisher-password>
    SERVICENOW_KB_ID=<target-kb-sys-id>
    ```
 

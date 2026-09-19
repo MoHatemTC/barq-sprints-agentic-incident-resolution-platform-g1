@@ -9,6 +9,7 @@ Implementation complete. Verified real operational corpus (11 runbooks extracted
 ## Deliverables in this Folder
 
 - [Corpus Design Specification](sprint1_corpus_design.md) (`sprint1_corpus_design.md`): Article schema, metadata validation rules, security tier taxonomy, 11-record inventory, and incident coverage matrix.
+- [KB Publisher Identity](kb-publisher-identity.md) (`kb-publisher-identity.md`): the non-admin user and role that publish the corpus, with verification (#91).
 - [Index Specification](sprint1_index_spec.md) (`sprint1_index_spec.md`): Hybrid vector configuration, single-batch BM25 IDF fitting rules, payload indexing, deterministic UUIDv5 identities, and persistence architecture.
 
 ## Architecture Summary

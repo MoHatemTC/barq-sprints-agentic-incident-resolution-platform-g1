@@ -6,9 +6,10 @@ PDI, updating it in place on re-runs — and verifies every write by reading
 the row back. Exits non-zero if any article fails.
 
 Requires in .env: SERVICENOW_INSTANCE_URL, SERVICENOW_CLIENT_ID,
-SERVICENOW_CLIENT_SECRET, SERVICENOW_USERNAME, SERVICENOW_PASSWORD,
-SERVICENOW_KB_ID (sys_id of the target Knowledge Base created in the PDI)
-and required custom columns on the kb_knowledge table.
+SERVICENOW_CLIENT_SECRET, SERVICENOW_KB_ID (sys_id of the target Knowledge Base),
+and the publisher's credentials in SERVICENOW_KB_USERNAME / SERVICENOW_KB_PASSWORD
+(the kb_publisher user, see docs/sprint-1/s1.4-knowledge-and-qdrant/kb-publisher-identity.md).
+Without them it falls back to SERVICENOW_USERNAME / SERVICENOW_PASSWORD.
 """
 
 from __future__ import annotations
@@ -21,7 +22,7 @@ from pathlib import Path
 
 import structlog
 
-from app.core.config import Settings, get_settings
+from app.core.config import Settings, get_settings, kb_publisher_settings
 from app.core.logging import configure_logging
 from app.publishing.payload import U_SOURCE_ID_FIELD, build_kb_payload
 from app.publishing.servicenow_kb import (
@@ -41,7 +42,11 @@ DEFAULT_REPORT = Path("data/corpus/publish_report.json")
 
 
 async def async_main(args: argparse.Namespace) -> int:
-    settings = get_settings()
+    try:
+        settings = kb_publisher_settings(get_settings())
+    except ValueError as exc:
+        logger.error("invalid_publisher_credentials", error=str(exc))
+        return 1
 
     if not args.corpus.exists():
         print(
