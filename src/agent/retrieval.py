@@ -49,7 +49,7 @@ def _run_search(
     *,
     collection_name: str | None,
     limit: int,
-    extra_filter: Filter,
+    extra_filter: Filter | None,
     max_security_level: SecurityLevel,
     engine: EmbeddingEngine,
 ) -> list[Any]:
@@ -65,13 +65,22 @@ def _run_search(
     )
 
 
-def _mandatory_filter(extra: Filter, max_security_level: SecurityLevel) -> Filter:
+def _mandatory_filter(extra: Filter | None, max_security_level: SecurityLevel) -> Filter:
     """The published-only, security-tiered filter, plus ``extra``."""
     return build_metadata_filter(
         metadata=MetadataFilterBuilder(max_security_level=max_security_level),
         extra=extra,
     )
 
+
+#: Extra relevance an out-of-category article must carry to be treated as evidence.
+#:
+#: The fallback searches the whole corpus, so its best hit is by construction at
+#: least as strong as the category pass's — including for queries with no answer
+#: anywhere. Holding it to a stricter bar keeps the §11.7 evidence gate honest:
+#: recall improves for a misclassified incident without lowering the standard of
+#: proof for one that simply has no article.
+FALLBACK_EVIDENCE_MARGIN = 0.1
 
 #: Classification label → corpus category (inverse of the S1.4 mapping, #70).
 CLASSIFICATION_TO_CORPUS_CATEGORY: dict[Classification, str] = {
@@ -159,24 +168,79 @@ class QdrantRetriever:
         threshold: float,
         incident_category: str | None = None,
     ) -> RetrievalResult:
+        engine = _MemoEngine(self._engine_factory())
+        started = time.perf_counter()
+        passes = self._passes(classification, incident_category)
+
+        def result(
+            label: str | None, items: list[EvidenceItem], best: float, *, sufficient: bool
+        ) -> RetrievalResult:
+            return RetrievalResult(
+                query=query,
+                category_filter=label,
+                hits=items,
+                best_relevance=best,
+                threshold=threshold,
+                sufficient=sufficient,
+                latency_ms=round((time.perf_counter() - started) * 1000, 2),
+            )
+
+        if not passes:
+            return result(None, [], 0.0, sufficient=False)
+
+        label, extra = passes[0]
+        items, best = self._one_pass(query, extra, top_k=top_k, engine=engine)
+        if items and best >= threshold:
+            return result(label, items, best, sufficient=True)
+
+        # The predicted category yielded nothing sufficient. Search the whole
+        # published, in-tier corpus before concluding there is no evidence.
+        wide_items, wide_best = self._one_pass(query, None, top_k=top_k, engine=engine)
+        if wide_items and wide_best >= threshold + FALLBACK_EVIDENCE_MARGIN:
+            return result(None, wide_items, wide_best, sufficient=True)
+
+        # Neither pass cleared its bar. Report the category pass: it is the
+        # search the classification asked for, and the wider one only confirmed
+        # that nothing better exists.
+        return result(label, items, best, sufficient=False)
+
+    def _passes(
+        self, classification: Classification, incident_category: str | None
+    ) -> list[tuple[str | None, Filter | None]]:
+        """The searches to try, in order, stopping at the first sufficient one.
+
+        The category pass goes first because it is the measured baseline: when the
+        label is right it is the most precise search we have. It is *not* the only
+        pass, because the label comes from the model. A misclassification used to
+        hide the correct article entirely — an Outlook fault labelled ``network``
+        returned KB0003 at 0.67 while KB0002 sat unreachable at 0.90 (observed on
+        dev407364, 2026-09-20). Topical metadata is a hint; only ``workflow_state``
+        and ``security_level`` are governance gates, and those stay mandatory on
+        every pass through :func:`_mandatory_filter`.
+        """
         categories = search_categories(classification, incident_category)
         if not categories:
             # No corpus category covers this label (security, other). An unfiltered
             # search would still return the "nearest" article — measured at 0.58 for
             # a leave request — so there is, by definition, no evidence.
-            return RetrievalResult(
-                query=query,
-                category_filter=None,
-                hits=[],
-                best_relevance=0.0,
-                threshold=threshold,
-                sufficient=False,
-                latency_ms=0.0,
-            )
-        category = ",".join(categories)
-        extra = Filter(must=[FieldCondition(key="category", match=MatchAny(any=categories))])
-        engine = _MemoEngine(self._engine_factory())
-        started = time.perf_counter()
+            return []
+        return [
+            (
+                ",".join(categories),
+                Filter(must=[FieldCondition(key="category", match=MatchAny(any=categories))]),
+            ),
+            # Governance-only fallback: published and within tier, any category.
+            (None, None),
+        ]
+
+    def _one_pass(
+        self,
+        query: str,
+        extra: Filter | None,
+        *,
+        top_k: int,
+        engine: EmbeddingEngine,
+    ) -> tuple[list[EvidenceItem], float]:
         try:
             client = self._qdrant()
             hits = _run_search(
@@ -195,7 +259,6 @@ class QdrantRetriever:
         except Exception as exc:
             # Qdrant unreachable / timed out: the next attempt may succeed.
             raise RetryableError(f"retrieval unavailable: {type(exc).__name__}") from exc
-        latency_ms = (time.perf_counter() - started) * 1000
 
         items = [
             EvidenceItem(
@@ -211,19 +274,14 @@ class QdrantRetriever:
             )
             for hit in hits
         ]
-        best = max((item.relevance for item in items), default=0.0)
-        return RetrievalResult(
-            query=query,
-            category_filter=category,
-            hits=items,
-            best_relevance=best,
-            threshold=threshold,
-            sufficient=bool(items) and best >= threshold,
-            latency_ms=round(latency_ms, 2),
-        )
+        return items, max((item.relevance for item in items), default=0.0)
 
     def _dense_scores(
-        self, client: QdrantClient, embedded: EmbeddedText, extra: Filter, hits: list[Any]
+        self,
+        client: QdrantClient,
+        embedded: EmbeddedText,
+        extra: Filter | None,
+        hits: list[Any],
     ) -> dict[tuple[str, int], float]:
         """Dense cosine for exactly the chunks ``hits`` contains.
 
@@ -285,6 +343,7 @@ def build_default_retriever() -> Retriever:
 
 __all__ = [
     "CLASSIFICATION_TO_CORPUS_CATEGORY",
+    "FALLBACK_EVIDENCE_MARGIN",
     "QdrantRetriever",
     "Retriever",
     "build_default_retriever",
