@@ -4,16 +4,14 @@
 
 ## Status
 
-Merged in [#29](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pull/29): the execution log table, a dedicated non-admin
-service account, field-level ACLs and an automated verification harness, rebuilt
-mostly inside scope `x_2215032_ai_inc_0` after the first submission was built entirely
-in the ServiceNow Global scope. Four Global-scope ACLs remain in the merged update
-set — tracked in [#48](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/issues/48).
+Merged in [#29](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pull/29) and [#32](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pull/32): the execution log table, a dedicated non-admin
+service account, field-level ACLs and an automated verification harness.
 
-A rework is in review in [#32](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pull/32), covering the execution-log status
-taxonomy, a write ACL for `ai_human_review_required`, and a platform-side human-lock
-Business Rule. Open findings from the post-merge audit are tracked in
-[#46](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/issues/46)–[#52](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/issues/52).
+[#123](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pull/123) re-exports the update set so that it installs on a clean instance with
+nothing in the Global scope, and adds a security fixes update set. The safety stop is a
+scoped ACL condition, journal read is narrowed, and access tracking is Enforcing.
+The harness passes 28 of 28 on a clean PDI. Import order and the one-off cleanup for
+instances that hold the earlier set are in [audit-and-identity.md](audit-and-identity.md) §8.
 
 ## What lands in this folder once merged
 
