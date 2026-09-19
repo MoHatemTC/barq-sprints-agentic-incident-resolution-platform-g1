@@ -123,6 +123,18 @@ class Settings(RetrievalSettings):
         default="dev-webhook-secret-token",
         description="Bearer token for webhook authentication",
     )
+    webhook_oauth_client_id: str = Field(
+        default="barq-servicenow",
+        description="OAuth 2.0 client_id for inbound webhook/REST authentication",
+    )
+    webhook_oauth_client_secret: SecretStr | None = Field(
+        default=None,
+        description="OAuth 2.0 client_secret for inbound webhook/REST authentication",
+    )
+    webhook_oauth_signing_key: SecretStr | None = Field(
+        default=None,
+        description="HMAC-SHA256 signing secret for OAuth 2.0 access tokens (min 32 chars)",
+    )
 
     # PostgreSQL
     postgres_host: str = "localhost"

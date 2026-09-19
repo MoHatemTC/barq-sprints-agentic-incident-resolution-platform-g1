@@ -8,6 +8,7 @@ import pytest
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
+from app.auth.roles import UserRole
 from app.auth.webhook_oauth import (
     TOKEN_PATH,
     InvalidClientError,
@@ -23,6 +24,7 @@ CONFIG = WebhookOAuthConfig(
     client_id="barq-servicenow",
     client_secret="client-secret-for-tests",  # noqa: S106 - test value
     signing_key="k" * 40,
+    token_ttl_seconds=300,
 )
 NOW = 1_800_000_000.0
 Claims = Annotated[dict[str, Any], Depends(bearer_dependency(lambda: CONFIG))]
@@ -164,3 +166,72 @@ class TestEndpoints:
             headers={"Authorization": f"Bearer {CONFIG.client_secret}"},
         )
         assert resp.status_code == 401
+
+
+class TestUserRoleHierarchy:
+    def test_role_hierarchy_levels(self) -> None:
+        assert UserRole.ADMIN.level == 3
+        assert UserRole.OPERATOR.level == 2
+        assert UserRole.VIEWER.level == 1
+
+    def test_admin_satisfies_all(self) -> None:
+        assert UserRole.ADMIN.satisfies(UserRole.ADMIN)
+        assert UserRole.ADMIN.satisfies(UserRole.OPERATOR)
+        assert UserRole.ADMIN.satisfies(UserRole.VIEWER)
+        assert UserRole.ADMIN.satisfies("operator")
+        assert UserRole.ADMIN.satisfies("viewer")
+
+    def test_operator_satisfies_operator_and_viewer(self) -> None:
+        assert not UserRole.OPERATOR.satisfies(UserRole.ADMIN)
+        assert UserRole.OPERATOR.satisfies(UserRole.OPERATOR)
+        assert UserRole.OPERATOR.satisfies(UserRole.VIEWER)
+
+    def test_viewer_satisfies_only_viewer(self) -> None:
+        assert not UserRole.VIEWER.satisfies(UserRole.ADMIN)
+        assert not UserRole.VIEWER.satisfies(UserRole.OPERATOR)
+        assert UserRole.VIEWER.satisfies(UserRole.VIEWER)
+
+    def test_invalid_role_string_returns_false(self) -> None:
+        assert not UserRole.OPERATOR.satisfies("nonexistent_role")
+
+    def test_oauth_token_satisfies_require_role_operator(self) -> None:
+        from app.auth.auth import require_role
+        from app.exceptions.handlers import register_exception_handlers
+        from tests.helpers import mock_settings
+
+        test_app = FastAPI()
+        register_exception_handlers(test_app)
+        test_app.state.settings = mock_settings(
+            webhook_oauth_client_id=CONFIG.client_id,
+            webhook_oauth_client_secret=CONFIG.client_secret,
+            webhook_oauth_signing_key=CONFIG.signing_key,
+        )
+
+        @test_app.post("/test-operator-action")
+        def operator_action(role: str = Depends(require_role("operator"))) -> dict[str, str]:
+            return {"role": role}
+
+        client = TestClient(test_app)
+        token = issue_access_token(CONFIG, CONFIG.client_id, CONFIG.client_secret)["access_token"]
+
+        # 1. Calling with OAuth token (claims contain role="operator")
+        # without X-User-Role header succeeds
+        resp = client.post("/test-operator-action", headers={"Authorization": f"Bearer {token}"})
+        assert resp.status_code == 200
+        assert resp.json() == {"role": "operator"}
+
+        # 2. Calling with static token is rejected with 401 when static tokens are disabled
+        static_token = test_app.state.settings.webhook_auth_token
+        resp_static = client.post(
+            "/test-operator-action",
+            headers={"Authorization": f"Bearer {static_token}", "X-User-Role": "admin"},
+        )
+        assert resp_static.status_code == 401
+
+        # 3. Calling with OAuth token and X-User-Role: viewer fails with 403
+        resp_viewer = client.post(
+            "/test-operator-action",
+            headers={"Authorization": f"Bearer {token}", "X-User-Role": "viewer"},
+        )
+        assert resp_viewer.status_code == 403
+
