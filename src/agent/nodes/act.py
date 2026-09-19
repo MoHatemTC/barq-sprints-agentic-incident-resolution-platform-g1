@@ -29,6 +29,11 @@ from agent.state import (
     RiskAssessment,
     RiskLevel,
 )
+from app.models.execution_log import (
+    ExecutionAction,
+    ExecutionLogCreatePayload,
+    ExecutionStatus,
+)
 from app.models.incident import AIProcessingState, IncidentUpdatePayload
 
 PREFIX = "AI Suggested Response"
@@ -207,6 +212,15 @@ def act(state: AgentState, deps: AgentDependencies) -> dict[str, Any]:
     outcome = decide_outcome(state)
     output = compose(state, outcome)
     if outcome is Outcome.SKIPPED_INELIGIBLE:
+        if deps.settings.agent_write_back_enabled:
+            incident = IncidentSnapshot.model_validate(state["incident"])
+            _write_execution_log(
+                state,
+                deps,
+                incident,
+                output,
+                status=ExecutionStatus.BLOCKED,
+            )
         return {"output": output.model_dump(mode="json")}
 
     incident = IncidentSnapshot.model_validate(state["incident"])
@@ -225,7 +239,7 @@ def act(state: AgentState, deps: AgentDependencies) -> dict[str, Any]:
         # The S1.1 model rejects an explicit None timestamp, so it is omitted instead.
         fields["ai_processing_start"] = started
     payload = IncidentUpdatePayload(**fields)
-    actions = ["write_ai_fields", "write_work_note", "flag_human_review"]
+    actions = ["write_ai_fields", "write_work_note", "flag_human_review", "write_execution_log"]
     if not deps.settings.agent_write_back_enabled:
         output = output.model_copy(update={"actions": actions, "write_back": "dry_run"})
         return {"output": output.model_dump(mode="json")}
@@ -238,9 +252,48 @@ def act(state: AgentState, deps: AgentDependencies) -> dict[str, Any]:
             human_review_required=False,
             processing_state=AIProcessingState.PENDING.value,
         )
+        _write_execution_log(
+            state,
+            deps,
+            incident,
+            output,
+            status=ExecutionStatus.BLOCKED,
+            error="Human lock prevented incident write-back.",
+        )
         return {"output": output.model_dump(mode="json")}
+    _write_execution_log(
+        state,
+        deps,
+        incident,
+        output,
+        status=ExecutionStatus.AWAITING_APPROVAL,
+    )
     output = output.model_copy(update={"actions": actions, "write_back": "written"})
     return {"output": output.model_dump(mode="json")}
+
+
+def _write_execution_log(
+    state: AgentState,
+    deps: AgentDependencies,
+    incident: IncidentSnapshot,
+    output: FinalOutput,
+    *,
+    status: ExecutionStatus,
+    error: str | None = None,
+) -> None:
+    action = (
+        ExecutionAction.PROPOSE if output.outcome is Outcome.SUGGESTED else ExecutionAction.ESCALATE
+    )
+    payload = ExecutionLogCreatePayload(
+        incident_sys_id=incident.sys_id,
+        execution_id=state["execution_id"],
+        agent=deps.settings.agent_version,
+        action=action,
+        status=status,
+        result=output.summary,
+        error=error,
+    )
+    deps.servicenow.write_execution_log(incident.sys_id, payload)
 
 
 def _parse_ts(value: str | None) -> datetime | None:

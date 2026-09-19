@@ -21,6 +21,7 @@ from agent.dependencies import AgentDependencies
 from agent.prompts import ClassifyOutput, DiagnoseOutput, GenerateOutput, StepOutput
 from agent.servicenow import AsyncRunner, IncidentGateway
 from agent.state import EvidenceItem, RetrievalResult
+from app.models.execution_log import ExecutionLogCreatePayload
 from app.models.incident import Incident, IncidentUpdatePayload
 from app.models.knowledge import Classification
 from observability.tracing import Tracer
@@ -330,6 +331,7 @@ class FakeServiceNow:
         self.records = {r["sys_id"]: dict(r) for r in (records or INCIDENTS).values()}
         self.updates: list[tuple[str, IncidentUpdatePayload]] = []
         self.notes: list[tuple[str, str]] = []
+        self.execution_logs: list[ExecutionLogCreatePayload] = []
         self.read_error: BaseException | None = None
         self.write_error: BaseException | None = None
         self.on_update: Callable[[str], None] | None = None
@@ -351,6 +353,9 @@ class FakeServiceNow:
     async def add_work_note(self, sys_id: str, note: str) -> Incident:
         self.notes.append((sys_id, note))
         return Incident.model_validate(self.records[sys_id])
+
+    async def write_execution_log(self, payload: ExecutionLogCreatePayload) -> None:
+        self.execution_logs.append(payload)
 
 
 def make_deps(

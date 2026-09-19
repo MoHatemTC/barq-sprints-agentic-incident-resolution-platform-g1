@@ -28,6 +28,7 @@ from app.exceptions.servicenow import (
     ServiceNowServerError,
     ServiceNowTimeoutError,
 )
+from app.models.execution_log import ExecutionLogCreatePayload
 from app.models.incident import IncidentUpdatePayload
 from app.workers.retry_policy import RetryableError, TerminalError
 from observability.tracing import Tracer
@@ -41,6 +42,7 @@ PERMITTED_ACTIONS: dict[str, str] = {
     "write_work_note": "low",
     "flag_human_review": "low",
     "write_ai_fields": "low",
+    "write_execution_log": "low",
 }
 
 _RETRYABLE = (
@@ -72,6 +74,8 @@ class IncidentBackend(Protocol):
     def update_incident(self, sys_id: str, payload: IncidentUpdatePayload) -> Awaitable[Any]: ...
 
     def add_work_note(self, sys_id: str, note: str) -> Awaitable[Any]: ...
+
+    def write_execution_log(self, payload: ExecutionLogCreatePayload) -> Awaitable[Any]: ...
 
 
 class AsyncRunner:
@@ -171,6 +175,9 @@ class IncidentGateway:
 
     def write_work_note(self, sys_id: str, note: str) -> None:
         self._call("write_work_note", sys_id, lambda b: b.add_work_note(sys_id, note))
+
+    def write_execution_log(self, sys_id: str, payload: ExecutionLogCreatePayload) -> None:
+        self._call("write_execution_log", sys_id, lambda b: b.write_execution_log(payload))
 
 
 def _only_review_flag(payload: IncidentUpdatePayload) -> bool:

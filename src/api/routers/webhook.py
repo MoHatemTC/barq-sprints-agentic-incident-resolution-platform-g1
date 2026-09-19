@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy import delete
 from sqlalchemy.exc import MissingGreenlet, SQLAlchemyError
 
-from api.auth import verify_bearer_token
+from api.auth import verify_webhook_oauth_token
 from api.schemas.webhook import IncidentWebhookPayload, WebhookAcceptedResponse
 from app.api.dependencies import get_session_factory
 from app.core.correlation import get_correlation_id
@@ -33,7 +33,7 @@ logger = structlog.getLogger("api.webhook")
 router = APIRouter(
     prefix="/api/v1/webhook",
     tags=["Webhook"],
-    dependencies=[Depends(verify_bearer_token)],
+    dependencies=[Depends(verify_webhook_oauth_token)],
 )
 
 

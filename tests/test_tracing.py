@@ -202,7 +202,7 @@ class TestCorrelation:
         """Receipt and enqueue (API process) + pickup (worker) → one trace id."""
         from app.main import create_app
         from app.workers.producer import CORRELATION_HEADER
-        from tests.helpers import mock_settings
+        from tests.helpers import mock_settings, webhook_oauth_headers
 
         tracer, exporter = recording_tracer()
         app = create_app(settings=mock_settings(webhook_auth_token="tok"))
@@ -234,7 +234,10 @@ class TestCorrelation:
                 resp = await client.post(
                     "/api/v1/webhook/incident",
                     json=payload,
-                    headers={"Authorization": "Bearer tok", "X-Correlation-ID": "corr-http-1"},
+                    headers={
+                        **webhook_oauth_headers(app.state.settings),
+                        "X-Correlation-ID": "corr-http-1",
+                    },
                 )
         assert resp.status_code == 202
         assert resp.json()["correlation_id"] == "corr-http-1"

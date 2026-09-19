@@ -30,7 +30,7 @@ from tests.helpers import mock_settings
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 VALID_PAYLOAD = h.make_incident_payload()
-AUTH = h.AUTH_HEADERS
+AUTH = h.webhook_oauth_headers()
 
 
 def _accepted() -> EventAcceptanceResult:
@@ -100,6 +100,7 @@ async def test_missing_authorization_returns_401_envelope_without_token_leak(cli
 @pytest.mark.asyncio
 async def test_invalid_bearer_tokens_return_401(client) -> None:
     invalid_headers = [
+        h.AUTH_HEADERS,  # operator API token must never authenticate ServiceNow
         {"Authorization": "Bearer wrong-token-value"},
         {"Authorization": "Bearer "},
         {"Authorization": "Basic dXNlcjpwYXNz"},
@@ -108,6 +109,72 @@ async def test_invalid_bearer_tokens_return_401(client) -> None:
         resp = await client.post("/api/v1/webhook/incident", json=VALID_PAYLOAD, headers=headers)
         assert resp.status_code == 401, f"{headers} must be rejected with 401"
         assert resp.json()["error"]["code"] == "AUTHENTICATION_FAILED"
+
+
+@pytest.mark.asyncio
+async def test_real_token_route_issues_token_that_the_real_webhook_accepts(
+    app_with_mocks,
+) -> None:
+    """Prove the two production routers are wired together, not merely unit tested."""
+    app, _, _ = app_with_mocks
+    settings = app.state.settings
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        token_response = await client.post(
+            "/api/v1/oauth/token",
+            data={
+                "grant_type": "client_credentials",
+                "client_id": settings.webhook_oauth_client_id,
+                "client_secret": settings.webhook_oauth_client_secret.get_secret_value(),
+            },
+        )
+        assert token_response.status_code == 200
+        token = token_response.json()["access_token"]
+
+        with (
+            patch(
+                "api.routers.webhook.accept_inbound_event",
+                new_callable=AsyncMock,
+                return_value=_accepted(),
+            ),
+            patch("api.routers.webhook.send_incident_event"),
+        ):
+            response = await client.post(
+                "/api/v1/webhook/incident",
+                json=VALID_PAYLOAD,
+                headers={"Authorization": f"Bearer {token}"},
+            )
+
+    assert response.status_code == 202
+
+
+def test_settings_require_all_api_and_webhook_auth_secrets(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pydantic import ValidationError
+
+    from app.core.config import Settings
+
+    required = (
+        "WEBHOOK_AUTH_TOKEN",
+        "WEBHOOK_OAUTH_CLIENT_ID",
+        "WEBHOOK_OAUTH_CLIENT_SECRET",
+        "WEBHOOK_OAUTH_SIGNING_KEY",
+    )
+    for name in required:
+        monkeypatch.delenv(name, raising=False)
+
+    with pytest.raises(ValidationError) as raised:
+        Settings(
+            _env_file=None,
+            servicenow_instance_url="https://dev00000.service-now.com",
+            servicenow_client_id="test-client",
+            servicenow_client_secret="test-secret",
+            servicenow_username="svc",
+            servicenow_password="test-password",
+        )
+
+    missing = {str(error["loc"][0]) for error in raised.value.errors()}
+    assert set(required) == {name.upper() for name in missing if name.startswith("webhook_")}
 
 
 # ---------------------------------------------------------------------------

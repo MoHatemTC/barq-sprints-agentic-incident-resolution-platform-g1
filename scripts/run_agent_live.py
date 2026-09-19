@@ -66,11 +66,12 @@ def main() -> int:
     target = parser.add_mutually_exclusive_group(required=True)
     target.add_argument("--number", help="live ServiceNow incident number")
     target.add_argument("--scenario", choices=sorted(SCENARIOS), help="in-memory manual case")
+    target.add_argument("--text", help="custom incident problem description to resolve live")
     parser.add_argument("--dry-run", action="store_true", help="never write to ServiceNow")
     args = parser.parse_args()
 
     settings = get_agent_settings()
-    if args.dry_run:
+    if args.dry_run or args.text:
         settings = settings.model_copy(update={"agent_write_back_enabled": False})
     tracer = get_tracer()
 
@@ -79,6 +80,22 @@ def main() -> int:
 
         record = INCIDENTS[SCENARIOS[args.scenario]]
         backend: Any = FakeServiceNow()
+        gateway = IncidentGateway(lambda: backend, tracer)
+        identity = {"sys_id": record["sys_id"], "number": record["number"]}
+    elif args.text:
+        from tests.agent_support import FakeServiceNow, incident_record
+
+        record = incident_record(
+            "INC0099999",
+            short=args.text[:80],
+            description=args.text,
+            category="inquiry",
+            priority="3",
+            impact="3",
+            urgency="3",
+            service="IT Support",
+        )
+        backend = FakeServiceNow({record["number"]: record})
         gateway = IncidentGateway(lambda: backend, tracer)
         identity = {"sys_id": record["sys_id"], "number": record["number"]}
     else:

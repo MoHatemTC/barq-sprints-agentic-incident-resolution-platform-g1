@@ -20,7 +20,10 @@ x-app-environment: &app-environment
   POSTGRES_USER: ${POSTGRES_USER:-postgres}
   POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
   QDRANT_URL: http://barq-qdrant:6333
-  WEBHOOK_AUTH_TOKEN: ${WEBHOOK_AUTH_TOKEN:-dev-webhook-secret-token}
+  WEBHOOK_AUTH_TOKEN: ${WEBHOOK_AUTH_TOKEN:?WEBHOOK_AUTH_TOKEN must be set in .env}
+  WEBHOOK_OAUTH_CLIENT_ID: ${WEBHOOK_OAUTH_CLIENT_ID:?WEBHOOK_OAUTH_CLIENT_ID must be set in .env}
+  WEBHOOK_OAUTH_CLIENT_SECRET: ${WEBHOOK_OAUTH_CLIENT_SECRET:?WEBHOOK_OAUTH_CLIENT_SECRET must be set in .env}
+  WEBHOOK_OAUTH_SIGNING_KEY: ${WEBHOOK_OAUTH_SIGNING_KEY:?WEBHOOK_OAUTH_SIGNING_KEY must be set in .env}
 
 services:
   # ---------------------------------------------------------------------------
@@ -164,7 +167,6 @@ services:
       WORKER_SOFT_TIME_LIMIT: ${WORKER_SOFT_TIME_LIMIT:-120}
       WORKER_TIME_LIMIT: ${WORKER_TIME_LIMIT:-150}
       WORKER_REPO_BACKEND: ${WORKER_REPO_BACKEND:-postgres}
-      WEBHOOK_AUTH_TOKEN: ${WEBHOOK_AUTH_TOKEN:-integration-test-token}
       # S2.5: the graph retrieves from Qdrant on the compose network.
       QDRANT_URL: http://barq-qdrant:6333
       AGENT_GRAPH_BACKEND: ${AGENT_GRAPH_BACKEND:-langgraph}

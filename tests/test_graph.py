@@ -297,7 +297,11 @@ class TestCheckpointing:
         assert result["outcome"] == "suggested"
         # classify and diagnose were not paid for twice; load did not re-read.
         assert llm.purposes() == ["classify", "diagnose", "generate", "generate"]
-        assert deps.servicenow.calls == ["read_incident", "write_ai_fields"]
+        assert deps.servicenow.calls == [
+            "read_incident",
+            "write_ai_fields",
+            "write_execution_log",
+        ]
         assert result["path"] == FULL_PATH
 
     def test_a_finished_execution_is_not_run_again(self) -> None:

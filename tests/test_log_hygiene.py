@@ -120,7 +120,7 @@ async def test_error_path_logs_do_not_dump_secrets_or_headers(app) -> None:
             resp = await ac.post(
                 "/api/v1/webhook/incident",
                 json=h.make_incident_payload(),
-                headers=h.AUTH_HEADERS,
+                headers=h.webhook_oauth_headers(app.state.settings),
             )
             assert resp.status_code == 503
 

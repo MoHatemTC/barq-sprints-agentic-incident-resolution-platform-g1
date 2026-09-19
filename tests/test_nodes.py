@@ -506,6 +506,10 @@ class TestAct:
         assert body["x_2215032_ai_inc_0_ai_model_name"] == "gemini/gemini-3.5-flash"
         assert body["x_2215032_ai_inc_0_ai_classification"] == "network"
         assert body["work_notes"].startswith("AI Suggested Response drafted. Confidence 0.82.")
+        log = backend.execution_logs[0]
+        assert log.execution_id == EXECUTION_ID
+        assert log.action.value == "propose"
+        assert log.status.value == "awaiting_approval"
         # Nothing outside §11.6 is ever called.
         assert set(deps.servicenow.calls) <= set(PERMITTED_ACTIONS)
         assert "comments" not in body
@@ -522,6 +526,7 @@ class TestAct:
             "AI Suggested Response: risk assessed as high before retrieval — Priority 1"
         )
         assert "x_2215032_ai_inc_0_ai_suggestion" not in body
+        assert backend.execution_logs[0].action.value == "escalate"
 
     def test_no_evidence_note_names_the_best_match(self) -> None:
         backend = FakeServiceNow()
@@ -586,6 +591,7 @@ class TestAct:
         output = act(state, make_deps(servicenow=backend))["output"]
         assert output["outcome"] == "skipped_ineligible"
         assert backend.updates == [] and backend.notes == []
+        assert backend.execution_logs[0].status.value == "blocked"
 
     def test_lock_taken_between_read_and_write_is_respected(self) -> None:
         backend = FakeServiceNow()
@@ -595,6 +601,7 @@ class TestAct:
         ]
         assert output["outcome"] == "skipped_human_lock"
         assert output["write_back"] == "skipped"
+        assert backend.execution_logs[0].status.value == "blocked"
 
     def test_missing_start_time_is_omitted_not_sent_as_null(self) -> None:
         backend = FakeServiceNow()

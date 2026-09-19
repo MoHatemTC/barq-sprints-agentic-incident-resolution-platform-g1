@@ -86,6 +86,8 @@ async def test_config_redacts_all_runtime_secrets(app_with_secrets) -> None:
     assert data["postgres_password"] == REDACTED_SENTINEL
     assert data["redis_password"] == REDACTED_SENTINEL
     assert data["webhook_auth_token"] == REDACTED_SENTINEL
+    assert data["webhook_oauth_client_secret"] == REDACTED_SENTINEL
+    assert data["webhook_oauth_signing_key"] == REDACTED_SENTINEL
     assert "webhook_secret" not in data
 
     # 3. Assert that NO raw secret string leaked anywhere in the raw response text
