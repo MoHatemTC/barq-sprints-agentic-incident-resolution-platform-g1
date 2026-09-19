@@ -108,7 +108,7 @@ jobs:
             docker compose up -d --wait postgres redis qdrant
 
             echo "==> Running database migrations from the new image..."
-            docker compose run --rm --no-deps api alembic upgrade head
+            docker compose run --rm --no-deps -T api alembic upgrade head < /dev/null
 
             echo "==> Starting the API and worker from the verified image..."
             docker compose up -d --no-build api celery-worker
