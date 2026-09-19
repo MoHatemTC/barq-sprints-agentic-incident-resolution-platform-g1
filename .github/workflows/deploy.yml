@@ -108,7 +108,7 @@ jobs:
             docker compose up -d --wait postgres redis qdrant
 
             echo "==> Running database migrations from the new image..."
-            docker compose run --rm --no-deps api uv run alembic upgrade head
+            docker compose run --rm --no-deps api alembic upgrade head
 
             echo "==> Starting the API and worker from the verified image..."
             docker compose up -d --no-build api celery-worker
@@ -125,7 +125,7 @@ jobs:
 
             echo "==> Verifying the Celery worker responds..."
             docker compose exec -T celery-worker \
-              uv run celery -A app.workers.celery_app inspect ping --timeout 10
+              celery -A app.workers.celery_app inspect ping --timeout 10
 
             docker compose ps api celery-worker
             trap - ERR
