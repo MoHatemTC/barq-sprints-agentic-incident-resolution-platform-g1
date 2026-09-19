@@ -53,27 +53,30 @@ def _init_langfuse(settings: Settings):
 def create_redis_client(settings: Settings) -> aioredis.Redis:
     """Create an async Redis client instance."""
     password = settings.redis_password.get_secret_value() if settings.redis_password else None
+    timeout = getattr(settings, "redis_socket_timeout", 5.0)
     return aioredis.Redis(
         host=settings.redis_host,
         port=settings.redis_port,
         password=password,
         decode_responses=True,
-        socket_timeout=5.0,
-        socket_connect_timeout=5.0,
+        socket_timeout=timeout,
+        socket_connect_timeout=timeout,
     )
 
 
 def create_sync_redis_client(settings: Settings) -> sync_redis_lib.Redis:
     """Create a thread-safe synchronous Redis client with connection pooling."""
     password = settings.redis_password.get_secret_value() if settings.redis_password else None
+    timeout = getattr(settings, "redis_socket_timeout", 5.0)
+    max_conns = getattr(settings, "redis_pool_max_connections", 20)
     pool = sync_redis_lib.ConnectionPool(
         host=settings.redis_host,
         port=settings.redis_port,
         password=password,
         decode_responses=True,
-        socket_timeout=5.0,
-        socket_connect_timeout=5.0,
-        max_connections=20,
+        socket_timeout=timeout,
+        socket_connect_timeout=timeout,
+        max_connections=max_conns,
     )
     return sync_redis_lib.Redis(connection_pool=pool)
 

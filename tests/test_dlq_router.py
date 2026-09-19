@@ -29,6 +29,7 @@ def app_instance():
     app.state.engine = MagicMock()
     app.state.session_factory = MagicMock()
     app.state.redis = MagicMock()
+    app.state.redis.lrange = AsyncMock(return_value=[])
 
     mock_repo = MagicMock(spec=WorkerRepo)
     mock_repo.get_event_payload.return_value = {"number": "INC009", "sys_id": "sys999"}
@@ -183,7 +184,9 @@ async def test_replay_dlq_moves_event_from_dlq_to_events_queue(
     )
     mock_sync_redis = MagicMock()
     mock_sync_redis.lrange.return_value = [fake_dlq_item]
-    mock_sync_redis.lrem.return_value = 1
+    mock_pipe = MagicMock()
+    mock_pipe.execute.return_value = [1]
+    mock_sync_redis.pipeline.return_value = mock_pipe
     app_instance.state.sync_redis = mock_sync_redis
 
     async with AsyncClient(
@@ -198,7 +201,8 @@ async def test_replay_dlq_moves_event_from_dlq_to_events_queue(
     data = resp.json()
     assert data["event_id"] == "evt-dlq-replay-123"
     assert "replayed" in data["message"]
-    mock_sync_redis.lrem.assert_called_once_with(INCIDENT_DLQ_QUEUE, 0, fake_dlq_item)
+    mock_pipe.lrem.assert_called_once_with(INCIDENT_DLQ_QUEUE, 0, fake_dlq_item)
+    mock_pipe.execute.assert_called_once()
     mock_send_incident.assert_called_once()
 
 

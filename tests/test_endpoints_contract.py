@@ -99,6 +99,7 @@ def app():
     application.state.session_factory = MagicMock()
     application.state.redis = MagicMock()
     application.state.redis.ping = AsyncMock(return_value=True)
+    application.state.redis.lrange = AsyncMock(return_value=[])
 
     mock_repo = MagicMock(spec=WorkerRepo)
     mock_repo.get_event_payload.return_value = {"event_id": "test"}

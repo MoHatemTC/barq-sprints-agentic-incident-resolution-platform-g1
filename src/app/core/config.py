@@ -119,6 +119,8 @@ class Settings(RetrievalSettings):
     redis_host: str = "localhost"
     redis_port: int = 6379
     redis_password: SecretStr | None = None
+    redis_pool_max_connections: int = 20
+    redis_socket_timeout: float = 5.0
 
     # Workers (S2.3) — every value is configuration-driven; the worker code must
     # contain no literal concurrency/retry/timeout numbers.

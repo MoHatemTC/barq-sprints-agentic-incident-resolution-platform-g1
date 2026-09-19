@@ -30,8 +30,23 @@ EVENT_PAYLOAD = {
 }
 
 
+class FakePipeline:
+    """Mock pipeline executing queued operations on execute()."""
+
+    def __init__(self, redis: FakeListRedis) -> None:
+        self._redis = redis
+        self._ops: list[tuple[str, int, str]] = []
+
+    def lrem(self, key: str, count: int, value: str) -> FakePipeline:
+        self._ops.append((key, count, value))
+        return self
+
+    def execute(self) -> list[int]:
+        return [self._redis.lrem(key, count, value) for key, count, value in self._ops]
+
+
 class FakeListRedis:
-    """Just enough of redis-py for the DLQ list: LPUSH / LRANGE(0,-1) / LREM(0)."""
+    """Just enough of redis-py for the DLQ list: LPUSH / LRANGE(0,-1) / LREM(0) / PIPELINE."""
 
     def __init__(self) -> None:
         self.lists: dict[str, list[str]] = {}
@@ -49,6 +64,9 @@ class FakeListRedis:
         kept = [item for item in items if item != value]
         self.lists[key] = kept
         return len(items) - len(kept)
+
+    def pipeline(self) -> FakePipeline:
+        return FakePipeline(self)
 
 
 def _parked_repo(*, state: str) -> InMemoryRepo:

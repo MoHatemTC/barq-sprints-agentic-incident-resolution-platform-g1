@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import inspect
 import json
 from datetime import UTC, datetime
 from typing import Annotated, Any
@@ -51,11 +50,11 @@ async def list_dlq_events(
 ) -> list[DLQEventResponse]:
     """List dead-letter events currently accumulated in the DLQ."""
     logger.info("dlq_events_queried")
-    raw_events = []
+    raw_events: list[Any] = []
     if redis_client is not None:
         try:
             res = redis_client.lrange(INCIDENT_DLQ_QUEUE, 0, -1)
-            raw_events = await res if inspect.isawaitable(res) else (res or [])
+            raw_events = (await res) if hasattr(res, "__await__") else (res or [])
         except Exception as exc:
             logger.warning("dlq_redis_read_failed", error=str(exc))
 
