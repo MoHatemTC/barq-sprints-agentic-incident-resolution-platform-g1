@@ -52,6 +52,20 @@ class RetrievalSettings(BaseSettings):
     sparse_embedding_model: str = "Qdrant/bm25"
     retrieval_mode: RetrievalMode = RetrievalMode.HYBRID
 
+    # Retrieval
+    retrieval_mode: RetrievalMode = RetrievalMode.HYBRID_RERANKED
+    rerank_model: str = "Xenova/ms-marco-MiniLM-L-6-v2"
+    rerank_top_k: int = 5
+    rerank_candidate_limit: int = 20  # must be larger than rerank_top_k
+
+    @field_validator("rerank_candidate_limit")
+    @classmethod
+    def validate_candidate_limit(cls, v: int, info) -> int:
+        top_n = info.data.get("rerank_top_n", 5)
+        if v < top_n:
+            raise ValueError(f"rerank_candidate_limit ({v}) must be >= rerank_top_n ({top_n})")
+        return v
+
 
 class Settings(RetrievalSettings):
     # No model_config here on purpose. It is inherited from RetrievalSettings, and
@@ -169,6 +183,20 @@ class Settings(RetrievalSettings):
         default="postgres",
         description="Worker repository backend: 'postgres' or 'memory' (tests/stand-in)",
     )
+    # Langfuse Tracing (optional — integration is disabled when keys are absent)
+    langfuse_public_key: str | None = Field(
+        default=None,
+        description="Langfuse project public key (tracing disabled when absent)",
+    )
+    langfuse_secret_key: SecretStr | None = Field(
+        default=None,
+        description="Langfuse project secret key (tracing disabled when absent)",
+    )
+    langfuse_host: str = Field(
+        default="https://cloud.langfuse.com",
+        description="Langfuse server URL",
+    )
+
     # Langfuse Tracing (optional — integration is disabled when keys are absent)
     langfuse_public_key: str | None = Field(
         default=None,

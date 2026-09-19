@@ -11,22 +11,10 @@ request-capture links were supplied for this repository update, so none are
 invented here. The exported update set is configuration evidence, not a
 substitute for runtime evidence.
 
-Sprint 1 verification currently uses a **No Authentication**
-request-inspection endpoint. The configured REST Message uses `POST` and
-`Content-Type: application/json`. This matches prior implementation guidance
-because the real downstream webhook is not introduced until Sprint 2, and
-Webhook.site cannot meaningfully validate the intended outbound OAuth flow.
-S1.2 OAuth controls inbound access into ServiceNow; it is not outbound OAuth
-from ServiceNow.
-
-The written S1.3 acceptance criterion and rubric Point 8 still reference
-outbound OAuth. Outbound OAuth has not been formally waived, retired, approved
-for deferral, or removed from S1.3.
-
-Point 8 is not currently met in Sprint 1. The current request-inspection
-transport uses No Authentication. Outbound OAuth deferral is pending formal
-mentor confirmation. If deferral is not approved, outbound OAuth must be
-implemented.
+The results below were recorded against a **No Authentication**
+request-inspection endpoint, before outbound OAuth was added. Point 8 (outbound
+OAuth) is now met and verified separately against a token-validating receiver; see
+[outbound-oauth.md](outbound-oauth.md).
 
 No Basic Auth or administrative credentials are used.
 

@@ -121,6 +121,7 @@ async def async_main(args: argparse.Namespace) -> int:
 
     created = sum(1 for r in results if r["outcome"] == "created")
     updated = sum(1 for r in results if r["outcome"] == "updated")
+    unchanged = sum(1 for r in results if r["outcome"] == "unchanged")
     _write_report(
         args.report,
         {
@@ -128,6 +129,7 @@ async def async_main(args: argparse.Namespace) -> int:
             "dry_run": False,
             "created": created,
             "updated": updated,
+            "unchanged": unchanged,
             "failed": failed,
             "results": results,
         },

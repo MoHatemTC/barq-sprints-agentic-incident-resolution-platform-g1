@@ -27,6 +27,9 @@ services:
   # 1. Qdrant — Vector Database (Sprint 1+)
   # ---------------------------------------------------------------------------
   qdrant:
+    # Pinned in lockstep with qdrant-client in pyproject.toml. Bump both in the
+    # same PR - see the comment there. tests/repo/test_qdrant_client_server_pin.py
+    # fails if they drift apart.
     image: qdrant/qdrant:v1.14.0
     container_name: barq-qdrant
     restart: unless-stopped
