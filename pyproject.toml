@@ -23,6 +23,8 @@ dependencies = [
     "pydantic>=2.13.5",
     "pydantic-settings>=2.15.0",
     "python-dotenv>=1.2.3",
+    # Must match the Qdrant server image in docker-compose.yml; bump both together.
+    # Enforced by tests/repo/test_qdrant_client_server_pin.py.
     "qdrant-client>=1.14,<1.15",
     "redis>=5.0.0",
     "sqlalchemy>=2.0,<3",
