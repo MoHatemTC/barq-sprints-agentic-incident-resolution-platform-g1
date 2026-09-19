@@ -7,9 +7,9 @@ from unittest.mock import MagicMock
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+import tests.helpers as h
 from api.schemas.eval import EvalResultResponse, EvalRunResponse
 from app.main import create_app
-import tests.helpers as h
 from tests.helpers import mock_settings
 
 AUTH_HEADERS = h.AUTH_HEADERS
