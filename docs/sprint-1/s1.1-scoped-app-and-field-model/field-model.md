@@ -22,7 +22,7 @@ All fields must be created while **AI Incident Orchestrator** is the active appl
 
 | Display label | Technical name | Type / length | Default and permitted values | Writing component | Intended write permission | Purpose and validation |
 |---|---|---|---|---|---|---|
-| AI Enabled | `x_2215032_ai_inc_0_ai_enabled` | True/False | Default `false`; `true` or `false` | Authorized fulfiller or platform administrator | Human-controlled; integration identity reads only | Explicitly opts an Incident into AI processing. Required now because the S1.3 eligibility Business Rule depends on it. |
+| AI Enabled | `x_2215032_ai_inc_0_ai_enabled` | True/False | Default `false`; `true` or `false` | Platform administrator | Human-controlled; integration identity reads only | Explicitly opts an Incident into AI processing. Required now because the S1.3 eligibility Business Rule depends on it. |
 | AI Processing State | `x_2215032_ai_inc_0_ai_processing_state` | Choice | Default `pending`; `pending`, `in_progress`, `awaiting_approval`, `complete`, or `failed` | Orchestrator through the integration identity | Integration identity may update; authorized support users may perform controlled recovery | Stores the durable lifecycle state. `in_progress` prevents concurrent processing; `awaiting_approval` pauses automation; terminal states are `complete` and `failed`. |
 | AI Classification | `x_2215032_ai_inc_0_ai_classification` | String (100) | Free text produced by the classifier. Initial expected labels: `hardware`, `software`, `network`, `access`, `security`, and `other`; S1.4 refined the corpus vocabulary; the mapping is recorded below and enforced by a test. | Classification node through the integration identity | Integration identity writes; support users read | Stores the class determined by the agent. A String intentionally avoids freezing a taxonomy before the S1.4 classification contract is finalized. |
 | AI Confidence | `x_2215032_ai_inc_0_ai_confidence` | Decimal, scale 2 | Blank until scored; inclusive range `0.00`–`1.00` | Confidence-check node through the integration identity | Integration identity writes; support users read | Stores the normalized confidence score. Scoped onChange/onSubmit validation enforces the range on forms; every API writer must enforce the identical contract before writing. |
@@ -33,7 +33,7 @@ All fields must be created while **AI Incident Orchestrator** is the active appl
 | AI Processing Start | `x_2215032_ai_inc_0_ai_processing_start` | Date/Time | Blank until a run begins | Orchestrator through the integration identity | Integration identity writes; support users read | Records when execution begins. |
 | AI Processing End | `x_2215032_ai_inc_0_ai_processing_end` | Date/Time | Blank until the attempt reaches a terminal state | Orchestrator through the integration identity | Integration identity writes; support users read | Records when execution completes or fails. Duration is calculated as end minus start. End must not precede start. |
 | AI Human Review Required | `x_2215032_ai_inc_0_ai_human_review_required` | True/False | Default `false`; `true` or `false` | Risk/confidence routing or approval workflow | Integration identity sets the requirement; authorized reviewers complete the related approval process | Means **review required**: the automated run has flagged the Incident for human inspection or sign-off. It is distinct from Human Lock. |
-| AI Human Lock | `x_2215032_ai_inc_0_ai_human_lock` | True/False | Default `false`; `true` or `false` | Authorized human fulfiller | Human-controlled; integration identity reads only and must not clear it | Hard safety override. When true, event eligibility and every later write path must halt automated AI processing. |
+| AI Human Lock | `x_2215032_ai_inc_0_ai_human_lock` | True/False | Default `false`; `true` or `false` | Platform administrator | Human-controlled; integration identity reads only and must not clear it | Hard safety override. When true, event eligibility and every later write path must halt automated AI processing. |
 | AI Failure Reason | `x_2215032_ai_inc_0_ai_failure_reason` | Large String (4000) | Blank unless a run fails; explicit diagnostic text on failure | Orchestrator/worker through the integration identity | Integration identity writes; support users read | Makes a failed attempt diagnosable. When state becomes `failed`, this field should be populated and Processing End recorded. |
 
 ## Exact writer and permission contract
@@ -44,7 +44,7 @@ The **persistence component** is the component that performs the ServiceNow Tabl
 
 | Field | Value-producing component | Persistence component | Intended write role(s) | Intended read role(s) |
 |---|---|---|---|---|
-| AI Enabled | Authorized Incident fulfiller | ServiceNow Incident form | `x_2215032_ai_inc_0.user`, `x_2215032_ai_inc_0.admin`; explicitly deny `x_2215032_ai_inc_0.integration_writer` | App user/admin and integration writer |
+| AI Enabled | Platform administrator | ServiceNow Incident form | `admin`; explicitly deny `x_2215032_ai_inc_0.integration_writer` (see below) | App user/admin and integration writer |
 | AI Processing State | Backend Incident Orchestrator lifecycle controller | Backend ServiceNow Writer using OAuth/Table API | `x_2215032_ai_inc_0.integration_writer`; `x_2215032_ai_inc_0.admin` only for controlled recovery | App user/admin and integration writer |
 | AI Classification | LangGraph Classification Agent node | Backend ServiceNow Writer using OAuth/Table API | `x_2215032_ai_inc_0.integration_writer` | App user/admin and integration writer |
 | AI Confidence | Confidence Evaluation/Guardrail node | Backend ServiceNow Writer using OAuth/Table API | `x_2215032_ai_inc_0.integration_writer` | App user/admin and integration writer |
@@ -55,8 +55,9 @@ The **persistence component** is the component that performs the ServiceNow Tabl
 | AI Processing Start | Backend worker claim/start handler | Backend ServiceNow Writer using OAuth/Table API | `x_2215032_ai_inc_0.integration_writer` | App user/admin and integration writer |
 | AI Processing End | Backend completion/failure handler | Backend ServiceNow Writer using OAuth/Table API | `x_2215032_ai_inc_0.integration_writer` | App user/admin and integration writer |
 | AI Human Review Required | Risk/Confidence Router and approval workflow | Backend ServiceNow Writer using OAuth/Table API; approval workflow clears after review | `x_2215032_ai_inc_0.integration_writer`; `x_2215032_ai_inc_0.user` and `.admin` for the human review transition | App user/admin and integration writer |
-| AI Human Lock | Authorized Incident fulfiller or risk owner | ServiceNow Incident form | `x_2215032_ai_inc_0.user`, `x_2215032_ai_inc_0.admin`; explicitly deny `x_2215032_ai_inc_0.integration_writer` | App user/admin and integration writer |
+| AI Human Lock | Platform administrator | ServiceNow Incident form | `admin`; explicitly deny `x_2215032_ai_inc_0.integration_writer` (see below) | App user/admin and integration writer |
 | AI Failure Reason | Backend worker error handler | Backend ServiceNow Writer using OAuth/Table API | `x_2215032_ai_inc_0.integration_writer` | App user/admin and integration writer |
+| AI Retry Count | S1.3 eligibility/retry Business Rule, on the ServiceNow side | The Business Rule itself — never the backend | The Business Rule; `admin` for recovery. Explicitly deny `x_2215032_ai_inc_0.integration_writer` | App user/admin and integration writer |
 
 Permission rules:
 
@@ -64,7 +65,28 @@ Permission rules:
 - Human Lock and AI Enabled are human-controlled. The integration identity may read them for eligibility but cannot write or clear them.
 - AI Suggestion remains machine-authored. AI Resolution may be written only after an approved/safe action or by an authorized human fulfiller.
 - Application users may read AI-produced audit fields; only the integration writer and explicitly listed human roles may update them.
+- AI Retry Count is written by the S1.3 Business Rule. Anything that can reset it to `0`
+  defeats the retry cap, so the integration identity reads it and never writes it.
 - S1.2 owns implementation and automated testing of these field ACLs.
+
+### Human Lock and AI Enabled: `admin` only (#69)
+
+The S1.2 export grants the write ACLs `incident.x_2215032_ai_inc_0_ai_human_lock` and
+`incident.x_2215032_ai_inc_0_ai_enabled` to `admin` only. @MohamedAbdelaiem, who owns the
+ACLs, chose that on #69, and this contract follows the export.
+
+The integration identity is refused on both fields. It cannot lift its own lock
+(`LOCK-01`, `test_live_integration_identity_cannot_set_human_lock`).
+
+The trade-off: a fulfiller with `itil` cannot set the lock or opt an incident in. They ask
+a platform admin. Widening that to `itil` or to the app's user role is an ACL change in
+S1.2 first, and this section changes with it.
+
+### AI Retry Count: `admin` only (#100)
+
+The field has its own write ACL in the S1.2 security fixes update set, granted to `admin`
+for recovery. The S1.3 Business Rule updates the count server-side. The integration identity
+is refused (`DENY-06`).
 
 ## Suggestion and resolution separation
 
