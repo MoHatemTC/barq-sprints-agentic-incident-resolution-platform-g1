@@ -10,6 +10,7 @@ dependencies = [
     "asyncpg>=0.30,<1",
     # Imported directly by src/app/retrieval/extraction.py. It arrived only as a
     # markdownify transitive before, so a markdownify change could have broken imports.
+    "asyncpg>=0.29.0",
     "beautifulsoup4>=4.12.3",
     "fastapi>=0.141.1",
     "fastembed>=0.8.0",
@@ -20,9 +21,11 @@ dependencies = [
     "pydantic-settings>=2.15.0",
     "python-dotenv>=1.2.3",
     "qdrant-client>=1.14,<1.15",
+    "redis>=5.0.0",
     "sqlalchemy>=2.0,<3",
     "structlog>=26.1.0",
     "uvicorn[standard]>=0.52.4",
+    "langfuse>=4.15.4",
 ]
 
 [dependency-groups]
@@ -46,7 +49,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/app", "src/retrieval"]
+packages = ["src/app", "src/retrieval", "src/api", "src/db"]
 
 [tool.ruff]
 line-length = 100
@@ -70,6 +73,11 @@ indent-style = "space"
 testpaths = ["tests"]
 asyncio_mode = "auto"
 pythonpath = ["src"]
+markers = [
+    "unit: fast isolated tests using mocks/fakes (default suite)",
+    "integration: exercises real PostgreSQL/Redis; skips when infrastructure is unreachable",
+    "load: latency/load benchmarks; run explicitly via tests/load/run_load_test.py",
+]
 
 [tool.mypy]
 python_version = "3.12"

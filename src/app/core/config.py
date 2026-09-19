@@ -14,6 +14,12 @@ class Environment(StrEnum):
     PRODUCTION = "production"
 
 
+class RetrievalMode(StrEnum):
+    DENSE_ONLY = "dense_only"
+    HYBRID = "hybrid"
+    HYBRID_RERANKED = "hybrid_reranked"
+
+
 def _get_version() -> str:
     try:
         return version("barq-sprints-agentic-incident-resolution-platform-g1")
@@ -44,6 +50,7 @@ class RetrievalSettings(BaseSettings):
     # Embedding Models
     dense_embedding_model: str = "BAAI/bge-small-en-v1.5"
     sparse_embedding_model: str = "Qdrant/bm25"
+    retrieval_mode: RetrievalMode = RetrievalMode.HYBRID
 
 
 class Settings(RetrievalSettings):
@@ -57,6 +64,16 @@ class Settings(RetrievalSettings):
     app_version: str = Field(default_factory=_get_version)
     log_level: str = "INFO"
     environment: Environment = Environment.DEVELOPMENT
+
+    # Feature Flags
+    active_feature_flags: dict[str, bool] = Field(
+        default_factory=lambda: {
+            "hitl_approvals": True,
+            "dlq_replay": True,
+            "eval_benchmarks": False,
+            "auto_remediation": False,
+        }
+    )
 
     # Host & Network Binding (Security)
     bind_ip: str = "127.0.0.1"
@@ -85,6 +102,12 @@ class Settings(RetrievalSettings):
         description="Target Knowledge Base sys_id for KB publishing",
     )
 
+    # WebHook
+    webhook_auth_token: str = Field(
+        default="dev-webhook-secret-token",
+        description="Bearer token for webhook authentication",
+    )
+
     # PostgreSQL
     postgres_host: str = "localhost"
     postgres_port: int = 5432
@@ -96,6 +119,20 @@ class Settings(RetrievalSettings):
     redis_host: str = "localhost"
     redis_port: int = 6379
     redis_password: SecretStr | None = None
+
+    # Langfuse Tracing (optional — integration is disabled when keys are absent)
+    langfuse_public_key: str | None = Field(
+        default=None,
+        description="Langfuse project public key (tracing disabled when absent)",
+    )
+    langfuse_secret_key: SecretStr | None = Field(
+        default=None,
+        description="Langfuse project secret key (tracing disabled when absent)",
+    )
+    langfuse_host: str = Field(
+        default="https://cloud.langfuse.com",
+        description="Langfuse server URL",
+    )
 
     @field_validator("servicenow_instance_url")
     @classmethod

@@ -7,12 +7,15 @@ import os
 from logging.config import fileConfig
 
 from alembic import context
+from dotenv import load_dotenv
 from sqlalchemy.engine import URL, make_url
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import NullPool
 
 from app.db import models as canonical_models  # noqa: F401
 from app.db.base import Base
+
+load_dotenv()
 
 config = context.config
 

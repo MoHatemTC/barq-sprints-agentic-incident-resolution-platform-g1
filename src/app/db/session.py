@@ -1,5 +1,7 @@
 """Async SQLAlchemy engine and session construction without import-time I/O."""
 
+from __future__ import annotations
+
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Protocol
@@ -44,9 +46,25 @@ def build_database_url(settings: PostgreSQLSettings) -> URL:
     )
 
 
+# Compatibility alias for build_database_url
+build_postgres_url = build_database_url
+
+
 def create_database_engine(database_url: str | URL, *, echo: bool = False) -> AsyncEngine:
-    """Create a lazy async engine; no connection is opened until first use."""
-    return create_async_engine(database_url, echo=echo, pool_pre_ping=True)
+    """Create an async engine configured for high concurrent throughput."""
+    return create_async_engine(
+        database_url,
+        echo=echo,
+        pool_size=50,
+        max_overflow=25,
+        pool_pre_ping=False,
+    )
+
+
+def create_db_engine(settings: PostgreSQLSettings) -> AsyncEngine:
+    """Create a production-configured SQLAlchemy async engine from settings."""
+    url = build_database_url(settings)
+    return create_database_engine(url)
 
 
 def create_session_factory(engine: AsyncEngine) -> SessionFactory:

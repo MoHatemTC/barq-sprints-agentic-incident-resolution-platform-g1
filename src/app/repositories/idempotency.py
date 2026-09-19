@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy.exc import IntegrityError
 
@@ -82,35 +82,39 @@ async def accept_inbound_event(
     async with session_factory() as session:
         try:
             async with session.begin():
-                session.add(IdempotencyKey(event_id=inbound_event.event_id))
-                await session.flush()
-
-                event_record = Event(
-                    event_id=inbound_event.event_id,
-                    incident_sys_id=inbound_event.sys_id,
-                    incident_number=inbound_event.number,
-                    event_type=inbound_event.event_type,
-                    contract_version="v1",
+                event_record_id = uuid4()
+                execution_id = uuid4()
+                session.add_all(
+                    [
+                        IdempotencyKey(event_id=inbound_event.event_id),
+                        Event(
+                            id=event_record_id,
+                            event_id=inbound_event.event_id,
+                            incident_sys_id=inbound_event.sys_id,
+                            incident_number=inbound_event.number,
+                            event_type=inbound_event.event_type,
+                            contract_version="v1",
+                        ),
+                        Execution(
+                            execution_id=execution_id,
+                            event_record_id=event_record_id,
+                            incident_sys_id=inbound_event.sys_id,
+                            status="accepted",
+                        ),
+                    ]
                 )
-                session.add(event_record)
-                await session.flush()
-
-                execution = Execution(
-                    event_record_id=event_record.id,
-                    incident_sys_id=inbound_event.sys_id,
-                    status="accepted",
-                )
-                session.add(execution)
-                await session.flush()
 
                 accepted_result = EventAcceptanceResult(
                     status=EventAcceptanceStatus.ACCEPTED,
                     event_id=inbound_event.event_id,
-                    event_record_id=event_record.id,
-                    execution_id=execution.execution_id,
+                    event_record_id=event_record_id,
+                    execution_id=execution_id,
                 )
         except IntegrityError as error:
-            if _postgres_constraint_name(error) == IDEMPOTENCY_CONSTRAINT_NAME:
+            if _postgres_constraint_name(error) in (
+                IDEMPOTENCY_CONSTRAINT_NAME,
+                "uq_events_event_id",
+            ):
                 return EventAcceptanceResult(
                     status=EventAcceptanceStatus.DUPLICATE,
                     event_id=inbound_event.event_id,
