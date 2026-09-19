@@ -220,6 +220,7 @@ class TestCorrelation:
             "sys_id": VPN["sys_id"],
             "number": VPN["number"],
             "event_type": "incident.created",
+            "contract_version": "v1",
         }
         with (
             patch("api.routers.webhook.get_tracer", return_value=tracer),

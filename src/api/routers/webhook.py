@@ -126,7 +126,7 @@ async def _ingest(
                     send_incident_event,
                     payload.model_dump(),
                     str(acceptance.execution_id),
-                    correlation_id,
+                    correlation_id=correlation_id,
                 )
         except Exception as exc:
             logger.exception(
@@ -163,4 +163,3 @@ async def _ingest(
         correlation_id=correlation_id,
         idempotent_replay=is_duplicate,
     )
-

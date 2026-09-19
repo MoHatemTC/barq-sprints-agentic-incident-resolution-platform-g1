@@ -26,11 +26,7 @@ docs/sprint2_worker_topology.md):
 from __future__ import annotations
 
 import datetime as dt
-<<<<<<< HEAD
 from typing import Any, Protocol
-=======
-from typing import Protocol
->>>>>>> origin/main
 from uuid import UUID, uuid4
 
 from sqlalchemy import select, update
@@ -134,7 +130,6 @@ class WorkerRepo(Protocol):
         model_name: str | None = None,
         agent_version: str | None = None,
     ) -> None: ...
-
 
     def get_termination_cause(self, execution_id: UUID) -> str | None: ...
 

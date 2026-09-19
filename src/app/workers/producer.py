@@ -44,4 +44,3 @@ def send_incident_event(
 
 
 __all__ = ["CORRELATION_HEADER", "PROCESS_INCIDENT_TASK", "send_incident_event"]
-
