@@ -29,7 +29,7 @@ dependencies = [
     "python-dotenv>=1.2.3",
     # Must match the Qdrant server image in docker-compose.yml; bump both together.
     # Enforced by tests/repo/test_qdrant_client_server_pin.py.
-    "qdrant-client>=1.14,<1.15",
+    "qdrant-client>=1.14,<1.20",
     # Pinned: redis-py 8.x breaks kombu 5.6 BRPOP parsing (KeyError 'properties' on
     # delivery). Revisit when kombu supports redis-py 8.
     "redis==5.2.1",
