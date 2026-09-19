@@ -73,7 +73,7 @@ jobs:
             git pull origin main
 
             echo "==> Running database migrations..."
-            docker compose exec -T api uv run alembic upgrade head || true
+            docker compose exec -T api alembic upgrade head || true
 
             echo "==> Rebuilding and restarting application containers..."
             docker compose up -d --build api celery-worker
