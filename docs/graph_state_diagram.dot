@@ -1,0 +1,36 @@
+digraph incident_resolution {
+  graph [rankdir=TB fontname="Helvetica" nodesep=0.5 ranksep=0.45 label="BARQ incident-resolution graph (S2.5) — 11 nodes, deterministic edges\norange: risk is decided before any retrieval · dashed: Sprint 4 gates (pass-through) · yellow: confidence floor 0.45 · blue: the only node that writes to ServiceNow" labelloc=t fontsize=16];
+  node [shape=box style="rounded,filled" fillcolor="#f5f5ff" fontname="Helvetica" fontsize=12];
+  edge [fontname="Helvetica" fontsize=9 color="#555555"];
+  "__start__" [shape=circle label="" width=0.25 style=filled fillcolor="#222222"];
+  "load" [];
+  "validate" [];
+  "classify" [];
+  "determine_risk" [fillcolor="#fde2cf" color="#c2410c" penwidth=2];
+  "retrieve" [];
+  "diagnose" [];
+  "generate" [];
+  "verify_evidence" [fillcolor="#eeeeee" style="rounded,filled,dashed"];
+  "safety_check" [fillcolor="#eeeeee" style="rounded,filled,dashed"];
+  "confidence_check" [fillcolor="#fef9c3" color="#a16207"];
+  "act" [fillcolor="#dbeafe" color="#1d4ed8" penwidth=2];
+  "__end__" [shape=doublecircle label="" width=0.2 style=filled fillcolor="#222222"];
+  "__start__" -> "load" [];
+  "classify" -> "determine_risk" [];
+  "confidence_check" -> "act" [];
+  "determine_risk" -> "act" [label="risk HIGH\n(no retrieval,\nno generation)" color="#c2410c" fontcolor="#c2410c" style=dashed constraint=false];
+  "determine_risk" -> "retrieve" [label="risk.level in {low, elevated}"];
+  "diagnose" -> "act" [label="no retrieved article\nmatches the fault" color="#c2410c" fontcolor="#c2410c" style=dashed constraint=false];
+  "diagnose" -> "generate" [label="diagnosis.matched_article_ids non-empty"];
+  "generate" -> "verify_evidence" [];
+  "load" -> "validate" [];
+  "retrieve" -> "act" [label="best cosine < 0.55\nor no corpus category" color="#c2410c" fontcolor="#c2410c" style=dashed constraint=false];
+  "retrieve" -> "diagnose" [label="retrieval.best_relevance >= threshold"];
+  "safety_check" -> "act" [label="gate failed" color="#c2410c" fontcolor="#c2410c" style=dashed constraint=false];
+  "safety_check" -> "confidence_check" [label="safety.passed"];
+  "validate" -> "act" [label="ineligible\n(skip, no write)" color="#c2410c" fontcolor="#c2410c" style=dashed constraint=false];
+  "validate" -> "classify" [label="eligibility.eligible"];
+  "verify_evidence" -> "act" [label="gate failed" color="#c2410c" fontcolor="#c2410c" style=dashed constraint=false];
+  "verify_evidence" -> "safety_check" [label="verification.passed"];
+  "act" -> "__end__" [];
+}

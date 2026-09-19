@@ -21,10 +21,6 @@ def mock_settings(**overrides: object) -> Settings:
         "servicenow_client_secret": "test-secret",
         "servicenow_username": "svc_user",
         "servicenow_password": "svc_pass",
-        "webhook_auth_token": "test-operator-token",
-        "webhook_oauth_client_id": "test-servicenow-webhook",
-        "webhook_oauth_client_secret": "test-oauth-client-secret",
-        "webhook_oauth_signing_key": "test-oauth-signing-key-at-least-32-chars",
         "servicenow_timeout_seconds": 5,
         "servicenow_token_expiry_buffer_seconds": 30,
         "postgres_host": "localhost",
@@ -35,6 +31,10 @@ def mock_settings(**overrides: object) -> Settings:
         "redis_host": "localhost",
         "redis_port": 6379,
         "redis_password": "test_redis_password",
+        "webhook_auth_token": "operator-api-token-for-tests",
+        "webhook_oauth_client_id": "barq-servicenow-test",
+        "webhook_oauth_client_secret": "client-secret-for-tests",
+        "webhook_oauth_signing_key": "test-signing-key-that-is-at-least-32-characters",
         "langfuse_public_key": None,
         "langfuse_secret_key": None,
     }
@@ -51,7 +51,7 @@ OPERATOR_HEADERS = {**AUTH_HEADERS, "X-User-Role": "operator"}
 
 
 def webhook_oauth_headers(settings: Settings | None = None) -> dict[str, str]:
-    """Issue a valid short-lived ServiceNow webhook token for boundary tests."""
+    """Issue a valid short-lived ServiceNow webhook token for HTTP-boundary tests."""
     from app.auth.webhook_oauth import config_from_settings, issue_access_token
 
     resolved = settings or mock_settings()

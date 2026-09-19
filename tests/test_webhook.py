@@ -100,7 +100,7 @@ async def test_missing_authorization_returns_401_envelope_without_token_leak(cli
 @pytest.mark.asyncio
 async def test_invalid_bearer_tokens_return_401(client) -> None:
     invalid_headers = [
-        h.AUTH_HEADERS,
+        h.AUTH_HEADERS,  # operator API token must never authenticate ServiceNow
         {"Authorization": "Bearer wrong-token-value"},
         {"Authorization": "Bearer "},
         {"Authorization": "Basic dXNlcjpwYXNz"},
@@ -112,8 +112,10 @@ async def test_invalid_bearer_tokens_return_401(client) -> None:
 
 
 @pytest.mark.asyncio
-async def test_token_route_issues_token_accepted_by_production_webhook(app_with_mocks) -> None:
-    """Prove the two production routers are wired together end to end."""
+async def test_real_token_route_issues_token_that_the_real_webhook_accepts(
+    app_with_mocks,
+) -> None:
+    """Prove the two production routers are wired together, not merely unit tested."""
     app, _, _ = app_with_mocks
     settings = app.state.settings
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -126,6 +128,7 @@ async def test_token_route_issues_token_accepted_by_production_webhook(app_with_
             },
         )
         assert token_response.status_code == 200
+        token = token_response.json()["access_token"]
 
         with (
             patch(
@@ -138,7 +141,7 @@ async def test_token_route_issues_token_accepted_by_production_webhook(app_with_
             response = await client.post(
                 "/api/v1/webhook/incident",
                 json=VALID_PAYLOAD,
-                headers={"Authorization": f"Bearer {token_response.json()['access_token']}"},
+                headers={"Authorization": f"Bearer {token}"},
             )
 
     assert response.status_code == 202
@@ -171,7 +174,7 @@ def test_settings_require_all_api_and_webhook_auth_secrets(
     for name in required:
         monkeypatch.delenv(name, raising=False)
 
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValidationError) as raised:
         Settings(
             _env_file=None,
             servicenow_instance_url="https://dev00000.service-now.com",
@@ -180,6 +183,9 @@ def test_settings_require_all_api_and_webhook_auth_secrets(
             servicenow_username="svc",
             servicenow_password="test-password",
         )
+
+    missing = {str(error["loc"][0]) for error in raised.value.errors()}
+    assert set(required) == {name.upper() for name in missing if name.startswith("webhook_")}
 
 
 # ---------------------------------------------------------------------------
@@ -347,6 +353,11 @@ async def test_event_persisted_and_enqueued_to_barq_incident_events(app_with_moc
 @pytest.mark.asyncio
 async def test_zero_downstream_execution_on_request_thread(app_with_mocks) -> None:
     """FR-08: request thread must never invoke retrieval, ServiceNow, or agents."""
+    import sys
+
+    forbidden_names = ("langgraph", "langchain", "langfuse", "openai", "anthropic")
+    loaded_before = {mod for mod in sys.modules if mod in forbidden_names}
+
     app, _, _ = app_with_mocks
     with (
         patch(
@@ -367,10 +378,9 @@ async def test_zero_downstream_execution_on_request_thread(app_with_mocks) -> No
     mock_retrieve.assert_not_called()
     mock_servicenow.assert_not_called()
 
-    import sys
-
-    for forbidden in ("langgraph", "langchain", "langfuse", "openai", "anthropic"):
-        assert forbidden not in sys.modules, f"{forbidden} must not load during ingestion"
+    loaded_after = {mod for mod in sys.modules if mod in forbidden_names}
+    newly_loaded = loaded_after - loaded_before
+    assert not newly_loaded, f"{newly_loaded} must not load during ingestion"
 
 
 # ---------------------------------------------------------------------------

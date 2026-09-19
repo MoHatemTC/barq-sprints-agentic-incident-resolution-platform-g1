@@ -30,7 +30,6 @@ def verify_bearer_token(
         raise AuthenticationError("Missing or invalid Bearer token")
 
     token = credentials.credentials.strip()
-
     expected = settings.webhook_auth_token.get_secret_value()
     if secrets.compare_digest(token, expected):
         return token

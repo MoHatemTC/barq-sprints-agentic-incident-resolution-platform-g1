@@ -26,7 +26,7 @@ docs/sprint2_worker_topology.md):
 from __future__ import annotations
 
 import datetime as dt
-from typing import Protocol
+from typing import Any, Protocol
 from uuid import UUID, uuid4
 
 from sqlalchemy import select, update
@@ -121,7 +121,15 @@ class WorkerRepo(Protocol):
         the attempt that failed — history is never forged to max_attempts."""
         ...
 
-    def mark_succeeded(self, execution_id: UUID) -> None: ...
+    def mark_succeeded(
+        self,
+        execution_id: UUID,
+        *,
+        node_reached: str | None = None,
+        termination_cause: str = "completed",
+        model_name: str | None = None,
+        agent_version: str | None = None,
+    ) -> None: ...
 
     def get_termination_cause(self, execution_id: UUID) -> str | None: ...
 
@@ -318,17 +326,35 @@ class PostgresRepo:
                 update(RetryState).where(RetryState.execution_id == execution_id).values(**values)
             )
 
-    def mark_succeeded(self, execution_id: UUID) -> None:
+    def mark_succeeded(
+        self,
+        execution_id: UUID,
+        *,
+        node_reached: str | None = None,
+        termination_cause: str = "completed",
+        model_name: str | None = None,
+        agent_version: str | None = None,
+    ) -> None:
+        # The optional arguments let the graph record what it decided on the
+        # executions summary row. Without them the row reads "completed" for a
+        # high-risk escalation, which is the one outcome an auditor most needs to
+        # see. node_reached exists for this ("Latest workflow node entered").
+        summary: dict[str, Any] = {
+            "status": "succeeded",
+            "ended_at": _utcnow(),
+            "termination_cause": termination_cause,
+        }
+        if node_reached is not None:
+            summary["node_reached"] = node_reached
+        if model_name is not None:
+            summary["model_name"] = model_name
+        if agent_version is not None:
+            summary["agent_version"] = agent_version
         with self._session_factory() as session, session.begin():
             session.execute(
-                update(Execution)
-                .where(Execution.execution_id == execution_id)
-                .values(
-                    status="succeeded",
-                    ended_at=_utcnow(),
-                    termination_cause="completed",
-                )
+                update(Execution).where(Execution.execution_id == execution_id).values(**summary)
             )
+
             session.execute(
                 update(RetryState)
                 .where(RetryState.execution_id == execution_id)
@@ -573,11 +599,26 @@ class InMemoryRepo:
         elif attempt_count is not None:
             row["attempt_count"] = attempt_count
 
-    def mark_succeeded(self, execution_id: UUID) -> None:
+    def mark_succeeded(
+        self,
+        execution_id: UUID,
+        *,
+        node_reached: str | None = None,
+        termination_cause: str = "completed",
+        model_name: str | None = None,
+        agent_version: str | None = None,
+    ) -> None:
         execution = self.executions[execution_id]
         execution["status"] = "succeeded"
         execution["ended_at"] = _utcnow()
-        execution["termination_cause"] = "completed"
+        execution["termination_cause"] = termination_cause
+        if node_reached is not None:
+            execution["node_reached"] = node_reached
+        if model_name is not None:
+            execution["model_name"] = model_name
+        if agent_version is not None:
+            execution["agent_version"] = agent_version
+
         row = self.retry_states[execution_id]
         row["state"] = "succeeded"
         row["next_retry_at"] = None

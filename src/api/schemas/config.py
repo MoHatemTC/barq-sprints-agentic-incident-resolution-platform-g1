@@ -51,7 +51,16 @@ class RedactedConfigResponse(BaseModel):
     # Webhook
     webhook_auth_token: str = Field(
         default=REDACTED_SENTINEL,
-        description="Redacted webhook bearer authentication secret",
+        description="Redacted operator API bearer authentication secret",
+    )
+    webhook_oauth_client_id: str = Field(..., description="ServiceNow webhook OAuth client ID")
+    webhook_oauth_client_secret: str = Field(
+        default=REDACTED_SENTINEL,
+        description="Redacted ServiceNow webhook OAuth client secret",
+    )
+    webhook_oauth_signing_key: str = Field(
+        default=REDACTED_SENTINEL,
+        description="Redacted webhook OAuth signing key",
     )
 
     # PostgreSQL
@@ -128,6 +137,9 @@ class RedactedConfigResponse(BaseModel):
             servicenow_token_expiry_buffer_seconds=settings.servicenow_token_expiry_buffer_seconds,
             servicenow_kb_id=settings.servicenow_kb_id,
             webhook_auth_token=REDACTED_SENTINEL,
+            webhook_oauth_client_id=settings.webhook_oauth_client_id,
+            webhook_oauth_client_secret=REDACTED_SENTINEL,
+            webhook_oauth_signing_key=REDACTED_SENTINEL,
             postgres_host=settings.postgres_host,
             postgres_port=settings.postgres_port,
             postgres_db=settings.postgres_db,
