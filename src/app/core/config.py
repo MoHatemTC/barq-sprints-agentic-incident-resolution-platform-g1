@@ -50,8 +50,6 @@ class RetrievalSettings(BaseSettings):
     # Embedding Models
     dense_embedding_model: str = "BAAI/bge-small-en-v1.5"
     sparse_embedding_model: str = "Qdrant/bm25"
-    retrieval_mode: RetrievalMode = RetrievalMode.HYBRID
-
     # Retrieval
     retrieval_mode: RetrievalMode = RetrievalMode.HYBRID_RERANKED
     rerank_model: str = "Xenova/ms-marco-MiniLM-L-6-v2"
@@ -187,20 +185,6 @@ class Settings(RetrievalSettings):
         default="postgres",
         description="Worker repository backend: 'postgres' or 'memory' (tests/stand-in)",
     )
-    # Langfuse Tracing (optional — integration is disabled when keys are absent)
-    langfuse_public_key: str | None = Field(
-        default=None,
-        description="Langfuse project public key (tracing disabled when absent)",
-    )
-    langfuse_secret_key: SecretStr | None = Field(
-        default=None,
-        description="Langfuse project secret key (tracing disabled when absent)",
-    )
-    langfuse_host: str = Field(
-        default="https://cloud.langfuse.com",
-        description="Langfuse server URL",
-    )
-
     # Langfuse Tracing (optional — integration is disabled when keys are absent)
     langfuse_public_key: str | None = Field(
         default=None,

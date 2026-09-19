@@ -284,7 +284,7 @@ async def test_zero_downstream_execution_on_request_thread(app_with_mocks) -> No
         ),
         patch("api.routers.webhook.send_incident_event"),
         patch("app.clients.qdrant.get_qdrant_client") as mock_qdrant,
-        patch("app.retrieval.search.retrieve_knowledge") as mock_retrieve,
+        patch("app.retrieval.hybrid_search.hybrid_search") as mock_retrieve,
         patch("app.clients.servicenow_client.ServiceNowClient") as mock_servicenow,
     ):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
