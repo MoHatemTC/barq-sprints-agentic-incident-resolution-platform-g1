@@ -33,7 +33,7 @@ for _key, _value in {
     "LANGFUSE_PUBLIC_KEY": "",
     "LANGFUSE_SECRET_KEY": "",
 }.items():
-    os.environ.setdefault(_key, _value)
+    os.environ[_key] = _value
 
 
 @pytest.fixture

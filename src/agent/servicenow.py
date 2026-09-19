@@ -66,6 +66,10 @@ class HumanLockedError(Exception):
     """The incident was locked by an analyst between read and write."""
 
 
+class AsyncCancellationError(RuntimeError):
+    """A timed-out ServiceNow coroutine did not acknowledge cancellation."""
+
+
 class IncidentBackend(Protocol):
     """The subset of ``ServiceNowClient`` the gateway calls."""
 
@@ -88,9 +92,31 @@ class AsyncRunner:
         )
         self._thread.start()
 
-    def run(self, coro: Coroutine[Any, Any, T], timeout: float | None = None) -> T:
-        future: Future[T] = asyncio.run_coroutine_threadsafe(coro, self._loop)
-        return future.result(timeout=timeout)
+    def run(
+        self,
+        coro: Coroutine[Any, Any, T],
+        timeout: float | None = None,
+        *,
+        cancellation_timeout: float = 5.0,
+    ) -> T:
+        completed = threading.Event()
+
+        async def tracked() -> T:
+            try:
+                return await coro
+            finally:
+                completed.set()
+
+        future: Future[T] = asyncio.run_coroutine_threadsafe(tracked(), self._loop)
+        try:
+            return future.result(timeout=timeout)
+        except TimeoutError:
+            future.cancel()
+            if not completed.wait(timeout=cancellation_timeout):
+                raise AsyncCancellationError(
+                    "Timed-out ServiceNow request did not stop; refusing a concurrent retry"
+                ) from None
+            raise
 
     def close(self) -> None:
         self._loop.call_soon_threadsafe(self._loop.stop)
@@ -195,6 +221,7 @@ def build_servicenow_backend() -> IncidentBackend:
 __all__ = [
     "PERMITTED_ACTIONS",
     "ActionNotPermittedError",
+    "AsyncCancellationError",
     "AsyncRunner",
     "HumanLockedError",
     "IncidentBackend",

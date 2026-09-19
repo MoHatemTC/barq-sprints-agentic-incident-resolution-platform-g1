@@ -147,6 +147,17 @@ async def test_real_token_route_issues_token_that_the_real_webhook_accepts(
     assert response.status_code == 202
 
 
+@pytest.mark.asyncio
+async def test_servicenow_token_cannot_access_operator_routes(app_with_mocks) -> None:
+    app, _, _ = app_with_mocks
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get(
+            "/api/v1/config",
+            headers=h.webhook_oauth_headers(app.state.settings),
+        )
+    assert response.status_code == 401
+
+
 def test_settings_require_all_api_and_webhook_auth_secrets(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
