@@ -2,23 +2,19 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Annotated
 
 import structlog
 from fastapi import APIRouter, Depends, status
-from redis.asyncio import Redis
 from sqlalchemy import delete
 from sqlalchemy.exc import MissingGreenlet, SQLAlchemyError
 
 from api.auth import verify_bearer_token
 from api.schemas.webhook import IncidentWebhookPayload, WebhookAcceptedResponse
-from app.api.dependencies import (
-    get_redis,
-    get_session_factory,
-)
+from app.api.dependencies import get_session_factory
 from app.core.correlation import get_correlation_id
 from app.db.models import Event
-from app.db.redis.keys import INCIDENT_EVENTS_QUEUE
 from app.db.session import SessionFactory
 from app.exceptions.app_errors import ServiceUnavailableError
 from app.repositories.idempotency import (
@@ -26,6 +22,7 @@ from app.repositories.idempotency import (
     InboundEvent,
     accept_inbound_event,
 )
+from app.workers.producer import send_incident_event
 
 logger = structlog.getLogger("api.webhook")
 
@@ -48,7 +45,6 @@ router = APIRouter(
 async def ingest_incident_webhook(
     payload: IncidentWebhookPayload,
     session_factory: Annotated[SessionFactory, Depends(get_session_factory)],
-    redis_client: Annotated[Redis, Depends(get_redis)],
 ) -> WebhookAcceptedResponse:
     """Ingest, validate, persist, and queue an incoming ServiceNow incident event."""
     correlation_id = get_correlation_id()
@@ -75,7 +71,9 @@ async def ingest_incident_webhook(
 
     is_duplicate = acceptance.status == EventAcceptanceStatus.DUPLICATE
 
-    # 3. Redis Enqueue for New Events Only
+    # 3. Enqueue for New Events Only — via the worker producer, the single
+    # owner of the Celery envelope format. to_thread keeps the sync broker
+    # publish off the event loop (NFR-01: 500ms p95).
     if is_duplicate:
         logger.info(
             "duplicate_incident_event_ignored",
@@ -88,10 +86,14 @@ async def ingest_incident_webhook(
             execution_id=str(acceptance.execution_id),
         )
         try:
-            await redis_client.lpush(INCIDENT_EVENTS_QUEUE, payload.model_dump_json())
+            await asyncio.to_thread(
+                send_incident_event,
+                payload.model_dump(),
+                str(acceptance.execution_id),
+            )
         except Exception as exc:
             logger.exception(
-                "redis_enqueue_failed",
+                "event_enqueue_failed",
                 event_id=payload.event_id,
                 error=str(exc),
             )

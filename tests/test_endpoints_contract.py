@@ -10,7 +10,7 @@ scope per the S2.1 boundary: stubs must be schema-valid and must not crash.
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -26,6 +26,7 @@ from app.core.constants import ERROR_STATUS_MAP
 from app.db.models import Execution, ExecutionNodeState
 from app.exceptions.app_errors import NotImplementedStubError
 from app.main import create_app
+from app.workers.db import WorkerRepo
 from tests.helpers import mock_settings
 
 AUTH = h.AUTH_HEADERS
@@ -98,6 +99,14 @@ def app():
     application.state.session_factory = MagicMock()
     application.state.redis = MagicMock()
     application.state.redis.ping = AsyncMock(return_value=True)
+    application.state.redis.lrange = AsyncMock(return_value=[])
+
+    mock_repo = MagicMock(spec=WorkerRepo)
+    mock_repo.get_event_payload.return_value = {"event_id": "test"}
+    mock_repo.find_execution_id.return_value = uuid4()
+    mock_repo.reset_for_replay.return_value = True
+    application.state.sync_worker_repo = mock_repo
+    application.state.sync_redis = MagicMock()
     return application
 
 
@@ -291,7 +300,8 @@ async def test_dlq_list_contract_and_replay_rbac_matrix(client) -> None:
         assert "role" in body["error"]["message"].lower()
 
     # 4. Operator -> documented accepted stub response (202).
-    replayed = await client.post(f"/api/v1/dlq/{event_id}/replay", headers=h.OPERATOR_HEADERS)
+    with patch("app.workers.replay.send_incident_event"):
+        replayed = await client.post(f"/api/v1/dlq/{event_id}/replay", headers=h.OPERATOR_HEADERS)
     assert replayed.status_code == 202
     validated = DLQReplayResponse.model_validate(replayed.json())
     assert validated.event_id == event_id

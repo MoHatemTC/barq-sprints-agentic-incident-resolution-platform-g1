@@ -10,6 +10,8 @@ dependencies = [
     "asyncpg>=0.30,<1",
     # Imported directly by src/app/retrieval/extraction.py. It arrived only as a
     # markdownify transitive before, so a markdownify change could have broken imports.
+    # Worker execution substrate (S2.3): task queue over the Redis broker.
+    "celery[redis]>=5.6,<6",
     "asyncpg>=0.29.0",
     "beautifulsoup4>=4.12.3",
     "fastapi>=0.141.1",
@@ -22,11 +24,15 @@ dependencies = [
     "markdownify>=1.2.3",
     "pydantic>=2.13.5",
     "pydantic-settings>=2.15.0",
+    # Sync PostgreSQL driver for the Celery worker's session engine (workers/sync_engine.py).
+    "psycopg[binary]>=3.2,<4",
     "python-dotenv>=1.2.3",
     # Must match the Qdrant server image in docker-compose.yml; bump both together.
     # Enforced by tests/repo/test_qdrant_client_server_pin.py.
     "qdrant-client>=1.14,<1.15",
-    "redis>=5.0.0",
+    # Pinned: redis-py 8.x breaks kombu 5.6 BRPOP parsing (KeyError 'properties' on
+    # delivery). Revisit when kombu supports redis-py 8.
+    "redis==5.2.1",
     "sqlalchemy>=2.0,<3",
     "structlog>=26.1.0",
     "uvicorn[standard]>=0.52.4",
@@ -78,6 +84,11 @@ indent-style = "space"
 testpaths = ["tests"]
 asyncio_mode = "auto"
 pythonpath = ["src"]
+# Integration tests need the docker stack (postgres, redis) which CI and fresh
+# clones don't have: deselect by default so `pytest` is green everywhere.
+# Run them explicitly with `just test-integration` (passes -m integration,
+# which overrides this filter).
+addopts = "-m 'not integration'"
 markers = [
     "unit: fast isolated tests using mocks/fakes (default suite)",
     "integration: exercises real PostgreSQL/Redis; skips when infrastructure is unreachable",
@@ -89,6 +100,11 @@ python_version = "3.12"
 packages = ["app"]
 warn_unused_ignores = true
 warn_redundant_casts = true
+
+[[tool.mypy.overrides]]
+# celery ships without py.typed markers
+module = ["celery", "celery.*"]
+ignore_missing_imports = true
 
 [tool.coverage.run]
 source = ["src/app", "src/retrieval"]

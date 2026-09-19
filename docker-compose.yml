@@ -1,15 +1,30 @@
 # =============================================================================
-# Docker Compose — BARQ AI Incident Resolution Platform
+# Docker Compose — BARQ AI Agentic Incident Resolution Platform
 # =============================================================================
 # Services:
-#   1. qdrant: Vector store for dual dense (384d) + sparse (BM25) KB retrieval
-#   2. postgres: Relational store for incident tracking, execution logs, audit
-#   3. redis: Fast key-value store and message broker for task queues
+#   1. qdrant        : Vector store for dual dense (384d) + sparse (BM25) KB retrieval
+#   2. postgres      : Relational store for incident tracking, execution logs, audit
+#   3. redis         : In-memory cache and Celery task queue broker
+#   4. api           : FastAPI ingestion and REST API surface (port 8000)
+#   5. celery-worker : Background Celery worker executing incident resolution graph
 # =============================================================================
+
+# Shared application environment inherited by both API and Worker
+x-app-environment: &app-environment
+  REDIS_HOST: barq-redis
+  REDIS_PORT: 6379
+  REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+  POSTGRES_HOST: barq-postgres
+  POSTGRES_PORT: 5432
+  POSTGRES_DB: ${POSTGRES_DB:-barq_incident_dev}
+  POSTGRES_USER: ${POSTGRES_USER:-postgres}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+  QDRANT_URL: http://barq-qdrant:6333
+  WEBHOOK_AUTH_TOKEN: ${WEBHOOK_AUTH_TOKEN:-dev-webhook-secret-token}
 
 services:
   # ---------------------------------------------------------------------------
-  # Qdrant — Vector Database (Sprint 1+)
+  # 1. Qdrant — Vector Database (Sprint 1+)
   # ---------------------------------------------------------------------------
   qdrant:
     # Pinned in lockstep with qdrant-client in pyproject.toml. Bump both in the
@@ -37,7 +52,7 @@ services:
       - barq-network
 
   # ---------------------------------------------------------------------------
-  # PostgreSQL — Relational Database (Sprint 2+)
+  # 2. PostgreSQL — Relational Database (Sprint 2+)
   # ---------------------------------------------------------------------------
   postgres:
     image: postgres:16-alpine
@@ -61,7 +76,7 @@ services:
       - barq-network
 
   # ---------------------------------------------------------------------------
-  # Redis — Caching & Message Broker (Sprint 2+)
+  # 3. Redis — Caching & Message Broker (Sprint 2+)
   # ---------------------------------------------------------------------------
   redis:
     image: redis:7-alpine
@@ -71,9 +86,6 @@ services:
       - "${BIND_IP:-127.0.0.1}:${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
-    # Without this the container never receives REDIS_PASSWORD: the $$ below is escaped
-    # so the shell expands it inside the container, where it was always empty. Redis
-    # therefore always started unauthenticated while the healthcheck stayed green. (#53)
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
     command: >
@@ -85,13 +97,84 @@ services:
         fi
       '
     healthcheck:
-      # REDISCLI_AUTH, not -a: the password would otherwise appear in the container's
-      # process list on every probe.
       test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$REDIS_PASSWORD\" redis-cli ping | grep -q PONG"]
       interval: 5s
       timeout: 3s
       retries: 5
       start_period: 5s
+    networks:
+      - barq-network
+
+  # ---------------------------------------------------------------------------
+  # 4. FastAPI Ingestion API (Sprint 2+)
+  # ---------------------------------------------------------------------------
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: barq-api
+    restart: unless-stopped
+    ports:
+      - "${BIND_IP:-127.0.0.1}:${API_PORT:-8000}:8000"
+    env_file:
+      - .env
+    environment:
+      <<: *app-environment
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    networks:
+      - barq-network
+
+  # ---------------------------------------------------------------------------
+  # 5. Celery Worker — Execution Substrate (Sprint 2, Task S2.3)
+  # ---------------------------------------------------------------------------
+  celery-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: barq-celery-worker
+    restart: unless-stopped
+    stop_grace_period: 30s
+    command: >
+      celery -A app.workers.celery_app worker
+      --queues=${BARQ_EVENTS_QUEUE:-barq:incident:events}
+      --concurrency=${WORKER_CONCURRENCY:-4}
+      --loglevel=INFO
+    env_file:
+      - .env
+    environment:
+      <<: *app-environment
+      WORKER_MAX_RETRIES: ${WORKER_MAX_RETRIES:-5}
+      WORKER_BACKOFF_BASE: ${WORKER_BACKOFF_BASE:-1.0}
+      WORKER_BACKOFF_MAX: ${WORKER_BACKOFF_MAX:-60.0}
+      WORKER_BACKOFF_JITTER: ${WORKER_BACKOFF_JITTER:-true}
+      WORKER_SOFT_TIME_LIMIT: ${WORKER_SOFT_TIME_LIMIT:-120}
+      WORKER_TIME_LIMIT: ${WORKER_TIME_LIMIT:-150}
+      WORKER_REPO_BACKEND: ${WORKER_REPO_BACKEND:-postgres}
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.workers.celery_app inspect ping -d celery@$$HOSTNAME --timeout=5 | grep -q pong || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
     networks:
       - barq-network
 

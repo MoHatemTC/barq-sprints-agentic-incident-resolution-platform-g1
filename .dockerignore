@@ -1,0 +1,18 @@
+# Keep the worker image slim; nothing outside src/ + lockfiles is needed at runtime
+.git
+.github
+.venv
+.env
+.env.example
+**/__pycache__
+**/*.pyc
+.agents
+docs
+tests
+scripts
+data
+servicenow
+skills-lock.json
+justfile
+*.md
+!README.md

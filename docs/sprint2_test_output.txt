@@ -1,0 +1,23 @@
+Sprint 2 (S2.3) committed test output — generated 2026-09-16 21:44 UTC
+branch: feat/s2-3-redis-celery-dlq @ d896080
+
+════ 1. full suite (unit + contract + eager; integration deselected by default) ════
+    client.create_payload_index(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+429 passed, 16 skipped, 1 warning in 38.12s
+
+════ 2. integration suite (real docker redis + postgres, real celery worker subprocess) ════
+.........                                                                [100%]
+9 passed, 436 deselected in 15.24s
+
+════ 3. worker unit/contract/eager tests, verbose ════
+......................................................                   [100%]
+54 passed in 13.23s
+
+════ 4. version pins ════
+celery 5.6.3
+kombu 5.6.2
+redis 5.2.1
+psycopg 3.3.5
+sqlalchemy 2.0.53

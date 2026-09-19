@@ -50,7 +50,6 @@ class RetrievalSettings(BaseSettings):
     # Embedding Models
     dense_embedding_model: str = "BAAI/bge-small-en-v1.5"
     sparse_embedding_model: str = "Qdrant/bm25"
-
     # Retrieval
     retrieval_mode: RetrievalMode = RetrievalMode.HYBRID_RERANKED
     rerank_model: str = "Xenova/ms-marco-MiniLM-L-6-v2"
@@ -136,7 +135,56 @@ class Settings(RetrievalSettings):
     redis_host: str = "localhost"
     redis_port: int = 6379
     redis_password: SecretStr | None = None
+    redis_pool_max_connections: int = 20
+    redis_socket_timeout: float = 5.0
 
+    # Workers (S2.3) — every value is configuration-driven; the worker code must
+    # contain no literal concurrency/retry/timeout numbers.
+    worker_concurrency: int = Field(
+        default=4,
+        description="Celery worker concurrency (prefork child processes)",
+    )
+    worker_max_retries: int = Field(
+        default=5,
+        ge=1,
+        description="Maximum total attempts per event (initial + retries) before "
+        "dead-lettering; also written to retry_state.max_attempts so the database "
+        "enforces the same budget: attempt_count may never exceed it. "
+        "NOTE: a value of 1 means ONE attempt with ZERO retries — the event "
+        "dead-letters on the first failure.",
+    )
+    worker_backoff_base: float = Field(
+        default=1.0,
+        description="Exponential backoff base in seconds: delay = base * 2**(attempt-1)",
+    )
+    worker_backoff_max: float = Field(
+        default=60.0,
+        description="Upper bound for a single backoff delay in seconds",
+    )
+    worker_backoff_jitter: bool = Field(
+        default=True,
+        description="Full jitter on backoff delays so parallel retriers do not sync up",
+    )
+    worker_soft_time_limit: int = Field(
+        default=120,
+        description="Soft task time limit (s): raises SoftTimeLimitExceeded inside the "
+        "task so it can log and retry. Sized for an assumed sub-90s graph run; "
+        "revisit when Sprint 3 lands real latency numbers",
+    )
+    worker_time_limit: int = Field(
+        default=150,
+        description="Hard task time limit (s): SIGKILL the worker process; must exceed "
+        "the soft limit to leave room for cleanup",
+    )
+    worker_prefetch: int = Field(
+        default=1,
+        description="Prefetch multiplier: 1 for long-running tasks so workers do not "
+        "hoard jobs while others sit idle",
+    )
+    worker_repo_backend: str = Field(
+        default="postgres",
+        description="Worker repository backend: 'postgres' or 'memory' (tests/stand-in)",
+    )
     # Langfuse Tracing (optional — integration is disabled when keys are absent)
     langfuse_public_key: str | None = Field(
         default=None,
