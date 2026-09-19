@@ -110,6 +110,12 @@ jobs:
             echo "==> Running database migrations from the new image..."
             docker compose run --rm --no-deps -T api alembic upgrade head < /dev/null
 
+            echo "==> Seeding Qdrant knowledge base from the new image..."
+            docker compose run --rm --no-deps -T \
+              -v "$app_dir/scripts:/app/scripts:ro" \
+              -v "$app_dir/data:/app/data:ro" \
+              api python scripts/seed_qdrant.py < /dev/null
+
             echo "==> Starting the API and worker from the verified image..."
             docker compose up -d --no-build api celery-worker
 
