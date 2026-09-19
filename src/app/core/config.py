@@ -50,11 +50,9 @@ class RetrievalSettings(BaseSettings):
     # Embedding Models
     dense_embedding_model: str = "BAAI/bge-small-en-v1.5"
     sparse_embedding_model: str = "Qdrant/bm25"
-    retrieval_mode: RetrievalMode = RetrievalMode.HYBRID
 
     # Retrieval
     retrieval_mode: RetrievalMode = RetrievalMode.HYBRID_RERANKED
-    # TODO: choose a better one later
     rerank_model: str = "Xenova/ms-marco-MiniLM-L-6-v2"
     rerank_top_k: int = 5
     rerank_candidate_limit: int = 20  # must be larger than rerank_top_k
