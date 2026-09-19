@@ -14,6 +14,9 @@ dependencies = [
     "beautifulsoup4>=4.12.3",
     "fastapi>=0.141.1",
     "fastembed>=0.8.0",
+    # SQLAlchemy's implicit greenlet marker omits macOS arm64. Async engine/session
+    # cleanup still imports it, so declare the runtime dependency explicitly.
+    "greenlet>=3.2,<4",
     "httpx>=0.28.1",
     "langchain-text-splitters>=1.1.2",
     "markdownify>=1.2.3",
@@ -90,4 +93,3 @@ source = ["src/app", "src/retrieval"]
 
 [tool.coverage.report]
 show_missing = true
-
