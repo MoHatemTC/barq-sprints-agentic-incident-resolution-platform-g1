@@ -306,7 +306,7 @@
         },
         {
             "incident_id": "SYN_SPARSE_2",
-            "query": "MIR-2026-03",
+            "query": "PRB0040018 pool drain procedure connection recycled",
             "primary_article_ids": [
                 "KB0010-v2.0"
             ],
@@ -314,6 +314,30 @@
             "forbidden_article_ids": [
                 "KB0010-v1.0"
             ],
+            "is_answerable": true,
+            "source": "synthetic"
+        },
+        {
+            "incident_id": "SYN_SPARSE_3",
+            "query": "CHG0030455 emergency change approval status",
+            "primary_article_ids": [
+                "KB0010-v2.0"
+            ],
+            "acceptable_article_ids": [],
+            "forbidden_article_ids": [
+                "KB0010-v1.0"
+            ],
+            "is_answerable": true,
+            "source": "synthetic"
+        },
+        {
+            "incident_id": "SYN_SPARSE_4",
+            "query": "RITM0010877 order service connection pool emergency change approval workflow",
+            "primary_article_ids": [
+                "KB0006-v3.0"
+            ],
+            "acceptable_article_ids": [],
+            "forbidden_article_ids": [],
             "is_answerable": true,
             "source": "synthetic"
         }

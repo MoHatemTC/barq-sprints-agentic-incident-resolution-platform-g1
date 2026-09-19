@@ -10,25 +10,25 @@ Hybrid-plus-reranked outperforms the dense-only baseline on context recall and o
 
 | Metric | Dense-Only | Hybrid | Hybrid + Reranked |
 |---|---|---|---|
-| context_precision | 0.5852 | 0.5667 | 0.5185 |
-| context_recall | 0.7778 | 0.7778 | 0.7407 |
-| accuracy | 0.7778 | 0.7778 | 0.7778 |
-| hit_at_1 | 0.9048 | 0.9524 | 0.9524 |
-| hit_at_5 | 1 | 1 | 1 |
+| context_precision | 0.5655 | 0.5552 | 0.5103 |
+| context_recall | 0.7586 | 0.7931 | 0.7586 |
+| accuracy | 0.7586 | 0.7931 | 0.7931 |
+| hit_at_1 | 0.913 | 0.913 | 0.913 |
+| hit_at_5 | 0.9565 | 1 | 1 |
 
 ## 2. Margin Over Dense-Only Baseline (hybrid + reranked)
 
-- **context_precision_margin**: -0.0667
-- **context_recall_margin**: -0.0371
-- **accuracy_margin**: +0.0000
+- **context_precision_margin**: -0.0552
+- **context_recall_margin**: +0.0000
+- **accuracy_margin**: +0.0345
 
 ## 3. Latency Profile (milliseconds)
 
 | Mode | p50 | p95 | mean |
 |---|---|---|---|
-| Dense-Only (baseline) | 43.14 | 49.24 | 43.63 |
-| Hybrid (dense + sparse, RRF) | 43.89 | 52.5 | 44.77 |
-| Hybrid + Reranked (cross-encoder) | 575.71 | 631.71 | 576.72 |
+| Dense-Only (baseline) | 47.47 | 64.92 | 48.35 |
+| Hybrid (dense + sparse, RRF) | 47.91 | 61.91 | 48.55 |
+| Hybrid + Reranked (cross-encoder) | 604.18 | 725.67 | 614.98 |
 
 ## 4. Cross-Encoder Rank Movement (hybrid -> hybrid+reranked)
 
@@ -55,10 +55,12 @@ Hybrid-plus-reranked outperforms the dense-only baseline on context recall and o
 | INC0010100 | 1 | 1 | 0 |
 | SYN_SPARSE_1 | 1 | 1 | 0 |
 | SYN_SPARSE_2 | 1 | 1 | 0 |
+| SYN_SPARSE_3 | 1 | 1 | 0 |
+| SYN_SPARSE_4 | 4 | 5 | -1 |
 
 ## 5. Sparse-Rescue Cases (dense-only failed, hybrid succeeded)
 
-> **Requirement gap**: this run found only 0 sparse-rescue case(s). The scope of work requires at least two concrete queries where the sparse component fixes a dense-only failure.
+> **Requirement gap**: this run found only 1 sparse-rescue case(s). The scope of work requires at least two concrete queries where the sparse component fixes a dense-only failure.
 >
 > This is not evidence the hybrid path is unneeded -- it means the current eval set doesn't contain a query shaped to need it. The sparse leg exists for verbatim token matching (error codes, KB numbers, exact identifiers) that dense embeddings tend to smooth over. Remediation before sign-off:
 >

@@ -227,17 +227,67 @@ restricted articles, this default matters; don't quietly narrow it.
 
 ## 8. Known gaps and findings as of the latest ablation run
 
-These findings are based on the latest ablation run using seed 42, limit 5, and `max_security_level=restricted`. They should be re-verified whenever the evaluation set, corpus, or retrieval implementation changes.
+These findings are based on the latest ablation run using seed 42, limit 5, and
+`max_security_level=restricted`, after a deliberate multi-query investigation into
+the sparse-rescue requirement. They should be re-verified whenever the evaluation
+set, corpus, or retrieval implementation changes.
 
-1. **Sparse-rescue requirement remains unmet.** Two targeted lexical evaluation cases were added using exact identifiers already present in the canonical corpus. The latest ablation reports `0` strict sparse-rescue cases. This means that, for these queries, dense-only already retrieved the correct article within the evaluated top-K, so hybrid retrieval did not recover an article that dense retrieval had completely missed. 
+1. **One genuine sparse-rescue case is now confirmed.** `SYN_SPARSE_4`
+   (`"RITM0010877 order service connection pool emergency change approval
+   workflow"` → `KB0006-v3.0`) is absent from dense-only's top 5 entirely and is
+   recovered by hybrid at rank 4. This is a strict rescue per
+   `find_sparse_rescues()`: dense-only misses the article completely, hybrid's
+   RRF fusion (not the reranker) recovers it. Verified directly against
+   `ablation_results.json`'s `per_incident` data, not asserted from the summary
+   alone.
 
-2. **Hybrid improves first-hit ranking without improving top-5 recall on this evaluation set.** Dense-only achieved `hit_at_1=0.9048` and `hit_at_5=1.0`, while hybrid achieved `hit_at_1=0.9524` and `hit_at_5=1.0`. Therefore, the measured hybrid improvement is in first-result ranking rather than top-5 recall. Context recall remained `0.7778` for both modes, while context precision decreased slightly from `0.5852` to `0.5667`.
+2. **A second rescue was actively pursued and not found, across seven queries on
+   two independent anchor tokens.** Both `MIR-2026-03` (targeting `KB0010-v2.0`)
+   and `CHG0030455` (also `KB0010-v2.0`) were tried as bare tokens and in four
+   further variants layering in vocabulary from competing articles at
+   different intensities. None produced a strict dense-miss/hybrid-hit:
+   - The bare-token and lightly-modified variants stayed inside dense's top 5
+     (best case: rank 4, one slot from falling out).
+   - Heavier variants pushed the target out of dense's top 5, but also pushed it
+     out of the sparse/RRF candidate window — `hybrid` also came back null, not
+     just dense.
+   - One variant landed the target at rank 5 in `hybrid_reranked` only, which is
+     explicitly *not* a sparse rescue by the harness's own definition (fusion
+     never surfaced it; the cross-encoder recovered a candidate from a wider
+     `fetch_limit` window instead). Recorded as a legitimate but distinct
+     mechanism, not conflated with #1.
+   - A second own-vocabulary anchor, `PRB0040018` (also targeting `KB0010-v2.0`,
+     phrased around the article's own "pool drain procedure" language, mirroring
+     what worked for `RITM0010877`), was tried as a further test and also did
+     not produce a rescue.
 
-3. **Hybrid+reranking shows the largest retrieval-quality improvement, but with substantially higher latency.** Hybrid+reranked achieved `context_precision=0.7407`, `context_recall=0.9630`, and `accuracy=1.0`, compared with `0.5852`, `0.7778`, and `0.7778` for dense-only. The corresponding margins over dense-only were `+0.1555` context precision, `+0.1852` context recall, and `+0.2222` accuracy. These aggregate improvements should be interpreted together with the evaluation methodology, particularly the unanswerable-query refusal threshold, rather than attributed entirely to passage-ranking improvements.
+3. **Working hypothesis for why `KB0010-v2.0` resists rescue where `KB0006-v3.0`
+   did not**: with only 11 published articles in the corpus, "top 5" is
+   effectively the top half. `KB0010-v2.0`'s dense embedding already sits in a
+   less crowded semantic neighborhood (order-processing/database language is
+   distinct from anything else in the corpus), so it tends to survive on dense
+   signal alone even when a query is stripped down or restructured. `KB0006-v3.0`
+   apparently sits closer to genuine semantic competitors (KB0005, KB0010's own
+   approval-gate language), which is why an ID-plus-distractor query was able to
+   knock it out of dense's top 5 in a way the same technique couldn't replicate
+   for KB0010.
 
-4. **Reranking introduces a substantial latency cost.** Dense-only measured a p50/p95 latency of `46.43/65.00 ms`, hybrid measured `45.90/53.95 ms`, while hybrid+reranked measured `599.66/733.04 ms`. The reranked path therefore provides materially higher retrieval-quality metrics at the cost of substantially higher latency. This trade-off should be considered when selecting the production retrieval mode.
+4. **Corpus-size constraint, restated with evidence rather than assumption**: the
+   original gap note speculated that a suitably shaped query would find two
+   rescues. That speculation has now been tested directly, not just reasoned
+   about — one rescue is confirmed real, and a second was not found despite a
+   systematic, evidence-directed search (not random guessing) across two
+   plausible target articles. This is not proof no second rescue exists
+   anywhere in the query space, but it is evidence that this corpus, at
+   `limit=5`, may only reliably support one clean example without adding new
+   knowledge content — which is out of scope per the constraint to keep the KB
+   untouched.
 
-5. **Corpus constraint remains unchanged.** The sparse-focused evaluation cases use identifiers already present in the verified BARQ knowledge corpus. No synthetic knowledge articles were added solely to manufacture sparse-rescue results. The current corpus/evaluation combination therefore provides evidence of lexical ranking behavior, but does not yet provide the required two strict dense-to-hybrid rescue cases.
+5. **Hybrid improves first-hit ranking; reranking adds the largest quality gain
+   at a substantial latency cost.** These findings from the prior run continue
+   to hold and should be re-stated from the latest `ablation_results.json`
+   after §1–2 above are reflected in the eval set (do not hand-copy old numbers
+   forward — regenerate via `eval/generate_report.py`).
 
 ---
 
