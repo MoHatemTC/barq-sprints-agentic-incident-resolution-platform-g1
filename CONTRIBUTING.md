@@ -78,3 +78,12 @@ paste the checklist into it. The template pre-fills automatically only in the we
 Copilot reviews every pull request automatically. Address its findings or say why you
 disagree — do not merge over an unaddressed one. Requirement-level review belongs to
 the workstream owner listed in [CODEOWNERS](.github/CODEOWNERS).
+
+### Dismissing a change request
+
+Only the reviewer who requested changes should dismiss their own review. If a review is
+blocking you, push the fix and re-request review rather than dismissing it or merging
+around it.
+
+If the reviewer cannot re-review (for example, an automated reviewer), a dismissal must
+say who dismissed it and why, and point to the check that shows each finding is fixed.

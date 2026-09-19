@@ -17,7 +17,12 @@ To support idempotent publishing, semantic versioning, and provenance tracking, 
 | **Article Number** | `x_2215032_ai_inc_0_article_number` | String | 20 | Canonical BARQ article numbering (e.g. `KB0001`) |
 
 > [!NOTE]
-> Currently, these 5 columns are created manually on the PDI under the **AI Incident Orchestrator** application scope as described in §2. Automated creation via scoped update set export / Fluent definitions is tracked in issue #90.
+> These 5 columns are declared in the scoped application's Fluent source at
+> `ai_incident_orchestrator/sdk-app/src/fluent/kb-knowledge-fields.now.ts` and ship with
+> the app, so a clean PDI gets them from the deploy — they are no longer a manual step
+> (#90). The table above stays here as the reference for verifying an instance by hand.
+> `tests/repo/test_kb_fields_match_publisher.py` fails if the Fluent source, the
+> publisher in `src/app/publishing/payload.py` and this table ever disagree.
 
 ---
 
@@ -25,7 +30,7 @@ To support idempotent publishing, semantic versioning, and provenance tracking, 
 
 When deploying to a fresh ServiceNow instance:
 
-1. Configure the 5 custom columns on `kb_knowledge` under the **AI Incident Orchestrator** application scope (`x_2215032_ai_inc_0`) with the elements, types, and max lengths in the table above.
+1. Deploy the scoped application. The 5 custom columns on `kb_knowledge` come with it (`src/fluent/kb-knowledge-fields.now.ts`) — no manual field creation is needed. Verify them against the table in §1; `ServiceNowProvisioner.ensure_schema` also checks they exist before publishing and fails loudly if they do not.
 2. In **Form Designer**, add a **BARQ Metadata** section containing these 5 fields.
 3. In **List Layout**, add `Corpus Version` to the visible list columns.
 

@@ -21,8 +21,32 @@ naming the owner, the tracking issues, and what belongs there. See
 S1.1 holds the field dictionary, implementation runbook, acceptance matrix, PDI
 verification records, submission checklist and screenshots. S1.2 holds the audit
 and identity design with its verified permission matrix. S1.4 holds the corpus
-design and index specification. S1.3 and S1.5 currently hold a `README.md`
-recording status and ownership until their pull requests land.
+design and index specification. S1.3 holds the event contract and its verification
+evidence. S1.5 holds a `README.md` recording the client's behaviour and security
+properties.
+
+## Sprint 2 — Event Integration
+
+Tracked in the [Sprint 2 milestone](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/milestone/2). Scope: the FastAPI webhook
+with 202 semantics, the PostgreSQL state schema with database-level idempotency,
+Redis and Celery with a dead-letter path, hybrid retrieval measured against a
+dense-only baseline, and Langfuse tracing over an explicit LangGraph state machine.
+
+| Task | Owner |
+|---|---|
+| S2.1 — FastAPI application, webhook and 202 semantics | [@MohamedAbdelaiem](https://github.com/MohamedAbdelaiem) |
+| S2.2 — PostgreSQL state schema, migrations, idempotency | [@ahmedtamer101](https://github.com/ahmedtamer101) |
+| S2.3 — Redis queue, Celery workers, dead-letter path | [@kerolos-mohsen](https://github.com/kerolos-mohsen) |
+| S2.4 — Hybrid retrieval, filtering, reranking, baseline | [@Tasneemmohammed0](https://github.com/Tasneemmohammed0) |
+| S2.5 — Langfuse tracing, agent init, LangGraph state machine | [@ali-ezz](https://github.com/ali-ezz) |
+
+Documentation folders are created as each task opens its first pull request,
+following the same `docs/sprint-N/sN.M-name/` layout.
+
+> Note: [ROADMAP.md](ROADMAP.md) places hybrid retrieval and the state machine in
+> Sprint 3. Both were pulled forward into Sprint 2 as S2.4 and S2.5, so the task
+> table above is authoritative for sprint assignment and the roadmap remains the
+> reference for overall PRD scope.
 
 ## Conventions
 

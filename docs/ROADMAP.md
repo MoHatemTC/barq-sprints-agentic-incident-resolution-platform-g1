@@ -41,6 +41,9 @@ lands in the dead-letter path rather than looping.
 
 ## Sprint 3 — Retrieval & Reasoning
 
+> Hybrid retrieval and the LangGraph state machine were moved into Sprint 2 as S2.4 and
+> S2.5. See the task table in [README.md](README.md).
+
 **Goal:** an explicit, checkpointed state machine that retrieves well and knows when
 not to act.
 

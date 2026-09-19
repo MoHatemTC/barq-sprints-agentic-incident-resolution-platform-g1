@@ -1,0 +1,345 @@
+{
+    "schema_version": "1.0.0",
+    "generated_from": "data/coverage_matrix.csv",
+    "description": "Sprint 2 (S2.4) retrieval evaluation set, derived 1:1 from the S1.4 coverage matrix. 13 manual (real incident) scenarios + 14 synthetic scenarios (7 multi-article, 5 unanswerable synthetic + 1 unanswerable manual = 6 unanswerable total).",
+    "scoring_contract": {
+        "primary_hit": 1.0,
+        "acceptable_hit": 0.5,
+        "forbidden_hit": "fail",
+        "unanswerable_with_refusal": "correct",
+        "note": "Scores are computed per-incident against the article_ids returned by retrieval, not per-chunk. A hit is any returned chunk whose article_id matches. Surfacing any forbidden_article_id fails the incident regardless of any primary/acceptable hit also present."
+    },
+    "counts": {
+        "total_incidents": 27,
+        "manual": 13,
+        "synthetic": 14,
+        "multi_article": 7,
+        "unanswerable": 6
+    },
+    "incidents": [
+        {
+            "incident_id": "INC0010023",
+            "query": "VPN authentication failure after a password reset",
+            "primary_article_ids": [
+                "KB0001-v2.0"
+            ],
+            "acceptable_article_ids": [],
+            "forbidden_article_ids": [],
+            "is_answerable": true,
+            "source": "manual"
+        },
+        {
+            "incident_id": "INC0010047",
+            "query": "Printer hardware mechanical squeaking and grinding noise in meeting room 4",
+            "primary_article_ids": [],
+            "acceptable_article_ids": [],
+            "forbidden_article_ids": [],
+            "is_answerable": false,
+            "source": "manual"
+        },
+        {
+            "incident_id": "INC0010064",
+            "query": "Account locked after repeated failed sign-ins and MFA reset attempts",
+            "primary_article_ids": [
+                "KB0005-v4.0"
+            ],
+            "acceptable_article_ids": [
+                "KB0006-v3.0"
+            ],
+            "forbidden_article_ids": [],
+            "is_answerable": true,
+            "source": "manual"
+        },
+        {
+            "incident_id": "INC0010052",
+            "query": "Order service database connection pool exhausted returning HTTP 500 under load",
+            "primary_article_ids": [
+                "KB0010-v2.0"
+            ],
+            "acceptable_article_ids": [],
+            "forbidden_article_ids": [
+                "KB0010-v1.0"
+            ],
+            "is_answerable": true,
+            "source": "manual"
+        },
+        {
+            "incident_id": "INC0010024",
+            "query": "Outlook shows disconnected and no new mail is delivered",
+            "primary_article_ids": [
+                "KB0002-v3.0"
+            ],
+            "acceptable_article_ids": [],
+            "forbidden_article_ids": [],
+            "is_answerable": true,
+            "source": "manual"
+        },
+        {
+            "incident_id": "INC0010025",
+            "query": "Mapped shared drive S: is missing from File Explorer after sign-in",
+            "primary_article_ids": [
+                "KB0003-v2.0"
+            ],
+            "acceptable_article_ids": [],
+            "forbidden_article_ids": [],
+            "is_answerable": true,
+            "source": "manual"
+        },
+        {
+            "incident_id": "INC0010026",
+            "query": "Print jobs queue indefinitely on follow-me printer but nothing prints",
+            "primary_article_ids": [
+                "KB0004-v1.0"
+            ],
+            "acceptable_article_ids": [],
+            "forbidden_article_ids": [],
+            "is_answerable": true,
+            "source": "manual"
+        },
+        {
+            "incident_id": "INC0010027",
+            "query": "User Active Directory account locked out due to invalid cached credentials",
+            "primary_article_ids": [
+                "KB0005-v4.0"
+            ],
+            "acceptable_article_ids": [],
+            "forbidden_article_ids": [],
+            "is_answerable": true,
+            "source": "manual"
+        },
+        {
+            "incident_id": "INC0010028",
+            "query": "User lost mobile phone and requires MFA device registration reset",
+            "primary_article_ids": [
+                "KB0006-v3.0"
+            ],
+            "acceptable_article_ids": [],
+            "forbidden_article_ids": [],
+            "is_answerable": true,
+            "source": "manual"
+        },
+        {
+            "incident_id": "INC0010029",
+            "query": "Laptop high CPU utilization and thermal throttling following system update",
+            "primary_article_ids": [
+                "KB0007-v2.0"
+            ],
+            "acceptable_article_ids": [],
+            "forbidden_article_ids": [],
+            "is_answerable": true,
+            "source": "manual"
+        },
+        {
+            "incident_id": "INC0010031",
+            "query": "SAP GUI connection times out with RFC_ERROR_COMMUNICATION on ECC production",
+            "primary_article_ids": [
+                "KB0008-v1.0"
+            ],
+            "acceptable_article_ids": [],
+            "forbidden_article_ids": [],
+            "is_answerable": true,
+            "source": "manual"
+        },
+        {
+            "incident_id": "INC0010033",
+            "query": "Corporate Wi-Fi drops repeatedly and reconnects every five minutes on 5 GHz",
+            "primary_article_ids": [
+                "KB0009-v2.0"
+            ],
+            "acceptable_article_ids": [],
+            "forbidden_article_ids": [],
+            "is_answerable": true,
+            "source": "manual"
+        },
+        {
+            "incident_id": "INC0009884",
+            "query": "Order service connection pool exhaustion causing in-flight order loss",
+            "primary_article_ids": [
+                "KB0010-v2.0"
+            ],
+            "acceptable_article_ids": [],
+            "forbidden_article_ids": [
+                "KB0010-v1.0"
+            ],
+            "is_answerable": true,
+            "source": "manual"
+        },
+        {
+            "incident_id": "INC0010091",
+            "query": "Domain password change causing simultaneous VPN failure and AD account lockout",
+            "primary_article_ids": [
+                "KB0001-v2.0",
+                "KB0005-v4.0"
+            ],
+            "acceptable_article_ids": [],
+            "forbidden_article_ids": [],
+            "is_answerable": true,
+            "source": "synthetic"
+        },
+        {
+            "incident_id": "INC0010092",
+            "query": "Remote user reports Outlook disconnected and mapped drive missing simultaneously",
+            "primary_article_ids": [
+                "KB0002-v3.0",
+                "KB0003-v2.0"
+            ],
+            "acceptable_article_ids": [],
+            "forbidden_article_ids": [],
+            "is_answerable": true,
+            "source": "synthetic"
+        },
+        {
+            "incident_id": "INC0010093",
+            "query": "Facilities HVAC water chiller unit leak in basement equipment room 2B",
+            "primary_article_ids": [],
+            "acceptable_article_ids": [],
+            "forbidden_article_ids": [],
+            "is_answerable": false,
+            "source": "synthetic"
+        },
+        {
+            "incident_id": "INC0010094",
+            "query": "Cafeteria point-of-sale card payment terminal displaying hardware tamper detected",
+            "primary_article_ids": [],
+            "acceptable_article_ids": [],
+            "forbidden_article_ids": [],
+            "is_answerable": false,
+            "source": "synthetic"
+        },
+        {
+            "incident_id": "INC0010095",
+            "query": "Building east wing biometric turnstile gate motor physically jammed",
+            "primary_article_ids": [],
+            "acceptable_article_ids": [],
+            "forbidden_article_ids": [],
+            "is_answerable": false,
+            "source": "synthetic"
+        },
+        {
+            "incident_id": "INC0010096",
+            "query": "User lost mobile phone and cannot complete VPN re-authentication requiring MFA re-enrollment",
+            "primary_article_ids": [
+                "KB0006-v3.0",
+                "KB0001-v2.0"
+            ],
+            "acceptable_article_ids": [],
+            "forbidden_article_ids": [],
+            "is_answerable": true,
+            "source": "synthetic"
+        },
+        {
+            "incident_id": "INC0010097",
+            "query": "Laptop thermal throttling after system update combined with corporate Wi-Fi drops",
+            "primary_article_ids": [
+                "KB0007-v2.0",
+                "KB0009-v2.0"
+            ],
+            "acceptable_article_ids": [],
+            "forbidden_article_ids": [],
+            "is_answerable": true,
+            "source": "synthetic"
+        },
+        {
+            "incident_id": "INC0010098",
+            "query": "SAP GUI connection times out for remote user working off the corporate network without VPN",
+            "primary_article_ids": [
+                "KB0008-v1.0",
+                "KB0001-v2.0"
+            ],
+            "acceptable_article_ids": [],
+            "forbidden_article_ids": [],
+            "is_answerable": true,
+            "source": "synthetic"
+        },
+        {
+            "incident_id": "INC0010099",
+            "query": "Follow-me print queue stalls and mapped drives disappear after network switch replacement",
+            "primary_article_ids": [
+                "KB0004-v1.0",
+                "KB0003-v2.0"
+            ],
+            "acceptable_article_ids": [],
+            "forbidden_article_ids": [],
+            "is_answerable": true,
+            "source": "synthetic"
+        },
+        {
+            "incident_id": "INC0010100",
+            "query": "Laptop degradation after system update causing SAP GUI timeouts during month-end close",
+            "primary_article_ids": [
+                "KB0007-v2.0",
+                "KB0008-v1.0"
+            ],
+            "acceptable_article_ids": [],
+            "forbidden_article_ids": [],
+            "is_answerable": true,
+            "source": "synthetic"
+        },
+        {
+            "incident_id": "INC0010101",
+            "query": "Building B passenger elevator stuck between floors with occupants inside",
+            "primary_article_ids": [],
+            "acceptable_article_ids": [],
+            "forbidden_article_ids": [],
+            "is_answerable": false,
+            "source": "synthetic"
+        },
+        {
+            "incident_id": "INC0010102",
+            "query": "Payroll system displays incorrect salary amount for employee after compensation review",
+            "primary_article_ids": [],
+            "acceptable_article_ids": [],
+            "forbidden_article_ids": [],
+            "is_answerable": false,
+            "source": "synthetic"
+        },
+        {
+            "incident_id": "SYN_SPARSE_1",
+            "query": "RFC_ERROR_COMMUNICATION",
+            "primary_article_ids": [
+                "KB0008-v1.0"
+            ],
+            "acceptable_article_ids": [],
+            "forbidden_article_ids": [],
+            "is_answerable": true,
+            "source": "synthetic"
+        },
+        {
+            "incident_id": "SYN_SPARSE_2",
+            "query": "PRB0040018 pool drain procedure connection recycled",
+            "primary_article_ids": [
+                "KB0010-v2.0"
+            ],
+            "acceptable_article_ids": [],
+            "forbidden_article_ids": [
+                "KB0010-v1.0"
+            ],
+            "is_answerable": true,
+            "source": "synthetic"
+        },
+        {
+            "incident_id": "SYN_SPARSE_3",
+            "query": "CHG0030455 emergency change approval status",
+            "primary_article_ids": [
+                "KB0010-v2.0"
+            ],
+            "acceptable_article_ids": [],
+            "forbidden_article_ids": [
+                "KB0010-v1.0"
+            ],
+            "is_answerable": true,
+            "source": "synthetic"
+        },
+        {
+            "incident_id": "SYN_SPARSE_4",
+            "query": "RITM0010877 order service connection pool emergency change approval workflow",
+            "primary_article_ids": [
+                "KB0006-v3.0"
+            ],
+            "acceptable_article_ids": [],
+            "forbidden_article_ids": [],
+            "is_answerable": true,
+            "source": "synthetic"
+        }
+    ]
+}

@@ -1,0 +1,551 @@
+<?xml version="1.0" encoding="UTF-8"?><unload unload_date="2026-09-16 19:45:31">
+<sys_remote_update_set action="INSERT_OR_UPDATE">
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<application_name>AI Incident Orchestrator</application_name>
+<application_scope>x_2215032_ai_inc_0</application_scope>
+<application_version>1.0.1</application_version>
+<collisions/>
+<commit_date/>
+<deleted/>
+<description>Clean-install fixes for the S1.2 update set, built and verified on dev434590.</description>
+<inserted/>
+<name>BARQ G1 - S1.2 - Security fixes (#47 #48 #49 #50 #68 #100)</name>
+<origin_sys_id/>
+<parent display_value=""/>
+<release_date/>
+<remote_base_update_set display_value=""/>
+<remote_parent_id/>
+<remote_sys_id>7aa574b2731b4b102aedfed25ab8b734</remote_sys_id>
+<state>loaded</state>
+<summary/>
+<sys_class_name>sys_remote_update_set</sys_class_name>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-16 19:45:30</sys_created_on>
+<sys_id>dd48383a731b4b102aedfed25ab8b74f</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-16 19:45:30</sys_updated_on>
+<update_set display_value=""/>
+<update_source display_value=""/>
+<updated/>
+</sys_remote_update_set>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>DELETE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_scope_privilege_d899f849475b0710c148497f316d431b</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_scope_privilege"><sys_scope_privilege action="DELETE"><operation>read</operation><source_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</source_scope><status>allowed</status><sys_class_name>sys_scope_privilege</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-11 09:21:47</sys_created_on><sys_id>d899f849475b0710c148497f316d431b</sys_id><sys_mod_count>0</sys_mod_count><sys_name>sys_security_acl_role</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_update_name>sys_scope_privilege_d899f849475b0710c148497f316d431b</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-11 09:21:47</sys_updated_on><target_name>sys_security_acl_role</target_name><target_scope display_value="Global">global</target_scope><target_type>sys_db_object</target_type></sys_scope_privilege></record_update>]]></payload>
+<payload_hash>351450841</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.2 - Security fixes (#47 #48 #49 #50 #68 #100)">dd48383a731b4b102aedfed25ab8b74f</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-16 19:45:30</sys_created_on>
+<sys_id>1148383a731b4b102aedfed25ab8b753</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a0abbb82500000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-16 19:45:30</sys_updated_on>
+<table/>
+<target_name>sys_security_acl_role</target_name>
+<type>Cross scope privilege</type>
+<update_domain>global</update_domain>
+<update_guid>a9f6f476061b4b107ab789e7840a5def</update_guid>
+<update_guid_history>a9f6f476061b4b107ab789e7840a5def:351450841,5499f849325b0710d64ebcc8a200b81e:-1005631283</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_app_51a63bbf738bc7502aedfed25ab8b789</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_app"><sys_app action="INSERT_OR_UPDATE"><active>true</active><can_edit_in_studio>true</can_edit_in_studio><enforce_license>log</enforce_license><guided_setup_guid/><hide_on_ui>false</hide_on_ui><ide_created>SNS</ide_created><installed_as_dependency>false</installed_as_dependency><js_level>es_latest</js_level><licensable>true</licensable><license/><license_category>none</license_category><license_definition/><license_model>none</license_model><logo/><menu/><name>AI Incident Orchestrator</name><package_json display_value="x_2215032_ai_inc_0/ai-incident-orchestrator/1.0.0/package.json" path="x_2215032_ai_inc_0/ai-incident-orchestrator/1.0.0/package.json">x_2215032_ai_inc_0/ai-incident-orchestrator/1.0.0/package.json</package_json><package_resolver_version>1.0.0</package_resolver_version><private>false</private><restrict_table_access>false</restrict_table_access><runtime_access_tracking>enforcing</runtime_access_tracking><scope>x_2215032_ai_inc_0</scope><scoped_administration>false</scoped_administration><short_description/><source>x_2215032_ai_inc_0</source><store_correlation_id/><store_url/><subscription_entitlement/><sys_class_name>sys_app</sys_class_name><sys_code/><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-08 01:55:29</sys_created_on><sys_id>51a63bbf738bc7502aedfed25ab8b789</sys_id><sys_mod_count>5</sys_mod_count><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-16 19:39:47</sys_updated_on><template/><trackable>true</trackable><uninstall_blocked>false</uninstall_blocked><user_role/><vendor/><vendor_prefix/><version>1.0.1</version></sys_app><sys_translated_text action="delete_multiple" query="documentkey=51a63bbf738bc7502aedfed25ab8b789"/></record_update>]]></payload>
+<payload_hash>-725755164</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.2 - Security fixes (#47 #48 #49 #50 #68 #100)">dd48383a731b4b102aedfed25ab8b74f</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-16 19:45:30</sys_created_on>
+<sys_id>1548383a731b4b102aedfed25ab8b750</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a0abbb83980000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-16 19:45:30</sys_updated_on>
+<table/>
+<target_name>AI Incident Orchestrator</target_name>
+<type>Custom Application</type>
+<update_domain>global</update_domain>
+<update_guid>f9f63876531b4b1058c7200423818829</update_guid>
+<update_guid_history>f9f63876531b4b1058c7200423818829:-725755164,8af61c32c2174b10c7bed1bde7acf417:295339998,39c6543255174b101fb1a917f72fa452:-725755164,c07ccdc8ff170b5041370695c358f634:295339998,1aa6fbbff78bc750f7f1516c2cee4297:-2098326936</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_security_acl_cee57cb2731b4b102aedfed25ab8b7d7</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_security_acl"><sys_security_acl action="INSERT_OR_UPDATE"><active>true</active><admin_overrides>true</admin_overrides><advanced>false</advanced><applies_to/><condition/><controlled_by_refs/><decision_type>allow</decision_type><description>Only admins may change the retry count by hand; the eligibility rule updates it server-side.</description><local_or_existing>Existing</local_or_existing><name>incident.x_2215032_ai_inc_0_ai_retry_count</name><operation display_value="write">write</operation><script/><security_attribute/><sys_class_name>sys_security_acl</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-16 19:35:10</sys_created_on><sys_id>cee57cb2731b4b102aedfed25ab8b7d7</sys_id><sys_mod_count>0</sys_mod_count><sys_name>incident.x_2215032_ai_inc_0_ai_retry_count</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_update_name>sys_security_acl_cee57cb2731b4b102aedfed25ab8b7d7</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-16 19:35:10</sys_updated_on><type display_value="record">record</type></sys_security_acl></record_update>]]></payload>
+<payload_hash>-1458878768</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.2 - Security fixes (#47 #48 #49 #50 #68 #100)">dd48383a731b4b102aedfed25ab8b74f</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-16 19:45:30</sys_created_on>
+<sys_id>1548383a731b4b102aedfed25ab8b754</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a0abb748f20000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-16 19:45:30</sys_updated_on>
+<table>incident.x_2215032_ai_inc_0_ai_retry_count</table>
+<target_name>incident.x_2215032_ai_inc_0_ai_retry_count</target_name>
+<type>Access Control</type>
+<update_domain>global</update_domain>
+<update_guid>4ee57cb2e71b4b10882170de6dd6e1dc</update_guid>
+<update_guid_history>4ee57cb2e71b4b10882170de6dd6e1dc:-1458878768</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_security_acl_role_4ae57cb2731b4b102aedfed25ab8b7df</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_security_acl_role"><sys_security_acl_role action="INSERT_OR_UPDATE"><sys_class_name>sys_security_acl_role</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-16 19:35:10</sys_created_on><sys_id>4ae57cb2731b4b102aedfed25ab8b7df</sys_id><sys_mod_count>0</sys_mod_count><sys_name>incident.x_2215032_ai_inc_0_ai_retry_count.admin</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_security_acl display_value="incident.x_2215032_ai_inc_0_ai_retry_count">cee57cb2731b4b102aedfed25ab8b7d7</sys_security_acl><sys_update_name>sys_security_acl_role_4ae57cb2731b4b102aedfed25ab8b7df</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-16 19:35:10</sys_updated_on><sys_user_role display_value="admin" name="admin">2831a114c611228501d4ea6c309d626d</sys_user_role></sys_security_acl_role></record_update>]]></payload>
+<payload_hash>284231962</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.2 - Security fixes (#47 #48 #49 #50 #68 #100)">dd48383a731b4b102aedfed25ab8b74f</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-16 19:45:30</sys_created_on>
+<sys_id>1948383a731b4b102aedfed25ab8b755</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a0abb7493b0000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-16 19:45:30</sys_updated_on>
+<table>incident.x_2215032_ai_inc_0_ai_retry_count</table>
+<target_name>incident.x_2215032_ai_inc_0_ai_retry_count.admin</target_name>
+<type>Access Roles</type>
+<update_domain>global</update_domain>
+<update_guid>02e57cb2091b4b106dd61bdb9c7fa1e9</update_guid>
+<update_guid_history>02e57cb2091b4b106dd61bdb9c7fa1e9:284231962</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>DELETE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_scope_privilege_9099f849475b0710c148497f316d4321</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_scope_privilege"><sys_scope_privilege action="DELETE"><operation>execute</operation><source_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</source_scope><status>allowed</status><sys_class_name>sys_scope_privilege</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-11 09:21:47</sys_created_on><sys_id>9099f849475b0710c148497f316d4321</sys_id><sys_mod_count>0</sys_mod_count><sys_name>GlideRecord.setValue</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_update_name>sys_scope_privilege_9099f849475b0710c148497f316d4321</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-11 09:21:47</sys_updated_on><target_name>GlideRecord.setValue</target_name><target_scope display_value="Global">global</target_scope><target_type>scriptable</target_type></sys_scope_privilege></record_update>]]></payload>
+<payload_hash>1024757101</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.2 - Security fixes (#47 #48 #49 #50 #68 #100)">dd48383a731b4b102aedfed25ab8b74f</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-16 19:45:30</sys_created_on>
+<sys_id>1d48383a731b4b102aedfed25ab8b751</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a0abbb82fa0000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-16 19:45:30</sys_updated_on>
+<table/>
+<target_name>GlideRecord.setValue</target_name>
+<type>Cross scope privilege</type>
+<update_domain>global</update_domain>
+<update_guid>f5f638769b1b4b10e89b13f4eec44f0a</update_guid>
+<update_guid_history>f5f638769b1b4b10e89b13f4eec44f0a:1024757101,1c99f849575b07105291dfccfd2be923:978652257</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>DELETE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_scope_privilege_9499f849475b0710c148497f316d4316</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_scope_privilege"><sys_scope_privilege action="DELETE"><operation>read</operation><source_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</source_scope><status>allowed</status><sys_class_name>sys_scope_privilege</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-11 09:21:47</sys_created_on><sys_id>9499f849475b0710c148497f316d4316</sys_id><sys_mod_count>0</sys_mod_count><sys_name>sys_security_acl</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_update_name>sys_scope_privilege_9499f849475b0710c148497f316d4316</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-11 09:21:47</sys_updated_on><target_name>sys_security_acl</target_name><target_scope display_value="Global">global</target_scope><target_type>sys_db_object</target_type></sys_scope_privilege></record_update>]]></payload>
+<payload_hash>912621405</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.2 - Security fixes (#47 #48 #49 #50 #68 #100)">dd48383a731b4b102aedfed25ab8b74f</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-16 19:45:30</sys_created_on>
+<sys_id>5148383a731b4b102aedfed25ab8b752</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a0abbb81b60000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-16 19:45:30</sys_updated_on>
+<table/>
+<target_name>sys_security_acl</target_name>
+<type>Cross scope privilege</type>
+<update_domain>global</update_domain>
+<update_guid>25f6f4769f1b4b10652712c52315acc8</update_guid>
+<update_guid_history>25f6f4769f1b4b10652712c52315acc8:912621405,1099f8490b5b0710f73633b2e94b9a19:-1522650543</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_security_acl_35e57cb2731b4b102aedfed25ab8b77e</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_security_acl"><sys_security_acl action="INSERT_OR_UPDATE"><active>true</active><admin_overrides>true</admin_overrides><advanced>false</advanced><applies_to/><condition/><controlled_by_refs/><decision_type>allow</decision_type><description>Field values may be set when a log row is created. There is deliberately no write ACL: rows are append-only.</description><local_or_existing>Existing</local_or_existing><name>x_2215032_ai_inc_0_ai_execution_log.*</name><operation display_value="create">create</operation><script/><security_attribute/><sys_class_name>sys_security_acl</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-16 19:35:09</sys_created_on><sys_id>35e57cb2731b4b102aedfed25ab8b77e</sys_id><sys_mod_count>0</sys_mod_count><sys_name>x_2215032_ai_inc_0_ai_execution_log.*</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_update_name>sys_security_acl_35e57cb2731b4b102aedfed25ab8b77e</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-16 19:35:09</sys_updated_on><type display_value="record">record</type></sys_security_acl></record_update>]]></payload>
+<payload_hash>-727147567</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.2 - Security fixes (#47 #48 #49 #50 #68 #100)">dd48383a731b4b102aedfed25ab8b74f</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-16 19:45:30</sys_created_on>
+<sys_id>5548383a731b4b102aedfed25ab8b753</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a0abb745820000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-16 19:45:30</sys_updated_on>
+<table>x_2215032_ai_inc_0_ai_execution_log.*</table>
+<target_name>x_2215032_ai_inc_0_ai_execution_log.*</target_name>
+<type>Access Control</type>
+<update_domain>global</update_domain>
+<update_guid>31e57cb2d51b4b10d0d22e5bc62f4186</update_guid>
+<update_guid_history>31e57cb2d51b4b10d0d22e5bc62f4186:-727147567</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_security_acl_f0d9bfe847df4310c148497f316d4353</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_security_acl"><sys_security_acl action="INSERT_OR_UPDATE"><active>true</active><admin_overrides>true</admin_overrides><advanced>false</advanced><applies_to/><condition table="sys_journal_field.*">name=incident^element=work_notes^EQ<item endquery="true" field="" goto="false" newquery="false" operator="=" or="false" value=""/></condition><controlled_by_refs/><decision_type>allow</decision_type><description>Allow read for all fields in sys_journal_field, for users with role x_2215032_ai_inc_0.integration_writer, and if the ACL condition (name=incident^element=work_notes^EQ) evaluates to true.</description><local_or_existing>Existing</local_or_existing><name>sys_journal_field.*</name><operation display_value="read">read</operation><script/><security_attribute/><sys_class_name>sys_security_acl</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-10 10:04:49</sys_created_on><sys_id>f0d9bfe847df4310c148497f316d4353</sys_id><sys_mod_count>1</sys_mod_count><sys_name>sys_journal_field.*</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_update_name>sys_security_acl_f0d9bfe847df4310c148497f316d4353</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-16 19:35:10</sys_updated_on><type display_value="record">record</type></sys_security_acl></record_update>]]></payload>
+<payload_hash>1186707948</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.2 - Security fixes (#47 #48 #49 #50 #68 #100)">dd48383a731b4b102aedfed25ab8b74f</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-16 19:45:30</sys_created_on>
+<sys_id>5948383a731b4b102aedfed25ab8b754</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a0abb748b40000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-16 19:45:30</sys_updated_on>
+<table>sys_journal_field.*</table>
+<target_name>sys_journal_field.*</target_name>
+<type>Access Control</type>
+<update_domain>global</update_domain>
+<update_guid>82e57cb2f21b4b1090578a1eb09e3fd5</update_guid>
+<update_guid_history>82e57cb2f21b4b1090578a1eb09e3fd5:1186707948,b8d9bfe83fdf431066a62f566329e758:-940537798</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_security_acl_role_71e57cb2731b4b102aedfed25ab8b789</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_security_acl_role"><sys_security_acl_role action="INSERT_OR_UPDATE"><sys_class_name>sys_security_acl_role</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-16 19:35:10</sys_created_on><sys_id>71e57cb2731b4b102aedfed25ab8b789</sys_id><sys_mod_count>0</sys_mod_count><sys_name>x_2215032_ai_inc_0_ai_execution_log.*.x_2215032_ai_inc_0.ai_execution_log_user</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_security_acl display_value="x_2215032_ai_inc_0_ai_execution_log.*">35e57cb2731b4b102aedfed25ab8b77e</sys_security_acl><sys_update_name>sys_security_acl_role_71e57cb2731b4b102aedfed25ab8b789</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-16 19:35:10</sys_updated_on><sys_user_role display_value="x_2215032_ai_inc_0.ai_execution_log_user" name="x_2215032_ai_inc_0.ai_execution_log_user">e803ab28471f4310c148497f316d43ad</sys_user_role></sys_security_acl_role></record_update>]]></payload>
+<payload_hash>939878149</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.2 - Security fixes (#47 #48 #49 #50 #68 #100)">dd48383a731b4b102aedfed25ab8b74f</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-16 19:45:30</sys_created_on>
+<sys_id>5d48383a731b4b102aedfed25ab8b755</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a0abb746fb0000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-16 19:45:30</sys_updated_on>
+<table>x_2215032_ai_inc_0_ai_execution_log.*</table>
+<target_name>x_2215032_ai_inc_0_ai_execution_log.*.x_2215032_ai_inc_0.ai_execution_log_user</target_name>
+<type>Access Roles</type>
+<update_domain>global</update_domain>
+<update_guid>0ae57cb2a21b4b10b56f9cb6618f6d94</update_guid>
+<update_guid_history>0ae57cb2a21b4b10b56f9cb6618f6d94:939878149</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>DELETE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_scope_privilege_1099f849475b0710c148497f316d4326</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_scope_privilege"><sys_scope_privilege action="DELETE"><operation>execute</operation><source_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</source_scope><status>allowed</status><sys_class_name>sys_scope_privilege</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-11 09:21:47</sys_created_on><sys_id>1099f849475b0710c148497f316d4326</sys_id><sys_mod_count>0</sys_mod_count><sys_name>GlideRecord.insert</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_update_name>sys_scope_privilege_1099f849475b0710c148497f316d4326</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-11 09:21:47</sys_updated_on><target_name>GlideRecord.insert</target_name><target_scope display_value="Global">global</target_scope><target_type>scriptable</target_type></sys_scope_privilege></record_update>]]></payload>
+<payload_hash>154643437</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.2 - Security fixes (#47 #48 #49 #50 #68 #100)">dd48383a731b4b102aedfed25ab8b74f</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-16 19:45:30</sys_created_on>
+<sys_id>9148383a731b4b102aedfed25ab8b751</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a0abbb82c20000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-16 19:45:30</sys_updated_on>
+<table/>
+<target_name>GlideRecord.insert</target_name>
+<type>Cross scope privilege</type>
+<update_domain>global</update_domain>
+<update_guid>29f638764a1b4b103b23e9aff678c301</update_guid>
+<update_guid_history>29f638764a1b4b103b23e9aff678c301:154643437,9899f849dd5b07102f777daf9b338228:634766561</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>DELETE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_security_acl_role_a90525b8475f8310c148497f316d4383</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_security_acl_role"><sys_security_acl_role action="DELETE"><sys_class_name>sys_security_acl_role</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-10 17:53:10</sys_created_on><sys_id>a90525b8475f8310c148497f316d4383</sys_id><sys_mod_count>0</sys_mod_count><sys_name>sys_journal_field.x_2215032_ai_inc_0.integration_writer</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_security_acl display_value="sys_journal_field">e7c3abccffa76210f65cffffffffffae</sys_security_acl><sys_update_name>sys_security_acl_role_a90525b8475f8310c148497f316d4383</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-10 17:53:10</sys_updated_on><sys_user_role display_value="x_2215032_ai_inc_0.integration_writer" name="x_2215032_ai_inc_0.integration_writer">105563ec471f4310c148497f316d438c</sys_user_role></sys_security_acl_role></record_update>]]></payload>
+<payload_hash>-1242251136</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.2 - Security fixes (#47 #48 #49 #50 #68 #100)">dd48383a731b4b102aedfed25ab8b74f</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-16 19:45:30</sys_created_on>
+<sys_id>9148383a731b4b102aedfed25ab8b756</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a0abb747b30000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-16 19:45:30</sys_updated_on>
+<table>sys_journal_field</table>
+<target_name>sys_journal_field.x_2215032_ai_inc_0.integration_writer</target_name>
+<type>Access Roles</type>
+<update_domain>global</update_domain>
+<update_guid>8ae57cb22a1b4b107f59c2f22c65a7b6</update_guid>
+<update_guid_history>8ae57cb22a1b4b107f59c2f22c65a7b6:-1242251136,e90525b81c5f8310391102f18e3ee98b:-1884482956</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>DELETE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_scope_privilege_d099f849475b0710c148497f316d4310</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_scope_privilege"><sys_scope_privilege action="DELETE"><operation>read</operation><source_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</source_scope><status>allowed</status><sys_class_name>sys_scope_privilege</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-11 09:21:47</sys_created_on><sys_id>d099f849475b0710c148497f316d4310</sys_id><sys_mod_count>0</sys_mod_count><sys_name>sys_scope</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_update_name>sys_scope_privilege_d099f849475b0710c148497f316d4310</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-11 09:21:47</sys_updated_on><target_name>sys_scope</target_name><target_scope display_value="Global">global</target_scope><target_type>sys_db_object</target_type></sys_scope_privilege></record_update>]]></payload>
+<payload_hash>796089517</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.2 - Security fixes (#47 #48 #49 #50 #68 #100)">dd48383a731b4b102aedfed25ab8b74f</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-16 19:45:30</sys_created_on>
+<sys_id>9548383a731b4b102aedfed25ab8b752</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a0abbb81ea0000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-16 19:45:30</sys_updated_on>
+<table/>
+<target_name>sys_scope</target_name>
+<type>Cross scope privilege</type>
+<update_domain>global</update_domain>
+<update_guid>65f6f4761e1b4b10825176e8dc0be1d1</update_guid>
+<update_guid_history>65f6f4761e1b4b10825176e8dc0be1d1:796089517,9899f849bd5b07100f3dd6a657f02413:-520254815</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_security_acl_7de57cb2731b4b102aedfed25ab8b751</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_security_acl"><sys_security_acl action="INSERT_OR_UPDATE"><active>true</active><admin_overrides>true</admin_overrides><advanced>false</advanced><applies_to/><condition table="incident">x_2215032_ai_inc_0_ai_human_lock=false^EQ<item endquery="false" field="x_2215032_ai_inc_0_ai_human_lock" goto="false" newquery="false" operator="=" or="false" value="false"/><item endquery="true" field="" goto="false" newquery="false" operator="=" or="false" value=""/></condition><controlled_by_refs/><decision_type>allow</decision_type><description>Record-level write on incident for the AI integration role, only while AI Human Lock is off. This is the server-side safety stop: a locked incident refuses every write from this role, including work notes. Field ACLs decide which fields it may change.</description><local_or_existing>Existing</local_or_existing><name>incident</name><operation display_value="write">write</operation><script/><security_attribute/><sys_class_name>sys_security_acl</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-16 19:35:09</sys_created_on><sys_id>7de57cb2731b4b102aedfed25ab8b751</sys_id><sys_mod_count>2</sys_mod_count><sys_name>incident</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_update_name>sys_security_acl_7de57cb2731b4b102aedfed25ab8b751</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-16 19:37:37</sys_updated_on><type display_value="record">record</type></sys_security_acl></record_update>]]></payload>
+<payload_hash>-665087074</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.2 - Security fixes (#47 #48 #49 #50 #68 #100)">dd48383a731b4b102aedfed25ab8b74f</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-16 19:45:30</sys_created_on>
+<sys_id>9948383a731b4b102aedfed25ab8b753</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a0abb986870000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-16 19:45:30</sys_updated_on>
+<table>incident</table>
+<target_name>incident</target_name>
+<type>Access Control</type>
+<update_domain>global</update_domain>
+<update_guid>f5767436231b4b10fd8335acc7ae5d3b</update_guid>
+<update_guid_history>f5767436231b4b10fd8335acc7ae5d3b:-665087074,bde57cb27f1b4b104f3965927bd9c258:1744800563</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>DELETE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_security_acl_role_2429f72847df4310c148497f316d4362</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_security_acl_role"><sys_security_acl_role action="DELETE"><sys_class_name>sys_security_acl_role</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-10 10:01:47</sys_created_on><sys_id>2429f72847df4310c148497f316d4362</sys_id><sys_mod_count>0</sys_mod_count><sys_name>incident.x_2215032_ai_inc_0.integration_writer</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_security_acl display_value="incident">24baff9a9d330210f877faf15ee3ec47</sys_security_acl><sys_update_name>sys_security_acl_role_2429f72847df4310c148497f316d4362</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-10 10:01:47</sys_updated_on><sys_user_role display_value="x_2215032_ai_inc_0.integration_writer" name="x_2215032_ai_inc_0.integration_writer">105563ec471f4310c148497f316d438c</sys_user_role></sys_security_acl_role></record_update>]]></payload>
+<payload_hash>-1388058646</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.2 - Security fixes (#47 #48 #49 #50 #68 #100)">dd48383a731b4b102aedfed25ab8b74f</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-16 19:45:30</sys_created_on>
+<sys_id>9d48383a731b4b102aedfed25ab8b754</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a0abb743f30000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-16 19:45:30</sys_updated_on>
+<table>incident</table>
+<target_name>incident.x_2215032_ai_inc_0.integration_writer</target_name>
+<type>Access Roles</type>
+<update_domain>global</update_domain>
+<update_guid>f1e57cb2121b4b103167e7f9216e0b42</update_guid>
+<update_guid_history>f1e57cb2121b4b103167e7f9216e0b42:-1388058646,ac29b7a84fdf4310bbd6c705acb51778:557092574</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_security_acl_role_31e57cb2731b4b102aedfed25ab8b75c</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_security_acl_role"><sys_security_acl_role action="INSERT_OR_UPDATE"><sys_class_name>sys_security_acl_role</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-16 19:35:09</sys_created_on><sys_id>31e57cb2731b4b102aedfed25ab8b75c</sys_id><sys_mod_count>0</sys_mod_count><sys_name>incident.x_2215032_ai_inc_0.integration_writer</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_security_acl display_value="incident">7de57cb2731b4b102aedfed25ab8b751</sys_security_acl><sys_update_name>sys_security_acl_role_31e57cb2731b4b102aedfed25ab8b75c</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-16 19:35:09</sys_updated_on><sys_user_role display_value="x_2215032_ai_inc_0.integration_writer" name="x_2215032_ai_inc_0.integration_writer">105563ec471f4310c148497f316d438c</sys_user_role></sys_security_acl_role></record_update>]]></payload>
+<payload_hash>-1732056023</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.2 - Security fixes (#47 #48 #49 #50 #68 #100)">dd48383a731b4b102aedfed25ab8b74f</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-16 19:45:30</sys_created_on>
+<sys_id>d148383a731b4b102aedfed25ab8b755</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a0abb744c50000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-16 19:45:30</sys_updated_on>
+<table>incident</table>
+<target_name>incident.x_2215032_ai_inc_0.integration_writer</target_name>
+<type>Access Roles</type>
+<update_domain>global</update_domain>
+<update_guid>b9e57cb2511b4b10961527706ba74b66</update_guid>
+<update_guid_history>b9e57cb2511b4b10961527706ba74b66:-1732056023</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_scope_privilege_3357f4b6731b4b102aedfed25ab8b7e7</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_scope_privilege"><sys_scope_privilege action="INSERT_OR_UPDATE"><operation>execute</operation><source_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</source_scope><status>allowed</status><sys_class_name>sys_scope_privilege</sys_class_name><sys_created_by>system</sys_created_by><sys_created_on>2026-09-16 19:41:34</sys_created_on><sys_id>3357f4b6731b4b102aedfed25ab8b7e7</sys_id><sys_mod_count>1</sys_mod_count><sys_name>ScriptableRESTMessageClient.setEndpoint</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_update_name>sys_scope_privilege_3357f4b6731b4b102aedfed25ab8b7e7</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-16 19:42:18</sys_updated_on><target_name>ScriptableRESTMessageClient.setEndpoint</target_name><target_scope display_value="Global">global</target_scope><target_type>scriptable</target_type></sys_scope_privilege></record_update>]]></payload>
+<payload_hash>576822353</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.2 - Security fixes (#47 #48 #49 #50 #68 #100)">dd48383a731b4b102aedfed25ab8b74f</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-16 19:45:30</sys_created_on>
+<sys_id>d548383a731b4b102aedfed25ab8b751</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a0abbdcf8f0000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-16 19:45:30</sys_updated_on>
+<table/>
+<target_name>ScriptableRESTMessageClient.setEndpoint</target_name>
+<type>Cross scope privilege</type>
+<update_domain>global</update_domain>
+<update_guid>ee877cb68f1b4b1089a9b84cfbd062b5</update_guid>
+<update_guid_history>ee877cb68f1b4b1089a9b84cfbd062b5:576822353,ff5738b6cf1b4b1033a19a4c94501c1a:447191307</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_security_acl_role_cae57cb2731b4b102aedfed25ab8b7c1</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_security_acl_role"><sys_security_acl_role action="INSERT_OR_UPDATE"><sys_class_name>sys_security_acl_role</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-16 19:35:10</sys_created_on><sys_id>cae57cb2731b4b102aedfed25ab8b7c1</sys_id><sys_mod_count>0</sys_mod_count><sys_name>sys_journal_field.x_2215032_ai_inc_0.integration_writer</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_security_acl display_value="sys_journal_field">cee57cb2731b4b102aedfed25ab8b7b9</sys_security_acl><sys_update_name>sys_security_acl_role_cae57cb2731b4b102aedfed25ab8b7c1</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-16 19:35:10</sys_updated_on><sys_user_role display_value="x_2215032_ai_inc_0.integration_writer" name="x_2215032_ai_inc_0.integration_writer">105563ec471f4310c148497f316d438c</sys_user_role></sys_security_acl_role></record_update>]]></payload>
+<payload_hash>-1110844487</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.2 - Security fixes (#47 #48 #49 #50 #68 #100)">dd48383a731b4b102aedfed25ab8b74f</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-16 19:45:30</sys_created_on>
+<sys_id>d548383a731b4b102aedfed25ab8b756</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a0abb748460000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-16 19:45:30</sys_updated_on>
+<table>sys_journal_field</table>
+<target_name>sys_journal_field.x_2215032_ai_inc_0.integration_writer</target_name>
+<type>Access Roles</type>
+<update_domain>global</update_domain>
+<update_guid>82e57cb2ea1b4b101191152e1f4be0cb</update_guid>
+<update_guid_history>82e57cb2ea1b4b101191152e1f4be0cb:-1110844487</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>DELETE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_scope_privilege_d4cfe3a4479f4310c148497f316d43c3</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_scope_privilege"><sys_scope_privilege action="DELETE"><operation>read</operation><source_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</source_scope><status>allowed</status><sys_class_name>sys_scope_privilege</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-10 09:20:49</sys_created_on><sys_id>d4cfe3a4479f4310c148497f316d43c3</sys_id><sys_mod_count>0</sys_mod_count><sys_name>sys_user_role</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_update_name>sys_scope_privilege_d4cfe3a4479f4310c148497f316d43c3</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-10 09:20:49</sys_updated_on><target_name>sys_user_role</target_name><target_scope display_value="Global">global</target_scope><target_type>sys_db_object</target_type></sys_scope_privilege></record_update>]]></payload>
+<payload_hash>1255404889</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.2 - Security fixes (#47 #48 #49 #50 #68 #100)">dd48383a731b4b102aedfed25ab8b74f</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-16 19:45:30</sys_created_on>
+<sys_id>d948383a731b4b102aedfed25ab8b752</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a0abbb821e0000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-16 19:45:30</sys_updated_on>
+<table/>
+<target_name>sys_user_role</target_name>
+<type>Cross scope privilege</type>
+<update_domain>global</update_domain>
+<update_guid>e9f6f476831b4b106f025a8e7bbb3ae6</update_guid>
+<update_guid_history>e9f6f476831b4b106f025a8e7bbb3ae6:1255404889,10cfe3a4e79f4310825a3f1af9dc31c7:723185485</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_security_acl_cee57cb2731b4b102aedfed25ab8b7b9</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_security_acl"><sys_security_acl action="INSERT_OR_UPDATE"><active>true</active><admin_overrides>true</admin_overrides><advanced>false</advanced><applies_to/><condition table="sys_journal_field">name=incident^element=work_notes^EQ<item endquery="false" field="name" goto="false" newquery="false" operator="=" or="false" value="incident"/><item endquery="false" field="element" goto="false" newquery="false" operator="=" or="false" value="work_notes"/><item endquery="true" field="" goto="false" newquery="false" operator="=" or="false" value=""/></condition><controlled_by_refs/><decision_type>allow</decision_type><description>Journal read for the AI integration role, limited to incident work notes.</description><local_or_existing>Existing</local_or_existing><name>sys_journal_field</name><operation display_value="read">read</operation><script/><security_attribute/><sys_class_name>sys_security_acl</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-16 19:35:10</sys_created_on><sys_id>cee57cb2731b4b102aedfed25ab8b7b9</sys_id><sys_mod_count>0</sys_mod_count><sys_name>sys_journal_field</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_update_name>sys_security_acl_cee57cb2731b4b102aedfed25ab8b7b9</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-16 19:35:10</sys_updated_on><type display_value="record">record</type></sys_security_acl></record_update>]]></payload>
+<payload_hash>-446867279</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.2 - Security fixes (#47 #48 #49 #50 #68 #100)">dd48383a731b4b102aedfed25ab8b74f</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-16 19:45:30</sys_created_on>
+<sys_id>dd48383a731b4b102aedfed25ab8b753</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a0abb747fd0000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-16 19:45:30</sys_updated_on>
+<table>sys_journal_field</table>
+<target_name>sys_journal_field</target_name>
+<type>Access Control</type>
+<update_domain>global</update_domain>
+<update_guid>cee57cb22c1b4b10c04b227ea560bdbe</update_guid>
+<update_guid_history>cee57cb22c1b4b10c04b227ea560bdbe:-446867279</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>DELETE</action>
+<application display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</application>
+<category>customer</category>
+<comments/>
+<name>sys_security_acl_role_c3f8aba4475f4310c148497f316d4323</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_security_acl_role"><sys_security_acl_role action="DELETE"><sys_class_name>sys_security_acl_role</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-10 08:51:55</sys_created_on><sys_id>c3f8aba4475f4310c148497f316d4323</sys_id><sys_mod_count>0</sys_mod_count><sys_name>.admin</sys_name><sys_package display_value="AI Incident Orchestrator" source="x_2215032_ai_inc_0">51a63bbf738bc7502aedfed25ab8b789</sys_package><sys_policy/><sys_scope display_value="AI Incident Orchestrator">51a63bbf738bc7502aedfed25ab8b789</sys_scope><sys_security_acl display_value="incident.x_2215032_ai_inc_0_ai_human_lock">9dd8efa4475f4310c148497f316d43bc</sys_security_acl><sys_update_name>sys_security_acl_role_c3f8aba4475f4310c148497f316d4323</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-10 08:51:55</sys_updated_on><sys_user_role display_value="admin" name="admin">2831a114c611228501d4ea6c309d626d</sys_user_role></sys_security_acl_role></record_update>]]></payload>
+<payload_hash>1740225914</payload_hash>
+<remote_update_set display_value="BARQ G1 - S1.2 - Security fixes (#47 #48 #49 #50 #68 #100)">dd48383a731b4b102aedfed25ab8b74f</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-17 00:11:18</sys_created_on>
+<sys_id>3615f5fa73138b102aedfed25ab8b78b</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a0acb356740000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-17 00:11:18</sys_updated_on>
+<table>incident.x_2215032_ai_inc_0_ai_human_lock</table>
+<target_name>.admin</target_name>
+<type>Access Roles</type>
+<update_domain>global</update_domain>
+<update_guid>32e431fa9c138b10aaeae2ca45afaa17</update_guid>
+<update_guid_history>32e431fa9c138b10aaeae2ca45afaa17:1740225914,0929abe47d5f4310c9690951ad6fba09:10144784</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml></unload>
