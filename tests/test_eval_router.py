@@ -7,18 +7,18 @@ from unittest.mock import MagicMock
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+import tests.helpers as h
 from api.schemas.eval import EvalResultResponse, EvalRunResponse
 from app.main import create_app
 from tests.helpers import mock_settings
 
-VALID_TOKEN = "dev-webhook-secret-token"
-AUTH_HEADERS = {"Authorization": f"Bearer {VALID_TOKEN}"}
+AUTH_HEADERS = h.AUTH_HEADERS
 
 
 @pytest.fixture
 def app_instance():
     """Create test application instance with mocked resources."""
-    settings = mock_settings(webhook_auth_token=VALID_TOKEN)
+    settings = mock_settings()
     app = create_app(settings=settings)
     app.state.engine = MagicMock()
     app.state.session_factory = MagicMock()

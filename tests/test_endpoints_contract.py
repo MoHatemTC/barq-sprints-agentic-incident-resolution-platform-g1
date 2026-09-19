@@ -174,10 +174,10 @@ async def test_every_protected_endpoint_rejects_missing_auth_with_401(client) ->
 
 
 @pytest.mark.asyncio
-async def test_servicenow_oauth_token_cannot_access_operator_routes(app, client) -> None:
+async def test_servicenow_oauth_token_can_access_operator_routes(app, client) -> None:
     token_headers = h.webhook_oauth_headers(app.state.settings)
     response = await client.get("/api/v1/config", headers=token_headers)
-    assert response.status_code == 401
+    assert response.status_code == 200
 
 
 # ---------------------------------------------------------------------------

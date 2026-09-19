@@ -42,22 +42,23 @@ def mock_settings(**overrides: object) -> Settings:
     return Settings(**defaults)  # type: ignore[arg-type]
 
 
-# ---------------------------------------------------------------------------
-# Shared S2.1 HTTP-boundary test constants and builders
-# ---------------------------------------------------------------------------
-WEBHOOK_TOKEN = "s21-test-bearer-token-7f3a"
+def make_oauth_token(settings: Settings | None = None) -> str:
+    """Issue a valid short-lived OAuth token for tests."""
+    from app.auth.webhook_oauth import config_from_settings, issue_access_token
+
+    resolved = settings or mock_settings()
+    config = config_from_settings(resolved)
+    return issue_access_token(config, config.client_id, config.client_secret)["access_token"]
+
+
+WEBHOOK_TOKEN = make_oauth_token()
 AUTH_HEADERS = {"Authorization": f"Bearer {WEBHOOK_TOKEN}"}
 OPERATOR_HEADERS = {**AUTH_HEADERS, "X-User-Role": "operator"}
 
 
 def webhook_oauth_headers(settings: Settings | None = None) -> dict[str, str]:
     """Issue a valid short-lived ServiceNow webhook token for HTTP-boundary tests."""
-    from app.auth.webhook_oauth import config_from_settings, issue_access_token
-
-    resolved = settings or mock_settings()
-    config = config_from_settings(resolved)
-    token = issue_access_token(config, config.client_id, config.client_secret)["access_token"]
-    return {"Authorization": f"Bearer {token}"}
+    return {"Authorization": f"Bearer {make_oauth_token(settings)}"}
 
 
 VALID_SYS_ID = "a1b2c3d4e5f60718293a4b5c6d7e8f90"
