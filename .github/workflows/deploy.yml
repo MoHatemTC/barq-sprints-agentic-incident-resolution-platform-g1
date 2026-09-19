@@ -1,0 +1,99 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: deploy-ec2-main
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Lint, type-check and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev --locked
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Format check
+        run: uv run ruff format --check .
+
+      - name: Type-check
+        run: uv run mypy src
+
+      - name: Test
+        run: uv run pytest -q
+
+  deploy:
+    name: Deploy to EC2
+    needs: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Configure SSH and Deploy to EC2
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts
+
+          ssh -i ~/.ssh/deploy_key "$EC2_USER@$EC2_HOST" 'bash -s' << 'DEPLOY_SCRIPT'
+            set -euo pipefail
+            cd /home/ubuntu/barq-sprints-agentic-incident-resolution-platform-g1
+
+            echo "==> Fetching latest changes from git origin..."
+            git fetch origin main
+            git checkout main
+            git pull origin main
+
+            echo "==> Running database migrations..."
+            docker compose exec -T api uv run alembic upgrade head || true
+
+            echo "==> Rebuilding and restarting application containers..."
+            docker compose up -d --build api celery-worker
+
+            echo "==> Verifying API health check..."
+            for i in $(seq 1 30); do
+              if curl -s -f http://127.0.0.1:8000/health > /dev/null; then
+                echo "✅ Deployment successful: API is healthy and operational!"
+                exit 0
+              fi
+              echo "Waiting for API service to be healthy ($i/30)..."
+              sleep 2
+            done
+
+            echo "❌ Deployment failed: API failed to reach healthy state within 60s"
+            docker compose logs --tail 30 api
+            exit 1
+          DEPLOY_SCRIPT
+
+      - name: Clean up secrets
+        if: always()
+        run: |
+          rm -f ~/.ssh/deploy_key
