@@ -118,22 +118,26 @@ class Settings(RetrievalSettings):
     servicenow_kb_username: str = ""
     servicenow_kb_password: SecretStr | None = None
 
-    # WebHook
-    webhook_auth_token: str = Field(
-        default="dev-webhook-secret-token",
-        description="Bearer token for webhook authentication",
+    # API and inbound ServiceNow webhook authentication. The static token protects
+    # operator-facing API routes; ServiceNow receives only short-lived OAuth JWTs.
+    webhook_auth_token: SecretStr = Field(
+        ...,
+        description="Bearer token for operator-facing API routes (not ServiceNow)",
     )
     webhook_oauth_client_id: str = Field(
-        default="barq-servicenow",
-        description="OAuth 2.0 client_id for inbound webhook/REST authentication",
+        ...,
+        min_length=1,
+        description="OAuth client ID used by the ServiceNow outbound REST message",
     )
-    webhook_oauth_client_secret: SecretStr | None = Field(
-        default=None,
-        description="OAuth 2.0 client_secret for inbound webhook/REST authentication",
+    webhook_oauth_client_secret: SecretStr = Field(
+        ...,
+        min_length=16,
+        description="OAuth client secret used only at the token endpoint",
     )
-    webhook_oauth_signing_key: SecretStr | None = Field(
-        default=None,
-        description="HMAC-SHA256 signing secret for OAuth 2.0 access tokens (min 32 chars)",
+    webhook_oauth_signing_key: SecretStr = Field(
+        ...,
+        min_length=32,
+        description="HMAC key used to sign short-lived webhook access tokens",
     )
 
     # PostgreSQL

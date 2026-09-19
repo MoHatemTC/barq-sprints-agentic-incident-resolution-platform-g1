@@ -18,13 +18,15 @@ import hmac
 import json
 import secrets
 import time
+import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol
 from urllib.parse import parse_qs
 
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import JSONResponse
+from pydantic import SecretStr
 
 ISSUER = "barq-webhook"
 AUDIENCE = "barq-webhook"
@@ -33,13 +35,12 @@ _HEADER = {"alg": "HS256", "typ": "JWT"}
 _BEARER_CHALLENGE = {"WWW-Authenticate": 'Bearer realm="barq-webhook"'}
 
 
-def _extract_secret(val: Any) -> str:
-    if val is None:
-        return ""
-    getter = getattr(val, "get_secret_value", None)
-    if callable(getter):
-        return str(getter())
-    return str(val)
+class WebhookOAuthSettings(Protocol):
+    """Settings surface required by the inbound webhook OAuth boundary."""
+
+    webhook_oauth_client_id: str
+    webhook_oauth_client_secret: SecretStr
+    webhook_oauth_signing_key: SecretStr
 
 
 @dataclass(frozen=True)
@@ -47,7 +48,7 @@ class WebhookOAuthConfig:
     client_id: str
     client_secret: str
     signing_key: str
-    token_ttl_seconds: int = 1800
+    token_ttl_seconds: int = 300
     leeway_seconds: int = 30
 
     def __post_init__(self) -> None:
@@ -56,40 +57,14 @@ class WebhookOAuthConfig:
         if len(self.signing_key) < 32:
             raise ValueError("webhook OAuth signing_key must be at least 32 characters")
 
-    @classmethod
-    def from_settings(cls, settings: Any) -> WebhookOAuthConfig | None:
-        """Construct WebhookOAuthConfig from settings if credentials and key are configured."""
-        if settings is None:
-            return None
-        client_id = getattr(settings, "webhook_oauth_client_id", None)
-        secret = _extract_secret(getattr(settings, "webhook_oauth_client_secret", None))
-        key = _extract_secret(getattr(settings, "webhook_oauth_signing_key", None))
 
-        if client_id and secret and len(key) >= 32:
-            return cls(
-                client_id=client_id,
-                client_secret=secret,
-                signing_key=key,
-            )
-        return None
-
-    @classmethod
-    def from_settings_or_fallback(cls, settings: Any) -> WebhookOAuthConfig:
-        """Construct WebhookOAuthConfig from settings or return a safe development fallback."""
-        cfg = cls.from_settings(settings)
-        if cfg is not None:
-            return cfg
-
-        client_id = (
-            getattr(settings, "webhook_oauth_client_id", "barq-servicenow") or "barq-servicenow"
-        )
-        secret = _extract_secret(getattr(settings, "webhook_oauth_client_secret", None))
-        key = _extract_secret(getattr(settings, "webhook_oauth_signing_key", None))
-        return cls(
-            client_id=client_id,
-            client_secret=secret or "placeholder-secret",
-            signing_key=key if len(key) >= 32 else "placeholder-signing-key-at-least-32-chars-long",
-        )
+def config_from_settings(settings: WebhookOAuthSettings) -> WebhookOAuthConfig:
+    """Build OAuth configuration without exposing secret values to repr or logs."""
+    return WebhookOAuthConfig(
+        client_id=settings.webhook_oauth_client_id,
+        client_secret=settings.webhook_oauth_client_secret.get_secret_value(),
+        signing_key=settings.webhook_oauth_signing_key.get_secret_value(),
+    )
 
 
 class InvalidClientError(Exception):
@@ -132,7 +107,7 @@ def issue_access_token(
         "sub": config.client_id,
         "iat": issued_at,
         "exp": issued_at + config.token_ttl_seconds,
-        "role": "operator",
+        "jti": uuid.uuid4().hex,
     }
     header = _b64encode(json.dumps(_HEADER, separators=(",", ":")).encode())
     payload = _b64encode(json.dumps(claims, separators=(",", ":")).encode())
@@ -201,22 +176,7 @@ def _basic_credentials(request: Request) -> tuple[str, str] | None:
     return (client_id, client_secret) if sep else None
 
 
-def get_default_webhook_oauth_config(request: Request | None = None) -> WebhookOAuthConfig:
-    """Resolve WebhookOAuthConfig from application settings or safe fallback."""
-    settings = None
-    if request is not None and hasattr(request.app.state, "settings"):
-        settings = request.app.state.settings
-    if settings is None:
-        from app.core.config import get_settings
-
-        settings = get_settings()
-
-    return WebhookOAuthConfig.from_settings_or_fallback(settings)
-
-
-def create_token_router(
-    get_config: Callable[[], WebhookOAuthConfig] | None = None,
-) -> APIRouter:
+def create_token_router(get_config: Callable[[], WebhookOAuthConfig]) -> APIRouter:
     """Router exposing the client-credentials token endpoint at TOKEN_PATH."""
     router = APIRouter(tags=["Webhook OAuth"])
 
@@ -234,19 +194,13 @@ def create_token_router(
             field("client_id"),
             field("client_secret"),
         )
-        resolved_config = (
-            get_config() if get_config is not None else get_default_webhook_oauth_config(request)
-        )
         try:
-            body = issue_access_token(resolved_config, client_id, client_secret)
+            body = issue_access_token(get_config(), client_id, client_secret)
         except InvalidClientError:
             return _token_error("invalid_client", status.HTTP_401_UNAUTHORIZED)
         return JSONResponse(body, headers={"Cache-Control": "no-store"})
 
     return router
-
-
-router = create_token_router()
 
 
 def bearer_dependency(

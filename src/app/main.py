@@ -7,7 +7,7 @@ from api.routers.eval import router as eval_router
 from api.routers.executions import router as executions_router
 from api.routers.health import router as health_router
 from api.routers.webhook import router as webhook_router
-from app.auth.webhook_oauth import router as oauth_router
+from app.auth.webhook_oauth import config_from_settings, create_token_router
 from app.core.config import Settings, get_settings
 from app.core.lifespan import lifespan
 from app.core.logging import configure_logging
@@ -46,9 +46,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     register_exception_handlers(app)
 
     # Register routers
+    app.include_router(create_token_router(lambda: config_from_settings(app_settings)))
     app.include_router(health_router)
     app.include_router(webhook_router)
-    app.include_router(oauth_router)
     app.include_router(executions_router)
     app.include_router(approvals_router)
     app.include_router(config_router)

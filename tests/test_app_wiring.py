@@ -483,7 +483,7 @@ async def test_ingestion_succeeds_without_any_tracing_backend() -> None:
             resp = await client.post(
                 "/api/v1/webhook/incident",
                 json=accepted,
-                headers=h.AUTH_HEADERS,
+                headers=h.webhook_oauth_headers(app.state.settings),
             )
 
     assert resp.status_code == 202, resp.text
@@ -521,7 +521,7 @@ async def test_langfuse_outage_fails_open(monkeypatch: pytest.MonkeyPatch) -> No
             resp = await client.post(
                 "/api/v1/webhook/incident",
                 json=h.make_incident_payload(),
-                headers=h.AUTH_HEADERS,
+                headers=h.webhook_oauth_headers(app.state.settings),
             )
             health = await client.get("/health")
 
@@ -540,7 +540,7 @@ async def test_uninitialized_dependencies_return_503_service_unavailable() -> No
         resp = await client.post(
             "/api/v1/webhook/incident",
             json=h.make_incident_payload(),
-            headers=h.AUTH_HEADERS,
+            headers=h.webhook_oauth_headers(app.state.settings),
         )
 
     assert resp.status_code == 503

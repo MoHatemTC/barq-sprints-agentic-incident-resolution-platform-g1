@@ -3,15 +3,15 @@
 from __future__ import annotations
 
 from app.auth.auth import (
-    UserRole,
     http_bearer_scheme,
     require_role,
     verify_bearer_token,
+    verify_webhook_oauth_token,
 )
 
 __all__ = [
-    "UserRole",
     "http_bearer_scheme",
     "require_role",
     "verify_bearer_token",
+    "verify_webhook_oauth_token",
 ]

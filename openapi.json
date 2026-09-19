@@ -6,6 +6,25 @@
     "version": "0.1.0"
   },
   "paths": {
+    "/api/v1/oauth/token": {
+      "post": {
+        "tags": [
+          "Webhook OAuth"
+        ],
+        "summary": "Issue a webhook access token (client credentials)",
+        "operationId": "token_api_v1_oauth_token_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "tags": [
@@ -97,25 +116,6 @@
             "BearerAuth": []
           }
         ]
-      }
-    },
-    "/api/v1/oauth/token": {
-      "post": {
-        "tags": [
-          "Webhook OAuth"
-        ],
-        "summary": "Issue a webhook access token (client credentials)",
-        "operationId": "token_api_v1_oauth_token_post",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        }
       }
     },
     "/api/v1/executions/{execution_id}": {
