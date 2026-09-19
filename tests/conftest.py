@@ -17,6 +17,9 @@ _REQUIRED_TEST_ENV = {
     "SERVICENOW_USERNAME": "test_service_account",
     "SERVICENOW_PASSWORD": "test-password",
     "WEBHOOK_AUTH_TOKEN": "dev-webhook-secret-token",
+    "WEBHOOK_OAUTH_CLIENT_ID": "test-servicenow-webhook",
+    "WEBHOOK_OAUTH_CLIENT_SECRET": "test-oauth-client-secret",
+    "WEBHOOK_OAUTH_SIGNING_KEY": "test-oauth-signing-key-at-least-32-chars",
 }
 
 if os.environ.get("SERVICENOW_LIVE_TESTS") != "1":

@@ -10,6 +10,7 @@ from fastapi import Depends, Header
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.api.dependencies import get_app_settings
+from app.auth.webhook_oauth import InvalidTokenError, config_from_settings, verify_access_token
 from app.core.config import Settings
 from app.exceptions.app_errors import AuthenticationError, PermissionDeniedError
 
@@ -24,21 +25,38 @@ def verify_bearer_token(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(http_bearer_scheme)],
     settings: Annotated[Settings, Depends(get_app_settings)],
 ) -> str:
-    """Validate Bearer authentication header against configured webhook auth token."""
+    """Validate the separate bearer credential for operator-facing API routes."""
     if not credentials or not credentials.credentials:
         raise AuthenticationError("Missing or invalid Bearer token")
 
     token = credentials.credentials.strip()
-    if not secrets.compare_digest(token, settings.webhook_auth_token):
-        raise AuthenticationError("Invalid Bearer token")
 
+    expected = settings.webhook_auth_token.get_secret_value()
+    if secrets.compare_digest(token, expected):
+        return token
+    raise AuthenticationError("Invalid Bearer token")
+
+
+def verify_webhook_oauth_token(
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(http_bearer_scheme)],
+    settings: Annotated[Settings, Depends(get_app_settings)],
+) -> str:
+    """Accept only an OAuth JWT issued for the ServiceNow webhook client."""
+    if not credentials or not credentials.credentials:
+        raise AuthenticationError("Missing or invalid Bearer token")
+
+    token = credentials.credentials.strip()
+    try:
+        verify_access_token(config_from_settings(settings), token)
+    except InvalidTokenError as exc:
+        raise AuthenticationError("Invalid Bearer token") from exc
     return token
 
 
 def require_role(required_role: str) -> Callable[..., str]:
     """Dependency factory enforcing caller role (RBAC).
 
-    Inspects 'X-User-Role' header; raises 403 PermissionDeniedError if role does not match.
+    Inspects 'X-User-Role' after the separate operator credential is verified.
     """
 
     def _role_checker(
@@ -54,6 +72,8 @@ def require_role(required_role: str) -> Callable[..., str]:
 
 
 __all__ = [
+    "http_bearer_scheme",
     "require_role",
     "verify_bearer_token",
+    "verify_webhook_oauth_token",
 ]

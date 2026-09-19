@@ -21,6 +21,10 @@ def mock_settings(**overrides: object) -> Settings:
         "servicenow_client_secret": "test-secret",
         "servicenow_username": "svc_user",
         "servicenow_password": "svc_pass",
+        "webhook_auth_token": "test-operator-token",
+        "webhook_oauth_client_id": "test-servicenow-webhook",
+        "webhook_oauth_client_secret": "test-oauth-client-secret",
+        "webhook_oauth_signing_key": "test-oauth-signing-key-at-least-32-chars",
         "servicenow_timeout_seconds": 5,
         "servicenow_token_expiry_buffer_seconds": 30,
         "postgres_host": "localhost",
@@ -44,6 +48,17 @@ def mock_settings(**overrides: object) -> Settings:
 WEBHOOK_TOKEN = "s21-test-bearer-token-7f3a"
 AUTH_HEADERS = {"Authorization": f"Bearer {WEBHOOK_TOKEN}"}
 OPERATOR_HEADERS = {**AUTH_HEADERS, "X-User-Role": "operator"}
+
+
+def webhook_oauth_headers(settings: Settings | None = None) -> dict[str, str]:
+    """Issue a valid short-lived ServiceNow webhook token for boundary tests."""
+    from app.auth.webhook_oauth import config_from_settings, issue_access_token
+
+    resolved = settings or mock_settings()
+    config = config_from_settings(resolved)
+    token = issue_access_token(config, config.client_id, config.client_secret)["access_token"]
+    return {"Authorization": f"Bearer {token}"}
+
 
 VALID_SYS_ID = "a1b2c3d4e5f60718293a4b5c6d7e8f90"
 VALID_NUMBER = "INC0014231"

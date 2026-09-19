@@ -21,17 +21,26 @@ import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol
 from urllib.parse import parse_qs
 
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import JSONResponse
+from pydantic import SecretStr
 
 ISSUER = "barq-webhook"
 AUDIENCE = "barq-webhook"
 TOKEN_PATH = "/api/v1/oauth/token"
 _HEADER = {"alg": "HS256", "typ": "JWT"}
 _BEARER_CHALLENGE = {"WWW-Authenticate": 'Bearer realm="barq-webhook"'}
+
+
+class WebhookOAuthSettings(Protocol):
+    """Settings surface required by the inbound webhook OAuth boundary."""
+
+    webhook_oauth_client_id: str
+    webhook_oauth_client_secret: SecretStr
+    webhook_oauth_signing_key: SecretStr
 
 
 @dataclass(frozen=True)
@@ -47,6 +56,15 @@ class WebhookOAuthConfig:
             raise ValueError("webhook OAuth client_id and client_secret must be set")
         if len(self.signing_key) < 32:
             raise ValueError("webhook OAuth signing_key must be at least 32 characters")
+
+
+def config_from_settings(settings: WebhookOAuthSettings) -> WebhookOAuthConfig:
+    """Build OAuth configuration without exposing secret values to repr or logs."""
+    return WebhookOAuthConfig(
+        client_id=settings.webhook_oauth_client_id,
+        client_secret=settings.webhook_oauth_client_secret.get_secret_value(),
+        signing_key=settings.webhook_oauth_signing_key.get_secret_value(),
+    )
 
 
 class InvalidClientError(Exception):
