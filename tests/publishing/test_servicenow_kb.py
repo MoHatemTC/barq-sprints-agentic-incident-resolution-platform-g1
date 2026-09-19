@@ -89,7 +89,7 @@ async def test_readback_mismatch_fails_loud(sample_articles: list[Article], fake
     client = fake.build_client()
     try:
         # instance returns invalid state to simulate tampering or write rejection
-        fake.tamper_next_readback = ("workflow_state", "corrupted_state")
+        fake.tamper_readback = ("workflow_state", "corrupted_state")
 
         with pytest.raises(ServiceNowWriteRejectedError, match="workflow_state"):
             await publish_article(client, sample_articles[0], KB_SYS_ID)
@@ -106,7 +106,7 @@ async def test_verify_stored_fails_when_article_stuck_in_draft(
     try:
         article = sample_articles[0]
         assert article.workflow_state.value == "published"
-        fake.tamper_next_readback = ("workflow_state", "draft")
+        fake.tamper_readback = ("workflow_state", "draft")
 
         with pytest.raises(ServiceNowWriteRejectedError, match="target workflow state"):
             await publish_article(client, article, KB_SYS_ID)
@@ -385,5 +385,36 @@ async def test_republish_is_unchanged_after_instance_html_sanitising(
 
         fake.refuse_patch = True
         assert await publish_article(client, article, KB_SYS_ID) == "unchanged"
+    finally:
+        await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_new_article_is_moved_from_draft_to_its_target_state(
+    sample_articles: list[Article], fake: Any
+) -> None:
+    """The platform creates articles as drafts; the publisher sets the state afterwards."""
+    fake.force_draft_on_create = True
+    client = fake.build_client()
+    try:
+        article = sample_articles[0]
+        assert article.workflow_state.value == "published"
+        assert await publish_article(client, article, KB_SYS_ID) == "created"
+
+        stored = next(r for r in fake.rows if r[U_SOURCE_ID_FIELD] == article.article_id)
+        assert stored["workflow_state"] == "published"
+        assert {"workflow_state": "published"} in fake.patches
+    finally:
+        await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_no_state_update_when_the_create_already_has_the_target_state(
+    sample_articles: list[Article], fake: Any
+) -> None:
+    client = fake.build_client()
+    try:
+        assert await publish_article(client, sample_articles[0], KB_SYS_ID) == "created"
+        assert fake.patches == []
     finally:
         await client.aclose()

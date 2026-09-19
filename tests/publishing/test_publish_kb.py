@@ -126,3 +126,20 @@ def test_without_allow_writes_the_run_is_read_only(
     data = json.loads(report.read_text())
     assert data["dry_run"] is True, "a run without --allow-writes must be a dry run"
     assert data["created"] == 0 and data["updated"] == 0
+
+
+def test_report_names_the_kb_publisher_when_configured(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, corpus_file: Path
+) -> None:
+    from pydantic import SecretStr
+
+    _with_kb_id(monkeypatch)
+    monkeypatch.setattr(get_settings(), "servicenow_kb_username", "kb_publisher")
+    monkeypatch.setattr(get_settings(), "servicenow_kb_password", SecretStr("kb-pass"))
+    report = tmp_path / "report.json"
+    exit_code = _run(
+        monkeypatch, "--corpus", str(corpus_file), "--report", str(report), "--dry-run"
+    )
+
+    assert exit_code == 0
+    assert json.loads(report.read_text())["username"] == "kb_publisher"

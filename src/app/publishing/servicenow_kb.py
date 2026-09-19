@@ -332,7 +332,8 @@ async def publish_article(
     Workflow:
     1. Constructs the Table API payload with metadata and converted HTML.
     2. Queries by stable `u_source_id` key scoped to target KB.
-    3. Creates new row or updates existing row in place.
+    3. Creates new row or updates existing row in place. A new row is created as a draft
+       and then moved to its target workflow state.
     4. Reads back the row and verifies stored values match sent values (fail-closed).
     5. Synchronizes the linked `kb_version` record so ServiceNow displays the true version.
     """
@@ -342,6 +343,11 @@ async def publish_article(
     if existing is None:
         sys_id = await client.create(payload)
         outcome = "created"
+        # The platform creates every article as a draft, so the target state is set by a
+        # follow-up update of that one field.
+        created = await client.get(sys_id)
+        if created.get("workflow_state") != payload["workflow_state"]:
+            await client.update(sys_id, {"workflow_state": payload["workflow_state"]})
     else:
         sys_id = str(existing["sys_id"])
         stored_state = existing.get("workflow_state")

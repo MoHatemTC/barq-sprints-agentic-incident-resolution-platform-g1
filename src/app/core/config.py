@@ -115,6 +115,10 @@ class Settings(RetrievalSettings):
         default="",
         description="Target Knowledge Base sys_id for KB publishing",
     )
+    # KB publishing identity (#91). scripts/publish_kb.py signs in as this user when set,
+    # so the incident integration user needs no knowledge-base rights.
+    servicenow_kb_username: str = ""
+    servicenow_kb_password: SecretStr | None = None
 
     # WebHook
     webhook_auth_token: str = Field(
@@ -223,6 +227,21 @@ class Settings(RetrievalSettings):
 @lru_cache
 def get_retrieval_settings() -> RetrievalSettings:
     return RetrievalSettings()
+
+
+def kb_publisher_settings(settings: Settings) -> Settings:
+    """Settings signed in as the KB publisher, when SERVICENOW_KB_USERNAME is set."""
+    if not settings.servicenow_kb_username:
+        return settings
+    password = settings.servicenow_kb_password
+    if password is None or not password.get_secret_value():
+        raise ValueError("SERVICENOW_KB_PASSWORD must be set together with SERVICENOW_KB_USERNAME")
+    return settings.model_copy(
+        update={
+            "servicenow_username": settings.servicenow_kb_username,
+            "servicenow_password": settings.servicenow_kb_password,
+        }
+    )
 
 
 @lru_cache
