@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import secrets
 from collections.abc import Callable
 from typing import Annotated
 
@@ -29,11 +30,10 @@ def verify_bearer_token(
         raise AuthenticationError("Missing or invalid Bearer token")
 
     token = credentials.credentials.strip()
-    try:
-        verify_access_token(config_from_settings(settings), token)
+    expected = settings.webhook_auth_token.get_secret_value()
+    if secrets.compare_digest(token, expected):
         return token
-    except InvalidTokenError as exc:
-        raise AuthenticationError("Invalid Bearer token") from exc
+    raise AuthenticationError("Invalid Bearer token")
 
 
 def verify_webhook_oauth_token(
