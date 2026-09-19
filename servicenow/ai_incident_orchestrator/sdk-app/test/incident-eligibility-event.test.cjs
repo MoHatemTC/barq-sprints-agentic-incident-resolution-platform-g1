@@ -506,7 +506,7 @@ test('Script Action reconstructs and sends exactly the four-field payload', () =
         info: () => {},
         error: (message) => assert.fail(message),
     }
-    const send = loadFunction('sendS13Event', { gs, sn_ws: { RESTMessageV2: FakeRESTMessageV2 } })
+    const send = loadFunction('sendS13Event', { gs, RESTMessageV2: FakeRESTMessageV2 })
 
     send(record('insert'), { parm1: { toString: () => 'event-from-parm1' }, parm2: 'incident.created' })
 
@@ -536,7 +536,7 @@ test('Script Action logs an error and makes no HTTP call when the endpoint prope
         info: () => {},
         error: (message) => errors.push(message),
     }
-    const send = loadFunction('sendS13Event', { gs, sn_ws: { RESTMessageV2: FakeRESTMessageV2 } })
+    const send = loadFunction('sendS13Event', { gs, RESTMessageV2: FakeRESTMessageV2 })
 
     send(record('insert'), { parm1: 'event-from-parm1', parm2: 'incident.created' })
 
@@ -559,7 +559,7 @@ test('Script Action treats a whitespace-only endpoint property as unset and make
         info: () => {},
         error: (message) => errors.push(message),
     }
-    const send = loadFunction('sendS13Event', { gs, sn_ws: { RESTMessageV2: FakeRESTMessageV2 } })
+    const send = loadFunction('sendS13Event', { gs, RESTMessageV2: FakeRESTMessageV2 })
 
     send(record('insert'), { parm1: 'event-from-parm1', parm2: 'incident.created' })
 
@@ -585,4 +585,12 @@ test('retry escalation sets human review before update without calling current.u
 
     assert.equal(current.getValue('x_2215032_ai_inc_0_ai_human_review_required'), '1')
     assert.deepEqual(logs, ['S1.3 retry escalation: retry_limit_exhausted'])
+})
+
+test('the event script action imports RESTMessageV2 instead of relying on an sn_ws global', () => {
+    // A scoped module has no sn_ws global: on the instance the old form failed with
+    // '"sn_ws" is not defined' while every test here, which injected it, passed.
+    const source = generatedModule('sendS13Event')
+    assert.match(source, /import \{ RESTMessageV2 \} from ['"]@servicenow\/glide\/sn_ws['"]/)
+    assert.doesNotMatch(source, /\bsn_ws\./)
 })

@@ -27,17 +27,18 @@ FR-03 (evaluate eligibility on insert and relevant update; emit nothing when
 inactive, unsupported, already processed, already running, or human-locked)
 and FR-04 (the event carries event ID, sys_id, number and event type only).
 
-## Deploying S1.3 — read before installing
+## Deploying S1.3
 
-**S1.3 ships as the update set** (`servicenow/ai_incident_orchestrator/ai_incident_orchestrator_s1_3.xml`),
-not as a Fluent deploy. The two are not interchangeable: the exported records and
-the sys_ids in `sdk-app/src/fluent/generated/keys.ts` do not correspond, so the same
-eligibility and retry rules are defined twice under different identifiers.
+**S1.3 ships as the update set** (`servicenow/ai_incident_orchestrator/ai_incident_orchestrator_s1_3.xml`).
+The Fluent source in `sdk-app` defines the same records under the same sys_ids
+(`sdk-app/src/fluent/generated/keys.ts`), so running `now-sdk install` on an instance
+that already holds the update set updates those records in place. It does not add a
+second rule or a second event.
 
-Running `now-sdk deploy` against an instance that already holds this update set
-creates a **second** eligibility Business Rule and a **second** retry rule. Both
-would then fire on the same save, emitting **two outbound events per eligible
-incident**.
+The Fluent build emits the scripts as modules rather than inline code, so a deploy
+replaces the inline scripts with the module versions. Both were run on `dev434590`
+under Enforcing access tracking: eligibility passed, the event was queued, and the
+script action sent its `POST`.
 
-Install one way or the other, never both. Reconciling the two definitions onto a
-single set of sys_ids is tracked as follow-up work.
+`.github/scripts/check_build_matches_export.py` fails CI if a build and the update set
+stop sharing sys_ids for these records.
