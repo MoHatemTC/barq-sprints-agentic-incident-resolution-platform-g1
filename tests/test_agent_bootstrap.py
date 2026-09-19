@@ -441,6 +441,66 @@ class TestQdrantRetriever:
         )
         assert result.category_filter == "software"
         assert result.best_relevance < 0.3
+        assert result.sufficient is False
+
+    @staticmethod
+    def _category_values(query_filter: object) -> list[str]:
+        """Every ``category`` value the filter tree matches on."""
+        found: list[str] = []
+        stack = [query_filter]
+        while stack:
+            node = stack.pop()
+            for attr in ("must", "should", "must_not"):
+                stack.extend(getattr(node, attr, None) or [])
+            if getattr(node, "key", None) == "category":
+                match = getattr(node, "match", None)
+                found.extend(getattr(match, "any", None) or [])
+                value = getattr(match, "value", None)
+                if value is not None:
+                    found.append(value)
+        return found
+
+    def test_insufficient_category_pass_searches_the_whole_corpus(
+        self, corpus_qdrant: QdrantClient
+    ) -> None:
+        """A wrong label must not hide the right article.
+
+        Gemini labels an Outlook mail fault ``network`` (observed on dev407364,
+        2026-09-20). KB0002 is filed under ``software``, so the category pass can
+        never return it. When that pass finds no evidence, a second search must run
+        with no category filter at all — still published-only and within tier.
+        """
+        client = MagicMock(wraps=corpus_qdrant)
+        result = self._retriever(client).search(
+            "Outlook shows Disconnected and no mail is delivered",
+            classification=Classification.NETWORK,
+            top_k=5,
+            threshold=0.99,
+        )
+        assert result.sufficient is False
+
+        filtered = [
+            call.kwargs["query_filter"]
+            for call in client.query_points.call_args_list
+            if "query_filter" in call.kwargs
+        ]
+        assert filtered, "expected the retriever to query Qdrant"
+        constrained = [f for f in filtered if self._category_values(f)]
+        unconstrained = [f for f in filtered if not self._category_values(f)]
+        assert constrained, "the category pass should filter on the predicted category"
+        assert unconstrained, "the fallback pass should carry no category filter"
+        assert {"network"} == set(self._category_values(constrained[0]))
+
+    def test_correct_label_never_reaches_the_fallback(self, corpus_qdrant: QdrantClient) -> None:
+        """A sufficient category pass stops there — the baseline is unchanged."""
+        result = self._retriever(corpus_qdrant).search(
+            "Outlook shows Disconnected and no mail is delivered",
+            classification=Classification.SOFTWARE,
+            top_k=5,
+            threshold=0.0,
+        )
+        assert result.category_filter == "software"
+        assert result.sufficient is True
 
     def test_restricted_and_retired_articles_are_never_returned(
         self, corpus_qdrant: QdrantClient
