@@ -14,17 +14,17 @@ from api.schemas.dlq import DLQReplayResponse
 from app.db.redis.keys import INCIDENT_DLQ_QUEUE
 from app.main import create_app
 from app.workers.db import WorkerRepo
+import tests.helpers as h
 from tests.helpers import mock_settings
 
-VALID_TOKEN = "dev-webhook-secret-token"
-AUTH_HEADERS = {"Authorization": f"Bearer {VALID_TOKEN}"}
-OPERATOR_HEADERS = {**AUTH_HEADERS, "X-User-Role": "operator"}
+AUTH_HEADERS = h.AUTH_HEADERS
+OPERATOR_HEADERS = h.OPERATOR_HEADERS
 
 
 @pytest.fixture
 def app_instance():
     """Create test application instance with mocked resources."""
-    settings = mock_settings(webhook_auth_token=VALID_TOKEN)
+    settings = mock_settings()
     app = create_app(settings=settings)
     app.state.engine = MagicMock()
     app.state.session_factory = MagicMock()

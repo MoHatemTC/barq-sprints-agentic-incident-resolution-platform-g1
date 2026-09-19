@@ -11,10 +11,10 @@ from pydantic import SecretStr
 
 from api.schemas.config import REDACTED_SENTINEL, RedactedConfigResponse
 from app.main import create_app
+import tests.helpers as h
 from tests.helpers import mock_settings
 
-VALID_TOKEN = "dev-webhook-secret-token"
-AUTH_HEADERS = {"Authorization": f"Bearer {VALID_TOKEN}"}
+AUTH_HEADERS = h.AUTH_HEADERS
 
 RAW_SERVICENOW_PW = "raw-secret-sn-pw-xyz"
 RAW_CLIENT_SECRET = "raw-client-secret-abc-123"
@@ -26,7 +26,6 @@ RAW_REDIS_PW = "raw-redis-secret-pw-789"
 def app_with_secrets():
     """Create test application configured with explicit raw secrets."""
     settings = mock_settings(
-        webhook_auth_token=VALID_TOKEN,
         servicenow_password=SecretStr(RAW_SERVICENOW_PW),
         servicenow_client_secret=SecretStr(RAW_CLIENT_SECRET),
         postgres_password=SecretStr(RAW_POSTGRES_PW),
@@ -96,7 +95,7 @@ async def test_config_redacts_all_runtime_secrets(app_with_secrets) -> None:
     assert RAW_CLIENT_SECRET not in raw_response_text
     assert RAW_POSTGRES_PW not in raw_response_text
     assert RAW_REDIS_PW not in raw_response_text
-    assert VALID_TOKEN not in raw_response_text
+    assert h.WEBHOOK_TOKEN not in raw_response_text
 
 
 @pytest.mark.asyncio
@@ -125,7 +124,6 @@ async def test_config_retrieval_mode_variants(mode: str) -> None:
     from app.core.config import RetrievalMode
 
     settings = mock_settings(
-        webhook_auth_token=VALID_TOKEN,
         retrieval_mode=RetrievalMode(mode),
     )
     app = create_app(settings=settings)

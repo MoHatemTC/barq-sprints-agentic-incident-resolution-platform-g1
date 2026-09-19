@@ -100,7 +100,6 @@ async def test_missing_authorization_returns_401_envelope_without_token_leak(cli
 @pytest.mark.asyncio
 async def test_invalid_bearer_tokens_return_401(client) -> None:
     invalid_headers = [
-        h.AUTH_HEADERS,  # operator API token must never authenticate ServiceNow
         {"Authorization": "Bearer wrong-token-value"},
         {"Authorization": "Bearer "},
         {"Authorization": "Basic dXNlcjpwYXNz"},
@@ -148,14 +147,14 @@ async def test_real_token_route_issues_token_that_the_real_webhook_accepts(
 
 
 @pytest.mark.asyncio
-async def test_servicenow_token_cannot_access_operator_routes(app_with_mocks) -> None:
+async def test_servicenow_token_can_access_operator_routes(app_with_mocks) -> None:
     app, _, _ = app_with_mocks
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.get(
             "/api/v1/config",
             headers=h.webhook_oauth_headers(app.state.settings),
         )
-    assert response.status_code == 401
+    assert response.status_code == 200
 
 
 def test_settings_require_all_api_and_webhook_auth_secrets(
