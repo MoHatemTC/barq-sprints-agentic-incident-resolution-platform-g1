@@ -45,6 +45,14 @@ declare global {
                         table: 'sys_properties'
                         id: '7fa1a0f983df0b10b5309e80ceaad377'
                     }
+                    s1_3_webhook_oauth_profile: {
+                        table: 'oauth_entity_profile'
+                        id: '0b758576739b4b102aedfed25ab8b782'
+                    }
+                    s1_3_webhook_oauth_provider: {
+                        table: 'oauth_entity'
+                        id: 'c3758576739b4b102aedfed25ab8b780'
+                    }
                     'src_server_business-rules_incident-eligibility_ts': {
                         table: 'sys_module'
                         id: 'a5815c8f3d0b4f93ab425f3e4498f103'

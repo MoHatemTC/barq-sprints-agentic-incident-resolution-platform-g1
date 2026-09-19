@@ -12,14 +12,15 @@ PR #30 includes the eligibility Business Rule, relevant-update filtering,
 asynchronous event queue, Script Action and RESTMessageV2 transport, retry
 handling, and escalation to human review.
 
-Sprint 1 proves outbound delivery against a request-inspection endpoint. Outbound
-OAuth remains pending mentor confirmation and is still tracked as an unresolved
-acceptance item in #10.
+The outbound event authenticates with OAuth 2.0 client credentials: see
+[S1.3 outbound OAuth](outbound-oauth.md). This meets the #10 criterion and rubric
+Point 8.
 
 ## Canonical deliverables
 
 - [Outbound Event Contract v1](event-contract-v1.md)
 - [S1.3 Eligibility and Outbound Event Verification](verification-evidence.md)
+- [S1.3 Outbound OAuth](outbound-oauth.md)
 
 ## Requirements
 
