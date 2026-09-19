@@ -35,6 +35,7 @@ def verify_bearer_token(
         return token
     raise AuthenticationError("Invalid Bearer token")
 
+
 def verify_webhook_oauth_token(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(http_bearer_scheme)],
     settings: Annotated[Settings, Depends(get_app_settings)],
