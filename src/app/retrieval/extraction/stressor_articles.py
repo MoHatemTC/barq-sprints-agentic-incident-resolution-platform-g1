@@ -6,14 +6,13 @@ that satisfy the Article interface, from the raw data extracted from the OCR/Tab
 from __future__ import annotations
 
 import subprocess
-from dataclasses import dataclass
-from enum import StrEnum
 from pathlib import Path
 
 import pdfplumber
 import structlog
 
-from app.models.knowledge import Article, SecurityLevel, WorkflowState
+from app.models.knowledge import Article, WorkflowState
+from app.models.stressor import StressorClass, StressorConfig
 from app.retrieval.extraction.layout_extraction import (
     detect_columns,
     extract_text_blocks,
@@ -27,41 +26,11 @@ from app.retrieval.extraction.table_extraction import (
     table_to_kv_text,
 )
 
-# from app.retrieval.extraction.layout_extraction import (
-#     detect_columns,
-#     extract_text_blocks,
-#     reconstruct_reading_order,
-# )
-
 logger = structlog.get_logger(__name__)
 
 OCR_CONFIDENCE_FLOOR = 0.60
 OCR_TEXT_LENGTH_FLOOR = 20
 MIN_COLUMNS_FOR_LAYOUT_CLASS = 2
-
-
-class StressorClass(StrEnum):
-    OCR = "ocr"
-    TABLE = "table"
-    MULTI_COLUMN = "layout"
-
-
-@dataclass
-class StressorConfig:
-    """Metadata needed to build one Article from an extracted stressor page."""
-
-    article_number: str
-    version: str
-    title: str
-    category: str
-    service: str
-    security_level: SecurityLevel
-    owner: str | None = None
-    author: str | None = None
-    reviewed_on: str | None = None
-    related_records: list[str] | None = None
-    pages: tuple[int, ...] = ()
-    stressor_class: StressorClass = StressorClass.OCR
 
 
 def _pdftotext_yield(pdf_path: Path, page_num: int) -> str:
