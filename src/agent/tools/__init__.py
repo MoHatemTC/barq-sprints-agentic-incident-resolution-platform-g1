@@ -6,10 +6,12 @@ from agent.tools.registry import (
     ToolCallContext,
     ToolRegistry,
 )
+from agent.tools.servicenow import build_servicenow_tool_registry
 
 __all__ = [
     "PermissionClass",
     "RegistryRefusalError",
     "ToolCallContext",
     "ToolRegistry",
+    "build_servicenow_tool_registry",
 ]
