@@ -50,6 +50,8 @@ class ManualSection(BaseModel):
     )
     ocr_confidence: float | None = Field(
         default=None,
+        ge=0.0,
+        le=1.0,
         description="Mean OCR word confidence (0.0-1.0), only set for OCR sections",
     )
     reliability_note: str | None = Field(
