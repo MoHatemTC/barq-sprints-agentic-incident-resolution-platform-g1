@@ -1,18 +1,15 @@
 from __future__ import annotations
 
-import re
-import uuid
 from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-MANUAL_NAMESPACE = uuid.uuid5(uuid.NAMESPACE_DNS, "barq-g1-manual-sections")
-SECTION_ID_PATTERN = re.compile(r"^section-[A-Za-z0-9][A-Za-z0-9._-]*$")
+SECTION_ID_PREFIX = "section-"
 
 
 class ManualSectionType(StrEnum):
-    """Content type classification for a manual section."""
+    """How a section's body text was produced."""
 
     PROSE = "prose"
     TABLE = "table"
@@ -21,90 +18,93 @@ class ManualSectionType(StrEnum):
 
 
 class ManualSection(BaseModel):
-    """One logical section extracted from the BARQ Operations Manual.
+    """One structural section of the manual, spanning one or more pages.
 
-    A section may span multiple pages and contains a single content type.
+    Produced by `section_detector` (plus the content-type-specific renderers
+    wired up in `full_document_parser`) before any chunking happens. A
+    `ManualSection` is never split across a section boundary downstream —
+    `manual_chunking.chunk_section` enforces that invariant.
     """
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    section_id: str = Field(
-        ...,
-        description='Unique section identifier, e.g. "section-3.4"',
-    )
+    section_id: str = Field(..., description='Stable id, e.g. "section-3.4"')
     section_number: str = Field(
-        ...,
-        description='Section number as it appears in the manual, e.g. "3.4" or "E.1"',
+        ..., description='Numbered ("3.4", "10.1.2") or lettered appendix ("A", "E.2")'
     )
-    title: str = Field(..., min_length=1, max_length=500)
+    title: str = Field(..., min_length=1, max_length=300)
     body: str = Field(
         ...,
         min_length=1,
-        description="Extracted section content (prose, table markdown, OCR text, etc.)",
+        description="Extracted section content, ready for chunking",
     )
     content_type: ManualSectionType
-    pages: tuple[int, ...] = Field(
-        ...,
-        min_length=1,
-        description="1-indexed page numbers this section spans",
-    )
+    pages: tuple[int, ...] = Field(..., description="1-indexed page numbers this section spans")
     ocr_confidence: float | None = Field(
         default=None,
         ge=0.0,
         le=1.0,
-        description="Mean OCR word confidence (0.0-1.0), only set for OCR sections",
+        description="Set only when content_type is OCR; average across the section's pages",
     )
     reliability_note: str | None = Field(
         default=None,
-        description="Human-readable note about extraction quality, if relevant",
+        description="Human-readable caveat surfaced to downstream consumers "
+        "(e.g. low OCR confidence) so a low-trust chunk is never silently indistinguishable "
+        "from a high-confidence one",
     )
-
-    @field_validator("section_id")
-    @classmethod
-    def validate_section_id(cls, value: str) -> str:
-        if not SECTION_ID_PATTERN.match(value):
-            raise ValueError(f"section_id must match {SECTION_ID_PATTERN.pattern}, got {value!r}")
-        return value
 
     @field_validator("pages")
     @classmethod
-    def validate_pages_positive(cls, value: tuple[int, ...]) -> tuple[int, ...]:
-        if any(p < 1 for p in value):
-            raise ValueError("page numbers must be >= 1")
+    def validate_pages(cls, value: tuple[int, ...]) -> tuple[int, ...]:
+        if not value:
+            raise ValueError("pages must not be empty")
+        if list(value) != sorted(value) or len(set(value)) != len(value):
+            raise ValueError(f"pages must be strictly ascending with no duplicates, got {value!r}")
         return value
+
+    @classmethod
+    def build_section_id(cls, section_number: str) -> str:
+        """Deterministic section id from a section number, e.g. "3.4" -> "section-3.4"."""
+        return f"{SECTION_ID_PREFIX}{section_number}"
 
 
 class ManualSectionChunk(BaseModel):
-    """One retrievable chunk of a manual section, produced by the section-aware chunker."""
+    """One retrievable piece of a manual section, produced by the chunker."""
 
     model_config = ConfigDict(frozen=True)
 
-    chunk_id: str = Field(
-        ...,
-        description='Deterministic chunk identifier, e.g. "section-3.4#c0"',
-    )
-    section_id: str
-    chunk_index: int = Field(ge=0)
-    total_chunks: int = Field(ge=1)
+    chunk_id: str
+    section_id: str = Field(..., description='Parent section id, e.g. "section-3.4"')
+    chunk_index: int = Field(default=0, ge=0)
+    total_chunks: int = Field(default=1, ge=1)
     text: str = Field(..., min_length=1)
+
+    # Metadata inherited from the parent section.
     section_number: str
     section_title: str
     pages: tuple[int, ...]
     content_type: ManualSectionType
 
-    # Relationship tuples populated from Appendix E
-    related_article_ids: tuple[str, ...] = ()
-    related_incident_ids: tuple[str, ...] = ()
-    related_problem_ids: tuple[str, ...] = ()
-    related_known_error_ids: tuple[str, ...] = ()
-    related_change_ids: tuple[str, ...] = ()
-    related_mir_ids: tuple[str, ...] = ()
+    # Appendix-E-derived relationships.
+    related_article_ids: tuple[str, ...] = Field(default_factory=tuple)
+    related_incident_ids: tuple[str, ...] = Field(default_factory=tuple)
+    related_problem_ids: tuple[str, ...] = Field(default_factory=tuple)
+    related_known_error_ids: tuple[str, ...] = Field(default_factory=tuple)
+    related_change_ids: tuple[str, ...] = Field(default_factory=tuple)
+    related_mir_ids: tuple[str, ...] = Field(default_factory=tuple)
+
+    @classmethod
+    def build_chunk_id(cls, section_id: str, chunk_index: int) -> str:
+        """Deterministic chunk identifier, e.g. "section-3.4#c0"."""
+        return f"{section_id}#c{chunk_index}"
+
+    @classmethod
+    def validate_bounds(cls, chunk_index: int, total_chunks: int) -> None:
+        if chunk_index >= total_chunks:
+            raise ValueError(f"chunk_index {chunk_index} must be < total_chunks {total_chunks}")
 
     def model_post_init(self, __context: Any) -> None:
-        if self.chunk_index >= self.total_chunks:
-            raise ValueError(
-                f"chunk_index {self.chunk_index} must be < total_chunks {self.total_chunks}"
-            )
+        self.validate_bounds(self.chunk_index, self.total_chunks)
 
 
 class ManualSectionPayload(BaseModel):
@@ -114,6 +114,7 @@ class ManualSectionPayload(BaseModel):
 
     doc_type: str = "manual_section"
     document_id: str = "barq-manual-v4.0"
+
     section_id: str
     section_number: str
     section_title: str
@@ -124,7 +125,6 @@ class ManualSectionPayload(BaseModel):
     pages: list[int]
     ocr_confidence: float | None = None
 
-    # Relationship fields
     related_article_ids: list[str] = Field(default_factory=list)
     related_incident_ids: list[str] = Field(default_factory=list)
     related_problem_ids: list[str] = Field(default_factory=list)
@@ -133,22 +133,17 @@ class ManualSectionPayload(BaseModel):
     related_mir_ids: list[str] = Field(default_factory=list)
 
     @classmethod
-    def from_chunk(
-        cls,
-        section: ManualSection,
-        chunk: ManualSectionChunk,
-    ) -> ManualSectionPayload:
-        """Build the Qdrant payload for one chunk of a manual section."""
+    def from_chunk(cls, chunk: ManualSectionChunk) -> ManualSectionPayload:
+        """Build the payload for one manual section chunk."""
         return cls(
-            section_id=section.section_id,
-            section_number=section.section_number,
-            section_title=section.title,
+            section_id=chunk.section_id,
+            section_number=chunk.section_number,
+            section_title=chunk.section_title,
             chunk_index=chunk.chunk_index,
             total_chunks=chunk.total_chunks,
             chunk_text=chunk.text,
-            content_type=section.content_type,
-            pages=list(section.pages),
-            ocr_confidence=section.ocr_confidence,
+            content_type=chunk.content_type,
+            pages=list(chunk.pages),
             related_article_ids=list(chunk.related_article_ids),
             related_incident_ids=list(chunk.related_incident_ids),
             related_problem_ids=list(chunk.related_problem_ids),
@@ -160,8 +155,3 @@ class ManualSectionPayload(BaseModel):
     def to_qdrant_payload(self) -> dict[str, Any]:
         """Serialize for Qdrant: enums as values, unset optionals omitted."""
         return self.model_dump(mode="json", exclude_none=True)
-
-
-def build_section_point_id(section_id: str, chunk_index: int) -> str:
-    """Deterministic UUIDv5 for a manual section chunk point (idempotent upserts)."""
-    return str(uuid.uuid5(MANUAL_NAMESPACE, f"{section_id}::chunk::{chunk_index}"))
