@@ -31,7 +31,7 @@ dependencies = [
     "qdrant-client>=1.14,<1.15",
     # Pinned: redis-py 8.x breaks kombu 5.6 BRPOP parsing (KeyError 'properties' on
     # delivery). Revisit when kombu supports redis-py 8.
-    "redis==5.2.1",
+    "redis==8.1.0",
     # [asyncio] pulls greenlet, which the async engine needs and which SQLAlchemy only
     # installs implicitly on some CPU architectures (not on Apple Silicon).
     "sqlalchemy[asyncio]>=2.0,<3",
