@@ -23,6 +23,7 @@ import structlog
 from sqlalchemy import select
 
 from agent.tools.permissions import PermissionClass
+from agent.tools.refusal_explainer import RefusalExplainer, RefusalFacts, fallback_explanation
 from app.db.models import Approval
 from app.db.session import SessionFactory
 from app.workers.retry_policy import TerminalError
@@ -162,6 +163,7 @@ class RegistryRefusalError(TerminalError):
         self.permission_class = permission_class
         self.execution_id = str(execution_id)
         self.approval_id = str(approval_id) if approval_id is not None else None
+        self.explanation = fallback_explanation(reason.value)
         super().__init__(f"tool invocation refused: {reason.value}")
 
 
@@ -251,6 +253,7 @@ class ToolRegistry:
         *,
         approval_checker: ApprovalChecker,
         audit_sink: EnforcementAuditSink | None = None,
+        refusal_explainer: RefusalExplainer | None = None,
     ) -> None:
         copied: dict[str, ToolRegistration] = {}
         for registration in registrations:
@@ -260,6 +263,7 @@ class ToolRegistry:
         self._registrations: Mapping[str, ToolRegistration] = MappingProxyType(copied)
         self._approval_checker = approval_checker
         self._audit_sink = audit_sink if audit_sink is not None else StructuredLoggingAuditSink()
+        self._refusal_explainer = refusal_explainer
 
     async def invoke(
         self,
@@ -279,6 +283,7 @@ class ToolRegistry:
                 execution_id=context.execution_id,
             )
             self._audit_refusal(refusal, context)
+            self._explain_refusal(refusal)
             raise refusal from None
 
         registration = self._registrations.get(normalized_name)
@@ -290,6 +295,7 @@ class ToolRegistry:
                 execution_id=context.execution_id,
             )
             self._audit_refusal(refusal, context)
+            self._explain_refusal(refusal)
             raise refusal
 
         approval_id: UUID | str | None = None
@@ -314,6 +320,7 @@ class ToolRegistry:
                     approval_id=approval_id,
                 )
                 self._audit_refusal(refusal, context)
+                self._explain_refusal(refusal)
                 raise refusal
 
         permit_event = EnforcementAuditEvent(
@@ -327,13 +334,16 @@ class ToolRegistry:
         try:
             self._audit_sink.emit(permit_event)
         except Exception as exc:
-            raise RegistryRefusalError(
+            refusal = RegistryRefusalError(
                 RefusalReason.AUDIT_UNAVAILABLE,
                 tool_name=registration.name,
                 permission_class=registration.permission_class,
                 execution_id=context.execution_id,
                 approval_id=approval_id,
-            ) from exc
+            )
+            self._audit_refusal(refusal, context)
+            self._explain_refusal(refusal)
+            raise refusal from exc
 
         handler_result = registration.handler(**dict(arguments))
         if inspect.isawaitable(handler_result):
@@ -355,6 +365,25 @@ class ToolRegistry:
         except Exception:
             # The request was already refused.  Preserve that policy decision;
             # an unavailable audit sink must never turn refusal into dispatch.
+            return
+
+    def _explain_refusal(self, refusal: RegistryRefusalError) -> None:
+        if self._refusal_explainer is None:
+            return
+        try:
+            facts = RefusalFacts(
+                tool_name=refusal.tool_name,
+                permission_class=refusal.permission_class,
+                execution_id=refusal.execution_id,
+                refusal_reason=refusal.reason_code,
+                approval_id=refusal.approval_id,
+            )
+            explanation = self._refusal_explainer.explain(facts)
+            if isinstance(explanation, str) and explanation.strip():
+                refusal.explanation = explanation.strip()
+        except Exception:
+            # Explanation is presentation only.  Preserve the final refusal and
+            # the deterministic fallback already attached to the exception.
             return
 
 

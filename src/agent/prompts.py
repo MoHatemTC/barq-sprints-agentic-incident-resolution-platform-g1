@@ -1,4 +1,4 @@
-"""Prompts and structured-output schemas for the three model-backed nodes.
+"""Prompts and structured-output schemas for model-backed agent components.
 
 Incident text is untrusted: it is redacted and length-bounded before it gets here,
 and it is always placed inside a tagged block that the system prompt declares to be
@@ -7,9 +7,10 @@ data. Prompt versions are recorded on every Langfuse generation.
 
 from __future__ import annotations
 
+import json
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from agent.state import EvidenceItem, IncidentSnapshot
 
@@ -51,6 +52,26 @@ class GenerateOutput(BaseModel):
     steps: list[StepOutput]
 
 
+class RefusalExplanation(BaseModel):
+    """The only output the refusal explainer may produce."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    message: str = Field(
+        min_length=1,
+        max_length=500,
+        description="A short plain-language explanation of the final refusal.",
+    )
+
+    @field_validator("message")
+    @classmethod
+    def _message_must_not_be_blank(cls, value: str) -> str:
+        message = value.strip()
+        if not message:
+            raise ValueError("message must not be blank")
+        return message
+
+
 CLASSIFY_SYSTEM = f"""You triage IT incidents for the BARQ service desk.
 Choose exactly one label:
 - hardware: a physical device or peripheral is faulty
@@ -74,6 +95,11 @@ it came from. Keep each step to one action. Keep the article's order and its war
 example "do not restart"). Do not add steps the evidence does not support, do not contact the
 requester, and do not resolve, close or reassign the incident: a person applies the procedure.
 {_DATA_RULE}"""
+
+REFUSAL_EXPLAINER_SYSTEM = """You explain a tool refusal that server policy has already made.
+The refusal is final. Do not approve, reconsider, override, retry, or invoke the action. Explain
+only the supplied enforcement facts. Do not suggest bypassing policy, and do not invent missing
+incident, tool, approval, or user context. Return one short plain-language explanation."""
 
 
 def incident_block(incident: IncidentSnapshot, *, short: str, description: str) -> str:
@@ -116,18 +142,43 @@ def generate_prompt(incident_text: str, evidence_text: str, cause: str) -> str:
     )
 
 
+def refusal_explanation_prompt(
+    *,
+    tool_name: str,
+    permission_class: str | None,
+    execution_id: str,
+    refusal_reason: str,
+    approval_id: str | None,
+) -> str:
+    """Serialize only immutable, server-owned refusal facts for explanation."""
+    facts = {
+        "approval_id": approval_id,
+        "execution_id": execution_id,
+        "permission_class": permission_class,
+        "refusal_reason": refusal_reason,
+        "tool_name": tool_name,
+    }
+    return (
+        "Explain this final server-policy refusal using only these enforcement facts:\n"
+        f"{json.dumps(facts, sort_keys=True, separators=(',', ':'))}"
+    )
+
+
 __all__ = [
     "CLASSIFY_SYSTEM",
     "DIAGNOSE_SYSTEM",
     "GENERATE_SYSTEM",
     "PROMPT_VERSION",
+    "REFUSAL_EXPLAINER_SYSTEM",
     "ClassifyOutput",
     "DiagnoseOutput",
     "GenerateOutput",
+    "RefusalExplanation",
     "StepOutput",
     "classify_prompt",
     "diagnose_prompt",
     "evidence_block",
     "generate_prompt",
     "incident_block",
+    "refusal_explanation_prompt",
 ]
