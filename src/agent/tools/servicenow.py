@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from agent.servicenow import IncidentGateway
 from agent.tools.permissions import PermissionClass
+from agent.tools.refusal_explainer import RefusalExplainer
 from agent.tools.registry import (
     ApprovalChecker,
     EnforcementAuditSink,
@@ -17,6 +18,7 @@ def build_servicenow_tool_registry(
     *,
     approval_checker: ApprovalChecker,
     audit_sink: EnforcementAuditSink | None = None,
+    refusal_explainer: RefusalExplainer | None = None,
 ) -> ToolRegistry:
     """Bind the existing gateway methods to their server-owned permissions."""
     registrations = (
@@ -45,6 +47,7 @@ def build_servicenow_tool_registry(
         registrations,
         approval_checker=approval_checker,
         audit_sink=audit_sink,
+        refusal_explainer=refusal_explainer,
     )
 
 

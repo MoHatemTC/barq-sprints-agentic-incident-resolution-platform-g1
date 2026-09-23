@@ -146,17 +146,60 @@ class TestProviders:
     def test_dependencies_are_wired_lazily(self) -> None:
         dependencies_module.get_agent_dependencies.cache_clear()
         backend_factory = MagicMock()
+        tools = MagicMock()
         with (
             patch.object(dependencies_module, "get_llm") as get_llm,
             patch.object(dependencies_module, "build_default_retriever") as retriever,
             patch.object(dependencies_module, "build_servicenow_backend", backend_factory),
+            patch.object(
+                dependencies_module,
+                "build_production_tool_registry",
+                return_value=tools,
+            ) as build_tools,
         ):
             deps = dependencies_module.get_agent_dependencies()
             assert dependencies_module.get_agent_dependencies() is deps
         dependencies_module.get_agent_dependencies.cache_clear()
         get_llm.assert_called_once()
         retriever.assert_called_once()
+        assert deps.tools is tools
+        assert build_tools.call_args.args[1] is get_llm.return_value
         backend_factory.assert_not_called()  # no ServiceNow client before first use
+
+    def test_production_registry_uses_sync_approval_storage_and_llm_explainer(self) -> None:
+        gateway = MagicMock()
+        llm = MagicMock()
+        engine = MagicMock()
+        session_factory = MagicMock()
+        registry = MagicMock()
+        with (
+            patch.object(dependencies_module, "get_settings") as settings,
+            patch.object(dependencies_module, "build_sync_database_url", return_value="db") as url,
+            patch.object(
+                dependencies_module, "create_sync_engine", return_value=engine
+            ) as make_engine,
+            patch.object(
+                dependencies_module,
+                "create_sync_session_factory",
+                return_value=session_factory,
+            ) as make_sessions,
+            patch.object(
+                dependencies_module,
+                "build_servicenow_tool_registry",
+                return_value=registry,
+            ) as build_registry,
+        ):
+            result = dependencies_module.build_production_tool_registry(gateway, llm)
+
+        assert result is registry
+        url.assert_called_once_with(settings.return_value)
+        make_engine.assert_called_once_with("db")
+        make_sessions.assert_called_once_with(engine)
+        assert build_registry.call_args.args == (gateway,)
+        checker = build_registry.call_args.kwargs["approval_checker"]
+        explainer = build_registry.call_args.kwargs["refusal_explainer"]
+        assert checker._session_factory is session_factory
+        assert explainer._llm is llm
 
     def test_runtime_is_built_once_per_process(self) -> None:
         runtime_module.get_runtime.cache_clear()

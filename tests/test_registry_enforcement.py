@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
-from contextlib import AbstractAsyncContextManager
+import ast
+from contextlib import AbstractContextManager
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from pathlib import Path
+from typing import Any, get_type_hints
 from unittest.mock import AsyncMock, Mock
 from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy.sql.elements import BinaryExpression
 
+from agent.dependencies import AgentDependencies
 from agent.tools import PermissionClass, RegistryRefusalError, ToolCallContext, ToolRegistry
 from agent.tools.registry import (
     ApprovalCheckResult,
@@ -30,14 +33,14 @@ class CaptureAudit:
         self.events.append(event)
 
 
-class SessionContext(AbstractAsyncContextManager[Any]):
+class SessionContext(AbstractContextManager[Any]):
     def __init__(self, session: Any) -> None:
         self.session = session
 
-    async def __aenter__(self) -> Any:
+    def __enter__(self) -> Any:
         return self.session
 
-    async def __aexit__(self, *args: Any) -> None:
+    def __exit__(self, *args: Any) -> None:
         return None
 
 
@@ -65,7 +68,7 @@ def checker_for_rows(rows: list[Approval]) -> PostgreSQLApprovalChecker:
     result = Mock()
     result.scalars.return_value.all.return_value = rows
     session = Mock()
-    session.execute = AsyncMock(return_value=result)
+    session.execute = Mock(return_value=result)
     return PostgreSQLApprovalChecker(Mock(return_value=SessionContext(session)))
 
 
@@ -75,7 +78,7 @@ def checker_and_session_for_rows(
     result = Mock()
     result.scalars.return_value.all.return_value = rows
     session = Mock()
-    session.execute = AsyncMock(return_value=result)
+    session.execute = Mock(return_value=result)
     checker = PostgreSQLApprovalChecker(Mock(return_value=SessionContext(session)))
     return checker, session
 
@@ -123,7 +126,7 @@ async def test_approval_query_filters_by_current_execution_id() -> None:
 
     await checker.check(execution_id=execution_id, tool_name="dangerous_action")
 
-    query = session.execute.await_args.args[0]
+    query = session.execute.call_args.args[0]
     whereclause = query.whereclause
     assert isinstance(whereclause, BinaryExpression)
     assert whereclause.left.compare(Approval.execution_id.__clause_element__())
@@ -421,3 +424,142 @@ async def test_fake_checker_can_authorize_without_database_or_servicenow() -> No
     handler.assert_awaited_once()
     checker.check.assert_awaited_once_with(execution_id=execution_id, tool_name="dangerous_action")
     assert audit.events[0].approval_id == str(approval_id)
+
+
+def test_graph_dependency_exposes_only_the_tool_registry_for_servicenow() -> None:
+    fields = AgentDependencies.__dataclass_fields__
+    assert "tools" in fields
+    assert get_type_hints(AgentDependencies)["tools"] is ToolRegistry
+    assert "servicenow" not in fields
+
+
+_FORBIDDEN_NODE_MODULES = {
+    "agent.servicenow",
+    "app.clients.servicenow_client",
+    "app.publishing.servicenow_kb",
+    "httpx",
+    "requests",
+}
+_FORBIDDEN_NODE_NAMES = {"IncidentGateway", "ServiceNowClient", "ServiceNowKBClient"}
+_FORBIDDEN_NODE_ATTRIBUTES = {
+    "servicenow",
+    "read_incident",
+    "write_ai_fields",
+    "write_work_note",
+    "write_execution_log",
+}
+_SERVICENOW_ENDPOINT_FRAGMENTS = ("/api/now/", "service-now.com", "/oauth_token.do")
+
+
+def _is_forbidden_node_module(module: str) -> bool:
+    return any(
+        module == forbidden or module.startswith(f"{forbidden}.")
+        for forbidden in _FORBIDDEN_NODE_MODULES
+    )
+
+
+def _graph_node_boundary_violations(source: str, *, filename: str = "<source>") -> list[str]:
+    tree = ast.parse(source, filename=filename)
+    violations: list[str] = []
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if _is_forbidden_node_module(alias.name):
+                    violations.append(f"{filename}:{node.lineno}: import {alias.name}")
+        elif isinstance(node, ast.ImportFrom):
+            module = node.module or ""
+            imported_paths = {module}
+            imported_paths.update(
+                f"{module}.{alias.name}" if module else alias.name for alias in node.names
+            )
+            forbidden_paths = sorted(
+                path for path in imported_paths if path and _is_forbidden_node_module(path)
+            )
+            if forbidden_paths:
+                violations.append(f"{filename}:{node.lineno}: from {', '.join(forbidden_paths)}")
+        elif isinstance(node, ast.Name) and node.id in _FORBIDDEN_NODE_NAMES:
+            violations.append(f"{filename}:{node.lineno}: {node.id}")
+        elif isinstance(node, ast.Attribute) and (
+            node.attr in _FORBIDDEN_NODE_ATTRIBUTES or node.attr in _FORBIDDEN_NODE_NAMES
+        ):
+            violations.append(f"{filename}:{node.lineno}: .{node.attr}")
+        elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+            lowered = node.value.lower()
+            if any(fragment in lowered for fragment in _SERVICENOW_ENDPOINT_FRAGMENTS):
+                violations.append(f"{filename}:{node.lineno}: ServiceNow endpoint literal")
+
+    return violations
+
+
+@pytest.mark.parametrize(
+    "source, expected",
+    [
+        ("from agent import servicenow", "agent.servicenow"),
+        (
+            "from agent import servicenow as sn\nx = sn.IncidentGateway",
+            "agent.servicenow",
+        ),
+        ("from app.clients import servicenow_client", "app.clients.servicenow_client"),
+        (
+            "from app.clients import servicenow_client as sn_client\n"
+            "x = sn_client.ServiceNowClient",
+            "app.clients.servicenow_client",
+        ),
+        ("from app.publishing import servicenow_kb", "app.publishing.servicenow_kb"),
+        (
+            "from app.publishing import servicenow_kb as kb\nx = kb.ServiceNowKBClient",
+            "app.publishing.servicenow_kb",
+        ),
+        ("import agent.servicenow", "agent.servicenow"),
+        ("import agent.servicenow as sn", "agent.servicenow"),
+        ("from agent.servicenow import IncidentGateway", "agent.servicenow"),
+        ("from agent.servicenow import IncidentGateway as IG", "agent.servicenow"),
+        (
+            "from app.clients.servicenow_client import ServiceNowClient",
+            "app.clients.servicenow_client",
+        ),
+        (
+            "from app.clients.servicenow_client import ServiceNowClient as SNC",
+            "app.clients.servicenow_client",
+        ),
+    ],
+)
+def test_graph_node_boundary_rejects_forbidden_import_variants(source: str, expected: str) -> None:
+    assert any(expected in violation for violation in _graph_node_boundary_violations(source))
+
+
+@pytest.mark.parametrize(
+    "source, expected",
+    [
+        ("x = sn.IncidentGateway", ".IncidentGateway"),
+        ("x = sn_client.ServiceNowClient", ".ServiceNowClient"),
+        ("x = kb.ServiceNowKBClient", ".ServiceNowKBClient"),
+    ],
+)
+def test_graph_node_boundary_rejects_forbidden_class_attributes(source: str, expected: str) -> None:
+    assert any(expected in violation for violation in _graph_node_boundary_violations(source))
+
+
+def test_graph_node_boundary_allows_unrelated_parent_package_imports() -> None:
+    source = """\
+from agent import errors
+from app.clients import base
+from app.publishing import payload
+"""
+    assert _graph_node_boundary_violations(source) == []
+
+
+def test_graph_nodes_cannot_bypass_the_tool_registry() -> None:
+    nodes_root = Path(__file__).parents[1] / "src" / "agent" / "nodes"
+    violations: list[str] = []
+
+    for path in sorted(nodes_root.rglob("*.py")):
+        violations.extend(
+            _graph_node_boundary_violations(
+                path.read_text(encoding="utf-8"),
+                filename=str(path),
+            )
+        )
+
+    assert violations == []

@@ -28,7 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from langgraph.checkpoint.memory import InMemorySaver  # noqa: E402
 
 from agent.config import get_agent_settings  # noqa: E402
-from agent.dependencies import AgentDependencies  # noqa: E402
+from agent.dependencies import AgentDependencies, build_production_tool_registry  # noqa: E402
 from agent.graph import build_graph, run_graph  # noqa: E402
 from agent.llm import get_llm  # noqa: E402
 from agent.retrieval import build_default_retriever  # noqa: E402
@@ -74,6 +74,7 @@ def main() -> int:
     if args.dry_run or args.text:
         settings = settings.model_copy(update={"agent_write_back_enabled": False})
     tracer = get_tracer()
+    llm = get_llm()
 
     if args.scenario:
         from tests.agent_support import INCIDENTS, FakeServiceNow
@@ -104,9 +105,9 @@ def main() -> int:
 
     deps = AgentDependencies(
         settings=settings,
-        llm=get_llm(),
+        llm=llm,
         retriever=build_default_retriever(),
-        servicenow=gateway,
+        tools=build_production_tool_registry(gateway, llm),
         tracer=tracer,
     )
     event = EventPayload(

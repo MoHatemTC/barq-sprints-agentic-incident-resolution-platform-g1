@@ -25,8 +25,8 @@ from sqlalchemy import select
 from agent.tools.permissions import PermissionClass
 from agent.tools.refusal_explainer import RefusalExplainer, RefusalFacts, fallback_explanation
 from app.db.models import Approval
-from app.db.session import SessionFactory
 from app.workers.retry_policy import TerminalError
+from app.workers.sync_engine import SyncSessionFactory
 
 MAX_TOOL_NAME_LENGTH = 128
 _TOOL_NAME_PATTERN = re.compile(r"[a-z][a-z0-9_]{0,127}\Z")
@@ -175,7 +175,7 @@ class PostgreSQLApprovalChecker:
     distinguished from a genuine absence of a matching approval.
     """
 
-    def __init__(self, session_factory: SessionFactory) -> None:
+    def __init__(self, session_factory: SyncSessionFactory) -> None:
         self._session_factory = session_factory
 
     async def check(self, *, execution_id: UUID | str, tool_name: str) -> ApprovalCheckResult:
@@ -188,8 +188,8 @@ class PostgreSQLApprovalChecker:
                 .where(Approval.execution_id == execution_uuid)
                 .order_by(Approval.decided_at.desc())
             )
-            async with self._session_factory() as session:
-                result = await session.execute(query)
+            with self._session_factory() as session:
+                result = session.execute(query)
                 rows = list(result.scalars().all())
         except Exception:
             return ApprovalCheckResult(False, RefusalReason.APPROVAL_CHECK_FAILED)

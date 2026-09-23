@@ -21,6 +21,8 @@ from agent.dependencies import AgentDependencies
 from agent.prompts import ClassifyOutput, DiagnoseOutput, GenerateOutput, StepOutput
 from agent.servicenow import AsyncRunner, IncidentGateway
 from agent.state import EvidenceItem, RetrievalResult
+from agent.tools import build_servicenow_tool_registry
+from agent.tools.registry import ApprovalCheckResult
 from app.models.execution_log import ExecutionLogCreatePayload
 from app.models.incident import Incident, IncidentUpdatePayload
 from app.models.knowledge import Classification
@@ -332,16 +334,19 @@ class FakeServiceNow:
         self.updates: list[tuple[str, IncidentUpdatePayload]] = []
         self.notes: list[tuple[str, str]] = []
         self.execution_logs: list[ExecutionLogCreatePayload] = []
+        self.calls: list[str] = []
         self.read_error: BaseException | None = None
         self.write_error: BaseException | None = None
         self.on_update: Callable[[str], None] | None = None
 
     async def get_incident(self, sys_id: str) -> Incident:
+        self.calls.append("read_incident")
         if self.read_error is not None:
             raise self.read_error
         return Incident.model_validate(self.records[sys_id])
 
     async def update_incident(self, sys_id: str, payload: IncidentUpdatePayload) -> Incident:
+        self.calls.append("write_ai_fields")
         if self.on_update is not None:
             self.on_update(sys_id)
         if self.write_error is not None:
@@ -351,11 +356,18 @@ class FakeServiceNow:
         return Incident.model_validate(self.records[sys_id])
 
     async def add_work_note(self, sys_id: str, note: str) -> Incident:
+        self.calls.append("write_work_note")
         self.notes.append((sys_id, note))
         return Incident.model_validate(self.records[sys_id])
 
     async def write_execution_log(self, payload: ExecutionLogCreatePayload) -> None:
+        self.calls.append("write_execution_log")
         self.execution_logs.append(payload)
+
+
+class NoHighRiskApprovalChecker:
+    async def check(self, *, execution_id: Any, tool_name: str) -> ApprovalCheckResult:
+        raise AssertionError("the graph's registered ServiceNow tools are not high-risk")
 
 
 def make_deps(
@@ -368,11 +380,15 @@ def make_deps(
 ) -> AgentDependencies:
     tracer = tracer or Tracer(None)
     backend = servicenow or FakeServiceNow()
+    gateway = IncidentGateway(lambda: backend, tracer, runner=shared_runner())
     return AgentDependencies(
         settings=AgentSettings(_env_file=None, agent_checkpointer_backend="memory", **settings),
         llm=llm or FakeLLM(vpn_answers()),
         retriever=retriever or FakeRetriever(),
-        servicenow=IncidentGateway(lambda: backend, tracer, runner=shared_runner()),
+        tools=build_servicenow_tool_registry(
+            gateway,
+            approval_checker=NoHighRiskApprovalChecker(),
+        ),
         tracer=tracer,
         clock=lambda: FIXED_NOW,
     )

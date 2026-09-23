@@ -31,8 +31,8 @@ from langgraph.graph.state import CompiledStateGraph
 from agent import edges
 from agent.config import AGENT_VERSION
 from agent.dependencies import AgentDependencies
+from agent.errors import HumanLockedError
 from agent.nodes import NODE_ORDER, NODES
-from agent.servicenow import HumanLockedError
 from agent.state import AgentState, EventPayload, FinalOutput, Outcome, initial_state
 from app.workers.retry_policy import TerminalError
 
