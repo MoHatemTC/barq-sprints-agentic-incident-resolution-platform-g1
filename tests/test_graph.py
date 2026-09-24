@@ -296,7 +296,7 @@ class TestCheckpointing:
         assert result["resumed"] is True
         assert result["outcome"] == "suggested"
         # classify and diagnose were not paid for twice; load did not re-read.
-        assert llm.purposes() == ["classify", "diagnose", "generate", "generate"]
+        assert llm.purposes() == ["classify", "diagnose", "generate", "generate", "verify_evidence"]
         assert deps.servicenow.calls == [
             "read_incident",
             "write_ai_fields",

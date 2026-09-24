@@ -435,18 +435,29 @@ class TestGenerate:
 # -- the Sprint 4 gates ---------------------------------------------------------------------
 
 
-@pytest.mark.parametrize(
-    ("node", "key", "gate"),
-    [
-        (verify_evidence, "verification", "verify_evidence"),
-        (safety_check, "safety", "safety_check"),
-    ],
-)
-def test_sprint4_gates_are_explicit_pass_throughs(node: Any, key: str, gate: str) -> None:
-    update = node(reasoned_state(), make_deps())
+def test_safety_check_is_explicit_pass_through() -> None:
+    update = safety_check(reasoned_state(), make_deps())
     assert update == {
-        key: {"gate": gate, "passed": True, "implemented": False, "checks": [], "reason": None}
+        "safety": {
+            "gate": "safety_check",
+            "passed": True,
+            "implemented": False,
+            "checks": [],
+            "reason": None,
+        }
     }
+
+
+def test_verify_evidence_critic_validates_grounding() -> None:
+    state = reasoned_state()
+    update = verify_evidence(state, make_deps())
+    assert "verification" in update
+    assert "critic_feedback" in update
+    verification = update["verification"]
+    assert verification["gate"] == "verify_evidence"
+    assert verification["implemented"] is True
+    assert verification["passed"] is True
+    assert update["critic_feedback"]["passed"] is True
 
 
 # -- confidence_check ---------------------------------------------------------------------

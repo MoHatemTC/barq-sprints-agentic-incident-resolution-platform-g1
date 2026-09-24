@@ -44,19 +44,28 @@ class AgentSettings(BaseSettings):
     )
     agent_llm_model: str = Field(
         default="gemini/gemini-3.5-flash",
-        description="Default fallback Gemini model for all agent calls: names must start with 'gemini/'.",
+        description=(
+            "Default fallback Gemini model for all agent calls: names must start with 'gemini/'."
+        ),
     )
     agent_diagnostic_model: str | None = Field(
         default=None,
-        description="Optional Gemini model override for the Diagnostic Agent (defaults to agent_llm_model).",
+        description=(
+            "Optional Gemini model override for the Diagnostic Agent (defaults to agent_llm_model)."
+        ),
     )
     agent_resolution_model: str | None = Field(
         default=None,
-        description="Optional Gemini model override for the Resolution Agent (defaults to agent_llm_model).",
+        description=(
+            "Optional Gemini model override for the Resolution Agent (defaults to agent_llm_model)."
+        ),
     )
     agent_critic_model: str | None = Field(
         default=None,
-        description="Optional Gemini model override for the Critic/Verifier Agent (defaults to agent_llm_model).",
+        description=(
+            "Optional Gemini model override for the Critic/Verifier Agent "
+            "(defaults to agent_llm_model)."
+        ),
     )
     agent_llm_reasoning_effort: Literal["low", "medium", "high"] | None = Field(
         default=None, description="Unset = the model's default thinking level."
