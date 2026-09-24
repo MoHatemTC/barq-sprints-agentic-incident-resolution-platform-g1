@@ -44,7 +44,19 @@ class AgentSettings(BaseSettings):
     )
     agent_llm_model: str = Field(
         default="gemini/gemini-3.5-flash",
-        description="A model the key allows: names must start with 'gemini/'.",
+        description="Default fallback Gemini model for all agent calls: names must start with 'gemini/'.",
+    )
+    agent_diagnostic_model: str | None = Field(
+        default=None,
+        description="Optional Gemini model override for the Diagnostic Agent (defaults to agent_llm_model).",
+    )
+    agent_resolution_model: str | None = Field(
+        default=None,
+        description="Optional Gemini model override for the Resolution Agent (defaults to agent_llm_model).",
+    )
+    agent_critic_model: str | None = Field(
+        default=None,
+        description="Optional Gemini model override for the Critic/Verifier Agent (defaults to agent_llm_model).",
     )
     agent_llm_reasoning_effort: Literal["low", "medium", "high"] | None = Field(
         default=None, description="Unset = the model's default thinking level."
@@ -54,18 +66,23 @@ class AgentSettings(BaseSettings):
     agent_llm_max_retries: int = Field(default=2, ge=0)
     agent_prompt_version: str = "v1"
 
-    @field_validator("agent_llm_model")
+    @field_validator(
+        "agent_llm_model",
+        "agent_diagnostic_model",
+        "agent_resolution_model",
+        "agent_critic_model",
+    )
     @classmethod
-    def _gemini_only(cls, value: str) -> str:
+    def _gemini_only(cls, value: str | None) -> str | None:
         """Hold the field to the promise its description makes.
 
         The programme's LiteLLM key is provisioned for Gemini only. Without this,
         an environment value such as ``openai/gpt-4`` is passed straight through to
         the proxy, so the restriction would live in a docstring rather than in code.
         """
-        if not value.startswith("gemini/"):
+        if value is not None and not value.startswith("gemini/"):
             raise ValueError(
-                f"agent_llm_model must name a Gemini model ('gemini/…'); got {value!r}"
+                f"Model must name a Gemini model ('gemini/…'); got {value!r}"
             )
         return value
 
@@ -108,6 +125,15 @@ class AgentSettings(BaseSettings):
     agent_write_back_enabled: bool = Field(
         default=True,
         description="False = dry run: the act node records what it would write.",
+    )
+
+    # -- Agent Specifications
+    agent_max_revisions: int = Field(
+        default=2,
+        ge=0,
+        le=5,
+        description="Maximum number of revisions the agent will attempt before escalating."
+    
     )
 
 

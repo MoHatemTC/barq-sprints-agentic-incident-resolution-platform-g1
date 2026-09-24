@@ -143,6 +143,29 @@ class Draft(_Section):
     rendered: str
     dropped_steps: int = 0
     sources: list[str]
+    revision_count: int = 0
+
+
+class UnsupportedClaim(_Section):
+    step_index: int
+    claim: str
+    reason: str
+    citation: str | None = None
+
+
+class InvalidCitation(_Section):
+    step_index: int | None = None
+    citation: str
+    reason: str
+
+
+class CriticFeedback(_Section):
+    passed: bool
+    attempt: int = 0
+    invalid_citations: list[InvalidCitation] = Field(default_factory=list)
+    unsupported_claims: list[UnsupportedClaim] = Field(default_factory=list)
+    safety_issues: list[str] = Field(default_factory=list)
+    feedback_instructions: str = ""
 
 
 class GateResult(_Section):
@@ -194,6 +217,9 @@ class AgentState(TypedDict, total=False):
     retrieval: dict[str, Any]
     diagnosis: dict[str, Any]
     draft: dict[str, Any]
+    # multi-agent revision loop
+    critic_feedback: dict[str, Any] | None
+    revision_count: int
     # gates
     verification: dict[str, Any]
     safety: dict[str, Any]
@@ -216,6 +242,7 @@ def initial_state(
         started_at=started_at,
         current_node="__input__",
         path=[],
+        revision_count=0,
     )
 
 
@@ -223,6 +250,7 @@ __all__ = [
     "AgentState",
     "ClassificationResult",
     "ConfidenceResult",
+    "CriticFeedback",
     "Diagnosis",
     "Draft",
     "DraftStep",
@@ -232,9 +260,11 @@ __all__ = [
     "FinalOutput",
     "GateResult",
     "IncidentSnapshot",
+    "InvalidCitation",
     "Outcome",
     "RetrievalResult",
     "RiskAssessment",
     "RiskLevel",
+    "UnsupportedClaim",
     "initial_state",
 ]

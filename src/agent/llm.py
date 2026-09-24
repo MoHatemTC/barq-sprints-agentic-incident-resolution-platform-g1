@@ -39,7 +39,15 @@ class LLMClient(Protocol):
     @property
     def model_name(self) -> str: ...
 
-    def structured(self, *, purpose: str, system: str, prompt: str, schema: type[M]) -> M:
+    def structured(
+        self,
+        *,
+        purpose: str,
+        system: str,
+        prompt: str,
+        schema: type[M],
+        model: str | None = None,
+    ) -> M:
         """Return ``schema`` parsed from the model's answer to ``prompt``."""
         ...
 
@@ -92,17 +100,37 @@ class LiteLLMClient:
     def model_name(self) -> str:
         return self._settings.agent_llm_model
 
-    def structured(self, *, purpose: str, system: str, prompt: str, schema: type[M]) -> M:
+    def _model_for_purpose(self, purpose: str, override: str | None = None) -> str:
+        if override:
+            return override
+        if purpose == "diagnose":
+            return self._settings.agent_diagnostic_model or self._settings.agent_llm_model
+        if purpose in ("generate", "resolution"):
+            return self._settings.agent_resolution_model or self._settings.agent_llm_model
+        if purpose in ("verify_evidence", "critic"):
+            return self._settings.agent_critic_model or self._settings.agent_llm_model
+        return self._settings.agent_llm_model
+
+    def structured(
+        self,
+        *,
+        purpose: str,
+        system: str,
+        prompt: str,
+        schema: type[M],
+        model: str | None = None,
+    ) -> M:
         import openai
 
         settings = self._settings
+        selected_model = self._model_for_purpose(purpose, model)
         options: dict[str, Any] = {"max_completion_tokens": settings.agent_llm_max_tokens}
         if settings.agent_llm_reasoning_effort:
             options["reasoning_effort"] = settings.agent_llm_reasoning_effort
         with self._tracer.span(
             f"llm.{purpose}",
             as_type="generation",
-            model=settings.agent_llm_model,
+            model=selected_model,
             input={"system": system, "prompt": prompt},
             version=settings.agent_prompt_version,
             model_parameters=options,
@@ -110,7 +138,7 @@ class LiteLLMClient:
         ) as generation:
             try:
                 raw = self._client.chat.completions.with_raw_response.parse(
-                    model=settings.agent_llm_model,
+                    model=selected_model,
                     messages=[
                         {"role": "system", "content": system},
                         {"role": "user", "content": prompt},

@@ -713,3 +713,54 @@ class TestPolicy:
             incident, event_number="INC0010023", supported_categories=["NETWORK"]
         )
         assert result.eligible
+
+
+class TestCriticFeedbackSerialization:
+    def test_critic_feedback_model_dump_and_round_trip(self) -> None:
+        from agent.state import CriticFeedback, InvalidCitation, UnsupportedClaim
+
+        feedback = CriticFeedback(
+            passed=False,
+            attempt=1,
+            invalid_citations=[
+                InvalidCitation(step_index=1, citation="KB9999", reason="Not retrieved")
+            ],
+            unsupported_claims=[
+                UnsupportedClaim(
+                    step_index=2,
+                    claim="Restart core server",
+                    reason="Article explicitly forbids restart",
+                    citation="KB0012 §3",
+                )
+            ],
+            safety_issues=["Destructive action without approval"],
+            feedback_instructions="Remove restart step and cite existing KB0012 section.",
+        )
+
+        dumped = feedback.model_dump(mode="json")
+        assert isinstance(dumped, dict)
+        assert dumped["passed"] is False
+        assert dumped["attempt"] == 1
+        assert dumped["invalid_citations"][0]["step_index"] == 1
+        assert dumped["invalid_citations"][0]["citation"] == "KB9999"
+        assert dumped["unsupported_claims"][0]["claim"] == "Restart core server"
+
+        # Validate round-trip from dumped dict
+        reloaded = CriticFeedback.model_validate(dumped)
+        assert reloaded == feedback
+
+    def test_draft_revision_count_serialization(self) -> None:
+        from agent.state import Draft, DraftStep
+
+        draft = Draft(
+            steps=[DraftStep(text="Verify route table", article_id="KB001", section="Diagnosis")],
+            rendered="1. Verify route table [KB001 v1 §Diagnosis]",
+            dropped_steps=0,
+            sources=["KB001 v1 — Routing"],
+            revision_count=2,
+        )
+
+        dumped = draft.model_dump(mode="json")
+        assert dumped["revision_count"] == 2
+        reloaded = Draft.model_validate(dumped)
+        assert reloaded.revision_count == 2
