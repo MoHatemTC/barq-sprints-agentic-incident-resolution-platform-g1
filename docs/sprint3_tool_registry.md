@@ -34,6 +34,15 @@ The implemented boundary addresses the following threats:
   a high-risk registration or change the audit record.
 - **High-risk invocation without approval.** `HIGH_RISK` dispatch requires an
   affirmative result from the PostgreSQL-backed checker. Missing approval fails closed.
+- **Malformed approval-checker result.** The registry validates the concrete result and
+  every result field before trusting it. Non-boolean `permitted` values, invalid refusal
+  reasons, invalid approval identifiers, and inconsistent permit/refusal combinations
+  become `approval_check_failed`; neither the handler nor untrusted result fields reach
+  the trusted refusal facts.
+- **Malformed execution identity.** The registry accepts production UUID objects and
+  valid UUID strings only. Invalid values become a typed `invalid_context` refusal,
+  are represented as `<invalid>` in the audit/explainer boundary, and do not reach the
+  approval checker or handler.
 - **Approval from another execution.** The database query is restricted to the current
   `execution_id`; a row from another execution does not authorize the call.
 - **Approval for another tool.** Approval evidence must contain an exact normalized
@@ -52,15 +61,19 @@ The implemented boundary addresses the following threats:
   model text cannot authorize, retry, or dispatch the handler.
 - **Graph code bypassing `ToolRegistry`.** The graph dependency exposes the registry,
   not the gateway, and an AST-based test scans every module under `src/agent/nodes` for
-  forbidden transports, classes, method attributes, and endpoint literals.
+  forbidden transports, classes, method attributes, endpoint literals, private registry
+  authority traversal, and imports of internal registry-composition types.
 - **Malicious or sensitive text in tool arguments.** Arguments are deliberately absent
   from enforcement audit events and `RefusalFacts`, so they are not forwarded to the
   explainer. For a permitted call, arguments still reach the registered handler; their
   domain validation and safe transport use remain handler responsibilities.
 
-The design fails closed at the registry boundary. It does not claim to make arbitrary
-handler arguments safe, prevent direct calls from every Python module in the repository,
-or provide an approval for a different execution, tool, or argument set.
+The design fails closed at the registry boundary. `ToolRegistry` validates only the
+structure of the execution identifier in `ToolCallContext`; it does not authenticate
+caller identity. Trusted graph/orchestration remains responsible for supplying the
+correct execution UUID. The design does not claim to make arbitrary handler arguments
+safe, prevent direct calls from every Python module in the repository, or provide an
+approval for a different execution, tool, or argument set.
 
 ## 3. Implemented Architecture
 
@@ -129,7 +142,11 @@ The exact server-owned classes in `src/agent/tools/permissions.py` are:
 Each class is assigned in a frozen `ToolRegistration` and copied into the registry's
 private read-only mapping during construction. The caller cannot provide or downgrade
 the effective class. Prompts and model output have no registration API and cannot modify
-it. `HIGH_RISK` is the only class that triggers approval lookup; `READ` and
+it. After construction, normal assignment or deletion cannot replace the registration
+mapping, approval checker, audit sink, or refusal explainer. The copied registration
+mapping cannot be mutated in place. This sealing is a runtime authority invariant, not
+an attempt to defeat deliberate `object.__setattr__` or other Python reflection.
+`HIGH_RISK` is the only class that triggers approval lookup; `READ` and
 `LOW_RISK_WRITE` still require a successful permit audit before dispatch.
 
 ## 5. Current Registered ServiceNow Tools
@@ -169,6 +186,14 @@ Both paths raise the typed terminal `RegistryRefusalError` with reason `unknown_
 and attempt a structured refusal audit. The prompt/model has no mechanism to add a name
 to the allowlist, expose a handler, or invoke an unchecked registry path.
 
+The invocation context accepts an `execution_id` as either a UUID object or a nonempty,
+valid UUID string, matching the production webhook, worker, graph, database, and
+checkpointer contract. Empty, whitespace-only, and malformed UUID strings fail before
+approval lookup or handler dispatch with `RegistryRefusalError` reason `invalid_context`.
+The invalid value is replaced with `<invalid>` for refusal audit and explanation. This is
+structural validation only; the trusted orchestration path remains responsible for
+associating the correct execution identity with the call.
+
 ## 7. High-Risk Approval Semantics
 
 The current implementation has these exact semantics:
@@ -199,6 +224,10 @@ The current implementation has these exact semantics:
   latest timestamp are ambiguous.
 - Database/session failures, invalid execution UUIDs, checker exceptions, and invalid
   checker return values fail closed as `approval_check_failed`.
+- At the registry boundary, `permitted` must be exactly `bool`; `reason` must be a
+  `RefusalReason` or `None`; and `approval_id` must be a UUID, a UUID-formatted string,
+  or `None`. Permit/refusal field combinations must also satisfy the result contract.
+  Malformed values are discarded and cannot supply a refusal code or approval fact.
 
 There is no elapsed-time expiry calculation in the checker. `expired` is an explicit
 stored decision, not a duration inferred by the registry.
@@ -286,9 +315,17 @@ authorization.
 
 An architectural AST/static test scans every Python file under `src/agent/nodes` and
 rejects imports or references to the gateway, incident client, KB client, common HTTP
-libraries, ServiceNow operation attributes, or ServiceNow endpoint literals. Additional
-tests assert that the dependency container exposes no `servicenow` field and that the
-public registry API exposes no registered handlers or unchecked invoke method.
+libraries, ServiceNow operation attributes, ServiceNow endpoint literals, the registry's
+private authority fields, or `ToolRegistration` imports from the internal registry
+module. Direct traversal such as `deps.tools._registrations[...].handler(...)` is
+therefore rejected, while normal `deps.tools.invoke(...)` and public `ToolRegistry` use
+remain allowed. Additional tests assert that the dependency container exposes no
+`servicenow` field and that the public registry API exposes no registered handlers or
+unchecked invoke method.
+
+This AST test is an architectural guardrail, not a Python sandbox. Deliberate dynamic
+access through `importlib`, `__import__`, `object.__setattr__`, or other reflection is
+outside its intended scope.
 
 Legitimate remaining ServiceNow references are outside graph nodes and have bounded
 roles:
@@ -409,4 +446,5 @@ not claim executable runtime functionality or test coverage.
 - Approval is bound to execution and tool, not generically to a hash or schema of the
   individual handler arguments.
 - The AST architectural boundary test focuses on graph-node modules under
-  `src/agent/nodes`; it is not a repository-wide Python import sandbox.
+  `src/agent/nodes`; it is not a repository-wide Python import sandbox and does not try
+  to prevent deliberate dynamic/reflection bypass.

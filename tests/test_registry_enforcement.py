@@ -314,6 +314,87 @@ async def test_invalid_approval_checker_result_fails_closed_without_dispatch() -
     handler.assert_not_awaited()
 
 
+def malformed_approval_result(
+    *, permitted: object, reason: object = None, approval_id: object = None
+) -> ApprovalCheckResult:
+    result = object.__new__(ApprovalCheckResult)
+    object.__setattr__(result, "permitted", permitted)
+    object.__setattr__(result, "reason", reason)
+    object.__setattr__(result, "approval_id", approval_id)
+    return result
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "result",
+    [
+        pytest.param(
+            malformed_approval_result(permitted="yes"),
+            id="truthy-string-permitted",
+        ),
+        pytest.param(
+            malformed_approval_result(permitted=1),
+            id="integer-permitted",
+        ),
+        pytest.param(
+            malformed_approval_result(
+                permitted=None,
+                reason=RefusalReason.APPROVAL_MISSING,
+            ),
+            id="none-permitted",
+        ),
+        pytest.param(
+            malformed_approval_result(permitted=False, reason="approval_missing"),
+            id="string-reason",
+        ),
+        pytest.param(
+            malformed_approval_result(
+                permitted=True,
+                approval_id=object(),
+            ),
+            id="object-approval-id",
+        ),
+        pytest.param(
+            malformed_approval_result(
+                permitted=True,
+                approval_id="not-a-uuid",
+            ),
+            id="malformed-string-approval-id",
+        ),
+    ],
+)
+async def test_malformed_approval_result_fields_fail_closed_without_dispatch(
+    result: ApprovalCheckResult,
+) -> None:
+    execution_id = uuid4()
+    checker = AsyncMock()
+    checker.check.return_value = result
+    handler = AsyncMock()
+    audit = CaptureAudit()
+    explainer = Mock()
+    explainer.explain.return_value = "blocked"
+    registry = ToolRegistry(
+        [ToolRegistration("dangerous_action", PermissionClass.HIGH_RISK, handler)],
+        approval_checker=checker,
+        audit_sink=audit,
+        refusal_explainer=explainer,
+    )
+
+    with pytest.raises(RegistryRefusalError) as caught:
+        await registry.invoke(
+            "dangerous_action", context=ToolCallContext(execution_id), arguments={}
+        )
+
+    assert caught.value.reason is RefusalReason.APPROVAL_CHECK_FAILED
+    assert caught.value.approval_id is None
+    handler.assert_not_awaited()
+    assert audit.events[0].refusal_reason is RefusalReason.APPROVAL_CHECK_FAILED
+    assert audit.events[0].approval_id is None
+    facts = explainer.explain.call_args.args[0]
+    assert facts.refusal_reason == RefusalReason.APPROVAL_CHECK_FAILED.value
+    assert facts.approval_id is None
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "row",
@@ -435,13 +516,28 @@ def test_graph_dependency_exposes_only_the_tool_registry_for_servicenow() -> Non
 
 _FORBIDDEN_NODE_MODULES = {
     "agent.servicenow",
+    "agent.tools.servicenow",
     "app.clients.servicenow_client",
     "app.publishing.servicenow_kb",
     "httpx",
     "requests",
 }
-_FORBIDDEN_NODE_NAMES = {"IncidentGateway", "ServiceNowClient", "ServiceNowKBClient"}
+_FORBIDDEN_NODE_NAMES = {
+    "IncidentGateway",
+    "ServiceNowClient",
+    "ServiceNowKBClient",
+    "ToolRegistration",
+}
+_FORBIDDEN_REGISTRY_IMPORT_NAMES = {"ToolRegistration"}
+# Graph nodes have no legitimate ``.handler`` access.  Treat it as registration
+# internals so a statically imported ToolRegistration cannot expose its callable.
 _FORBIDDEN_NODE_ATTRIBUTES = {
+    "_registrations",
+    "_approval_checker",
+    "_audit_sink",
+    "_refusal_explainer",
+    "ToolRegistration",
+    "handler",
     "servicenow",
     "read_incident",
     "write_ai_fields",
@@ -478,6 +574,17 @@ def _graph_node_boundary_violations(source: str, *, filename: str = "<source>") 
             )
             if forbidden_paths:
                 violations.append(f"{filename}:{node.lineno}: from {', '.join(forbidden_paths)}")
+            if module == "agent.tools.registry":
+                forbidden_names = sorted(
+                    alias.name
+                    for alias in node.names
+                    if alias.name in _FORBIDDEN_REGISTRY_IMPORT_NAMES
+                )
+                if forbidden_names:
+                    violations.append(
+                        f"{filename}:{node.lineno}: internal registry import "
+                        f"{', '.join(forbidden_names)}"
+                    )
         elif isinstance(node, ast.Name) and node.id in _FORBIDDEN_NODE_NAMES:
             violations.append(f"{filename}:{node.lineno}: {node.id}")
         elif isinstance(node, ast.Attribute) and (
@@ -515,6 +622,18 @@ def _graph_node_boundary_violations(source: str, *, filename: str = "<source>") 
         ("import agent.servicenow as sn", "agent.servicenow"),
         ("from agent.servicenow import IncidentGateway", "agent.servicenow"),
         ("from agent.servicenow import IncidentGateway as IG", "agent.servicenow"),
+        ("import agent.tools.servicenow", "agent.tools.servicenow"),
+        ("import agent.tools.servicenow as sn_tools", "agent.tools.servicenow"),
+        ("from agent.tools import servicenow", "agent.tools.servicenow"),
+        ("from agent.tools import servicenow as sn_tools", "agent.tools.servicenow"),
+        (
+            "from agent.tools.servicenow import ToolRegistration",
+            "agent.tools.servicenow",
+        ),
+        (
+            "from agent.tools.servicenow import ToolRegistration as T",
+            "agent.tools.servicenow",
+        ),
         (
             "from app.clients.servicenow_client import ServiceNowClient",
             "app.clients.servicenow_client",
@@ -546,6 +665,46 @@ def test_graph_node_boundary_allows_unrelated_parent_package_imports() -> None:
 from agent import errors
 from app.clients import base
 from app.publishing import payload
+"""
+    assert _graph_node_boundary_violations(source) == []
+
+
+@pytest.mark.parametrize(
+    "source, expected",
+    [
+        ("x = deps.tools._registrations", "._registrations"),
+        ("x = deps.tools._approval_checker", "._approval_checker"),
+        ("x = deps.tools._audit_sink", "._audit_sink"),
+        ("x = deps.tools._refusal_explainer", "._refusal_explainer"),
+        (
+            'deps.tools._registrations["write_ai_fields"].handler(...)',
+            "._registrations",
+        ),
+        ("registration.handler()", ".handler"),
+        (
+            "from agent.tools.registry import ToolRegistration",
+            "internal registry import ToolRegistration",
+        ),
+        (
+            "from agent.tools.registry import ToolRegistration as T",
+            "internal registry import ToolRegistration",
+        ),
+        ("x = registry.ToolRegistration", ".ToolRegistration"),
+    ],
+)
+def test_graph_node_boundary_rejects_private_registry_authority(source: str, expected: str) -> None:
+    assert any(expected in violation for violation in _graph_node_boundary_violations(source))
+
+
+def test_graph_node_boundary_allows_public_registry_invocation() -> None:
+    source = """\
+from agent.tools import ToolCallContext, ToolRegistry
+
+result = deps.tools.invoke(
+    "read_incident",
+    context=ToolCallContext(execution_id),
+    arguments={},
+)
 """
     assert _graph_node_boundary_violations(source) == []
 

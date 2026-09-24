@@ -126,6 +126,74 @@ def test_registration_is_immutable() -> None:
         registration.permission_class = PermissionClass.HIGH_RISK  # type: ignore[misc]
 
 
+@pytest.mark.parametrize(
+    "attribute",
+    [
+        "_registrations",
+        "_approval_checker",
+        "_audit_sink",
+        "_refusal_explainer",
+    ],
+)
+def test_registry_authority_cannot_be_rebound(attribute: str) -> None:
+    registry = ToolRegistry(
+        [ToolRegistration("read_incident", PermissionClass.READ, Mock())],
+        approval_checker=AsyncMock(),
+        audit_sink=CaptureAudit(),
+    )
+
+    with pytest.raises(AttributeError, match="sealed"):
+        setattr(registry, attribute, Mock())
+
+    with pytest.raises(AttributeError, match="sealed"):
+        delattr(registry, attribute)
+
+
+@pytest.mark.asyncio
+async def test_instance_shadow_cannot_disable_registry_sealing() -> None:
+    handler = Mock(return_value="ok")
+    registry = ToolRegistry(
+        [ToolRegistration("read_incident", PermissionClass.READ, handler)],
+        approval_checker=AsyncMock(),
+        audit_sink=CaptureAudit(),
+    )
+
+    registry._SEALED_AUTHORITY = frozenset()  # type: ignore[attr-defined]
+
+    for attribute in (
+        "_registrations",
+        "_approval_checker",
+        "_audit_sink",
+        "_refusal_explainer",
+    ):
+        with pytest.raises(AttributeError, match="sealed"):
+            setattr(registry, attribute, Mock())
+        with pytest.raises(AttributeError, match="sealed"):
+            delattr(registry, attribute)
+
+    result = await registry.invoke(
+        "read_incident",
+        context=ToolCallContext(uuid4()),
+        arguments={},
+    )
+
+    assert result == "ok"
+    handler.assert_called_once_with()
+
+
+def test_registration_mapping_cannot_be_mutated_in_place() -> None:
+    registry = ToolRegistry(
+        [ToolRegistration("read_incident", PermissionClass.READ, Mock())],
+        approval_checker=AsyncMock(),
+        audit_sink=CaptureAudit(),
+    )
+
+    with pytest.raises(TypeError):
+        registry._registrations["injected"] = ToolRegistration(  # type: ignore[index]
+            "injected", PermissionClass.READ, Mock()
+        )
+
+
 def test_supported_registry_api_does_not_expose_registered_handler() -> None:
     handler = Mock()
     registry = ToolRegistry(
@@ -262,6 +330,57 @@ async def test_invalid_tool_name_is_sanitized_and_blocked_before_dependencies(
     assert len(audit.events) == 1
     assert audit.events[0].tool_name == "<invalid>"
     assert invalid_name not in repr(audit.events[0])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "execution_id",
+    ["", "   ", "not-a-uuid"],
+    ids=["empty", "whitespace", "malformed-uuid"],
+)
+async def test_invalid_execution_id_fails_closed_before_dependencies(
+    execution_id: str,
+) -> None:
+    handler = Mock()
+    checker = AsyncMock()
+    audit = CaptureAudit()
+    registry = ToolRegistry(
+        [ToolRegistration("read_incident", PermissionClass.HIGH_RISK, handler)],
+        approval_checker=checker,
+        audit_sink=audit,
+    )
+
+    with pytest.raises(RegistryRefusalError) as caught:
+        await registry.invoke(
+            "read_incident",
+            context=ToolCallContext(execution_id),
+            arguments={},
+        )
+
+    assert caught.value.reason is RefusalReason.INVALID_CONTEXT
+    assert caught.value.execution_id == "<invalid>"
+    handler.assert_not_called()
+    checker.check.assert_not_awaited()
+    assert audit.events[0].execution_id == "<invalid>"
+
+
+@pytest.mark.asyncio
+async def test_valid_uuid_string_execution_id_still_dispatches() -> None:
+    execution_id = str(uuid4())
+    handler = Mock(return_value="ok")
+    checker = AsyncMock()
+    registry = ToolRegistry(
+        [ToolRegistration("read_incident", PermissionClass.READ, handler)],
+        approval_checker=checker,
+        audit_sink=CaptureAudit(),
+    )
+
+    assert (
+        await registry.invoke("read_incident", context=ToolCallContext(execution_id), arguments={})
+        == "ok"
+    )
+    handler.assert_called_once_with()
+    checker.check.assert_not_awaited()
 
 
 @pytest.mark.asyncio

@@ -46,6 +46,7 @@ _FALLBACK_EXPLANATIONS = {
     "approval_check_failed": (
         "The action was blocked because approval could not be safely verified."
     ),
+    "invalid_context": "The action was blocked because its execution context was invalid.",
     "audit_unavailable": (
         "The action was blocked because required enforcement auditing was unavailable."
     ),

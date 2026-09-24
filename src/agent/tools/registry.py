@@ -30,6 +30,14 @@ from app.workers.sync_engine import SyncSessionFactory
 
 MAX_TOOL_NAME_LENGTH = 128
 _TOOL_NAME_PATTERN = re.compile(r"[a-z][a-z0-9_]{0,127}\Z")
+_SEALED_REGISTRY_AUTHORITY = frozenset(
+    {
+        "_registrations",
+        "_approval_checker",
+        "_audit_sink",
+        "_refusal_explainer",
+    }
+)
 
 type ToolArguments = Mapping[str, Any]
 type ToolHandler = Callable[..., Any]
@@ -46,6 +54,7 @@ class RefusalReason(StrEnum):
     APPROVAL_SCOPE_INVALID = "approval_scope_invalid"
     APPROVAL_AMBIGUOUS = "approval_ambiguous"
     APPROVAL_CHECK_FAILED = "approval_check_failed"
+    INVALID_CONTEXT = "invalid_context"
     AUDIT_UNAVAILABLE = "audit_unavailable"
 
 
@@ -74,7 +83,7 @@ class ToolRegistration:
 
 @dataclass(frozen=True, slots=True)
 class ToolCallContext:
-    """Trusted invocation identity, deliberately excluding policy decisions."""
+    """Orchestrator-supplied identity, structurally validated before dispatch."""
 
     execution_id: UUID | str
     correlation_id: str | None = None
@@ -265,6 +274,16 @@ class ToolRegistry:
         self._audit_sink = audit_sink if audit_sink is not None else StructuredLoggingAuditSink()
         self._refusal_explainer = refusal_explainer
 
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name in _SEALED_REGISTRY_AUTHORITY and hasattr(self, name):
+            raise AttributeError(f"{name} is sealed after ToolRegistry construction")
+        object.__setattr__(self, name, value)
+
+    def __delattr__(self, name: str) -> None:
+        if name in _SEALED_REGISTRY_AUTHORITY:
+            raise AttributeError(f"{name} is sealed after ToolRegistry construction")
+        object.__delattr__(self, name)
+
     async def invoke(
         self,
         tool_name: str,
@@ -273,6 +292,26 @@ class ToolRegistry:
         arguments: ToolArguments,
     ) -> Any:
         """Enforce registry policy, audit the verdict, then dispatch the handler."""
+        if not _is_valid_execution_id(context.execution_id):
+            try:
+                context_tool_name = _normalize_tool_name(tool_name)
+            except (TypeError, ValueError):
+                context_tool_name = "<invalid>"
+            context_registration = self._registrations.get(context_tool_name)
+            refusal = RegistryRefusalError(
+                RefusalReason.INVALID_CONTEXT,
+                tool_name=context_tool_name,
+                permission_class=(
+                    context_registration.permission_class
+                    if context_registration is not None
+                    else None
+                ),
+                execution_id="<invalid>",
+            )
+            self._audit_refusal(refusal, context)
+            self._explain_refusal(refusal)
+            raise refusal
+
         try:
             normalized_name = _normalize_tool_name(tool_name)
         except (TypeError, ValueError):
@@ -305,7 +344,7 @@ class ToolRegistry:
                     execution_id=context.execution_id,
                     tool_name=registration.name,
                 )
-                if not isinstance(approval, ApprovalCheckResult):
+                if not _is_valid_approval_check_result(approval):
                     raise TypeError("approval checker returned an invalid result")
             except Exception:
                 approval = ApprovalCheckResult(False, RefusalReason.APPROVAL_CHECK_FAILED)
@@ -397,6 +436,40 @@ def _normalize_tool_name(name: str) -> str:
     if not _is_normalized_tool_name(name):
         raise ValueError("tool name is invalid")
     return name
+
+
+def _is_valid_execution_id(execution_id: object) -> bool:
+    if isinstance(execution_id, UUID):
+        return True
+    if not isinstance(execution_id, str) or not execution_id.strip():
+        return False
+    try:
+        UUID(execution_id)
+    except (ValueError, AttributeError):
+        return False
+    return True
+
+
+def _is_valid_approval_check_result(result: object) -> bool:
+    if not isinstance(result, ApprovalCheckResult):
+        return False
+    if type(result.permitted) is not bool:
+        return False
+    if result.reason is not None and not isinstance(result.reason, RefusalReason):
+        return False
+    if result.approval_id is not None:
+        if isinstance(result.approval_id, UUID):
+            pass
+        elif isinstance(result.approval_id, str):
+            try:
+                UUID(result.approval_id)
+            except (ValueError, AttributeError):
+                return False
+        else:
+            return False
+    if result.permitted:
+        return result.reason is None
+    return result.reason is not None
 
 
 __all__ = [
