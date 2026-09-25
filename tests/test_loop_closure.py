@@ -313,3 +313,32 @@ async def test_loop_does_not_close_for_incompatible_security_gate(
     numbers = {payload["article_number"] for payload in hits}
     assert "KB0001" in numbers or not hits
     assert "KB0002" not in numbers, "restricted content leaked through the default gate"
+
+
+def test_double_ingestion_creates_zero_duplicate_points() -> None:
+    """Rubric: ingesting an article twice must upsert, never duplicate.
+
+    Deterministic point IDs (uuid5 of article_id + chunk index) mean the second
+    run overwrites the exact same points — count unchanged, IDs identical.
+    """
+    qdrant = FilterHonoringQdrant()
+    article = Article(
+        article_number="KB1001",
+        version="1.0",
+        title="Resolving Stale Split-Tunnel VPN Routes",
+        short_description="Flush stale vpn routes and reinstall the client.",
+        body="1. Flush the stale split tunnel routes.\n2. Reinstall the vpn client.",
+        category="network",
+        service="corporate-vpn",
+        workflow_state=WorkflowState.HUMAN_RESOLVED,
+        security_level=SecurityLevel.INTERNAL,
+    )
+
+    first_count = ingest_articles([article], qdrant, embedding_engine=StubEmbeddingEngine())
+    ids_after_first = set(qdrant.points)
+
+    second_count = ingest_articles([article], qdrant, embedding_engine=StubEmbeddingEngine())
+
+    assert first_count == second_count
+    assert set(qdrant.points) == ids_after_first, "point IDs changed between ingests"
+    assert len(qdrant.points) == first_count, "duplicate points created by re-ingestion"

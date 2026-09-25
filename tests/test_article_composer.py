@@ -169,6 +169,32 @@ class TestCheckFaithfulness:
         )
         assert "2048" in check_faithfulness(article, "was the MTU mismatch, set MTU 1400")
 
+    def test_sparse_input_composes_without_invention(self) -> None:
+        """Rubric: sparse input ('restarted the service') must not grow roots.
+
+        The scripted composer invents a root cause the human never stated;
+        the faithfulness backstop must flag it — sparse input stays sparse.
+        """
+        solution = "restarted the service"
+        answer = ComposedArticle(
+            title="Service Restart",
+            short_description="Restart the service.",
+            category="software",
+            body=(
+                "1. Restart the service.\n"
+                "2. Root cause was a memory leak in the worker pool."
+            ),
+        )
+        article = compose_article(
+            INCIDENT, solution, deps=_deps(answer), article_number="KB1002"
+        )
+        issues = check_faithfulness(article, solution)
+        assert {"memory", "leak", "worker", "pool"} & set(issues), (
+            "invented diagnostic details were not flagged"
+        )
+        # the extractive part of the sparse solution survives untouched
+        assert "service" in article.body.lower()
+
     def test_incident_context_counts_as_allowed_source(self) -> None:
         answer = FAITHFUL_ANSWER.model_copy(update={"body": "VPN drops every few minutes."})
         article = compose_article(
