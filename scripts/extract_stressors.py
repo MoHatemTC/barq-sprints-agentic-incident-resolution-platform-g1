@@ -17,13 +17,13 @@ import sys
 from pathlib import Path
 
 import structlog
-
-from app.core.config import Settings
-from app.core.logging import configure_logging
 from app.retrieval.extraction.stressor_articles import (
     STRESSOR_REGISTRY,
     build_stressor_articles,
 )
+
+from app.core.config import Settings
+from app.core.logging import configure_logging
 
 settings = Settings()
 configure_logging(environment=settings.environment, log_level=settings.log_level)
