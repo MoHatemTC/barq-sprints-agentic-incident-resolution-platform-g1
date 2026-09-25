@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from app.publishing.html import markdown_to_html
-from app.retrieval.extraction import html_to_markdown
+from app.retrieval.html_markdown import html_to_markdown
 from app.retrieval.sources import LocalJSONSource
 
 CORPUS_PATH = Path("data/corpus/barq_articles.json")
