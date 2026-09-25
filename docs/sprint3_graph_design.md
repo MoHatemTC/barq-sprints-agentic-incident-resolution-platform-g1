@@ -196,11 +196,13 @@ so a populated `business_service` arrives as a bare reference. An unresolved ref
 recorded separately from an absent one: absent still allows LOW, unresolved fails closed
 to ELEVATED, because a tier that cannot be read cannot be ruled Tier 1 (§11.1).
 
-## 5. Open items for Sprint 3 and 4
+## 5. Open items for Sprint 4
 
-- **Sprint 4:** implement `verify_evidence` (match every step to evidence text) and
-  `safety_check` (output schema, action allowlist, secret scan of the draft), plus input
-  screening for embedded instructions (manual §11.6). Add the approval interrupt on
+- **Sprint 3.1 Delivery:** `verify_evidence` is fully implemented as the Critic / Verifier Agent
+  with deterministic citation checks, LLM-based semantic evidence verification against retrieved text,
+  and structured feedback emission driving the multi-agent revision loop.
+- **Sprint 4:** implement `safety_check` (output schema, action allowlist, secret scan of the draft),
+  plus input screening for embedded instructions (manual §11.6). Add the approval interrupt on
   `risk.approval_required`.
 - **S2.4 (#110):** `QdrantRetriever` already calls whichever entry point the tree
   carries (`_run_search`); once #110 is on `main`, delete the try/except shim in
