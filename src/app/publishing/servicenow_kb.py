@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import html
 import re
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 import httpx
@@ -22,7 +23,7 @@ from app.exceptions.servicenow import (
     ServiceNowConnectionError,
     ServiceNowTimeoutError,
 )
-from app.models.knowledge import Article
+from app.models.knowledge import Article, WorkflowState
 from app.publishing.exceptions import (
     ServiceNowAccessError,
     ServiceNowAuthError,
@@ -433,3 +434,35 @@ def _verify_stored(
             f"Read-back mismatch for {article_id!r}: stored body no longer contains "
             f"the provenance Source marker (sys_id={stored.get('sys_id')})."
         )
+
+
+def make_kb_publish_handler(
+    client: ServiceNowKBClient,
+    kb_sys_id: str,
+) -> Callable[[Article], Awaitable[str]]:
+    """Registry handler for the ``publish_kb_article`` tool (S3.5 knowledge capture).
+
+    ServiceNow's ``workflow_state`` choice list cannot hold ``human_resolved``,
+    and :func:`_verify_stored` fail-closes on any sent/stored mismatch — so the
+    handler publishes a *published copy* while the caller's original article
+    keeps the ``human_resolved`` marker for Qdrant ingestion. Returns the
+    ServiceNow ``sys_id`` fetched by ``find_by_source_id`` (``publish_article``
+    itself reports only the outcome).
+    """
+
+    async def handler(article: Article) -> str:
+        sn_article = (
+            article
+            if article.workflow_state is not WorkflowState.HUMAN_RESOLVED
+            else article.model_copy(update={"workflow_state": WorkflowState.PUBLISHED})
+        )
+        await publish_article(client, sn_article, kb_sys_id)
+        record = await client.find_by_source_id(article.article_id, kb_sys_id=kb_sys_id)
+        if record is None or not record.get("sys_id"):
+            raise ServiceNowKBError(
+                f"published article {article.article_id!r} not found by u_source_id "
+                f"in kb {kb_sys_id!r} after a successful publish — possible drift."
+            )
+        return str(record["sys_id"])
+
+    return handler
