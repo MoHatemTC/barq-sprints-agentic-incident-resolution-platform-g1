@@ -279,9 +279,9 @@ class TestScenarioCBudgetExhaustion:
         assert body["x_2215032_ai_inc_0_ai_human_review_required"] == "true"
         assert body["x_2215032_ai_inc_0_ai_processing_state"] == "awaiting_approval"
 
-        # Comprehensive work note must mention revision attempts and critic reasons
+        # Comprehensive work note must mention gate failure and critic reasons
         work_notes = body["work_notes"]
-        assert "after 2 revision attempts" in work_notes
+        assert "draft blocked by the verify_evidence check" in work_notes
         assert "Do not flush server DNS cache (Attempt 2)." in work_notes
 
 

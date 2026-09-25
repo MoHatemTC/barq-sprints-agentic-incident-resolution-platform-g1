@@ -189,3 +189,9 @@ Both seeded executions were traced via OpenTelemetry and Langfuse with explicit 
    - **Langfuse Trace URL**: [Run 2 Live Langfuse Trace](https://cloud.langfuse.com/project/cmu50d4jy0h8uad0fgvmn0y4f/traces/6d4f5d2cdbde18ccf97cbae8ffbbfc29)
    - **Trace Screenshot**: [`docs/evidence/langfuse-revision-loop-INC0010042.png`](evidence/langfuse-revision-loop-INC0010042.png)
    - **Span Structure**: `agent.diagnostic` $\rightarrow$ `agent.resolution (attempt 0)` $\rightarrow$ `agent.critic (attempt 0: rejected)` $\rightarrow$ `agent.resolution (attempt 1: revised)` $\rightarrow$ `agent.critic (attempt 1: passed)`.
+
+3. **Run 3: Budget Exhaustion (`INC0010048`)**
+   - **Postgres Execution ID**: `6d4c0f9d-c7f4-4d55-b26f-3cccb4d9d52e`
+   - **Langfuse Trace URL**: [Run 3 Live Langfuse Trace](https://cloud.langfuse.com/project/cmu50d4jy0h8uad0fgvmn0y4f/traces/e805fe42803ef66f1979cc2aac8196a7)
+   - **Outcome**: `escalated_blocked`
+   - **Span Structure**: `agent.diagnostic` $\rightarrow$ `agent.resolution (attempt 0)` $\rightarrow$ `agent.critic (attempt 0: rejected)` $\rightarrow$ `agent.resolution (attempt 1: revised)` $\rightarrow$ `agent.critic (attempt 1: rejected)` $\rightarrow$ `agent.resolution (attempt 2: revised)` $\rightarrow$ `agent.critic (attempt 2: rejected)` $\rightarrow$ `act (ESCALATED_BLOCKED)`.

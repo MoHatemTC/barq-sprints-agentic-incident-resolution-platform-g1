@@ -19,6 +19,7 @@ Fixtures:
 
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 import time
@@ -144,7 +145,15 @@ class RevisionHookLLM:
         self.ungrounded_first_draft = ungrounded_first_draft
         self.generate_count = 0
 
-    def structured(self, *, purpose: str, system: str, prompt: str, schema: type[Any]) -> Any:
+    def structured(
+        self,
+        *,
+        purpose: str,
+        system: str,
+        prompt: str,
+        schema: type[Any],
+        model: str | None = None,
+    ) -> Any:
         if purpose == "generate":
             self.generate_count += 1
             if self.generate_count == 1:
@@ -157,7 +166,52 @@ class RevisionHookLLM:
             system=system,
             prompt=prompt,
             schema=schema,
+            model=model,
         )
+
+    def model_for_purpose(self, purpose: str, override: str | None = None) -> str:
+        return self.real_llm.model_for_purpose(purpose, override)
+
+    @property
+    def model_name(self) -> str:
+        return getattr(self.real_llm, "model_name", "gemini/gemini-3.5-flash")
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self.real_llm, name)
+
+
+class PersistentUngroundedLLM:
+    """Wrapper around real LLM that continuously provides an ungrounded resolution step
+
+    on all generation attempts, forcing the real Critic Agent to reject each attempt
+    until the revision budget is exhausted and routes to ESCALATED_BLOCKED.
+    """
+
+    def __init__(self, real_llm: Any, ungrounded_draft: GenerateOutput) -> None:
+        self.real_llm = real_llm
+        self.ungrounded_draft = ungrounded_draft
+
+    def structured(
+        self,
+        *,
+        purpose: str,
+        system: str,
+        prompt: str,
+        schema: type[Any],
+        model: str | None = None,
+    ) -> Any:
+        if purpose == "generate":
+            return self.ungrounded_draft
+        return self.real_llm.structured(
+            purpose=purpose,
+            system=system,
+            prompt=prompt,
+            schema=schema,
+            model=model,
+        )
+
+    def model_for_purpose(self, purpose: str, override: str | None = None) -> str:
+        return self.real_llm.model_for_purpose(purpose, override)
 
     @property
     def model_name(self) -> str:
@@ -350,38 +404,170 @@ def run_rejection_and_correction(engine: Any, session_factory: Any) -> dict[str,
     }
 
 
+def run_budget_exhaustion(engine: Any, session_factory: Any) -> dict[str, Any]:
+    print("\n" + "=" * 70)
+    print("RUN 3: BUDGET EXHAUSTION (Seeded Incident: INC0010048 - Exchange Server)")
+    print("=" * 70)
+
+    record = incident_record(
+        "INC0010048",
+        short="Exchange mailbox sync failure",
+        description=(
+            "User unable to synchronize Exchange mailbox. Outlook disconnected. "
+            "Need procedure to troubleshoot."
+        ),
+        category="software",
+        priority="3",
+        impact="3",
+        urgency="2",
+        service="exchange-email",
+    )
+    execution_id, event_id = seed_postgres_execution(engine, record)
+    correlation_id = f"seeded-exhaustion-{uuid.uuid4().hex[:8]}"
+
+    # Consistently ungrounded candidate step that claims unauthorized server wipe
+    ungrounded_candidate = GenerateOutput(
+        steps=[
+            StepOutput(
+                text="Reboot the primary Exchange cluster and purge all transactional log volumes.",
+                article_id="KB0002-v3.0",
+                section="Resolution",
+            ),
+        ]
+    )
+
+    tracer = get_tracer()
+    real_llm = get_llm()
+    hooked_llm = PersistentUngroundedLLM(real_llm, ungrounded_draft=ungrounded_candidate)
+    retriever = build_default_retriever()
+    saver = WorkflowStateSaver(session_factory)
+    backend = FakeServiceNow({record["number"]: record})
+    gateway = IncidentGateway(lambda: backend, tracer)
+
+    deps = AgentDependencies(
+        settings=get_agent_settings(),
+        llm=hooked_llm,  # type: ignore[arg-type]
+        retriever=retriever,
+        servicenow=gateway,
+        tracer=tracer,
+    )
+    graph = build_graph(deps, checkpointer=saver)
+    event = EventPayload(
+        event_id=event_id,
+        sys_id=record["sys_id"],
+        number=record["number"],
+    )
+
+    t_start = time.perf_counter()
+    with (
+        tracer.span(
+            "worker.pickup",
+            correlation_id=correlation_id,
+            as_type="agent",
+            input={"event_id": event_id, "attempt": 1},
+            metadata={
+                "execution_id": str(execution_id),
+                "incident_number": record["number"],
+                "run_type": "seeded_budget_exhaustion",
+            },
+        ) as span,
+        tracer.trace_attributes(
+            correlation_id=correlation_id,
+            incident_number=record["number"],
+            execution_id=str(execution_id),
+        ),
+    ):
+        result = run_graph(
+            graph,
+            event,
+            execution_id=str(execution_id),
+            correlation_id=correlation_id,
+            attempt=1,
+            deps=deps,
+        )
+        span.update(output=result)
+    duration_s = round(time.perf_counter() - t_start, 2)
+    tracer.flush()
+
+    db_rows = query_workflow_state_rows(engine, execution_id)
+    trace_url = tracer.trace_url(correlation_id)
+
+    print(f"Outcome: {result['outcome']}")
+    print(f"Execution Path: {' -> '.join(result['path'])}")
+    print(f"Duration: {duration_s}s")
+    print(f"PostgreSQL Execution ID: {execution_id}")
+    print(f"PostgreSQL workflow_state rows written: {len(db_rows)}")
+    print(f"Langfuse Trace ID: {trace_id_for(correlation_id)}")
+    print(f"Langfuse Trace URL: {trace_url}")
+    return {
+        "scenario": "budget_exhaustion",
+        "result": result,
+        "db_rows": db_rows,
+        "trace_url": trace_url,
+        "correlation_id": correlation_id,
+        "duration_seconds": duration_s,
+    }
+
+
 def main() -> int:
+    parser = argparse.ArgumentParser(description="Run seeded incidents through live graph")
+    parser.add_argument(
+        "--scenario",
+        choices=["all", "clean_pass", "correction_cycle", "budget_exhaustion"],
+        default="all",
+        help="Specific scenario to execute",
+    )
+    args = parser.parse_args()
+
     settings = get_settings()
     engine = create_sync_engine(build_sync_database_url(settings))
     session_factory = create_sync_session_factory(engine)
 
-    clean_res = run_clean_pass(engine, session_factory)
-    corr_res = run_rejection_and_correction(engine, session_factory)
+    out_file = Path("docs/seeded_incident_runs_summary.json")
+    summary: dict[str, Any] = {}
+    if out_file.exists():
+        try:
+            summary = json.loads(out_file.read_text(encoding="utf-8"))
+        except Exception:
+            summary = {}
 
-    # Save summary report for Step 5.5 reference
-    summary = {
-        "clean_pass": {
+    if args.scenario in ("all", "clean_pass"):
+        clean_res = run_clean_pass(engine, session_factory)
+        summary["clean_pass"] = {
             "incident": "INC0010023",
             "outcome": clean_res["result"]["outcome"],
             "path": clean_res["result"]["path"],
             "trace_url": clean_res["trace_url"],
             "db_row_count": len(clean_res["db_rows"]),
             "duration_seconds": clean_res["duration_seconds"],
-        },
-        "correction_cycle": {
+        }
+
+    if args.scenario in ("all", "correction_cycle"):
+        corr_res = run_rejection_and_correction(engine, session_factory)
+        summary["correction_cycle"] = {
             "incident": "INC0010042",
             "outcome": corr_res["result"]["outcome"],
             "path": corr_res["result"]["path"],
             "trace_url": corr_res["trace_url"],
             "db_row_count": len(corr_res["db_rows"]),
             "duration_seconds": corr_res["duration_seconds"],
-        },
-    }
-    out_file = Path("docs/seeded_incident_runs_summary.json")
+        }
+
+    if args.scenario in ("all", "budget_exhaustion"):
+        exhaust_res = run_budget_exhaustion(engine, session_factory)
+        summary["budget_exhaustion"] = {
+            "incident": "INC0010048",
+            "outcome": exhaust_res["result"]["outcome"],
+            "path": exhaust_res["result"]["path"],
+            "trace_url": exhaust_res["trace_url"],
+            "db_row_count": len(exhaust_res["db_rows"]),
+            "duration_seconds": exhaust_res["duration_seconds"],
+        }
+
     out_file.parent.mkdir(parents=True, exist_ok=True)
     out_file.write_text(json.dumps(summary, indent=2), encoding="utf-8")
     print("\n" + "=" * 70)
-    print("ALL SEEDED RUNS COMPLETE! Summary saved to docs/seeded_incident_runs_summary.json")
+    print("SEEDED RUNS COMPLETE! Summary saved to docs/seeded_incident_runs_summary.json")
     print("=" * 70)
     return 0
 
