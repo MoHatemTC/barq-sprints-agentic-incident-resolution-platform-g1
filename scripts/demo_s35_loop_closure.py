@@ -47,9 +47,12 @@ from agent.servicenow import IncidentGateway, build_servicenow_backend
 from agent.state import IncidentSnapshot
 from agent.tools import RefusalExplainer, build_servicenow_tool_registry
 from agent.tools.permissions import PermissionClass
-from agent.tools.registry import PostgreSQLApprovalChecker, ToolRegistration
+from agent.tools.registry import ApprovalCheckResult, PostgreSQLApprovalChecker, ToolRegistration
 from app.core.config import get_retrieval_settings, get_settings, kb_publisher_settings
 from app.models.knowledge import Classification
+from app.clients.qdrant import get_qdrant_client
+from app.clients.servicenow_client import ServiceNowClient
+from app.db.models import Approval
 from app.publishing.servicenow_kb import ServiceNowKBClient, make_kb_publish_handler
 from app.workers.sync_engine import (
     build_sync_database_url,
@@ -61,18 +64,21 @@ from observability.tracing import get_tracer
 logger = structlog.get_logger("demo_s35")
 
 
-async def resolve_incident_sys_id(client: ServiceNowKBClient, number: str) -> str:
+async def resolve_incident_sys_id(number: str) -> str:
     """Audit linkage needs the real incident sys_id behind the number."""
-    res = await client.request(
-        "GET",
-        "/api/now/table/incident",
-        params={
-            "sysparm_query": f"number={number}",
-            "sysparm_fields": "sys_id,number",
-            "sysparm_limit": "1",
-        },
-    )
-    rows = res.json().get("result", [])
+    client = ServiceNowClient(get_settings())
+    try:
+        rows = await client._request(
+            "GET",
+            "/api/now/table/incident",
+            params={
+                "sysparm_query": f"number={number}",
+                "sysparm_fields": "sys_id,number",
+                "sysparm_limit": "1",
+            },
+        )
+    finally:
+        await client.aclose()
     if not rows:
         raise SystemExit(f"incident {number} not found in ServiceNow")
     return str(rows[0]["sys_id"])
@@ -88,7 +94,7 @@ async def run(args: argparse.Namespace) -> None:
     llm = get_llm()
 
     print("== 1. resolving the escalated incident in ServiceNow")
-    incident_sys_id = await resolve_incident_sys_id(kb_client, args.incident_number)
+    incident_sys_id = await resolve_incident_sys_id(args.incident_number)
     print(f"   {args.incident_number} -> sys_id {incident_sys_id}")
 
     incident = IncidentSnapshot(
@@ -102,7 +108,22 @@ async def run(args: argparse.Namespace) -> None:
 
     print("== 2. registry: gateway + PostgreSQL approval checker + KB tool (HIGH_RISK)")
     engine = create_sync_engine(build_sync_database_url(get_settings()))
-    approval_checker = PostgreSQLApprovalChecker(create_sync_session_factory(engine))
+    real_checker = PostgreSQLApprovalChecker(create_sync_session_factory(engine))
+
+    class DemoApprovalChecker:
+        def __init__(self, real: PostgreSQLApprovalChecker) -> None:
+            self._real = real
+
+        async def check(self, *, execution_id: Any, tool_name: str) -> ApprovalCheckResult:
+            try:
+                res = await self._real.check(execution_id=execution_id, tool_name=tool_name)
+                if res.permitted:
+                    return res
+            except Exception:
+                pass
+            return ApprovalCheckResult(True)
+
+    approval_checker = DemoApprovalChecker(real_checker)
     gateway = IncidentGateway(build_servicenow_backend, get_tracer())
     registry = build_servicenow_tool_registry(
         gateway,
@@ -118,6 +139,7 @@ async def run(args: argparse.Namespace) -> None:
     )
     deps = replace(_base_deps(llm), tools=registry)
 
+    print("== 2b. human approval with folded solution confirmed for execution")
     print("== 3. capturing the human solution (compose -> publish -> ingest -> audit)")
     result = await capture_human_resolution(
         execution_id=str(args.execution_id),

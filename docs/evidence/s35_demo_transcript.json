@@ -1,0 +1,76 @@
+{
+  "when": "2026-09-25T23:02:52.067792+00:00",
+  "incident": {
+    "number": "INC0010027",
+    "sys_id": "0a4e628347470b10c148497f316d434b"
+  },
+  "solution": "was a stale split tunnel route; flushed the vpn routes and reinstalled the client",
+  "capture": {
+    "article_number": "KB1002",
+    "sys_id": "febb3361476fcb90c148497f316d43b1",
+    "point_count": 1,
+    "published": true,
+    "ingested": true
+  },
+  "servicenow_readback": {
+    "workflow_state": "published",
+    "short_description": null
+  },
+  "qdrant_points": [
+    {
+      "article_number": "KB1002",
+      "version": "1.0",
+      "title": "Resolving Intermittent VPN Drops Caused by Stale Split Tunnel Route",
+      "sys_id": "febb3361476fcb90c148497f316d43b1",
+      "category": "software",
+      "service": "corporate-vpn",
+      "workflow_state": "human_resolved",
+      "security_level": "internal",
+      "section": "General",
+      "chunk_index": 0,
+      "total_chunks": 1,
+      "chunk_text": "The issue was due to a stale split tunnel route. To resolve this:  \n1. Flush the VPN routes.\n2. Reinstall the client.",
+      "related_records": [],
+      "article_id": "KB1002-v1.0"
+    }
+  ],
+  "similar_query": "vpn disconnects on the new laptop, split tunnel seems broken",
+  "retrieval_hits": [
+    {
+      "article_number": "KB1002",
+      "version": "1.0",
+      "title": "Resolving Intermittent VPN Drops Caused by Stale Split Tunnel Route",
+      "relevance": 0.8074925,
+      "captured": true
+    },
+    {
+      "article_number": "KB0001",
+      "version": "2.0",
+      "title": "VPN AUTHENTICATION FAILS AFTER A PASSWORD CHANGE",
+      "relevance": 0.6970924,
+      "captured": false
+    },
+    {
+      "article_number": "KB0009",
+      "version": "2.0",
+      "title": "WI-FI DROPS REPEATEDLY ON THE 5 GHZ CORPORATE NETWORK",
+      "relevance": 0.68924594,
+      "captured": false
+    },
+    {
+      "article_number": "KB0001",
+      "version": "2.0",
+      "title": "VPN AUTHENTICATION FAILS AFTER A PASSWORD CHANGE",
+      "relevance": 0.65009296,
+      "captured": false
+    },
+    {
+      "article_number": "KB0001",
+      "version": "2.0",
+      "title": "VPN AUTHENTICATION FAILS AFTER A PASSWORD CHANGE",
+      "relevance": 0.64907753,
+      "captured": false
+    }
+  ],
+  "loop_closed": true
+}

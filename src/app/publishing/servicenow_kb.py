@@ -295,16 +295,19 @@ class ServiceNowKBClient:
                 f"Refusing to query with prefix={prefix!r}: only 'KB' plus up to "
                 "three digits is allowed (e.g. 'KB1' for the human-captured range)."
             )
-        query = f"{U_SOURCE_ID_FIELD}STARTSWITH{prefix}"
-        if kb_sys_id:
-            query = f"{query}^kb_knowledge_base={kb_sys_id}"
         params = {
-            "sysparm_query": query,
             "sysparm_fields": U_SOURCE_ID_FIELD,
             "sysparm_limit": "1000",
         }
+        if kb_sys_id:
+            params["sysparm_query"] = f"kb_knowledge_base={kb_sys_id}"
         res = await self.request("GET", f"/api/now/table/{KB_TABLE}", params=params)
-        return [str(r.get(U_SOURCE_ID_FIELD)) for r in res.json().get("result", [])]
+        records = res.json().get("result", [])
+        return [
+            str(r.get(U_SOURCE_ID_FIELD))
+            for r in records
+            if r.get(U_SOURCE_ID_FIELD) and str(r.get(U_SOURCE_ID_FIELD)).startswith(prefix)
+        ]
 
     async def create(self, payload: dict[str, Any]) -> str:
         """POST a new kb_knowledge record; returns its sys_id."""
