@@ -278,6 +278,34 @@ class ServiceNowKBClient:
 
         return None
 
+    async def find_source_ids_by_prefix(
+        self,
+        prefix: str,
+        *,
+        kb_sys_id: str | None = None,
+    ) -> list[str]:
+        """List ``u_source_id`` values starting with ``prefix`` (S3.5 allocation).
+
+        The prefix is validated strictly (``KB`` plus digits only) because it is
+        interpolated into an encoded query — the same injection guard
+        ``find_by_source_id`` applies to whole article IDs.
+        """
+        if not re.fullmatch(r"KB\d{0,3}", prefix):
+            raise ServiceNowKBError(
+                f"Refusing to query with prefix={prefix!r}: only 'KB' plus up to "
+                "three digits is allowed (e.g. 'KB1' for the human-captured range)."
+            )
+        query = f"{U_SOURCE_ID_FIELD}STARTSWITH{prefix}"
+        if kb_sys_id:
+            query = f"{query}^kb_knowledge_base={kb_sys_id}"
+        params = {
+            "sysparm_query": query,
+            "sysparm_fields": U_SOURCE_ID_FIELD,
+            "sysparm_limit": "1000",
+        }
+        res = await self.request("GET", f"/api/now/table/{KB_TABLE}", params=params)
+        return [str(r.get(U_SOURCE_ID_FIELD)) for r in res.json().get("result", [])]
+
     async def create(self, payload: dict[str, Any]) -> str:
         """POST a new kb_knowledge record; returns its sys_id."""
         response = await self.request("POST", f"/api/now/table/{KB_TABLE}", json=payload)
