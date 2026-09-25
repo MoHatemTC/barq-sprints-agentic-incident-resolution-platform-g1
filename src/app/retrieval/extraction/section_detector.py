@@ -75,7 +75,9 @@ def page_for_offset(stream: str, offset: int) -> int:
     return stream.count(_PAGE_SEPARATOR, 0, offset) + 1
 
 
-def find_section_headings(stream: str, exclude_pages: set[int] = None) -> list[DetectedHeading]:
+def find_section_headings(
+    stream: str, exclude_pages: set[int] | None = None
+) -> list[DetectedHeading]:
     """Find section headings in the text stream, returning their offsets."""
     exclude_pages = exclude_pages or set()
     headings: list[DetectedHeading] = []
@@ -117,7 +119,7 @@ def find_section_headings(stream: str, exclude_pages: set[int] = None) -> list[D
     return headings
 
 
-def split_into_sections(stream: str, exclude_pages: set[int] = None) -> list[RawSection]:
+def split_into_sections(stream: str, exclude_pages: set[int] | None = None) -> list[RawSection]:
     """Split the text stream into sections based on detected headings."""
     headings = find_section_headings(stream, exclude_pages)
     if not headings:

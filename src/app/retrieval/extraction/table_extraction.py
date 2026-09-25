@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import pdfplumber
 
@@ -72,7 +73,7 @@ def _dedupe_overlapping_tables(raw_tables: list) -> list:
     """Collapse pdfplumber Table detections that cover the same region,
     keeping the most complete, least self-duplicating parse in each
     overlapping cluster, in top-to-bottom reading order."""
-    sized: list[tuple[object, list[list[str | None]], int]] = []
+    sized: list[tuple[Any, list[list[str | None]], int]] = []
     for table in raw_tables:
         rows = table.extract() or []
         non_empty = sum(1 for row in rows for v in row if v and v.strip())
@@ -92,7 +93,7 @@ def _dedupe_overlapping_tables(raw_tables: list) -> list:
 
     sized.sort(key=lambda item: item[2], reverse=True)
 
-    kept: list[tuple[object, list[list[str | None]]]] = []
+    kept: list[tuple[Any, list[list[str | None]]]] = []
     for table, rows, _score in sized:
         if any(
             _bbox_overlap_ratio(table.bbox, k.bbox) >= _DUPLICATE_TABLE_OVERLAP_THRESHOLD

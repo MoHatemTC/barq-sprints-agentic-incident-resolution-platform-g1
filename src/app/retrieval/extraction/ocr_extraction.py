@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import pdfplumber
-import pytesseract
+import pytesseract  # type: ignore
 from pdf2image import convert_from_path
 from PIL import Image
 

@@ -373,11 +373,12 @@ def build_manual_sections(
         ocr_confidence: float | None = None
         reliability_note: str | None = None
         if content_type == ManualSectionType.OCR:
-            confidences = [
-                pages[p].ocr_confidence
-                for p in raw.pages
-                if p in pages and pages[p].ocr_confidence is not None
-            ]
+            confidences: list[float] = []
+            for p in raw.pages:
+                if p in pages:
+                    c = pages[p].ocr_confidence
+                    if c is not None:
+                        confidences.append(c)
             if confidences:
                 ocr_confidence = sum(confidences) / len(confidences)
                 if ocr_confidence < OCR_RELIABILITY_FLOOR:
