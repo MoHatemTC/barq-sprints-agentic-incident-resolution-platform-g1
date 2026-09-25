@@ -294,15 +294,18 @@ step with precise feedback that the Resolution Agent can use for revision.
 def critic_prompt(
     steps_text: str,
     evidence_text: str,
-    cause: str,
+    cause: str | None = None,
 ) -> str:
-    return (
-        f"Diagnosed cause: {cause}\n\n"
+    parts = []
+    if cause:
+        parts.append(f"Diagnosed cause: {cause}\n\n")
+    parts.append(
         f"{evidence_text}\n\n"
         f"<proposed_steps>\n{steps_text}\n</proposed_steps>\n\n"
         "Verify each step against the cited evidence. "
         "Return passed=true only if all steps are supported by the evidence."
     )
+    return "".join(parts)
 
 
 __all__ = [

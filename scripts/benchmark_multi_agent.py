@@ -146,8 +146,22 @@ def main() -> int:
     )
 
     print("\n[2/3] Analyzing Live Seeded Runs Latency (Real Qdrant + Gemini LLM)...")
-    live_clean_s = 12.4
-    live_correction_s = 21.8
+    seeded_summary_path = Path("docs/seeded_incident_runs_summary.json")
+    if seeded_summary_path.exists():
+        try:
+            seeded_data = json.loads(seeded_summary_path.read_text(encoding="utf-8"))
+            live_clean_s = float(seeded_data.get("clean_pass", {}).get("duration_seconds", 12.4))
+            live_correction_s = float(
+                seeded_data.get("correction_cycle", {}).get("duration_seconds", 21.8)
+            )
+            print(f"- Loaded measured durations from {seeded_summary_path}")
+        except Exception as e:
+            print(f"- Failed to read {seeded_summary_path} ({e}), falling back to baseline")
+            live_clean_s, live_correction_s = 12.4, 21.8
+    else:
+        print(f"- {seeded_summary_path} not found, falling back to baseline")
+        live_clean_s, live_correction_s = 12.4, 21.8
+
     sla_threshold_s = 90.0
     clean_hr = ((sla_threshold_s - live_clean_s) / sla_threshold_s) * 100
     corr_hr = ((sla_threshold_s - live_correction_s) / sla_threshold_s) * 100

@@ -704,6 +704,11 @@ class TestVerifyEvidence:
             "revision_count": 0,
         }
 
+        # Inject customer PII into diagnostic probable cause to verify it does not leak
+        state["diagnosis"]["probable_cause"] = (
+            "User John Doe (john.doe@barq.internal, +971 50 999 8888) has a cached VPN fault."
+        )
+
         verify_evidence(state, make_deps(llm=llm))
 
         critic_call = [c for c in llm.calls if c["purpose"] == "verify_evidence"][0]
@@ -719,6 +724,55 @@ class TestVerifyEvidence:
         assert "+971 50 123 4567" not in prompt
         assert "***PHONE***" not in prompt
         assert "Call me on" not in prompt
+
+        # Diagnostic PII is strictly excluded (cause is omitted from Critic context)
+        assert "John Doe" not in prompt
+        assert "john.doe@barq.internal" not in prompt
+        assert "+971 50 999 8888" not in prompt
+        assert "Diagnosed cause" not in prompt
+
+    def test_context_isolation_filters_uncited_sections_of_same_article(self) -> None:
+        """Critic prompt must exclude uncited sections even from an article that IS cited."""
+        llm = FakeLLM(vpn_answers())
+        state = reasoned_state()
+
+        # Add an uncited section for the SAME article (KB0001-v2)
+        uncited_section_hit = evidence(
+            article="KB0001",
+            version="2",
+            section="Troubleshooting",
+            title="GlobalProtect VPN Authentication Failure",
+            text="Run Wireshark packet capture to trace gateway drop on port 443.",
+        )
+        state["retrieval"]["hits"].append(uncited_section_hit.model_dump(mode="json"))
+
+        # Draft only cites KB0001-v2 §Resolution
+        state["draft"] = {
+            "steps": [
+                {
+                    "text": "Clear the cached VPN credential.",
+                    "article_id": "KB0001-v2",
+                    "section": "Resolution",
+                }
+            ],
+            "rendered": "1. Clear the cached VPN credential. [KB0001 v2 §Resolution]",
+            "dropped_steps": 0,
+            "sources": ["KB0001 v2"],
+            "revision_count": 0,
+        }
+
+        verify_evidence(state, make_deps(llm=llm))
+
+        critic_call = [c for c in llm.calls if c["purpose"] == "verify_evidence"][0]
+        prompt = critic_call["prompt"]
+
+        # Cited section is present
+        assert 'section="Resolution"' in prompt
+        assert "Clear the cached VPN credential" in prompt
+
+        # Uncited section of the SAME article is strictly excluded
+        assert 'section="Troubleshooting"' not in prompt
+        assert "Wireshark packet capture" not in prompt
 
 
 # -- confidence_check ---------------------------------------------------------------------
@@ -785,6 +839,14 @@ class TestAct:
         # Nothing outside §11.6 is ever called.
         assert set(deps.servicenow.calls) <= set(PERMITTED_ACTIONS)
         assert "comments" not in body
+
+    def test_act_records_resolution_model_override_in_servicenow_payload(self) -> None:
+        backend = FakeServiceNow()
+        llm = FakeLLM(vpn_answers(), model_name="gemini/gemini-custom-resolution")
+        deps = make_deps(servicenow=backend, llm=llm)
+        act(reasoned_state(incident=snapshot(VPN)), deps)
+        body = backend.updates[0][1].to_table_api_body()
+        assert body["x_2215032_ai_inc_0_ai_model_name"] == "gemini/gemini-custom-resolution"
 
     def test_high_risk_escalation_note(self) -> None:
         backend = FakeServiceNow()

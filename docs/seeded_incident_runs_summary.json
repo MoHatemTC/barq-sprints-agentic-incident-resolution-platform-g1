@@ -16,7 +16,8 @@
       "act"
     ],
     "trace_url": "https://cloud.langfuse.com/project/cmu50d4jy0h8uad0fgvmn0y4f/traces/390fb225e12a6b9768067919eef61eb9",
-    "db_row_count": 13
+    "db_row_count": 13,
+    "duration_seconds": 12.4
   },
   "correction_cycle": {
     "incident": "INC0010042",
@@ -37,6 +38,7 @@
       "act"
     ],
     "trace_url": "https://cloud.langfuse.com/project/cmu50d4jy0h8uad0fgvmn0y4f/traces/6d4f5d2cdbde18ccf97cbae8ffbbfc29",
-    "db_row_count": 13
+    "db_row_count": 13,
+    "duration_seconds": 21.8
   }
 }

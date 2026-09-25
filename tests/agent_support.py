@@ -183,9 +183,27 @@ class FakeLLM:
     answers: dict[str, Any] = field(default_factory=dict)
     calls: list[dict[str, str]] = field(default_factory=list)
     model_name: str = "gemini/gemini-3.5-flash"
+    last_model_used: str | None = None
+    purpose_models: dict[str, str] = field(default_factory=dict)
 
-    def structured(self, *, purpose: str, system: str, prompt: str, schema: type[Any]) -> Any:
-        self.calls.append({"purpose": purpose, "system": system, "prompt": prompt})
+    def model_for_purpose(self, purpose: str, override: str | None = None) -> str:
+        return override or self.model_name
+
+    def structured(
+        self,
+        *,
+        purpose: str,
+        system: str,
+        prompt: str,
+        schema: type[Any],
+        model: str | None = None,
+    ) -> Any:
+        selected_model = self.model_for_purpose(purpose, model)
+        self.last_model_used = selected_model
+        self.purpose_models[purpose] = selected_model
+        self.calls.append(
+            {"purpose": purpose, "system": system, "prompt": prompt, "model": selected_model}
+        )
         answer = self.answers[purpose]
         if isinstance(answer, list):
             answer = answer.pop(0)

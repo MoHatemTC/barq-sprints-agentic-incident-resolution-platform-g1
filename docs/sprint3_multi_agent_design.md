@@ -54,9 +54,11 @@ To ensure auditability, eliminate confirmation bias, and prevent hallucination f
 - **Verification**: Verified in [`tests/test_nodes.py::test_diagnostic_isolation_prompt_excludes_draft_and_critic_content`](file:///d:/spritns/barq-sprints-agentic-incident-resolution-platform-g1/tests/test_nodes.py).
 
 ### 2.2 Critic Isolation & Scoping Guarantee
-- **Rule**: The Critic evaluates candidate steps *only* against the specific KB chunks cited by those steps, stripping customer PII and uncited retrieved hits.
-- **Rationale**: Presenting the Critic with all retrieved chunks or conversational incident history allows it to rationalize hallucinated steps from adjacent, uncited articles. Limiting the context window forces strict textual groundedness.
-- **Verification**: Verified in [`tests/test_nodes.py::TestVerifyEvidence::test_candidate_step_context_isolation`](file:///d:/spritns/barq-sprints-agentic-incident-resolution-platform-g1/tests/test_nodes.py).
+- **Rule**: The Critic evaluates candidate steps *only* against the exact `(article_id, section)` KB chunks cited by those steps. Uncited sections (even within the same cited article), raw incident customer telemetry, and free-form diagnostic outputs (`diagnosis.probable_cause`) are strictly omitted from the Critic prompt.
+- **Rationale**: 
+  1. Limiting evidence to cited `(article_id, section)` pairs prevents cross-section context contamination where a claim in `Resolution` is spuriously justified by text found in an uncited `Troubleshooting` section of the same article.
+  2. Omitting free-form diagnostic text guarantees that any customer PII echoed by the Diagnostic Agent (such as phone numbers, emails, or names) never reaches the Critic evaluation context.
+- **Verification**: Verified in [`tests/test_nodes.py::TestVerifyEvidence::test_context_isolation_filters_uncited_articles_and_incident_pii`](file:///d:/spritns/barq-sprints-agentic-incident-resolution-platform-g1/tests/test_nodes.py) and [`test_context_isolation_filters_uncited_sections_of_same_article`](file:///d:/spritns/barq-sprints-agentic-incident-resolution-platform-g1/tests/test_nodes.py).
 
 ---
 
@@ -160,9 +162,9 @@ Empirical performance measurements conducted under Step 5.4 across 100 in-proces
 ### 6.1 In-Process Graph Overhead (Mocked LLM, N=100)
 | Scenario | Median (p50) | 95th Percentile (p95) | Mean $\pm$ Stdev |
 |:---|:---:|:---:|:---:|
-| **Clean Pass (0 Revisions)** | 5.90 ms | 6.86 ms | 6.04 ms $\pm$ 0.54 ms |
-| **Correction Cycle (1 Revision)** | 6.73 ms | 7.80 ms | 6.83 ms $\pm$ 0.53 ms |
-| **Budget Exhaustion (2 Revisions)**| 6.69 ms | 7.61 ms | 6.73 ms $\pm$ 0.49 ms |
+| **Clean Pass (0 Revisions)** | 5.81 ms | 6.48 ms | 5.86 ms $\pm$ 0.45 ms |
+| **Correction Cycle (1 Revision)** | 6.75 ms | 8.83 ms | 6.98 ms $\pm$ 0.94 ms |
+| **Budget Exhaustion (2 Revisions)**| 6.57 ms | 7.75 ms | 6.75 ms $\pm$ 0.58 ms |
 
 ### 6.2 Live End-to-End Latency vs 90-Second SLA (SLA-01)
 | Execution Run | Seeded Incident | Live Duration | 90s SLA Target | Headroom Margin |
@@ -180,10 +182,10 @@ Both seeded executions were traced via OpenTelemetry and Langfuse with explicit 
    - **Postgres Execution ID**: `fc5ce0a5-c6b4-4f73-8ca4-51f01c11548a`
    - **Langfuse Trace URL**: [Run 1 Live Langfuse Trace](https://cloud.langfuse.com/project/cmu50d4jy0h8uad0fgvmn0y4f/traces/390fb225e12a6b9768067919eef61eb9)
    - **Trace Screenshot**: [`docs/evidence/langfuse-clean-pass-INC0010023.png`](evidence/langfuse-clean-pass-INC0010023.png)
-   - **Span Structure**: Single sequential pass through `agent.diagnose` $\rightarrow$ `agent.generate` $\rightarrow$ `agent.verify_evidence` (passed).
+   - **Span Structure**: Single sequential pass through `agent.diagnostic` $\rightarrow$ `agent.resolution` $\rightarrow$ `agent.critic` (passed).
 
 2. **Run 2: Correction Cycle (`INC0010042`)**
    - **Postgres Execution ID**: `bc71c697-547f-4d06-a403-bdf21f7f8a8c`
    - **Langfuse Trace URL**: [Run 2 Live Langfuse Trace](https://cloud.langfuse.com/project/cmu50d4jy0h8uad0fgvmn0y4f/traces/6d4f5d2cdbde18ccf97cbae8ffbbfc29)
    - **Trace Screenshot**: [`docs/evidence/langfuse-revision-loop-INC0010042.png`](evidence/langfuse-revision-loop-INC0010042.png)
-   - **Span Structure**: `agent.diagnose` $\rightarrow$ `agent.generate (attempt 0)` $\rightarrow$ `agent.verify_evidence (attempt 0: rejected)` $\rightarrow$ `agent.generate (attempt 1: revised)` $\rightarrow$ `agent.verify_evidence (attempt 1: passed)`.
+   - **Span Structure**: `agent.diagnostic` $\rightarrow$ `agent.resolution (attempt 0)` $\rightarrow$ `agent.critic (attempt 0: rejected)` $\rightarrow$ `agent.resolution (attempt 1: revised)` $\rightarrow$ `agent.critic (attempt 1: passed)`.

@@ -17,11 +17,13 @@ Excluding network and LLM inference time, the internal state machine routing, va
 
 | Scenario | Path Length (Nodes) | Median (p50) | 95th Percentile (p95) | 99th Percentile (p99) | Mean Overhead |
 |:---|:---:|:---:|:---:|:---:|:---:|
-| **Scenario A: Clean Pass** | 11 | 0.98 ms | 1.84 ms | 2.51 ms | 1.05 ms |
-| **Scenario B: Correction Cycle (1 Rev)** | 13 | 1.18 ms | 2.22 ms | 3.10 ms | 1.28 ms |
-| **Scenario C: Budget Exhaustion (2 Revs)** | 13 | 1.24 ms | 2.45 ms | 3.42 ms | 1.34 ms |
+| **Scenario A: Clean Pass** | 11 | 5.81 ms | 6.48 ms | 7.09 ms | 5.86 ms |
+| **Scenario B: Correction Cycle (1 Rev)** | 13 | 6.75 ms | 8.83 ms | 10.61 ms | 6.98 ms |
+| **Scenario C: Budget Exhaustion (2 Revs)** | 13 | 6.57 ms | 7.75 ms | 8.47 ms | 6.75 ms |
 
-*Takeaway*: The LangGraph engine and state transitions contribute less than **0.02%** of the overall end-to-end turnaround time.
+*Source*: Automated benchmark runner (`scripts/benchmark_multi_agent.py`), artifact saved to [`docs/benchmarking_results.json`](benchmarking_results.json).
+
+*Takeaway*: The LangGraph engine and state transitions contribute less than **0.01%** of the overall end-to-end turnaround time.
 
 ---
 

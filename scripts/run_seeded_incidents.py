@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import sys
+import time
 import uuid
 from pathlib import Path
 from typing import Any
@@ -196,6 +197,7 @@ def run_clean_pass(engine: Any, session_factory: Any) -> dict[str, Any]:
         number=record["number"],
     )
 
+    t_start = time.perf_counter()
     with (
         tracer.span(
             "worker.pickup",
@@ -223,6 +225,7 @@ def run_clean_pass(engine: Any, session_factory: Any) -> dict[str, Any]:
             deps=deps,
         )
         span.update(output=result)
+    duration_s = round(time.perf_counter() - t_start, 2)
     tracer.flush()
 
     db_rows = query_workflow_state_rows(engine, execution_id)
@@ -230,6 +233,7 @@ def run_clean_pass(engine: Any, session_factory: Any) -> dict[str, Any]:
 
     print(f"Outcome: {result['outcome']}")
     print(f"Execution Path: {' -> '.join(result['path'])}")
+    print(f"Duration: {duration_s}s")
     print(f"PostgreSQL Execution ID: {execution_id}")
     print(f"PostgreSQL workflow_state rows written: {len(db_rows)}")
     print(f"Langfuse Trace ID: {trace_id_for(correlation_id)}")
@@ -242,6 +246,7 @@ def run_clean_pass(engine: Any, session_factory: Any) -> dict[str, Any]:
         "db_rows": db_rows,
         "trace_url": trace_url,
         "correlation_id": correlation_id,
+        "duration_seconds": duration_s,
     }
 
 
@@ -292,6 +297,7 @@ def run_rejection_and_correction(engine: Any, session_factory: Any) -> dict[str,
         number=record["number"],
     )
 
+    t_start = time.perf_counter()
     with (
         tracer.span(
             "worker.pickup",
@@ -319,6 +325,7 @@ def run_rejection_and_correction(engine: Any, session_factory: Any) -> dict[str,
             deps=deps,
         )
         span.update(output=result)
+    duration_s = round(time.perf_counter() - t_start, 2)
     tracer.flush()
 
     db_rows = query_workflow_state_rows(engine, execution_id)
@@ -326,6 +333,7 @@ def run_rejection_and_correction(engine: Any, session_factory: Any) -> dict[str,
 
     print(f"Outcome: {result['outcome']}")
     print(f"Execution Path: {' -> '.join(result['path'])}")
+    print(f"Duration: {duration_s}s")
     print(f"PostgreSQL Execution ID: {execution_id}")
     print(f"PostgreSQL workflow_state rows written: {len(db_rows)}")
     print(f"Langfuse Trace ID: {trace_id_for(correlation_id)}")
@@ -338,6 +346,7 @@ def run_rejection_and_correction(engine: Any, session_factory: Any) -> dict[str,
         "db_rows": db_rows,
         "trace_url": trace_url,
         "correlation_id": correlation_id,
+        "duration_seconds": duration_s,
     }
 
 
@@ -357,6 +366,7 @@ def main() -> int:
             "path": clean_res["result"]["path"],
             "trace_url": clean_res["trace_url"],
             "db_row_count": len(clean_res["db_rows"]),
+            "duration_seconds": clean_res["duration_seconds"],
         },
         "correction_cycle": {
             "incident": "INC0010042",
@@ -364,6 +374,7 @@ def main() -> int:
             "path": corr_res["result"]["path"],
             "trace_url": corr_res["trace_url"],
             "db_row_count": len(corr_res["db_rows"]),
+            "duration_seconds": corr_res["duration_seconds"],
         },
     }
     out_file = Path("docs/seeded_incident_runs_summary.json")

@@ -39,6 +39,8 @@ class LLMClient(Protocol):
     @property
     def model_name(self) -> str: ...
 
+    def model_for_purpose(self, purpose: str, override: str | None = None) -> str: ...
+
     def structured(
         self,
         *,
@@ -95,12 +97,11 @@ class LiteLLMClient:
                 max_retries=settings.agent_llm_max_retries,
             )
         self._client = client
+        self._last_model_used: str | None = None
+        self._purpose_models: dict[str, str] = {}
 
-    @property
-    def model_name(self) -> str:
-        return self._settings.agent_llm_model
-
-    def _model_for_purpose(self, purpose: str, override: str | None = None) -> str:
+    def model_for_purpose(self, purpose: str, override: str | None = None) -> str:
+        """Resolve purpose-specific model name, taking into account overrides."""
         if override:
             return override
         if purpose == "diagnose":
@@ -110,6 +111,33 @@ class LiteLLMClient:
         if purpose in ("verify_evidence", "critic"):
             return self._settings.agent_critic_model or self._settings.agent_llm_model
         return self._settings.agent_llm_model
+
+    _model_for_purpose = model_for_purpose  # Preserves internal alias
+
+    @property
+    def model_name(self) -> str:
+        """Return the exact model selected and used for execution, or the default configured model.
+
+        When a resolution procedure is drafted, this returns the resolution model used
+        for drafting. Otherwise, it returns the model used in the most recent LLM execution,
+        falling back to `agent_llm_model`.
+        """
+        if "generate" in self._purpose_models:
+            return self._purpose_models["generate"]
+        if "resolution" in self._purpose_models:
+            return self._purpose_models["resolution"]
+        if self._last_model_used is not None:
+            return self._last_model_used
+        return self._settings.agent_llm_model
+
+    @property
+    def last_model_used(self) -> str | None:
+        """Return the model that was used in the most recent LLM invocation."""
+        return self._last_model_used
+
+    def get_used_model(self, purpose: str) -> str | None:
+        """Return the model that was resolved and used for a given purpose, if called."""
+        return self._purpose_models.get(purpose)
 
     def structured(
         self,
@@ -123,7 +151,9 @@ class LiteLLMClient:
         import openai
 
         settings = self._settings
-        selected_model = self._model_for_purpose(purpose, model)
+        selected_model = self.model_for_purpose(purpose, model)
+        self._last_model_used = selected_model
+        self._purpose_models[purpose] = selected_model
         options: dict[str, Any] = {"max_completion_tokens": settings.agent_llm_max_tokens}
         if settings.agent_llm_reasoning_effort:
             options["reasoning_effort"] = settings.agent_llm_reasoning_effort

@@ -119,9 +119,11 @@ def verify_evidence(state: AgentState, deps: AgentDependencies) -> dict[str, Any
                 f"Step {idx}: {step.text} [Citation: {step.article_id} §{step.section}]"
                 for idx, step in valid_step_pairs
             )
-            # Filter evidence to chunks cited by these steps
-            cited_article_ids = {s.article_id for _, s in valid_step_pairs}
-            relevant_evidence = [h for h in retrieval.hits if h.article_id in cited_article_ids]
+            # Filter evidence to chunks cited by these steps (exact article_id and section)
+            cited_sections = {(s.article_id, s.section) for _, s in valid_step_pairs}
+            relevant_evidence = [
+                h for h in retrieval.hits if (h.article_id, h.section) in cited_sections
+            ]
 
             critic_response = deps.llm.structured(
                 purpose="verify_evidence",
@@ -129,7 +131,6 @@ def verify_evidence(state: AgentState, deps: AgentDependencies) -> dict[str, Any
                 prompt=critic_prompt(
                     steps_text=steps_text,
                     evidence_text=evidence_block(relevant_evidence),
-                    cause=diagnosis.probable_cause,
                 ),
                 schema=CriticOutput,
             )
