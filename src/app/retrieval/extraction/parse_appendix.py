@@ -135,7 +135,7 @@ def parse_appendix_e_body(body: str) -> tuple[AppendixERelationships, AppendixER
             if identifier not in reverse[num]:
                 reverse[num].append(identifier)
 
-        return AppendixERelationships(forward=forward, reverse=reverse), report
+    return AppendixERelationships(forward=forward, reverse=reverse), report
 
 
 def relationships_for_section(

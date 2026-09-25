@@ -189,6 +189,10 @@ def classify_and_extract(
                     "using plain text"
                 )
                 rendered = plain_by_page[page_number]
+            else:
+                prose = plain_by_page[page_number].strip()
+                if prose:
+                    rendered = f"{prose}\n\n{rendered}"
             pages[page_number] = PageInfo(page_number, ManualSectionType.TABLE, rendered)
             continue
 
@@ -261,6 +265,7 @@ def build_manual_sections(
                 title=raw.title,
                 pages=raw.pages,
             )
+            continue
 
         sections.append(
             ManualSection(

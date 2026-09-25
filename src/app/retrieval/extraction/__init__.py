@@ -14,14 +14,6 @@ from app.retrieval.extraction.ocr_extraction import (
     ocr_image,
     post_process_technical_tokens,
 )
-from app.retrieval.extraction.stressor_articles import (
-    STRESSOR_REGISTRY,
-    StressorClass,
-    StressorConfig,
-    build_stressor_articles,
-    classify_page,
-    extract_stressor_page,
-)
 from app.retrieval.extraction.table_extraction import (
     Cell,
     ExtractedTable,
@@ -34,11 +26,11 @@ from app.retrieval.extraction.table_extraction import (
 
 __all__ = [
     "Cell",
+    "SECTION_HEADING_RE",
     "ExtractedTable",
     "NormalizedRow",
     "OcrPageResult",
     "OcrResult",
-    "STRESSOR_REGISTRY",
     "StressorClass",
     "StressorConfig",
     "TextBlock",

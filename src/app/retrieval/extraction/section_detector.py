@@ -23,6 +23,19 @@ _TOC_LEADER_RE = re.compile(r"\.{3,}\s*\d+\s*$")
 # header/footer stripping must never be read as a section title.
 _FOOTER_FRAGMENT_RE = re.compile(r"^\s*(?:of\s+\d+|page\s+\d+)\s*$", re.IGNORECASE)
 
+_MAX_HEADING_WORDS = 10
+_MAX_HEADING_CHARS = 80
+
+
+def _looks_like_prose_sentence(title: str) -> bool:
+    if len(title) > _MAX_HEADING_CHARS:
+        return True
+    if title.rstrip().endswith((".", ",", ";")):
+        return True
+    if len(title.split()) > _MAX_HEADING_WORDS:
+        return True
+    return False
+
 
 @dataclass(frozen=True)
 class DetectedHeading:
@@ -77,6 +90,9 @@ def find_section_headings(stream: str, exclude_pages: set[int] = None) -> list[D
         end = match.end() + 1
         # Skip false positives that look like footers
         if _FOOTER_FRAGMENT_RE.match(title):
+            continue
+
+        if _looks_like_prose_sentence(title):
             continue
         headings.append(DetectedHeading(section_number, title, start, end))
     return headings

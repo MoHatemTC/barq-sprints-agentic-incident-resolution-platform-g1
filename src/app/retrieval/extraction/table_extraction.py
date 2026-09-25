@@ -136,6 +136,9 @@ def propagate_merged_headers(table: list[list[Cell]]) -> list[NormalizedRow]:
     data_start = max(header_rowspan_max, 1)
     normalized_rows: list[NormalizedRow] = []
     for r in range(data_start, n_rows):
+        if not table[r]:
+            continue
+
         row_values = {column_headers.get(c, f"column_{c}"): value_grid[r][c] for c in range(n_cols)}
         if any(v for v in row_values.values()):
             normalized_rows.append(NormalizedRow(cells=row_values))
