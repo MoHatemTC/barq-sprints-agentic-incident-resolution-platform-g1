@@ -16,6 +16,19 @@ PAYLOAD_KEYWORD_INDEXES = [
     "article_number",
 ]
 
+MANUAL_PAYLOAD_KEYWORD_INDEXES: tuple[str, ...] = (
+    "section_number",
+    "section_id",
+    "content_type",
+    "doc_type",
+    "related_article_ids",
+    "related_incident_ids",
+    "related_problem_ids",
+    "related_known_error_ids",
+    "related_change_ids",
+    "related_mir_ids",
+)
+
 
 def get_qdrant_client(
     url: str | None = None,
