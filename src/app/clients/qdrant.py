@@ -1,3 +1,5 @@
+from collections.abc import Iterable
+
 from qdrant_client import QdrantClient, models
 
 from app.core.config import get_retrieval_settings
@@ -40,28 +42,15 @@ def get_qdrant_client(
     return QdrantClient(url=endpoint, api_key=api_key)
 
 
-def ensure_collection(
+def _ensure_named_vector_collection(
     client: QdrantClient,
     name: str,
     *,
-    dense_vector_size: int = DENSE_VECTOR_SIZE,
-    force_recreate: bool = False,
+    dense_vector_size: int,
+    force_recreate: bool,
+    keyword_indexes: Iterable[str],
 ) -> None:
-    """Ensure the target collection exists with named dense and sparse vectors and payload indexes.
-
-    Configuration follows Qdrant Advisor recommendations:
-    - Named dense vector: sized to the configured dense embedding model (default 384d,
-      bge-small-en-v1.5), Cosine distance
-    - Named sparse vector: BM25 in-memory inverted index (on_disk=False) with
-      ``Modifier.IDF``. fastembed's Bm25 model sets ``requires_idf=True`` and does not
-      fit IDF client-side, so Qdrant must supply it or rare tokens carry no more weight
-      than common ones (#44).
-    - KEYWORD payload indexes on all 5 metadata fields + unique article identifiers.
-
-    The dense dimension is derived from the embedding engine by the caller: a
-    mismatch between an existing collection and the configured model raises
-    instead of failing later with a cryptic upsert error.
-    """
+    """Shared setup for every collection in this pipeline."""
     exists = client.collection_exists(collection_name=name)
 
     if exists and force_recreate:
@@ -81,8 +70,8 @@ def ensure_collection(
             raise ValueError(
                 f"Collection '{name}' was created with dense dimension {existing_size}, "
                 f"but the configured dense model produces {dense_vector_size}d vectors. "
-                "Rebuild with `uv run python scripts/setup_qdrant.py --force-recreate` "
-                "or configure a model matching the collection dimension."
+                "Rebuild with `--force-recreate` (or the matching setup/seed script's "
+                "equivalent flag) or configure a model matching the collection dimension."
             )
 
         # A collection created before #44 has modifier=None. BM25 scoring silently
@@ -94,8 +83,7 @@ def ensure_collection(
             raise ValueError(
                 f"Collection '{name}' has sparse modifier {existing_modifier!r}, "
                 f"but BM25 requires {models.Modifier.IDF!r}. Without it, rare tokens "
-                "score no higher than common ones. Rebuild with "
-                "`uv run python scripts/setup_qdrant.py --force-recreate`."
+                "score no higher than common ones. Rebuild with `--force-recreate`."
             )
     else:
         client.create_collection(
@@ -121,10 +109,43 @@ def ensure_collection(
     # Ensure payload keyword indexes. create_payload_index is idempotent —
     # re-creating an existing index is a safe schema update — so failures here
     # are real (auth, network, permission) and must propagate, not be swallowed:
-    # a collection silently missing its indexes breaks Sprint 2 filtered search.
-    for field_name in PAYLOAD_KEYWORD_INDEXES:
+    # a collection silently missing its indexes breaks filtered search.
+    for field_name in keyword_indexes:
         client.create_payload_index(
             collection_name=name,
             field_name=field_name,
             field_schema=models.PayloadSchemaType.KEYWORD,
         )
+
+
+def ensure_collection(
+    client: QdrantClient,
+    name: str,
+    *,
+    dense_vector_size: int = DENSE_VECTOR_SIZE,
+    force_recreate: bool = False,
+) -> None:
+    _ensure_named_vector_collection(
+        client,
+        name,
+        dense_vector_size=dense_vector_size,
+        force_recreate=force_recreate,
+        keyword_indexes=PAYLOAD_KEYWORD_INDEXES,
+    )
+
+
+def ensure_manual_collection(
+    client: QdrantClient,
+    name: str,
+    *,
+    dense_vector_size: int = DENSE_VECTOR_SIZE,
+    force_recreate: bool = False,
+) -> None:
+    """Ensure the manual-sections collection exists."""
+    _ensure_named_vector_collection(
+        client,
+        name,
+        dense_vector_size=dense_vector_size,
+        force_recreate=force_recreate,
+        keyword_indexes=MANUAL_PAYLOAD_KEYWORD_INDEXES,
+    )

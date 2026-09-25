@@ -8,6 +8,10 @@ from langchain_text_splitters import Language, RecursiveCharacterTextSplitter
 
 from app.models.manual_section import ManualSection, ManualSectionChunk
 from app.retrieval.chunking import balance_code_fences
+from app.retrieval.extraction.parse_appendix import (
+    AppendixERelationships,
+    relationships_for_section,
+)
 
 DEFAULT_CHUNK_SIZE = 1200
 DEFAULT_CHUNK_OVERLAP = 150
@@ -26,6 +30,7 @@ def _split_body(body: str, chunk_size: int, chunk_overlap: int) -> list[str]:
 
 def chunk_section(
     section: ManualSection,
+    relationships: AppendixERelationships,
     chunk_size: int = DEFAULT_CHUNK_SIZE,
     chunk_overlap: int = DEFAULT_CHUNK_OVERLAP,
 ) -> list[ManualSectionChunk]:
@@ -38,6 +43,7 @@ def chunk_section(
     if not texts:
         return []
 
+    related = relationships_for_section(relationships, section.section_number)
     total_chunks = len(texts)
 
     return [
@@ -51,6 +57,7 @@ def chunk_section(
             section_title=section.title,
             pages=section.pages,
             content_type=section.content_type,
+            **related,
         )
         for index, text in enumerate(texts)
     ]
