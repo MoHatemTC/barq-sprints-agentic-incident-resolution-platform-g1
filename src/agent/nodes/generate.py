@@ -91,7 +91,6 @@ def generate(state: AgentState, deps: AgentDependencies) -> dict[str, Any]:
             "revising": bool(critic_feedback_raw and prev_draft_raw),
             "confidence": diagnosis.model_confidence,
             "probable_cause": diagnosis.probable_cause,
-            
         },
         metadata={
             "agent": "resolution",

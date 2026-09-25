@@ -90,6 +90,7 @@ All multi-agent interactions utilize strictly typed Pydantic output schemas via 
       article_id: str
       section: str
 
+
   class GenerateOutput(BaseModel):
       steps: list[StepOutput]
   ```

@@ -132,12 +132,18 @@ def main() -> int:
     )
 
     print("\nIn-Process Graph Execution Latency (Mocked, N=100):")
-    print(f"- Clean Pass:        p50 = {clean_stats['median_ms']:.2f} ms | "
-          f"p95 = {clean_stats['p95_ms']:.2f} ms")
-    print(f"- Correction Cycle:  p50 = {rev1_stats['median_ms']:.2f} ms | "
-          f"p95 = {rev1_stats['p95_ms']:.2f} ms")
-    print(f"- Budget Exhaustion: p50 = {exhaust_stats['median_ms']:.2f} ms | "
-          f"p95 = {exhaust_stats['p95_ms']:.2f} ms")
+    print(
+        f"- Clean Pass:        p50 = {clean_stats['median_ms']:.2f} ms | "
+        f"p95 = {clean_stats['p95_ms']:.2f} ms"
+    )
+    print(
+        f"- Correction Cycle:  p50 = {rev1_stats['median_ms']:.2f} ms | "
+        f"p95 = {rev1_stats['p95_ms']:.2f} ms"
+    )
+    print(
+        f"- Budget Exhaustion: p50 = {exhaust_stats['median_ms']:.2f} ms | "
+        f"p95 = {exhaust_stats['p95_ms']:.2f} ms"
+    )
 
     print("\n[2/3] Analyzing Live Seeded Runs Latency (Real Qdrant + Gemini LLM)...")
     live_clean_s = 12.4
@@ -161,9 +167,8 @@ def main() -> int:
             "clean_pass": live_clean_s,
             "correction_cycle": live_correction_s,
             "headroom_pct_clean": ((sla_threshold_s - live_clean_s) / sla_threshold_s) * 100,
-            "headroom_pct_correction": (
-                (sla_threshold_s - live_correction_s) / sla_threshold_s
-            ) * 100,
+            "headroom_pct_correction": ((sla_threshold_s - live_correction_s) / sla_threshold_s)
+            * 100,
         },
     }
 

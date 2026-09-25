@@ -90,9 +90,7 @@ class AgentSettings(BaseSettings):
         the proxy, so the restriction would live in a docstring rather than in code.
         """
         if value is not None and not value.startswith("gemini/"):
-            raise ValueError(
-                f"Model must name a Gemini model ('gemini/…'); got {value!r}"
-            )
+            raise ValueError(f"Model must name a Gemini model ('gemini/…'); got {value!r}")
         return value
 
     # -- manual §11.7: search ------------------------------------------------------
@@ -141,8 +139,7 @@ class AgentSettings(BaseSettings):
         default=2,
         ge=0,
         le=5,
-        description="Maximum number of revisions the agent will attempt before escalating."
-    
+        description="Maximum number of revisions the agent will attempt before escalating.",
     )
 
 

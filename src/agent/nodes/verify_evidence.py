@@ -140,11 +140,7 @@ def verify_evidence(state: AgentState, deps: AgentDependencies) -> dict[str, Any
             semantic_feedback_text = critic_response.feedback_instructions
 
         # Consolidate verdict
-        passed = (
-            len(all_invalid) == 0
-            and len(all_unsupported) == 0
-            and len(all_safety_issues) == 0
-        )
+        passed = len(all_invalid) == 0 and len(all_unsupported) == 0 and len(all_safety_issues) == 0
 
         instructions_parts = []
         if deterministic_invalid:
@@ -159,8 +155,7 @@ def verify_evidence(state: AgentState, deps: AgentDependencies) -> dict[str, Any
             )
         if all_safety_issues:
             instructions_parts.append(
-                f"Address {len(all_safety_issues)} safety issues: "
-                + "; ".join(all_safety_issues)
+                f"Address {len(all_safety_issues)} safety issues: " + "; ".join(all_safety_issues)
             )
         if semantic_feedback_text:
             instructions_parts.append(semantic_feedback_text)
