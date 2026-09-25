@@ -173,6 +173,13 @@ async def test_every_protected_endpoint_rejects_missing_auth_with_401(client) ->
         assert resp.status_code != 401, f"{url} is a probe and must not require auth"
 
 
+@pytest.mark.asyncio
+async def test_servicenow_oauth_token_can_access_operator_routes(app, client) -> None:
+    token_headers = h.webhook_oauth_headers(app.state.settings)
+    response = await client.get("/api/v1/config", headers=token_headers)
+    assert response.status_code == 200
+
+
 # ---------------------------------------------------------------------------
 # Executions
 # ---------------------------------------------------------------------------
@@ -378,6 +385,8 @@ async def test_config_redacts_every_secret_recursively(app, client) -> None:
         "postgres_password",
         "redis_password",
         "webhook_auth_token",
+        "webhook_oauth_client_secret",
+        "webhook_oauth_signing_key",
     ):
         assert body.get(field) == REDACTED_SENTINEL, f"{field} must be redacted"
 

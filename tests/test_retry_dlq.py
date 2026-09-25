@@ -76,7 +76,7 @@ def test_hanging_task_terminated_by_timeout() -> None:
     repo.seed_execution(EXECUTION_ID, status="queued")
     task = MockCeleryTask(retries=0)
 
-    def simulate_hanging_graph(payload):
+    def simulate_hanging_graph(payload, **kwargs):
         raise SoftTimeLimitExceeded()
 
     with mock.patch.object(tasks_module, "invoke_graph", side_effect=simulate_hanging_graph):
@@ -138,7 +138,7 @@ def test_malformed_payload_routes_straight_to_dlq_without_burning_retries() -> N
     task = MockCeleryTask(retries=0)
     mock_redis = mock.MagicMock()
 
-    def validate_and_invoke(payload):
+    def validate_and_invoke(payload, **kwargs):
         if "number" not in payload or "sys_id" not in payload:
             raise KeyError("Malformed payload: missing required incident fields")
         return {"status": "ok"}

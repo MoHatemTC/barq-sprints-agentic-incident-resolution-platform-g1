@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy import delete
 from sqlalchemy.exc import MissingGreenlet, SQLAlchemyError
 
-from api.auth import verify_bearer_token
+from api.auth import verify_webhook_oauth_token
 from api.schemas.webhook import IncidentWebhookPayload, WebhookAcceptedResponse
 from app.api.dependencies import get_session_factory
 from app.core.correlation import get_correlation_id
@@ -23,13 +23,17 @@ from app.repositories.idempotency import (
     accept_inbound_event,
 )
 from app.workers.producer import send_incident_event
+from observability.tracing import get_tracer
 
 logger = structlog.getLogger("api.webhook")
 
+# The bearer check is a router-level dependency, so FastAPI resolves it before the
+# handler body runs. That ordering is load-bearing: an unauthenticated caller must
+# never reach the tracer and create a trace.
 router = APIRouter(
     prefix="/api/v1/webhook",
     tags=["Webhook"],
-    dependencies=[Depends(verify_bearer_token)],
+    dependencies=[Depends(verify_webhook_oauth_token)],
 )
 
 
@@ -48,6 +52,31 @@ async def ingest_incident_webhook(
 ) -> WebhookAcceptedResponse:
     """Ingest, validate, persist, and queue an incoming ServiceNow incident event."""
     correlation_id = get_correlation_id()
+    tracer = get_tracer()
+    with (
+        tracer.span(
+            "webhook.receipt",
+            correlation_id=correlation_id,
+            input={
+                "event_id": payload.event_id,
+                "number": payload.number,
+                "event_type": payload.event_type,
+            },
+            metadata={"incident_number": payload.number, "event_id": payload.event_id},
+        ) as receipt,
+        tracer.trace_attributes(correlation_id=correlation_id, incident_number=payload.number),
+    ):
+        response = await _ingest(payload, session_factory, correlation_id)
+        receipt.update(output=response.model_dump(mode="json"))
+        return response
+
+
+async def _ingest(
+    payload: IncidentWebhookPayload,
+    session_factory: SessionFactory,
+    correlation_id: str,
+) -> WebhookAcceptedResponse:
+    tracer = get_tracer()
 
     # 1. Idempotent Database Persistence
     inbound = InboundEvent(
@@ -86,11 +115,19 @@ async def ingest_incident_webhook(
             execution_id=str(acceptance.execution_id),
         )
         try:
-            await asyncio.to_thread(
-                send_incident_event,
-                payload.model_dump(),
-                str(acceptance.execution_id),
-            )
+            with tracer.span(
+                "queue.enqueue",
+                metadata={
+                    "execution_id": str(acceptance.execution_id),
+                    "incident_number": payload.number,
+                },
+            ):
+                await asyncio.to_thread(
+                    send_incident_event,
+                    payload.model_dump(),
+                    str(acceptance.execution_id),
+                    correlation_id=correlation_id,
+                )
         except Exception as exc:
             logger.exception(
                 "event_enqueue_failed",

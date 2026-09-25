@@ -1,0 +1,1100 @@
+"""Unit tests for each of the eleven nodes and the deterministic policy (S2.5).
+
+Every node is called directly with a hand-built state and mocked dependencies:
+no graph, no model, no network, no database.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+import pytest
+
+from agent.nodes import (
+    NODE_ORDER,
+    NODES,
+    act,
+    classify,
+    confidence_check,
+    determine_risk,
+    diagnose,
+    generate,
+    load,
+    retrieve,
+    safety_check,
+    validate,
+    verify_evidence,
+)
+from agent.nodes.act import compose, decide_outcome
+from agent.nodes.confidence_check import score
+from agent.policy import (
+    assess_risk,
+    check_eligibility,
+    effective_priority,
+    service_name,
+    snapshot_incident,
+)
+from agent.prompts import ClassifyOutput, DiagnoseOutput, GenerateOutput, StepOutput
+from agent.servicenow import PERMITTED_ACTIONS, ActionNotPermittedError
+from agent.state import (
+    ClassificationResult,
+    Diagnosis,
+    Draft,
+    DraftStep,
+    IncidentSnapshot,
+    Outcome,
+    RiskLevel,
+)
+from app.exceptions.servicenow import (
+    ServiceNowConnectionError,
+    ServiceNowHumanLockError,
+    ServiceNowNotFoundError,
+)
+from app.models.incident import Incident
+from app.models.knowledge import Classification
+from app.workers.retry_policy import RetryableError, TerminalError
+from tests.agent_support import (
+    EXECUTION_ID,
+    LEAVE,
+    MFA,
+    ORDER_P1,
+    PRINTER,
+    VPN,
+    FakeLLM,
+    FakeRetriever,
+    FakeServiceNow,
+    event_for,
+    evidence,
+    make_deps,
+    vpn_answers,
+)
+
+
+def snapshot(record: dict[str, Any], **overrides: Any) -> dict[str, Any]:
+    incident = Incident.model_validate(record).model_dump(mode="json")
+    return snapshot_incident({**incident, **overrides}).model_dump(mode="json")
+
+
+def classification(label: str = "network", confidence: float = 0.9) -> dict[str, Any]:
+    return ClassificationResult(
+        label=Classification(label), rationale="r", model_confidence=confidence
+    ).model_dump(mode="json")
+
+
+def base_state(record: dict[str, Any] = VPN, **extra: Any) -> dict[str, Any]:
+    return {
+        "execution_id": EXECUTION_ID,
+        "correlation_id": "corr-1",
+        "event": event_for(record),
+        "started_at": "2026-09-08T06:14:00+00:00",
+        **extra,
+    }
+
+
+def reasoned_state(**extra: Any) -> dict[str, Any]:
+    """VPN state as it stands after confidence_check on the happy path."""
+    deps = make_deps()
+    state = base_state(incident=snapshot(VPN), classification=classification())
+    state |= validate(state, deps)
+    state |= determine_risk(state, deps)
+    state |= retrieve(state, deps)
+    state |= diagnose(state, deps)
+    state |= generate(state, deps)
+    state |= verify_evidence(state, deps)
+    state |= safety_check(state, deps)
+    state |= confidence_check(state, deps)
+    return state | extra
+
+
+def test_the_graph_has_exactly_the_eleven_brief_nodes() -> None:
+    assert NODE_ORDER == (
+        "load",
+        "validate",
+        "classify",
+        "determine_risk",
+        "retrieve",
+        "diagnose",
+        "generate",
+        "verify_evidence",
+        "safety_check",
+        "confidence_check",
+        "act",
+    )
+    assert set(NODES) == set(NODE_ORDER)
+
+
+# -- load ---------------------------------------------------------------------------------
+
+
+class TestLoad:
+    def test_reads_the_incident_through_the_gateway(self) -> None:
+        backend = FakeServiceNow()
+        deps = make_deps(servicenow=backend)
+        update = load(base_state(), deps)
+        incident = update["incident"]
+        assert incident["number"] == "INC0010023"
+        assert incident["priority"] == 3
+        assert incident["service"] == "corporate-vpn"
+        assert incident["ai_enabled"] is True
+        assert incident["ai_human_lock"] is False
+        assert deps.servicenow.calls == ["read_incident"]
+
+    def test_transient_servicenow_failure_is_retryable(self) -> None:
+        backend = FakeServiceNow()
+        backend.read_error = ServiceNowConnectionError("down")
+        with pytest.raises(RetryableError):
+            load(base_state(), make_deps(servicenow=backend))
+
+    def test_missing_incident_is_terminal(self) -> None:
+        backend = FakeServiceNow()
+        backend.read_error = ServiceNowNotFoundError("gone")
+        with pytest.raises(TerminalError):
+            load(base_state(), make_deps(servicenow=backend))
+
+
+# -- validate -----------------------------------------------------------------------------
+
+
+class TestValidate:
+    def test_eligible_incident(self) -> None:
+        update = validate(base_state(incident=snapshot(VPN)), make_deps())
+        assert update["eligibility"] == {"eligible": True, "reasons": []}
+
+    @pytest.mark.parametrize(
+        ("overrides", "reason"),
+        [
+            ({"ai_enabled": False}, "AI assistance is not enabled"),
+            ({"ai_human_lock": True}, "human lock is set"),
+            ({"ai_human_lock": None}, "human lock is unknown"),
+            ({"state": "3"}, "on hold"),
+            ({"state": "6"}, "not active"),
+            ({"active": False}, "not active"),
+            ({"category": "database"}, "not in the supported set"),
+            ({"ai_processing_state": "complete"}, "already processed"),
+        ],
+    )
+    def test_each_eligibility_check_fails_closed(
+        self, overrides: dict[str, Any], reason: str
+    ) -> None:
+        state = base_state(incident=snapshot(VPN, **overrides))
+        eligibility = validate(state, make_deps())["eligibility"]
+        assert eligibility["eligible"] is False
+        assert any(reason in r for r in eligibility["reasons"])
+
+    def test_event_and_incident_numbers_must_agree(self) -> None:
+        state = base_state(incident=snapshot(VPN))
+        state["event"] = {**state["event"], "number": "INC0099999"}
+        eligibility = validate(state, make_deps())["eligibility"]
+        assert eligibility["eligible"] is False
+
+
+# -- classify -----------------------------------------------------------------------------
+
+
+class TestClassify:
+    def test_records_label_and_redacts_the_prompt(self) -> None:
+        llm = FakeLLM(vpn_answers())
+        update = classify(base_state(incident=snapshot(VPN)), make_deps(llm=llm))
+        assert update["classification"]["label"] == "network"
+        prompt = llm.calls[0]["prompt"]
+        assert "+971 50 123 4567" not in prompt
+        assert "***PHONE***" in prompt
+        assert "<incident>" in prompt and "INC0010023" in prompt
+
+    def test_confidence_is_clamped(self) -> None:
+        llm = FakeLLM({"classify": ClassifyOutput(label="other", rationale="x", confidence=7)})
+        update = classify(base_state(incident=snapshot(LEAVE)), make_deps(llm=llm))
+        assert update["classification"]["model_confidence"] == 1.0
+
+    def test_length_bound_applies(self) -> None:
+        llm = FakeLLM(vpn_answers())
+        long_text = snapshot(VPN, description="x" * 20_000)
+        classify(base_state(incident=long_text), make_deps(llm=llm, agent_max_incident_chars=500))
+        assert len(llm.calls[0]["prompt"]) < 1500
+
+
+# -- determine_risk -----------------------------------------------------------------------
+
+
+class TestDetermineRisk:
+    def test_p1_on_tier1_is_high(self) -> None:
+        state = base_state(incident=snapshot(ORDER_P1), classification=classification("software"))
+        risk = determine_risk(state, make_deps())["risk"]
+        assert risk["level"] == "high"
+        assert risk["service_tier"] == 1
+        assert any("Priority 1" in r for r in risk["reasons"])
+
+    def test_p3_on_tier2_is_low(self) -> None:
+        state = base_state(incident=snapshot(VPN), classification=classification())
+        risk = determine_risk(state, make_deps())["risk"]
+        assert risk == {
+            "level": "low",
+            "reasons": ["Priority 3, service tier 2"],
+            "approval_required": False,
+            "service_tier": 2,
+        }
+
+    def test_unresolved_service_reference_fails_closed(self) -> None:
+        """A bare reference means the tier is unknowable, so it must not read as LOW.
+
+        ``get_incident`` does not request display values, so a populated
+        ``business_service`` arrives as ``{"value": sys_id, "link": …}``. Defaulting
+        that to "no service" would skip the §11.1 Tier 1 approval rule for a
+        non-P1 incident on order-processing, identity or sap-erp.
+        """
+        bare_reference = {
+            "value": "0c5f3cec1449",
+            "link": "https://example.service-now.com/api/now/table/cmdb_ci_service/0c5f3cec1449",
+        }
+        snap = snapshot(VPN, business_service=bare_reference)
+        assert snap["service"] is None
+        assert snap["service_unresolved"] is True
+
+        state = base_state(incident=snap, classification=classification())
+        risk = determine_risk(state, make_deps())["risk"]
+        assert risk["level"] == "elevated"
+        assert risk["approval_required"] is True
+        assert any("could not be resolved" in r for r in risk["reasons"])
+
+    def test_absent_service_still_allows_low(self) -> None:
+        """No service set at all is not the same as an unresolved one."""
+        snap = snapshot(VPN, business_service=None)
+        assert snap["service"] is None
+        assert snap["service_unresolved"] is False
+        state = base_state(incident=snap, classification=classification())
+        risk = determine_risk(state, make_deps())["risk"]
+        assert risk["level"] == "low"
+        assert risk["approval_required"] is False
+
+    def test_mfa_reset_on_identity_is_elevated_and_needs_approval(self) -> None:
+        state = base_state(incident=snapshot(MFA), classification=classification("access"))
+        risk = determine_risk(state, make_deps())["risk"]
+        assert risk["level"] == "elevated"
+        assert risk["approval_required"] is True
+        assert len(risk["reasons"]) == 2
+
+    def test_security_classification_is_high(self) -> None:
+        state = base_state(incident=snapshot(VPN), classification=classification("security"))
+        assert determine_risk(state, make_deps())["risk"]["level"] == "high"
+
+    def test_derived_priority_overrides_a_lowered_one(self) -> None:
+        # Impact 1 / urgency 1 derives P1 even if someone typed P3 (§3.3).
+        state = base_state(
+            incident=snapshot(VPN, priority=3, impact=1, urgency=1),
+            classification=classification(),
+        )
+        assert determine_risk(state, make_deps())["risk"]["level"] == "high"
+
+    def test_unknown_priority_fails_closed(self) -> None:
+        state = base_state(
+            incident=snapshot(VPN, priority=None, impact=None, urgency=None),
+            classification=classification(),
+        )
+        assert determine_risk(state, make_deps())["risk"]["level"] == "high"
+
+    def test_configured_risk_priorities_are_honoured(self) -> None:
+        state = base_state(incident=snapshot(VPN), classification=classification())
+        risk = determine_risk(state, make_deps(agent_risk_priorities=[1, 2, 3]))["risk"]
+        assert risk["level"] == "high"
+
+    def test_reads_no_evidence(self) -> None:
+        # The node must decide from the record alone; evidence in state is ignored.
+        state = base_state(incident=snapshot(ORDER_P1), classification=classification("software"))
+        state["retrieval"] = {"hits": "must not be read"}
+        assert determine_risk(state, make_deps())["risk"]["level"] == "high"
+
+
+# -- retrieve -----------------------------------------------------------------------------
+
+
+class TestRetrieve:
+    def test_passes_classification_top_k_and_threshold(self) -> None:
+        retriever = FakeRetriever()
+        state = base_state(incident=snapshot(VPN), classification=classification())
+        result = retrieve(state, make_deps(retriever=retriever))["retrieval"]
+        assert result["sufficient"] is True
+        assert result["threshold"] == 0.55
+        call = retriever.calls[0]
+        assert call["classification"] is Classification.NETWORK
+        assert call["top_k"] == 5
+        assert call["incident_category"] == "network"
+        assert "***PHONE***" in call["query"]
+
+    def test_below_threshold_is_insufficient(self) -> None:
+        retriever = FakeRetriever(hits=[evidence("KB0004", relevance=0.31)])
+        state = base_state(incident=snapshot(PRINTER), classification=classification("hardware"))
+        result = retrieve(state, make_deps(retriever=retriever))["retrieval"]
+        assert result["sufficient"] is False
+        assert result["best_relevance"] == 0.31
+
+    def test_no_hits_is_insufficient(self) -> None:
+        state = base_state(incident=snapshot(LEAVE), classification=classification("other"))
+        result = retrieve(state, make_deps(retriever=FakeRetriever(hits=[])))["retrieval"]
+        assert result["sufficient"] is False
+
+    def test_store_outage_is_retryable(self) -> None:
+        retriever = FakeRetriever(error=RetryableError("qdrant down"))
+        state = base_state(incident=snapshot(VPN), classification=classification())
+        with pytest.raises(RetryableError):
+            retrieve(state, make_deps(retriever=retriever))
+
+
+# -- diagnose -----------------------------------------------------------------------------
+
+
+class TestDiagnose:
+    def _state(self) -> dict[str, Any]:
+        state = base_state(incident=snapshot(VPN), classification=classification())
+        return state | retrieve(state, make_deps())
+
+    def test_grounded_diagnosis(self) -> None:
+        llm = FakeLLM(vpn_answers())
+        diagnosis = diagnose(self._state(), make_deps(llm=llm))["diagnosis"]
+        assert diagnosis["matched_article_ids"] == ["KB0001-v2"]
+        assert diagnosis["symptom_match"] is True
+        assert '<evidence article_id="KB0001-v2"' in llm.calls[0]["prompt"]
+
+    def test_citations_outside_the_retrieved_set_are_discarded(self) -> None:
+        answer = DiagnoseOutput(
+            probable_cause="c",
+            matched_article_ids=["KB0099-v1", "KB0001-v2", "KB0001-v2"],
+            symptom_match=True,
+            confidence=0.8,
+            rationale="r",
+        )
+        diagnosis = diagnose(self._state(), make_deps(llm=FakeLLM({"diagnose": answer})))[
+            "diagnosis"
+        ]
+        assert diagnosis["matched_article_ids"] == ["KB0001-v2"]
+
+    def test_symptom_match_requires_a_real_match(self) -> None:
+        answer = DiagnoseOutput(
+            probable_cause="c",
+            matched_article_ids=["KB0099-v1"],
+            symptom_match=True,
+            confidence=0.8,
+            rationale="r",
+        )
+        diagnosis = diagnose(self._state(), make_deps(llm=FakeLLM({"diagnose": answer})))[
+            "diagnosis"
+        ]
+        assert diagnosis["matched_article_ids"] == []
+        assert diagnosis["symptom_match"] is False
+
+    def test_diagnostic_isolation_prompt_excludes_draft_and_critic_content(self) -> None:
+        """Asserts that no draft or critic feedback leaks into the Diagnostic prompt."""
+        llm = FakeLLM(vpn_answers())
+        state = self._state()
+        state["draft"] = {
+            "steps": [
+                {
+                    "text": "Secret resolution step that must not leak",
+                    "article_id": "KB0001-v2",
+                    "section": "Resolution",
+                }
+            ],
+            "rendered": "1. Secret resolution step that must not leak",
+            "dropped_steps": 0,
+            "sources": ["KB0001 v2"],
+            "revision_count": 2,
+        }
+        state["critic_feedback"] = {
+            "passed": False,
+            "attempt": 1,
+            "invalid_citations": [
+                {"step_index": 1, "citation": "KB9999", "reason": "Hallucinated"}
+            ],
+            "unsupported_claims": [
+                {"step_index": 1, "claim": "Secret claim", "reason": "Not in KB"}
+            ],
+            "safety_issues": ["Critical safety defect"],
+            "feedback_instructions": "DO NOT USE THIS RESOLUTION STEP",
+        }
+        state["revision_count"] = 2
+
+        diagnose(state, make_deps(llm=llm))
+
+        diagnostic_prompt = llm.calls[0]["prompt"]
+        diagnostic_system = llm.calls[0]["system"]
+
+        # Ensure no draft or critic terms leaked into prompt or system
+        assert "Secret resolution step" not in diagnostic_prompt
+        assert "KB9999" not in diagnostic_prompt
+        assert "Hallucinated" not in diagnostic_prompt
+        assert "Critical safety defect" not in diagnostic_prompt
+        assert "DO NOT USE THIS RESOLUTION STEP" not in diagnostic_prompt
+        assert "revision_count" not in diagnostic_prompt
+
+        assert "Secret resolution step" not in diagnostic_system
+        assert "DO NOT USE THIS RESOLUTION STEP" not in diagnostic_system
+
+        # Ensure prompt contains expected diagnostic inputs
+        assert '<evidence article_id="KB0001-v2"' in diagnostic_prompt
+        assert "Classification: network" in diagnostic_prompt
+
+
+# -- generate -----------------------------------------------------------------------------
+
+
+class TestGenerate:
+    def _state(self, answers: dict[str, Any] | None = None) -> dict[str, Any]:
+        deps = make_deps(llm=FakeLLM(answers or vpn_answers()))
+        state = base_state(incident=snapshot(VPN), classification=classification())
+        state |= retrieve(state, deps)
+        return state | diagnose(state, deps)
+
+    def test_numbered_cited_procedure(self) -> None:
+        draft = generate(self._state(), make_deps())["draft"]
+        assert draft["rendered"].splitlines()[0] == (
+            "1. Confirm the password was changed in the last 24 hours. [KB0001 v2 §Resolution]"
+        )
+        assert draft["rendered"].splitlines()[2].startswith("3. ")
+        assert draft["rendered"].endswith(
+            "Sources: KB0001 v2 — VPN authentication fails after a password change"
+        )
+        assert draft["dropped_steps"] == 0
+
+    def test_steps_citing_unretrieved_articles_are_dropped(self) -> None:
+        answers = vpn_answers()
+        answers["generate"] = GenerateOutput(
+            steps=[
+                StepOutput(
+                    text="Restart the server.", article_id="KB0010-v2", section="Resolution"
+                ),
+                StepOutput(text="Clear the cache.", article_id="KB0001-v2", section="Resolution"),
+                StepOutput(text="   ", article_id="KB0001-v2", section="Resolution"),
+            ]
+        )
+        draft = generate(self._state(), make_deps(llm=FakeLLM(answers)))["draft"]
+        assert [s["text"] for s in draft["steps"]] == ["Clear the cache."]
+        assert draft["dropped_steps"] == 2
+        assert draft["rendered"].startswith("1. Clear the cache.")
+
+    def test_draft_fits_the_4000_char_field(self) -> None:
+        answers = vpn_answers()
+        answers["generate"] = GenerateOutput(
+            steps=[
+                StepOutput(text="x" * 900, article_id="KB0001-v2", section="Resolution")
+                for _ in range(8)
+            ]
+        )
+        draft = generate(self._state(), make_deps(llm=FakeLLM(answers)))["draft"]
+        assert len(draft["rendered"]) <= 4000
+        assert 0 < len(draft["steps"]) < 8
+
+    def test_generate_handles_structured_critiques_and_increments_revision_count(self) -> None:
+        """Asserts that generate consumes critic feedback and increments revision_count."""
+        llm = FakeLLM(vpn_answers())
+        state = self._state()
+        state["draft"] = {
+            "steps": [
+                {
+                    "text": "Restart the core authentication server.",
+                    "article_id": "KB0001-v2",
+                    "section": "Resolution",
+                }
+            ],
+            "rendered": "1. Restart the core authentication server. [KB0001 v2 §Resolution]",
+            "dropped_steps": 0,
+            "sources": ["KB0001 v2 — VPN authentication fails after a password change"],
+            "revision_count": 0,
+        }
+        state["critic_feedback"] = {
+            "passed": False,
+            "attempt": 0,
+            "invalid_citations": [
+                {
+                    "step_index": 1,
+                    "citation": "KB9999-v1 §Troubleshooting",
+                    "reason": "Article ID 'KB9999-v1' was not found in retrieved evidence.",
+                }
+            ],
+            "unsupported_claims": [
+                {
+                    "step_index": 1,
+                    "claim": "Restart the core authentication server.",
+                    "reason": "Article does not authorize server restart.",
+                    "citation": "KB0001-v2 §Resolution",
+                }
+            ],
+            "safety_issues": ["Destructive restart operation without approval."],
+            "feedback_instructions": (
+                "Remove the restart instruction; guide the user through credential clearing."
+            ),
+        }
+        state["revision_count"] = 0
+
+        update = generate(state, make_deps(llm=llm))
+
+        assert update["revision_count"] == 1
+        assert update["draft"]["revision_count"] == 1
+
+        prompt = llm.calls[0]["prompt"]
+        assert "<previous_draft>" in prompt
+        assert "Restart the core authentication server." in prompt
+        assert "<critic_feedback>" in prompt
+        assert "Invalid Citations:" in prompt
+        assert "KB9999-v1 §Troubleshooting" in prompt
+        assert "Unsupported Claims:" in prompt
+        assert "Article does not authorize server restart." in prompt
+        assert "Safety Issues:" in prompt
+        assert "Destructive restart operation without approval." in prompt
+        assert "Actionable Instructions: Remove the restart instruction" in prompt
+
+    def test_generate_initial_attempt_uses_standard_prompt(self) -> None:
+        """When no critic feedback is present, standard prompt is used and revision_count is 0."""
+        llm = FakeLLM(vpn_answers())
+        state = self._state()
+        assert "critic_feedback" not in state
+
+        update = generate(state, make_deps(llm=llm))
+
+        assert update["revision_count"] == 0
+        assert update["draft"]["revision_count"] == 0
+        prompt = llm.calls[0]["prompt"]
+        assert "<previous_resolution_steps>" not in prompt
+        assert "<critic_feedback>" not in prompt
+
+
+# -- the Sprint 4 gates ---------------------------------------------------------------------
+
+
+def test_safety_check_is_explicit_pass_through() -> None:
+    update = safety_check(reasoned_state(), make_deps())
+    assert update == {
+        "safety": {
+            "gate": "safety_check",
+            "passed": True,
+            "implemented": False,
+            "checks": [],
+            "reason": None,
+        }
+    }
+
+
+class TestVerifyEvidence:
+    def test_passes_grounded_draft(self) -> None:
+        state = reasoned_state()
+        update = verify_evidence(state, make_deps())
+        assert "verification" in update
+        assert "critic_feedback" in update
+        verification = update["verification"]
+        assert verification["gate"] == "verify_evidence"
+        assert verification["implemented"] is True
+        assert verification["passed"] is True
+        assert update["critic_feedback"]["passed"] is True
+
+    def test_catches_nonexistent_article_id(self) -> None:
+        """Deterministic pre-check detects hallucinated article IDs not in retrieved hits."""
+        state = reasoned_state()
+        state["draft"] = {
+            "steps": [
+                {
+                    "text": "Execute command from phantom article.",
+                    "article_id": "KB9999-v1",
+                    "section": "Resolution",
+                }
+            ],
+            "rendered": "1. Execute command from phantom article. [KB9999 v1 §Resolution]",
+            "dropped_steps": 0,
+            "sources": [],
+            "revision_count": 0,
+        }
+        update = verify_evidence(state, make_deps())
+        verification = update["verification"]
+        feedback = update["critic_feedback"]
+
+        assert verification["passed"] is False
+        assert feedback["passed"] is False
+        assert len(feedback["invalid_citations"]) == 1
+        inv = feedback["invalid_citations"][0]
+        assert inv["step_index"] == 1
+        assert "KB9999-v1" in inv["citation"]
+        assert "was not found in retrieved evidence" in inv["reason"]
+        assert "Fix 1 invalid citations" in feedback["feedback_instructions"]
+        assert verification["reason"] == feedback["feedback_instructions"]
+
+    def test_catches_nonexistent_section(self) -> None:
+        """Deterministic pre-check detects cited section missing from valid retrieved article."""
+        state = reasoned_state()
+        state["draft"] = {
+            "steps": [
+                {
+                    "text": "Execute command from non-existent section.",
+                    "article_id": "KB0001-v2",
+                    "section": "NonExistentSection",
+                }
+            ],
+            "rendered": "1. Execute command [KB0001 v2 §NonExistentSection]",
+            "dropped_steps": 0,
+            "sources": ["KB0001 v2"],
+            "revision_count": 0,
+        }
+        update = verify_evidence(state, make_deps())
+        verification = update["verification"]
+        feedback = update["critic_feedback"]
+
+        assert verification["passed"] is False
+        assert feedback["passed"] is False
+        assert len(feedback["invalid_citations"]) == 1
+        inv = feedback["invalid_citations"][0]
+        assert inv["step_index"] == 1
+        assert "NonExistentSection" in inv["citation"]
+        assert "was not found in article 'KB0001-v2'" in inv["reason"]
+
+    def test_catches_semantic_unsupported_claim(self) -> None:
+        """Semantic verification catches unsupported claims despite valid citations."""
+        from agent.prompts import CriticOutput
+        from agent.state import UnsupportedClaim
+
+        state = reasoned_state()
+        critic_out = CriticOutput(
+            passed=False,
+            invalid_citations=[],
+            unsupported_claims=[
+                UnsupportedClaim(
+                    step_index=1,
+                    claim="Format the hard drive.",
+                    reason="KB0001 does not instruct to format disk.",
+                    citation="KB0001-v2 §Resolution",
+                )
+            ],
+            safety_issues=["Destructive disk formatting."],
+            feedback_instructions="Remove formatting instruction.",
+        )
+        llm = FakeLLM(vpn_answers() | {"verify_evidence": critic_out})
+        update = verify_evidence(state, make_deps(llm=llm))
+
+        verification = update["verification"]
+        feedback = update["critic_feedback"]
+        assert verification["passed"] is False
+        assert feedback["passed"] is False
+        assert len(feedback["unsupported_claims"]) == 1
+        claim = feedback["unsupported_claims"][0]
+        assert claim["claim"] == "Format the hard drive."
+        assert "Remove formatting instruction." in feedback["feedback_instructions"]
+        assert "Remove formatting instruction." in verification["reason"]
+
+    def test_context_isolation_filters_uncited_articles_and_incident_pii(self) -> None:
+        """Critic prompt must contain only candidate steps and their cited evidence chunks."""
+        llm = FakeLLM(vpn_answers())
+        state = reasoned_state()
+        # Add an uncited evidence hit
+        uncited_hit = evidence(
+            article="KB0099",
+            version="1",
+            section="Troubleshooting",
+            title="Unrelated Oracle DB Failure",
+            text="Oracle connection timeout error details.",
+        )
+        state["retrieval"]["hits"].append(uncited_hit.model_dump(mode="json"))
+
+        # Draft only cites KB0001-v2
+        state["draft"] = {
+            "steps": [
+                {
+                    "text": "Clear the cached VPN credential.",
+                    "article_id": "KB0001-v2",
+                    "section": "Resolution",
+                }
+            ],
+            "rendered": "1. Clear the cached VPN credential. [KB0001 v2 §Resolution]",
+            "dropped_steps": 0,
+            "sources": ["KB0001 v2"],
+            "revision_count": 0,
+        }
+
+        # Inject customer PII into diagnostic probable cause to verify it does not leak
+        state["diagnosis"]["probable_cause"] = (
+            "User John Doe (john.doe@barq.internal, +971 50 999 8888) has a cached VPN fault."
+        )
+
+        verify_evidence(state, make_deps(llm=llm))
+
+        critic_call = [c for c in llm.calls if c["purpose"] == "verify_evidence"][0]
+        prompt = critic_call["prompt"]
+
+        # Cited article is present
+        assert '<evidence article_id="KB0001-v2"' in prompt
+        # Uncited article is strictly excluded
+        assert "KB0099" not in prompt
+        assert "Oracle DB" not in prompt
+
+        # Incident PII/phone number from raw incident is not present in Critic prompt
+        assert "+971 50 123 4567" not in prompt
+        assert "***PHONE***" not in prompt
+        assert "Call me on" not in prompt
+
+        # Diagnostic PII is strictly excluded (cause is omitted from Critic context)
+        assert "John Doe" not in prompt
+        assert "john.doe@barq.internal" not in prompt
+        assert "+971 50 999 8888" not in prompt
+        assert "Diagnosed cause" not in prompt
+
+    def test_context_isolation_filters_uncited_sections_of_same_article(self) -> None:
+        """Critic prompt must exclude uncited sections even from an article that IS cited."""
+        llm = FakeLLM(vpn_answers())
+        state = reasoned_state()
+
+        # Add an uncited section for the SAME article (KB0001-v2)
+        uncited_section_hit = evidence(
+            article="KB0001",
+            version="2",
+            section="Troubleshooting",
+            title="GlobalProtect VPN Authentication Failure",
+            text="Run Wireshark packet capture to trace gateway drop on port 443.",
+        )
+        state["retrieval"]["hits"].append(uncited_section_hit.model_dump(mode="json"))
+
+        # Draft only cites KB0001-v2 §Resolution
+        state["draft"] = {
+            "steps": [
+                {
+                    "text": "Clear the cached VPN credential.",
+                    "article_id": "KB0001-v2",
+                    "section": "Resolution",
+                }
+            ],
+            "rendered": "1. Clear the cached VPN credential. [KB0001 v2 §Resolution]",
+            "dropped_steps": 0,
+            "sources": ["KB0001 v2"],
+            "revision_count": 0,
+        }
+
+        verify_evidence(state, make_deps(llm=llm))
+
+        critic_call = [c for c in llm.calls if c["purpose"] == "verify_evidence"][0]
+        prompt = critic_call["prompt"]
+
+        # Cited section is present
+        assert 'section="Resolution"' in prompt
+        assert "Clear the cached VPN credential" in prompt
+
+        # Uncited section of the SAME article is strictly excluded
+        assert 'section="Troubleshooting"' not in prompt
+        assert "Wireshark packet capture" not in prompt
+
+
+# -- confidence_check ---------------------------------------------------------------------
+
+
+class TestConfidenceCheck:
+    def test_above_floor_passes(self) -> None:
+        result = confidence_check(reasoned_state(), make_deps())["confidence"]
+        assert result == {"score": 0.82, "floor": 0.45, "passed": True}
+
+    def test_below_floor_fails(self) -> None:
+        state = reasoned_state()
+        state["diagnosis"] = {**state["diagnosis"], "model_confidence": 0.44}
+        assert confidence_check(state, make_deps())["confidence"]["passed"] is False
+
+    def test_floor_is_configurable(self) -> None:
+        result = confidence_check(reasoned_state(), make_deps(agent_confidence_floor=0.9))
+        assert result["confidence"]["passed"] is False
+
+    @pytest.mark.parametrize(
+        ("match", "kept", "dropped", "expected"),
+        [(True, 3, 0, 0.8), (False, 3, 0, 0.4), (True, 1, 1, 0.4), (True, 0, 2, 0.0)],
+    )
+    def test_score_formula(self, match: bool, kept: int, dropped: int, expected: float) -> None:
+        diagnosis = Diagnosis(
+            probable_cause="c",
+            matched_article_ids=["KB0001-v2"],
+            symptom_match=match,
+            model_confidence=0.8,
+            rationale="r",
+        )
+        step = DraftStep(text="t", article_id="KB0001-v2", section="Resolution")
+        draft = Draft(steps=[step] * kept, rendered="", dropped_steps=dropped, sources=[])
+        assert score(diagnosis, draft) == expected
+
+
+# -- act ----------------------------------------------------------------------------------
+
+
+class TestAct:
+    def test_suggestion_is_written_with_review_flag(self) -> None:
+        backend = FakeServiceNow()
+        deps = make_deps(servicenow=backend)
+        output = act(reasoned_state(incident=snapshot(VPN)), deps)["output"]
+        assert output["outcome"] == "suggested"
+        assert output["write_back"] == "written"
+        sys_id, payload = backend.updates[0]
+        body = payload.to_table_api_body()
+        assert sys_id == VPN["sys_id"]
+        assert body["x_2215032_ai_inc_0_ai_suggestion"].startswith("1. Confirm")
+        assert body["x_2215032_ai_inc_0_ai_human_review_required"] == "true"
+        assert body["x_2215032_ai_inc_0_ai_processing_state"] == "awaiting_approval"
+        assert "x_2215032_ai_inc_0_ai_processing_end" not in body
+        assert body["x_2215032_ai_inc_0_ai_processing_start"].startswith("2026-09-08")
+        assert output["approval_required"] is False
+        assert body["x_2215032_ai_inc_0_ai_confidence"] == "0.82"
+        assert body["x_2215032_ai_inc_0_ai_model_name"] == "gemini/gemini-3.5-flash"
+        assert body["x_2215032_ai_inc_0_ai_classification"] == "network"
+        assert body["work_notes"].startswith("AI Suggested Response drafted. Confidence 0.82.")
+        log = backend.execution_logs[0]
+        assert log.execution_id == EXECUTION_ID
+        assert log.action.value == "propose"
+        assert log.status.value == "awaiting_approval"
+        # Nothing outside §11.6 is ever called.
+        assert set(deps.servicenow.calls) <= set(PERMITTED_ACTIONS)
+        assert "comments" not in body
+
+    def test_act_records_resolution_model_override_in_servicenow_payload(self) -> None:
+        backend = FakeServiceNow()
+        llm = FakeLLM(vpn_answers(), model_name="gemini/gemini-custom-resolution")
+        deps = make_deps(servicenow=backend, llm=llm)
+        act(reasoned_state(incident=snapshot(VPN)), deps)
+        body = backend.updates[0][1].to_table_api_body()
+        assert body["x_2215032_ai_inc_0_ai_model_name"] == "gemini/gemini-custom-resolution"
+
+    def test_high_risk_escalation_note(self) -> None:
+        backend = FakeServiceNow()
+        state = base_state(incident=snapshot(ORDER_P1), classification=classification("software"))
+        state |= determine_risk(state, make_deps())
+        state["eligibility"] = {"eligible": True, "reasons": []}
+        output = act(state, make_deps(servicenow=backend))["output"]
+        assert output["outcome"] == "escalated_high_risk"
+        body = backend.updates[0][1].to_table_api_body()
+        assert body["work_notes"].startswith(
+            "AI Suggested Response: risk assessed as high before retrieval — Priority 1"
+        )
+        assert "x_2215032_ai_inc_0_ai_suggestion" not in body
+        assert backend.execution_logs[0].action.value == "escalate"
+
+    def test_no_evidence_note_names_the_best_match(self) -> None:
+        backend = FakeServiceNow()
+        retriever = FakeRetriever(hits=[evidence("KB0004", relevance=0.31, title="Print queue")])
+        deps = make_deps(servicenow=backend, retriever=retriever)
+        state = base_state(incident=snapshot(PRINTER), classification=classification("hardware"))
+        state["eligibility"] = {"eligible": True, "reasons": []}
+        state |= determine_risk(state, deps)
+        state |= retrieve(state, deps)
+        output = act(state, deps)["output"]
+        assert output["outcome"] == "escalated_no_evidence"
+        assert (
+            "Best match KB0004 v2 (Print queue) scored 0.31 against a threshold of 0.55."
+            in output["work_note"]
+        )
+
+    @pytest.mark.parametrize(
+        ("retrieval", "expected"),
+        [
+            (
+                {"category_filter": None, "hits": []},
+                "The classification 'other' has no knowledge-base category, so no search was run.",
+            ),
+            (
+                {"category_filter": "hardware", "hits": []},
+                "Searched published hardware articles: nothing matched.",
+            ),
+            (
+                {"category_filter": "inquiry,network", "hits": [], "sufficient": False},
+                "Searched published inquiry, network articles: nothing matched.",
+            ),
+        ],
+    )
+    def test_no_evidence_note_wording(self, retrieval: dict[str, Any], expected: str) -> None:
+        state = base_state(incident=snapshot(LEAVE), classification=classification("other"))
+        state["eligibility"] = {"eligible": True, "reasons": []}
+        state |= determine_risk(state, make_deps())
+        state["retrieval"] = {
+            "query": "q",
+            "best_relevance": 0.0,
+            "threshold": 0.55,
+            "sufficient": False,
+            "latency_ms": 0.0,
+            **retrieval,
+        }
+        output = act(state, make_deps())["output"]
+        assert expected in output["work_note"]
+
+    def test_elevated_risk_suggestion_awaits_approval(self) -> None:
+        state = reasoned_state(incident=snapshot(MFA), classification=classification("access"))
+        state |= determine_risk(state, make_deps())
+        output = act(state, make_deps())["output"]
+        assert output["outcome"] == "suggested"
+        assert output["processing_state"] == "awaiting_approval"
+        assert output["approval_required"] is True
+        assert "Approval required before any action" in output["work_note"]
+
+    def test_ineligible_writes_nothing(self) -> None:
+        backend = FakeServiceNow()
+        state = base_state(incident=snapshot(VPN, ai_enabled=False))
+        state |= validate(state, make_deps())
+        output = act(state, make_deps(servicenow=backend))["output"]
+        assert output["outcome"] == "skipped_ineligible"
+        assert backend.updates == [] and backend.notes == []
+        assert backend.execution_logs[0].status.value == "blocked"
+
+    def test_lock_taken_between_read_and_write_is_respected(self) -> None:
+        backend = FakeServiceNow()
+        backend.write_error = ServiceNowHumanLockError("locked")
+        output = act(reasoned_state(incident=snapshot(VPN)), make_deps(servicenow=backend))[
+            "output"
+        ]
+        assert output["outcome"] == "skipped_human_lock"
+        assert output["write_back"] == "skipped"
+        assert backend.execution_logs[0].status.value == "blocked"
+
+    def test_missing_start_time_is_omitted_not_sent_as_null(self) -> None:
+        backend = FakeServiceNow()
+        state = reasoned_state(incident=snapshot(VPN))
+        state.pop("started_at")
+        act(state, make_deps(servicenow=backend))
+        body = backend.updates[0][1].to_table_api_body()
+        assert "x_2215032_ai_inc_0_ai_processing_start" not in body
+
+    def test_dry_run_records_but_does_not_write(self) -> None:
+        backend = FakeServiceNow()
+        deps = make_deps(servicenow=backend, agent_write_back_enabled=False)
+        output = act(reasoned_state(incident=snapshot(VPN)), deps)["output"]
+        assert output["write_back"] == "dry_run"
+        assert backend.updates == []
+
+    def test_gate_failure_blocks(self) -> None:
+        state = reasoned_state(incident=snapshot(VPN))
+        state["safety"] = {**state["safety"], "passed": False, "reason": "secret in draft"}
+        output = act(state, make_deps())["output"]
+        assert output["outcome"] == "escalated_blocked"
+        assert "safety_check check: secret in draft" in output["work_note"]
+
+    def test_forbidden_action_does_not_exist(self) -> None:
+        deps = make_deps()
+        with pytest.raises(ActionNotPermittedError):
+            deps.servicenow._call("resolve_incident", VPN["sys_id"], lambda b: b.get_incident(""))
+        assert "resolve_incident" not in deps.servicenow.calls
+
+
+@pytest.mark.parametrize(
+    ("changes", "expected"),
+    [
+        ({}, Outcome.SUGGESTED),
+        ({"eligibility": {"eligible": False, "reasons": ["x"]}}, Outcome.SKIPPED_INELIGIBLE),
+        ({"risk": None}, Outcome.ESCALATED_HIGH_RISK),
+        ({"retrieval": None}, Outcome.ESCALATED_NO_EVIDENCE),
+        ({"diagnosis": None}, Outcome.ESCALATED_NO_EVIDENCE),
+        ({"verification": None}, Outcome.ESCALATED_BLOCKED),
+        ({"confidence": None}, Outcome.ESCALATED_LOW_CONFIDENCE),
+        ({"draft": None}, Outcome.ESCALATED_NO_EVIDENCE),
+    ],
+)
+def test_decide_outcome_fails_closed_on_missing_sections(
+    changes: dict[str, Any], expected: Outcome
+) -> None:
+    state = reasoned_state(incident=snapshot(VPN))
+    for key, value in changes.items():
+        if value is None:
+            state.pop(key)
+        else:
+            state[key] = value
+    assert decide_outcome(state) is expected
+
+
+@pytest.mark.parametrize(
+    "missing",
+    ["eligibility", "risk", "retrieval", "diagnosis", "verification", "confidence", "draft"],
+)
+def test_compose_survives_the_state_that_selected_the_outcome(missing: str) -> None:
+    """The fail-closed decision has to be composable, not just decidable.
+
+    ``decide_outcome`` handles each section being absent, so ``compose`` must
+    build the escalation note from the same state. Indexing a section that is
+    missing turned the escalation into a KeyError and the incident was left with
+    no work note at all.
+    """
+    state = reasoned_state(incident=snapshot(VPN))
+    state.pop(missing)
+
+    outcome = decide_outcome(state)
+    output = compose(state, outcome)
+
+    assert output.outcome is outcome
+    if outcome is not Outcome.SKIPPED_INELIGIBLE:
+        assert output.work_note, "an escalation must still leave a work note"
+        assert output.human_review_required is True
+
+
+# -- policy helpers -------------------------------------------------------------------------
+
+
+class TestPolicy:
+    def test_service_name_ignores_bare_references(self) -> None:
+        assert service_name({"business_service": {"value": "abc", "link": "x"}}) is None
+        assert service_name({"business_service": {"display_value": "Identity"}}) == "identity"
+        assert service_name({"service": " corporate-VPN "}) == "corporate-vpn"
+
+    @pytest.mark.parametrize(
+        ("impact", "urgency", "recorded", "expected"),
+        [(1, 1, 5, 1), (2, 2, 2, 2), (3, 3, 2, 2), (None, None, 4, 4), (3, 1, None, 2)],
+    )
+    def test_effective_priority(
+        self, impact: int | None, urgency: int | None, recorded: int | None, expected: int
+    ) -> None:
+        incident = IncidentSnapshot(
+            sys_id="s", number="INC1", priority=recorded, impact=impact, urgency=urgency
+        )
+        assert effective_priority(incident) == expected
+
+    def test_mfa_pattern_does_not_flag_plain_vpn(self) -> None:
+        incident = IncidentSnapshot.model_validate(snapshot(VPN))
+        label = ClassificationResult(label=Classification.NETWORK, rationale="", model_confidence=1)
+        assert assess_risk(incident, label, risk_priorities=[1]).level is RiskLevel.LOW
+
+    def test_eligibility_accepts_the_supported_categories_case_insensitively(self) -> None:
+        incident = IncidentSnapshot.model_validate(snapshot(VPN))
+        result = check_eligibility(
+            incident, event_number="INC0010023", supported_categories=["NETWORK"]
+        )
+        assert result.eligible
+
+
+class TestCriticFeedbackSerialization:
+    def test_critic_feedback_model_dump_and_round_trip(self) -> None:
+        from agent.state import CriticFeedback, InvalidCitation, UnsupportedClaim
+
+        feedback = CriticFeedback(
+            passed=False,
+            attempt=1,
+            invalid_citations=[
+                InvalidCitation(step_index=1, citation="KB9999", reason="Not retrieved")
+            ],
+            unsupported_claims=[
+                UnsupportedClaim(
+                    step_index=2,
+                    claim="Restart core server",
+                    reason="Article explicitly forbids restart",
+                    citation="KB0012 §3",
+                )
+            ],
+            safety_issues=["Destructive action without approval"],
+            feedback_instructions="Remove restart step and cite existing KB0012 section.",
+        )
+
+        dumped = feedback.model_dump(mode="json")
+        assert isinstance(dumped, dict)
+        assert dumped["passed"] is False
+        assert dumped["attempt"] == 1
+        assert dumped["invalid_citations"][0]["step_index"] == 1
+        assert dumped["invalid_citations"][0]["citation"] == "KB9999"
+        assert dumped["unsupported_claims"][0]["claim"] == "Restart core server"
+
+        # Validate round-trip from dumped dict
+        reloaded = CriticFeedback.model_validate(dumped)
+        assert reloaded == feedback
+
+    def test_draft_revision_count_serialization(self) -> None:
+        from agent.state import Draft, DraftStep
+
+        draft = Draft(
+            steps=[DraftStep(text="Verify route table", article_id="KB001", section="Diagnosis")],
+            rendered="1. Verify route table [KB001 v1 §Diagnosis]",
+            dropped_steps=0,
+            sources=["KB001 v1 — Routing"],
+            revision_count=2,
+        )
+
+        dumped = draft.model_dump(mode="json")
+        assert dumped["revision_count"] == 2
+        reloaded = Draft.model_validate(dumped)
+        assert reloaded.revision_count == 2

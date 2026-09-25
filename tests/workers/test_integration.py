@@ -218,6 +218,9 @@ def worker(settings: Settings, schema, tmp_path_factory):
             "WORKER_BACKOFF_MAX": str(WORKER_BACKOFF_MAX),
             "WORKER_BACKOFF_JITTER": "false",
             "WORKER_REPO_BACKEND": "postgres",
+            # This suite measures the S2.3 substrate with the stub graph and its
+            # failure-injection numbers; the S2.5 graph has its own suites.
+            "AGENT_GRAPH_BACKEND": "stub",
         }
     )
 

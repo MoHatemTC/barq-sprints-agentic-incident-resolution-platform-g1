@@ -9,18 +9,18 @@ from uuid import uuid4
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+import tests.helpers as h
 from app.db.models import Approval, Execution
 from app.main import create_app
 from tests.helpers import mock_settings
 
-VALID_TOKEN = "dev-webhook-secret-token"
-AUTH_HEADERS = {"Authorization": f"Bearer {VALID_TOKEN}"}
+AUTH_HEADERS = h.AUTH_HEADERS
 
 
 @pytest.fixture
 def app_with_db():
     """Create test FastAPI application with mocked database session."""
-    settings = mock_settings(webhook_auth_token=VALID_TOKEN)
+    settings = mock_settings()
     app = create_app(settings=settings)
 
     mock_session = MagicMock()

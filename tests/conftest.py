@@ -17,11 +17,23 @@ _REQUIRED_TEST_ENV = {
     "SERVICENOW_USERNAME": "test_service_account",
     "SERVICENOW_PASSWORD": "test-password",
     "WEBHOOK_AUTH_TOKEN": "dev-webhook-secret-token",
+    "WEBHOOK_OAUTH_CLIENT_ID": "barq-servicenow-test",
+    "WEBHOOK_OAUTH_CLIENT_SECRET": "client-secret-for-tests",
+    "WEBHOOK_OAUTH_SIGNING_KEY": "test-signing-key-that-is-at-least-32-characters",
 }
 
 if os.environ.get("SERVICENOW_LIVE_TESTS") != "1":
     for _key, _value in _REQUIRED_TEST_ENV.items():
         os.environ.setdefault(_key, _value)
+
+# S2.5: a developer .env holds real Langfuse keys; unit tests must never trace to
+# them. Tests that need tracing build their own client explicitly.
+for _key, _value in {
+    "TRACING_ENABLED": "false",
+    "LANGFUSE_PUBLIC_KEY": "",
+    "LANGFUSE_SECRET_KEY": "",
+}.items():
+    os.environ[_key] = _value
 
 
 @pytest.fixture

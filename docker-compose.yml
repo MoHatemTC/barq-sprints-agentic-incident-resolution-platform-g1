@@ -20,7 +20,10 @@ x-app-environment: &app-environment
   POSTGRES_USER: ${POSTGRES_USER:-postgres}
   POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
   QDRANT_URL: http://barq-qdrant:6333
-  WEBHOOK_AUTH_TOKEN: ${WEBHOOK_AUTH_TOKEN:-dev-webhook-secret-token}
+  WEBHOOK_AUTH_TOKEN: ${WEBHOOK_AUTH_TOKEN:?WEBHOOK_AUTH_TOKEN must be set in .env}
+  WEBHOOK_OAUTH_CLIENT_ID: ${WEBHOOK_OAUTH_CLIENT_ID:?WEBHOOK_OAUTH_CLIENT_ID must be set in .env}
+  WEBHOOK_OAUTH_CLIENT_SECRET: ${WEBHOOK_OAUTH_CLIENT_SECRET:?WEBHOOK_OAUTH_CLIENT_SECRET must be set in .env}
+  WEBHOOK_OAUTH_SIGNING_KEY: ${WEBHOOK_OAUTH_SIGNING_KEY:?WEBHOOK_OAUTH_SIGNING_KEY must be set in .env}
 
 services:
   # ---------------------------------------------------------------------------
@@ -145,6 +148,8 @@ services:
       dockerfile: Dockerfile
     container_name: barq-celery-worker
     restart: unless-stopped
+    # SIGTERM → warm shutdown finishes the in-flight task; grace period must
+    # exceed the worst-case remaining task time (see worker_soft_time_limit).
     stop_grace_period: 30s
     command: >
       celery -A app.workers.celery_app worker
@@ -162,6 +167,9 @@ services:
       WORKER_SOFT_TIME_LIMIT: ${WORKER_SOFT_TIME_LIMIT:-120}
       WORKER_TIME_LIMIT: ${WORKER_TIME_LIMIT:-150}
       WORKER_REPO_BACKEND: ${WORKER_REPO_BACKEND:-postgres}
+      # S2.5: the graph retrieves from Qdrant on the compose network.
+      QDRANT_URL: http://barq-qdrant:6333
+      AGENT_GRAPH_BACKEND: ${AGENT_GRAPH_BACKEND:-langgraph}
     depends_on:
       redis:
         condition: service_healthy
@@ -170,6 +178,7 @@ services:
       qdrant:
         condition: service_healthy
     healthcheck:
+      # Celery responds to `inspect ping` on its own control bus.
       test: ["CMD-SHELL", "celery -A app.workers.celery_app inspect ping -d celery@$$HOSTNAME --timeout=5 | grep -q pong || exit 1"]
       interval: 15s
       timeout: 10s

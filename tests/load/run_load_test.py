@@ -113,11 +113,20 @@ async def _run_depth(
         "event_type": "incident.created",
         "contract_version": "v1",
     }
-    headers = {"Authorization": f"Bearer {_env('WEBHOOK_AUTH_TOKEN')}"}
     conn_pool_size = max(100, concurrency * 2)
     limits = httpx.Limits(max_connections=conn_pool_size, max_keepalive_connections=conn_pool_size)
 
     async with httpx.AsyncClient(base_url=base_url, timeout=15.0, limits=limits) as client:
+        token_response = await client.post(
+            "/api/v1/oauth/token",
+            data={
+                "grant_type": "client_credentials",
+                "client_id": _env("WEBHOOK_OAUTH_CLIENT_ID"),
+                "client_secret": _env("WEBHOOK_OAUTH_CLIENT_SECRET"),
+            },
+        )
+        token_response.raise_for_status()
+        headers = {"Authorization": f"Bearer {token_response.json()['access_token']}"}
         for _ in range(concurrency):
             await client.post(
                 "/api/v1/webhook/incident",

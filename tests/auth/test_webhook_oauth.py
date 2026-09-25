@@ -23,6 +23,7 @@ CONFIG = WebhookOAuthConfig(
     client_id="barq-servicenow",
     client_secret="client-secret-for-tests",  # noqa: S106 - test value
     signing_key="k" * 40,
+    token_ttl_seconds=300,
 )
 NOW = 1_800_000_000.0
 Claims = Annotated[dict[str, Any], Depends(bearer_dependency(lambda: CONFIG))]

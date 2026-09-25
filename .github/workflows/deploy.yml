@@ -1,0 +1,144 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: deploy-ec2-main
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Lint, type-check and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev --locked
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Format check
+        run: uv run ruff format --check .
+
+      - name: Type-check
+        run: uv run mypy src
+
+      - name: Test
+        run: uv run pytest -q
+
+  deploy:
+    name: Deploy to EC2
+    needs: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+
+    steps:
+      - name: Configure SSH and Deploy to EC2
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
+          EC2_KNOWN_HOSTS: ${{ secrets.EC2_KNOWN_HOSTS }}
+          DEPLOY_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test -n "$EC2_HOST"
+          test -n "$EC2_USER"
+          test -n "$SSH_PRIVATE_KEY"
+          test -n "$EC2_KNOWN_HOSTS"
+
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$EC2_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+          ssh -i ~/.ssh/deploy_key "$EC2_USER@$EC2_HOST" \
+            bash -s -- "$DEPLOY_SHA" << 'DEPLOY_SCRIPT'
+            set -euo pipefail
+            deploy_sha="$1"
+            app_dir="$HOME/barq-sprints-agentic-incident-resolution-platform-g1"
+            cd "$app_dir"
+
+            if ! git diff --quiet || ! git diff --cached --quiet; then
+              echo "Deployment refused: the EC2 checkout has uncommitted changes."
+              exit 1
+            fi
+
+            previous_sha=$(git rev-parse HEAD)
+            rollback() {
+              exit_status=$?
+              trap - ERR
+              echo "Deployment failed; restoring application code at $previous_sha"
+              git checkout --detach "$previous_sha"
+              docker compose build api celery-worker
+              docker compose up -d --no-build api celery-worker
+              exit "$exit_status"
+            }
+            trap rollback ERR
+
+            echo "==> Fetching exact triggering commit $deploy_sha..."
+            git fetch --no-tags origin "$deploy_sha"
+            git checkout --detach "$deploy_sha"
+
+            echo "==> Building the exact release image..."
+            docker compose build api celery-worker
+
+            echo "==> Ensuring infrastructure dependencies are ready..."
+            docker compose up -d --wait postgres redis qdrant
+
+            echo "==> Running database migrations from the new image..."
+            docker compose run --rm --no-deps -T api alembic upgrade head < /dev/null
+
+            echo "==> Seeding Qdrant knowledge base from the new image..."
+            docker compose run --rm --no-deps -T \
+              -v "$app_dir/scripts:/app/scripts:ro" \
+              -v "$app_dir/data:/app/data:ro" \
+              api python scripts/seed_qdrant.py < /dev/null
+
+            echo "==> Starting the API and worker from the verified image..."
+            docker compose up -d --no-build api celery-worker
+
+            echo "==> Verifying API readiness..."
+            for i in $(seq 1 30); do
+              if curl --fail --silent http://127.0.0.1:8000/ready > /dev/null; then
+                break
+              fi
+              echo "Waiting for API dependencies to become ready ($i/30)..."
+              sleep 2
+            done
+            curl --fail --silent http://127.0.0.1:8000/ready > /dev/null
+
+            echo "==> Verifying the Celery worker responds..."
+            docker compose exec -T celery-worker \
+              celery -A app.workers.celery_app inspect ping --timeout 10
+
+            docker compose ps api celery-worker
+            trap - ERR
+            echo "Deployment successful: API and worker are operational at $deploy_sha"
+          DEPLOY_SCRIPT
+
+      - name: Clean up secrets
+        if: always()
+        run: |
+          rm -f ~/.ssh/deploy_key
