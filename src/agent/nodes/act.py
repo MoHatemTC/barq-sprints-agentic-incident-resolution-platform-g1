@@ -151,7 +151,13 @@ def compose(state: AgentState, outcome: Outcome) -> FinalOutput:
         )
     if outcome is Outcome.ESCALATED_BLOCKED:
         gate = _blocked_gate(state)
-        detail = f"the {gate.gate} check: {gate.reason or 'failed'}" if gate else "a missing check"
+        attempts = int(state.get("revision_count", 0))
+        attempts_str = f" after {attempts} revision attempts" if attempts > 0 else ""
+        detail = (
+            f"the {gate.gate} check{attempts_str}: {gate.reason or 'failed'}"
+            if gate
+            else "a missing check"
+        )
         note = f"{PREFIX}: draft blocked by {detail}. No draft written. Escalated."
         return FinalOutput(
             outcome=outcome,

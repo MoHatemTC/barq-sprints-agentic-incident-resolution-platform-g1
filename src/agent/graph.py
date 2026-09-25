@@ -108,7 +108,7 @@ def build_graph(
     builder.add_conditional_edges(
         "verify_evidence",
         edges.after_verify_evidence,
-        {"safety_check": "safety_check", "act": "act"},
+        {"safety_check": "safety_check", "generate": "generate", "act": "act"},
     )
     builder.add_conditional_edges(
         "safety_check",

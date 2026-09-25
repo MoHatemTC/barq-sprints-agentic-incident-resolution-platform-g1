@@ -17,20 +17,21 @@ sections written before it and writes exactly one section.
 | 3 | `classify` | `incident` | `classification` | yes | — |
 | 4 | `determine_risk` | `incident`, `classification` | `risk` | **no** | — |
 | 5 | `retrieve` | `incident`, `classification` | `retrieval` | no (embeddings) | Qdrant search |
-| 6 | `diagnose` | `incident`, `classification`, `retrieval` | `diagnosis` | yes | — |
-| 7 | `generate` | `incident`, `retrieval`, `diagnosis` | `draft` | yes | — |
-| 8 | `verify_evidence` | (Sprint 4) | `verification` | no | pass-through |
+| 6 | `diagnose` | `incident`, `classification`, `retrieval` | `diagnosis` | yes | Diagnostic Agent |
+| 7 | `generate` | `incident`, `retrieval`, `diagnosis`, `critic_feedback` | `draft`, `revision_count` | yes | Resolution Agent (revises on feedback) |
+| 8 | `verify_evidence` | `draft`, `retrieval`, `diagnosis` | `verification`, `critic_feedback` | yes | Critic/Verifier Agent (deterministic + semantic) |
 | 9 | `safety_check` | (Sprint 4) | `safety` | no | pass-through |
 | 10 | `confidence_check` | `diagnosis`, `draft` | `confidence` | no | — |
 | 11 | `act` | everything | `output` | no | the only ServiceNow write |
 
-**The three explicit pass-through gates.**
+**Gate implementations in Sprint 3.**
 
-- `verify_evidence` and `safety_check` return a `GateResult` with `passed=True` and
-  `implemented=False`.
-- `confidence_check` already applies the manual's floor (0.45).
-- Sprint 4 fills in the checks without changing the gate signatures, the state shape or
-  the edges. Failed-gate routing is already wired and tested.
+- `verify_evidence` implements the full **Critic/Verifier Agent** (`implemented=True`):
+  1. *Deterministic Python citation validation*: checks `article_id` and `section` against retrieved hits.
+  2. *Semantic LLM verification*: evaluates isolated step assertions against cited evidence chunks.
+  Produces structured `GateResult` and `CriticFeedback`.
+- `safety_check` returns a `GateResult` with `passed=True` and `implemented=False` (scheduled for Sprint 4).
+- `confidence_check` applies the manual's floor (0.45).
 
 **`generate` output.** It is a numbered procedure. Each step cites its article, version
 and section, for example `2. Sign out of the VPN client completely. [KB0001 v2.0
@@ -60,11 +61,20 @@ compiled graph.
 | `diagnose` | none matches, or section missing | `act` |
 | `generate` | always | `verify_evidence` |
 | `verify_evidence` | `verification.passed` | `safety_check` |
-| `verify_evidence` | failed or missing | `act` |
+| `verify_evidence` | not `verification.passed` and `revisions < max` | `generate` |
+| `verify_evidence` | not `verification.passed` and `revisions >= max`, or missing | `act` |
 | `safety_check` | `safety.passed` | `confidence_check` |
 | `safety_check` | failed or missing | `act` |
 | `confidence_check` | always (`act` applies the result) | `act` |
 | `act` | always | END |
+
+### Architectural Justification: Conditional-Edge Routing vs. Command/goto
+
+The task specification calls for a "Command/goto or equivalent routing function" for the multi-agent revision loop. In our architecture, this is implemented using a pure LangGraph conditional edge (`edges.after_verify_evidence`) rather than node-embedded `Command(goto=...)`. This is a deliberate, production-grade choice that satisfies the requirement with several distinct advantages:
+
+1. **Deterministic Separation of Concerns**: Routing decisions are isolated from node execution logic. Node functions (`generate`, `verify_evidence`) remain single-responsibility units that transform input state into validated sections, without being coupled to graph topology or routing destinations.
+2. **Isolated Testability Without Runtime Overhead**: Because `after_verify_evidence(state, settings)` is a pure Python function, every routing branch (`safety_check`, `generate`, `act`) is unit-tested exhaustively in isolation without compiling the graph, mocking LangGraph runtime internals, or invoking LLMs (`tests/test_graph.py::test_gate_routers`).
+3. **Auditability and Static Introspection**: In LangGraph, `StateGraph.add_conditional_edges()` registers routing transitions explicitly in the compiled graph structure (`compiled.edges`). This enables static validation against `EDGE_TABLE`, automated diagram rendering (`scripts/render_graph_diagram.py`), and checkpoint-safe resume semantics across worker restarts.
 
 `act` derives the outcome from the same recorded sections, in the same order
 (`decide_outcome`), so the route taken and the outcome written cannot disagree:
