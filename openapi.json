@@ -396,13 +396,62 @@
         }
       }
     },
+    "/api/v1/approvals/pending/{execution_id}": {
+      "get": {
+        "tags": [
+          "Approvals"
+        ],
+        "summary": "Read the approval brief awaiting a decision",
+        "description": "Return the persisted interrupt payload for a paused execution: the Approval Brief Agent's summary alongside the raw facts it was written from (NFR-07). Nothing here has been decided yet.",
+        "operationId": "get_pending_approval_api_v1_approvals_pending__execution_id__get",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "execution_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Execution Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/approvals/{id}/decide": {
       "post": {
         "tags": [
           "Approvals"
         ],
-        "summary": "Submit human operator approval decision",
-        "description": "Record or submit a human operator decision ('approved', 'rejected', 'cancelled', 'expired') for an approval request.",
+        "summary": "Submit human operator approval decision and resume graph (S3.4)",
+        "description": "Resume a paused LangGraph thread with Command(resume=...), then record the approval decision for audit. The id is the execution_id.",
         "operationId": "decide_approval_api_v1_approvals__id__decide_post",
         "security": [
           {
@@ -773,19 +822,33 @@
             "description": "Foreign key to workflow_state.id if associated with a specific node"
           },
           "decision": {
-            "type": "string",
-            "enum": [
-              "approved",
-              "rejected",
-              "cancelled",
-              "expired"
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "approved",
+                  "rejected",
+                  "cancelled",
+                  "expired"
+                ]
+              },
+              {
+                "type": "null"
+              }
             ],
             "title": "Decision",
-            "description": "Decision outcome matching approvals.decision constraint"
+            "description": "Decision outcome matching approvals.decision constraint; null while paused"
           },
           "decided_by": {
-            "type": "string",
-            "maxLength": 255,
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Decided By",
             "description": "Identity of the operator or automated service that decided"
           },
@@ -815,20 +878,56 @@
             "description": "Structured context or parameters evaluated during decision"
           },
           "decided_at": {
-            "type": "string",
-            "format": "date-time",
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Decided At",
             "description": "Timestamp when the decision was finalized"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "decided | awaiting_approval",
+            "default": "decided"
+          },
+          "brief": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brief",
+            "description": "Approval Brief Agent output; descriptive only"
+          },
+          "facts": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Facts",
+            "description": "Raw interrupt payload persisted at pause time"
           }
         },
         "additionalProperties": false,
         "type": "object",
         "required": [
           "id",
-          "execution_id",
-          "decision",
-          "decided_by",
-          "decided_at"
+          "execution_id"
         ],
         "title": "ApprovalResponse",
         "description": "Schema representing an approval record from the 'approvals' table."
@@ -1435,7 +1534,24 @@
           "webhook_auth_token": {
             "type": "string",
             "title": "Webhook Auth Token",
-            "description": "Redacted webhook bearer authentication secret",
+            "description": "Redacted operator API bearer authentication secret",
+            "default": "***REDACTED***"
+          },
+          "webhook_oauth_client_id": {
+            "type": "string",
+            "title": "Webhook Oauth Client Id",
+            "description": "ServiceNow webhook OAuth client ID"
+          },
+          "webhook_oauth_client_secret": {
+            "type": "string",
+            "title": "Webhook Oauth Client Secret",
+            "description": "Redacted ServiceNow webhook OAuth client secret",
+            "default": "***REDACTED***"
+          },
+          "webhook_oauth_signing_key": {
+            "type": "string",
+            "title": "Webhook Oauth Signing Key",
+            "description": "Redacted webhook OAuth signing key",
             "default": "***REDACTED***"
           },
           "postgres_host": {
@@ -1567,6 +1683,7 @@
           "servicenow_timeout_seconds",
           "servicenow_token_expiry_buffer_seconds",
           "servicenow_kb_id",
+          "webhook_oauth_client_id",
           "postgres_host",
           "postgres_port",
           "postgres_db",

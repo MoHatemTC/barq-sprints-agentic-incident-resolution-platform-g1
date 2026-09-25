@@ -161,7 +161,12 @@ def rows(engine, execution_id: UUID) -> list[Any]:
 
 
 def run(
-    record: dict[str, Any], deps: Any, saver: WorkflowStateSaver, execution_id: UUID, attempt: int
+    record: dict[str, Any],
+    deps: Any,
+    saver: WorkflowStateSaver,
+    execution_id: UUID,
+    attempt: int,
+    resume: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return run_graph(
         build_graph(deps, checkpointer=saver),
@@ -170,6 +175,7 @@ def run(
         correlation_id="corr-pg",
         attempt=attempt,
         deps=deps,
+        resume=resume,
     )
 
 
@@ -220,8 +226,15 @@ class TestWorkflowStateTable:
 
         assert result["resumed"] is True
         assert result["outcome"] == "suggested"
-        assert llm.purposes() == ["classify", "diagnose", "generate", "generate"]
-        assert deps.servicenow.calls == ["read_incident", "write_ai_fields"]
+        # generate ran twice (the failed attempt and the resume); verify_evidence
+        # runs once, after the draft the resume produced.
+        assert llm.purposes() == ["classify", "diagnose", "generate", "generate", "verify_evidence"]
+        # write_execution_log is S3.1's multi-agent audit write-back (#156).
+        assert deps.servicenow.calls == [
+            "read_incident",
+            "write_ai_fields",
+            "write_execution_log",
+        ]
         stored = rows(pg_engine, execution_id)
         by_attempt = {(r.node_name, r.attempt) for r in stored}
         assert ("classify", 1) in by_attempt and ("classify", 2) not in by_attempt
@@ -238,7 +251,12 @@ class TestWorkflowStateTable:
         answers = vpn_answers() | {
             "classify": ClassifyOutput(label="software", rationale="r", confidence=0.9)
         }
-        run(ORDER_P1, make_deps(llm=FakeLLM(answers)), saver, execution_id, attempt=1)
+        backend = FakeServiceNow()
+        deps = make_deps(llm=FakeLLM(answers), servicenow=backend)
+        paused = run(ORDER_P1, deps, saver, execution_id, attempt=1)
+        assert paused["paused"] is True
+        assert backend.updates == []
+
         stored = rows(pg_engine, execution_id)
         assert [r.node_name for r in stored][2:] == [
             "load",
@@ -247,10 +265,30 @@ class TestWorkflowStateTable:
             "determine_risk",
             "act",
         ]
-        assert stored[-1].status == "blocked"
+        # act parked inside interrupt(), so it has no completed checkpoint of its
+        # own; record_pause() writes the row a reader of workflow_state needs.
+        assert stored[-1].status == "awaiting_approval"
+        assert stored[-1].decision["processing_state"] == "awaiting_approval"
         assert (
             next(r for r in stored if r.node_name == "determine_risk").decision["level"] == "high"
         )
+
+        resumed = run(
+            ORDER_P1,
+            deps,
+            saver,
+            execution_id,
+            1,
+            resume={"decision": "approved", "decided_by": "lead_ops", "reason": "change window"},
+        )
+        assert resumed["paused"] is False
+        assert resumed["resumed"] is True
+        assert len(backend.updates) == 1
+
+        final = rows(pg_engine, execution_id)
+        assert [r.node_name for r in final] == [r.node_name for r in stored]
+        assert final[-1].status == "blocked"
+        assert final[-1].decision["outcome"] == "escalated_high_risk"
 
     def test_same_node_same_attempt_replaces_the_row(self, pg_engine, saver) -> None:
         execution_id = seed_execution(pg_engine, VPN)

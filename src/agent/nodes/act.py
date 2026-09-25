@@ -12,6 +12,9 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+from langgraph.types import interrupt
+
+from agent.approval_brief import render_brief
 from agent.dependencies import AgentDependencies
 from agent.servicenow import HumanLockedError
 from agent.state import (
@@ -43,6 +46,16 @@ PREFIX = "AI Suggested Response"
 #: A draft or an escalation both leave the incident waiting for a person, and
 #: processing end stays blank because the state is not terminal.
 PAUSED = AIProcessingState.AWAITING_APPROVAL.value
+
+#: FR-17 interrupt points. ``ESCALATED_NO_EVIDENCE`` is intentionally absent —
+#: see ``docs/sprint3_hitl_design.md``.
+INTERRUPT_OUTCOMES = frozenset(
+    {
+        Outcome.ESCALATED_HIGH_RISK,
+        Outcome.ESCALATED_BLOCKED,
+        Outcome.ESCALATED_LOW_CONFIDENCE,
+    }
+)
 
 
 def decide_outcome(state: AgentState) -> Outcome:
@@ -208,7 +221,97 @@ def compose(state: AgentState, outcome: Outcome) -> FinalOutput:
     )
 
 
+def interrupt_payload(state: AgentState, output: FinalOutput, outcome: Outcome) -> dict[str, Any]:
+    """NFR-07 audit payload persisted next to the checkpoint at interrupt time."""
+    incident = state.get("incident") or {}
+    return {
+        "outcome": outcome.value,
+        "gate": outcome.value,
+        "summary": output.summary,
+        "work_note": output.work_note,
+        "planned_action": output.work_note,
+        "suggestion": output.suggestion,
+        "confidence": output.confidence,
+        "classification": output.classification,
+        "approval_required": output.approval_required,
+        "incident": {
+            "sys_id": incident.get("sys_id"),
+            "number": incident.get("number"),
+            "priority": incident.get("priority"),
+            "impact": incident.get("impact"),
+            "urgency": incident.get("urgency"),
+            "service": incident.get("service"),
+            "short_description": incident.get("short_description"),
+            "category": incident.get("category"),
+        },
+        "risk": state.get("risk"),
+        "retrieval": _slim_retrieval(state.get("retrieval")),
+        "draft": state.get("draft"),
+        "verification": state.get("verification"),
+        "safety": state.get("safety"),
+        "confidence_gate": state.get("confidence"),
+        "execution_id": state.get("execution_id"),
+        "correlation_id": state.get("correlation_id"),
+        "lifecycle": "interrupt",
+    }
+
+
+def _slim_retrieval(section: Any) -> dict[str, Any] | None:
+    if not isinstance(section, dict):
+        return None
+    hits = section.get("hits") or []
+    return {k: v for k, v in section.items() if k != "hits"} | {
+        "hit_count": len(hits),
+        "top_articles": [
+            {
+                "article_number": h.get("article_number"),
+                "version": h.get("version"),
+                "section": h.get("section"),
+                "relevance": h.get("relevance"),
+            }
+            for h in hits[:5]
+            if isinstance(h, dict)
+        ],
+    }
+
+
+def _request_human_decision(payload: dict[str, Any]) -> dict[str, Any]:
+    """Pause inside a compiled graph; unit tests that call ``act`` directly write."""
+    try:
+        value = interrupt(payload)
+    except RuntimeError:
+        return {"decision": "approved", "decided_by": "direct-node-call", "source": "no_graph"}
+    if isinstance(value, dict):
+        return value
+    return {"decision": str(value), "decided_by": "operator"}
+
+
+def _apply_human_decision(output: FinalOutput, decision: dict[str, Any]) -> FinalOutput:
+    verdict = str(decision.get("decision") or "approved").lower()
+    if verdict == "approved":
+        return output
+    who = str(decision.get("decided_by") or "operator")
+    why = str(decision.get("reason") or verdict)
+    note = (
+        f"{PREFIX}: human {verdict} by {who}. {why}. "
+        f"Original outcome {output.outcome.value}. No automated action applied."
+    )
+    return output.model_copy(
+        update={
+            "summary": note,
+            "work_note": note,
+            "suggestion": None,
+            "approval_required": True,
+        }
+    )
+
+
 def act(state: AgentState, deps: AgentDependencies) -> dict[str, Any]:
+    execution_id = str(state.get("execution_id") or "")
+    receipt = deps.audit.get_receipt(execution_id) if execution_id else None
+    if receipt and receipt.get("output"):
+        return {"output": receipt["output"]}
+
     outcome = decide_outcome(state)
     output = compose(state, outcome)
     if outcome is Outcome.SKIPPED_INELIGIBLE:
@@ -223,6 +326,19 @@ def act(state: AgentState, deps: AgentDependencies) -> dict[str, Any]:
             )
         return {"output": output.model_dump(mode="json")}
 
+    if outcome in INTERRUPT_OUTCOMES:
+        payload = interrupt_payload(state, output, outcome)
+        payload["brief"] = render_brief(payload, deps)
+        deps.audit.save_interrupt(execution_id, payload)
+        decision = _request_human_decision(payload)
+        output = _apply_human_decision(output, decision)
+
+    return _perform_write(state, deps, output)
+
+
+def _perform_write(
+    state: AgentState, deps: AgentDependencies, output: FinalOutput
+) -> dict[str, Any]:
     incident = IncidentSnapshot.model_validate(state["incident"])
     fields: dict[str, Any] = {
         "work_notes": output.work_note,
@@ -269,7 +385,17 @@ def act(state: AgentState, deps: AgentDependencies) -> dict[str, Any]:
         status=ExecutionStatus.AWAITING_APPROVAL,
     )
     output = output.model_copy(update={"actions": actions, "write_back": "written"})
-    return {"output": output.model_dump(mode="json")}
+    dumped = output.model_dump(mode="json")
+    lifecycle = (
+        "interrupt_resume"
+        if deps.audit.get_interrupt(str(state.get("execution_id") or ""))
+        else "direct"
+    )
+    deps.audit.save_receipt(
+        str(state["execution_id"]),
+        {"output": dumped, "lifecycle": lifecycle, "incident_sys_id": incident.sys_id},
+    )
+    return {"output": dumped}
 
 
 def _write_execution_log(

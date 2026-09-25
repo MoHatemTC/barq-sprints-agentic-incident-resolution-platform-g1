@@ -204,7 +204,16 @@ class FakeLLM:
         self.calls.append(
             {"purpose": purpose, "system": system, "prompt": prompt, "model": selected_model}
         )
-        answer = self.answers[purpose]
+        answer = self.answers.get(purpose)
+        if answer is None and purpose == "approval_brief":
+            from agent.prompts import ApprovalBriefOutput
+
+            answer = ApprovalBriefOutput(
+                incident_summary="Paused incident awaiting a human decision.",
+                gate="escalated",
+                planned_action="Write the composed work note to ServiceNow.",
+                judgment_required="Approve or reject the planned write.",
+            )
         if isinstance(answer, list):
             answer = answer.pop(0)
         if isinstance(answer, BaseException):
@@ -269,6 +278,7 @@ class FakeOpenAISDK:
         "DiagnoseOutput": "diagnose",
         "GenerateOutput": "generate",
         "CriticOutput": "verify_evidence",
+        "ApprovalBriefOutput": "approval_brief",
     }
 
     def __init__(
@@ -372,6 +382,7 @@ class FakeServiceNow:
         self.read_error: BaseException | None = None
         self.write_error: BaseException | None = None
         self.on_update: Callable[[str], None] | None = None
+        self.write_calls: list[tuple[str, IncidentUpdatePayload]] = []  # Track AI field writes
 
     async def get_incident(self, sys_id: str) -> Incident:
         if self.read_error is not None:
@@ -394,6 +405,11 @@ class FakeServiceNow:
     async def write_execution_log(self, payload: ExecutionLogCreatePayload) -> None:
         self.execution_logs.append(payload)
 
+    async def write_ai_fields(self, sys_id: str, payload: IncidentUpdatePayload) -> None:
+        """Track AI field writes for crash-recovery idempotency tests."""
+        self.write_calls.append((sys_id, payload))
+        self.records[sys_id].update(payload.to_table_api_body())
+
 
 def make_deps(
     *,
@@ -413,3 +429,72 @@ def make_deps(
         tracer=tracer,
         clock=lambda: FIXED_NOW,
     )
+
+
+def build_fake_deps(
+    *,
+    llm: FakeLLM | None = None,
+    retriever: FakeRetriever | None = None,
+    servicenow: FakeServiceNow | None = None,
+    tracer: Tracer | None = None,
+    **settings: Any,
+) -> AgentDependencies:
+    """Build fake dependencies with MemoryAuditStore for S3.4 tests."""
+    from agent.audit_store import MemoryGraphAuditStore
+
+    deps = make_deps(llm=llm, retriever=retriever, servicenow=servicenow, tracer=tracer, **settings)
+    # Replace the audit store with a fresh memory store
+    deps.audit = MemoryGraphAuditStore()
+    return deps
+
+
+def build_graph_with_checkpointer(deps: AgentDependencies):
+    """Build a graph with a memory checkpointer for interrupt/resume tests."""
+    from agent.checkpointer import build_checkpointer
+    from agent.graph import build_graph
+
+    checkpointer = build_checkpointer("memory", None)
+    return build_graph(deps, checkpointer=checkpointer)
+
+
+def minimal_event():
+    """Return a minimal event payload for tests using VPN incident."""
+    from agent.state import EventPayload
+
+    # Use the VPN incident from the default INCIDENTS dict
+    return EventPayload(
+        event_id="test-event-1",
+        sys_id=VPN["sys_id"],
+        number="INC0010023",
+        event_type="incident.created",
+    )
+
+
+def state_before_act(
+    deps: AgentDependencies,
+    record: dict[str, Any] | None = None,
+    *,
+    execution_id: str = EXECUTION_ID,
+) -> Any:
+    """Run every node up to ``confidence_check`` and stop before ``act``.
+
+    This is the state a worker's checkpoint holds when it is killed at the write
+    boundary: every gate has passed, the ServiceNow write has not happened, and
+    no receipt exists. Nodes are driven directly (outside the compiled graph) so
+    the test controls exactly which node is left undone.
+    """
+    from agent.nodes import NODE_ORDER, NODES
+    from agent.state import AgentState, EventPayload, initial_state
+
+    state: AgentState = initial_state(
+        EventPayload.model_validate(event_for(record or VPN)),
+        execution_id=execution_id,
+        correlation_id="corr-crash",
+        started_at=FIXED_NOW.isoformat(),
+    )
+    path: list[str] = []
+    for name in NODE_ORDER[:-1]:
+        update = NODES[name](state, deps)
+        path.append(name)
+        state = {**state, **update, "current_node": name, "path": list(path)}  # type: ignore[typeddict-item]
+    return state

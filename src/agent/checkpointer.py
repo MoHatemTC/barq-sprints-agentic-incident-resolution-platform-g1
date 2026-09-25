@@ -32,7 +32,7 @@ from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
@@ -334,6 +334,102 @@ class WorkflowStateSaver(BaseCheckpointSaver[str]):
                 "checkpoint_id": checkpoint["id"],
             }
         }
+
+    def record_pause(self, config: RunnableConfig, node: str) -> None:
+        """Row for a node parked in ``interrupt()`` (S3.4, FR-17).
+
+        One row per checkpoint means one row per node the graph *completed* — and a
+        node that parks never returns, so LangGraph writes no checkpoint for it.
+        Without this the authoritative history would stop at the previous node and
+        ``Execution.node_reached`` would still name it, hiding the fact that a human
+        decision is what the execution is waiting on.
+
+        The row carries the previous node's checkpoint with a new id of its own (no
+        new channel values), so state reconstruction is unchanged; when the graph
+        resumes and the node finally completes, ``put`` replaces this row through the
+        usual ``(execution_id, node_name, attempt)`` conflict rule.
+        """
+        configurable = config["configurable"]
+        execution_id = UUID(str(configurable["thread_id"]))
+        attempt = int(configurable.get("attempt", 1))
+        now = datetime.now(UTC)
+        with self._session() as session:
+            # Serialise sequence allocation per execution, as put() does.
+            session.execute(
+                select(Execution.execution_id)
+                .where(Execution.execution_id == execution_id)
+                .with_for_update()
+            )
+            rows = [
+                row
+                for row in session.scalars(
+                    select(ExecutionNodeState)
+                    .where(ExecutionNodeState.execution_id == execution_id)
+                    .order_by(ExecutionNodeState.sequence_number)
+                )
+                if row.state_snapshot
+            ]
+            if not rows:
+                return
+            last = rows[-1]
+            last_snapshot = dict(last.state_snapshot or {})
+            if last.node_name == node and last.attempt == attempt:
+                return  # a re-delivery that parked the same node again
+            checkpoint: dict[str, Any] = self.serde.loads_typed(_unb64(last_snapshot["checkpoint"]))
+            checkpoint_id = str(uuid4())
+            checkpoint["id"] = checkpoint_id
+            metadata: dict[str, Any] = self.serde.loads_typed(_unb64(last_snapshot["metadata"]))
+            # The parked node produced nothing; processing_state marks the wait.
+            status, decision, evidence = summarize(
+                node, {"output": {"processing_state": "awaiting_approval"}}
+            )
+            step = last_snapshot.get("step")
+            snapshot = {
+                "checkpoint_id": checkpoint_id,
+                "parent_checkpoint_id": last_snapshot.get("checkpoint_id"),
+                "checkpoint_ns": last_snapshot.get("checkpoint_ns", ""),
+                "step": step + 1 if isinstance(step, int) else step,
+                "source": "interrupt",
+                "checkpoint": _b64(self.serde.dumps_typed(checkpoint)),
+                "metadata": _b64(self.serde.dumps_typed(metadata)),
+                "blobs": {},
+                "writes": [],
+            }
+            sequence = (
+                session.scalar(
+                    select(func.coalesce(func.max(ExecutionNodeState.sequence_number), 0)).where(
+                        ExecutionNodeState.execution_id == execution_id
+                    )
+                )
+                or 0
+            ) + 1
+            stmt = insert(ExecutionNodeState).values(
+                execution_id=execution_id,
+                sequence_number=sequence,
+                node_name=node,
+                attempt=attempt,
+                status=status,
+                started_at=now,
+                ended_at=now,
+                evidence=evidence,
+                decision=decision if decision is not None else null(),
+                state_snapshot=snapshot,
+            )
+            stmt = stmt.on_conflict_do_update(
+                constraint="uq_workflow_state_execution_node_attempt",
+                set_={
+                    "sequence_number": stmt.excluded.sequence_number,
+                    "status": stmt.excluded.status,
+                    "ended_at": stmt.excluded.ended_at,
+                    "state_snapshot": stmt.excluded.state_snapshot,
+                },
+            )
+            session.execute(stmt)
+            session.execute(
+                update(Execution)
+                .where(Execution.execution_id == execution_id)
+                .values(node_reached=node)
+            )
 
     def put_writes(
         self,

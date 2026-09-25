@@ -308,17 +308,46 @@ def critic_prompt(
     return "".join(parts)
 
 
+APPROVAL_BRIEF_SYSTEM = f"""You write a short approval brief for a human operator reviewing a
+paused BARQ incident-resolution run. Describe only what is already in the payload: what the
+incident is, which gate stopped the graph, what action was planned, and the exact judgment
+required (approve the planned ServiceNow write, or reject it). Do not recommend approve or
+reject. Do not invent facts. Do not change routing.
+{_DATA_RULE}"""
+
+
+class ApprovalBriefOutput(BaseModel):
+    incident_summary: str = Field(description="What the incident is, in one or two sentences.")
+    gate: str = Field(description="Which gate or outcome paused the graph.")
+    planned_action: str = Field(description="What the agent would write if approved.")
+    judgment_required: str = Field(
+        description="The exact decision the operator must make, without recommending it."
+    )
+
+
+def approval_brief_prompt(payload_text: str) -> str:
+    return (
+        "<interrupt_payload>\n"
+        f"{payload_text}\n"
+        "</interrupt_payload>\n\n"
+        "Write the approval brief from this payload only."
+    )
+
+
 __all__ = [
+    "APPROVAL_BRIEF_SYSTEM",
     "CLASSIFY_SYSTEM",
     "CRITIC_SYSTEM",
     "DIAGNOSE_SYSTEM",
     "PROMPT_VERSION",
     "RESOLUTION_SYSTEM",
+    "ApprovalBriefOutput",
     "ClassifyOutput",
     "CriticOutput",
     "DiagnoseOutput",
     "GenerateOutput",
     "StepOutput",
+    "approval_brief_prompt",
     "classify_prompt",
     "critic_prompt",
     "diagnose_prompt",

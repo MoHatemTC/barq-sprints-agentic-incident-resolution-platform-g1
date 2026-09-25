@@ -777,9 +777,10 @@ class TestWorkerWiring:
     def test_a_high_risk_escalation_is_recorded_on_the_executions_row(self, settings: Any) -> None:
         """A P1 stops at determine_risk, and the execution row has to say so.
 
-        The row previously read termination_cause="completed" for this, which is
-        indistinguishable from a drafted suggestion — the one outcome an auditor
-        most needs to tell apart.
+        It used to read termination_cause="completed" for this, indistinguishable
+        from a drafted suggestion. Since S3.4 the graph pauses instead of writing,
+        so the row reads awaiting_approval with no termination cause — the one
+        state an auditor must not confuse with a finished run.
         """
         from celery import Celery
 
@@ -807,7 +808,12 @@ class TestWorkerWiring:
             outcome = task.apply(args=[event_for(ORDER_P1), str(execution_id)]).get()
 
         assert outcome["result"]["outcome"] == "escalated_high_risk"
-        assert repo.get_termination_cause(execution_id) == "escalated_high_risk"
+        # S3.4: the graph pauses at act instead of writing, so the row is parked
+        # non-terminal — awaiting_approval, with no termination cause yet. The
+        # cause is written when the human decision resumes the execution.
+        assert outcome["result"]["paused"] is True
+        assert repo.get_status(execution_id) == "awaiting_approval"
+        assert repo.get_termination_cause(execution_id) is None
         assert "retrieve" not in outcome["result"]["path"]
 
 
