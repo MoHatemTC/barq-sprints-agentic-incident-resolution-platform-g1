@@ -20,6 +20,7 @@ Every node is wrapped in a Langfuse span (``node.<name>``) and stamps
 
 from __future__ import annotations
 
+import functools
 from collections.abc import Callable
 from typing import Any, cast
 
@@ -40,8 +41,10 @@ GRAPH_NAME = "incident-resolution"
 NodeFn = Callable[[AgentState, AgentDependencies], dict[str, Any]]
 
 _SPAN_TYPES = {
+    "diagnose": "agent",
+    "generate": "agent",
+    "verify_evidence": "agent",
     "retrieve": "retriever",
-    "verify_evidence": "guardrail",
     "safety_check": "guardrail",
     "confidence_check": "guardrail",
     "act": "tool",
@@ -105,8 +108,8 @@ def build_graph(
     builder.add_edge("generate", "verify_evidence")
     builder.add_conditional_edges(
         "verify_evidence",
-        edges.after_verify_evidence,
-        {"safety_check": "safety_check", "act": "act"},
+        functools.partial(edges.after_verify_evidence, settings=deps.settings),
+        {"safety_check": "safety_check", "generate": "generate", "act": "act"},
     )
     builder.add_conditional_edges(
         "safety_check",

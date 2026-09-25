@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import Final, Literal
 
+from agent.config import AgentSettings, get_agent_settings
 from agent.state import (
     AgentState,
     Diagnosis,
@@ -65,14 +66,35 @@ def _gate_passed(state: AgentState, key: str) -> bool:
         return False
 
 
-def after_verify_evidence(state: AgentState) -> Literal["safety_check", "act"]:
-    """gate passed → safety_check; failed → act (blocked)."""
-    return "safety_check" if _gate_passed(state, "verification") else ACT
+def _revision_count(state: AgentState) -> int:
+    """return the revision count of the state."""
+    try:
+        return state["revision_count"]
+    except (KeyError, ValueError):
+        return 0
+
+
+def after_verify_evidence(
+    state: AgentState,
+    settings: AgentSettings | None = None,
+) -> Literal["safety_check", "generate", "act"]:
+    """gate passed → safety_check; failed & revision < max → generate; otherwise → act."""
+    if "verification" not in state:
+        return ACT
+    if _gate_passed(state, "verification"):
+        return "safety_check"
+    cfg = settings or get_agent_settings()
+    if _revision_count(state) < cfg.agent_max_revisions:
+        return "generate"
+    return ACT
 
 
 def after_safety_check(state: AgentState) -> Literal["confidence_check", "act"]:
     """gate passed → confidence_check; failed → act (blocked)."""
-    return "confidence_check" if _gate_passed(state, "safety") else ACT
+    if _gate_passed(state, "safety"):
+        return "confidence_check"
+    else:
+        return ACT
 
 
 #: Every transition, for the design record and the exhaustive edge tests.
@@ -91,7 +113,8 @@ EDGE_TABLE: tuple[tuple[str, str, str], ...] = (
     ("diagnose", "diagnosis.matched_article_ids empty", "act"),
     ("generate", "always", "verify_evidence"),
     ("verify_evidence", "verification.passed", "safety_check"),
-    ("verify_evidence", "not verification.passed", "act"),
+    ("verify_evidence", "not verification.passed and revisions < max", "generate"),
+    ("verify_evidence", "not verification.passed and revisions >= max", "act"),
     ("safety_check", "safety.passed", "confidence_check"),
     ("safety_check", "not safety.passed", "act"),
     ("confidence_check", "always (act applies the floor)", "act"),

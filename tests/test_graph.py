@@ -243,9 +243,15 @@ class TestEdgeConditions:
         def gate(name: str) -> dict[str, Any]:
             return {"gate": name, "passed": passed, "implemented": False, "checks": []}
 
-        verify = edges.after_verify_evidence({"verification": gate("verify_evidence")})  # type: ignore[typeddict-item]
+        verify_unexhausted = edges.after_verify_evidence(
+            {"verification": gate("verify_evidence"), "revision_count": 0}  # type: ignore[typeddict-item]
+        )
+        verify_exhausted = edges.after_verify_evidence(
+            {"verification": gate("verify_evidence"), "revision_count": 2}  # type: ignore[typeddict-item]
+        )
         safety = edges.after_safety_check({"safety": gate("safety_check")})  # type: ignore[typeddict-item]
-        assert verify == ("safety_check" if passed else "act")
+        assert verify_unexhausted == ("safety_check" if passed else "generate")
+        assert verify_exhausted == ("safety_check" if passed else "act")
         assert safety == ("confidence_check" if passed else "act")
         assert edges.after_verify_evidence({}) == "act"
         assert edges.after_safety_check({}) == "act"
@@ -296,7 +302,7 @@ class TestCheckpointing:
         assert result["resumed"] is True
         assert result["outcome"] == "suggested"
         # classify and diagnose were not paid for twice; load did not re-read.
-        assert llm.purposes() == ["classify", "diagnose", "generate", "generate"]
+        assert llm.purposes() == ["classify", "diagnose", "generate", "generate", "verify_evidence"]
         assert backend.calls == [
             "read_incident",
             "write_ai_fields",

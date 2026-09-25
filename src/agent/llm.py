@@ -39,7 +39,17 @@ class LLMClient(Protocol):
     @property
     def model_name(self) -> str: ...
 
-    def structured(self, *, purpose: str, system: str, prompt: str, schema: type[M]) -> M:
+    def model_for_purpose(self, purpose: str, override: str | None = None) -> str: ...
+
+    def structured(
+        self,
+        *,
+        purpose: str,
+        system: str,
+        prompt: str,
+        schema: type[M],
+        model: str | None = None,
+    ) -> M:
         """Return ``schema`` parsed from the model's answer to ``prompt``."""
         ...
 
@@ -87,22 +97,70 @@ class LiteLLMClient:
                 max_retries=settings.agent_llm_max_retries,
             )
         self._client = client
+        self._last_model_used: str | None = None
+        self._purpose_models: dict[str, str] = {}
+
+    def model_for_purpose(self, purpose: str, override: str | None = None) -> str:
+        """Resolve purpose-specific model name, taking into account overrides."""
+        if override:
+            return override
+        if purpose == "diagnose":
+            return self._settings.agent_diagnostic_model or self._settings.agent_llm_model
+        if purpose in ("generate", "resolution"):
+            return self._settings.agent_resolution_model or self._settings.agent_llm_model
+        if purpose in ("verify_evidence", "critic"):
+            return self._settings.agent_critic_model or self._settings.agent_llm_model
+        return self._settings.agent_llm_model
+
+    _model_for_purpose = model_for_purpose  # Preserves internal alias
 
     @property
     def model_name(self) -> str:
+        """Return the exact model selected and used for execution, or the default configured model.
+
+        When a resolution procedure is drafted, this returns the resolution model used
+        for drafting. Otherwise, it returns the model used in the most recent LLM execution,
+        falling back to `agent_llm_model`.
+        """
+        if "generate" in self._purpose_models:
+            return self._purpose_models["generate"]
+        if "resolution" in self._purpose_models:
+            return self._purpose_models["resolution"]
+        if self._last_model_used is not None:
+            return self._last_model_used
         return self._settings.agent_llm_model
 
-    def structured(self, *, purpose: str, system: str, prompt: str, schema: type[M]) -> M:
+    @property
+    def last_model_used(self) -> str | None:
+        """Return the model that was used in the most recent LLM invocation."""
+        return self._last_model_used
+
+    def get_used_model(self, purpose: str) -> str | None:
+        """Return the model that was resolved and used for a given purpose, if called."""
+        return self._purpose_models.get(purpose)
+
+    def structured(
+        self,
+        *,
+        purpose: str,
+        system: str,
+        prompt: str,
+        schema: type[M],
+        model: str | None = None,
+    ) -> M:
         import openai
 
         settings = self._settings
+        selected_model = self.model_for_purpose(purpose, model)
+        self._last_model_used = selected_model
+        self._purpose_models[purpose] = selected_model
         options: dict[str, Any] = {"max_completion_tokens": settings.agent_llm_max_tokens}
         if settings.agent_llm_reasoning_effort:
             options["reasoning_effort"] = settings.agent_llm_reasoning_effort
         with self._tracer.span(
             f"llm.{purpose}",
             as_type="generation",
-            model=settings.agent_llm_model,
+            model=selected_model,
             input={"system": system, "prompt": prompt},
             version=settings.agent_prompt_version,
             model_parameters=options,
@@ -110,7 +168,7 @@ class LiteLLMClient:
         ) as generation:
             try:
                 raw = self._client.chat.completions.with_raw_response.parse(
-                    model=settings.agent_llm_model,
+                    model=selected_model,
                     messages=[
                         {"role": "system", "content": system},
                         {"role": "user", "content": prompt},

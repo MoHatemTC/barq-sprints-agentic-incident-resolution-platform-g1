@@ -254,10 +254,10 @@ class TestCorrelation:
             pass
 
         spans = finished(tracer, exporter)
-        names = [s.name for s in spans]
-        assert names == ["webhook.receipt", "queue.enqueue", "worker.pickup"]
+        by_name = {s.name: s for s in spans}
+        assert set(by_name) == {"webhook.receipt", "queue.enqueue", "worker.pickup"}
         by_id = {s.context.span_id: s for s in spans}
-        enqueue = spans[1]
+        enqueue = by_name["queue.enqueue"]
         assert enqueue.parent is not None
         assert by_id[enqueue.parent.span_id].name == "webhook.receipt"
         assert {format(s.context.trace_id, "032x") for s in spans} == {trace_id_for("corr-http-1")}

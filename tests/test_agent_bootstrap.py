@@ -35,7 +35,12 @@ from agent.llm import (
     cost_details,
     usage_details,
 )
-from agent.prompts import ClassifyOutput
+from agent.prompts import (
+    ClassifyOutput,
+    CriticOutput,
+    DiagnoseOutput,
+    GenerateOutput,
+)
 from agent.retrieval import (
     CLASSIFICATION_TO_CORPUS_CATEGORY,
     OUT_OF_CATEGORY_EVIDENCE_MARGIN,
@@ -255,6 +260,111 @@ class TestLiteLLMClient:
         )
         llm.structured(purpose="classify", system="s", prompt="p", schema=ClassifyOutput)
         assert sdk.requests[0]["reasoning_effort"] == "low"
+
+    def test_diagnostic_model_override(self) -> None:
+        sdk = FakeOpenAISDK(vpn_answers())
+        llm = LiteLLMClient(
+            AgentSettings(_env_file=None, agent_diagnostic_model="gemini/gemini-diagnostic"),
+            Tracer(None),
+            client=sdk,
+        )
+        llm.structured(purpose="diagnose", system="s", prompt="p", schema=DiagnoseOutput)
+        assert sdk.requests[0]["model"] == "gemini/gemini-diagnostic"
+        assert llm.model_name == "gemini/gemini-diagnostic"
+        assert llm.model_name == sdk.requests[0]["model"]
+
+    def test_resolution_model_override(self) -> None:
+        sdk = FakeOpenAISDK(vpn_answers())
+        llm = LiteLLMClient(
+            AgentSettings(_env_file=None, agent_resolution_model="gemini/gemini-resolution"),
+            Tracer(None),
+            client=sdk,
+        )
+        llm.structured(purpose="generate", system="s", prompt="p", schema=GenerateOutput)
+        assert sdk.requests[0]["model"] == "gemini/gemini-resolution"
+        assert llm.model_name == "gemini/gemini-resolution"
+        assert llm.model_name == sdk.requests[0]["model"]
+
+    def test_critic_model_override(self) -> None:
+        sdk = FakeOpenAISDK(vpn_answers())
+        llm = LiteLLMClient(
+            AgentSettings(_env_file=None, agent_critic_model="gemini/gemini-critic"),
+            Tracer(None),
+            client=sdk,
+        )
+        llm.structured(purpose="verify_evidence", system="s", prompt="p", schema=CriticOutput)
+        assert sdk.requests[0]["model"] == "gemini/gemini-critic"
+        assert llm.model_name == "gemini/gemini-critic"
+        assert llm.model_name == sdk.requests[0]["model"]
+
+    def test_fallback_to_agent_llm_model(self) -> None:
+        sdk = FakeOpenAISDK(vpn_answers())
+        llm = LiteLLMClient(
+            AgentSettings(_env_file=None, agent_llm_model="gemini/gemini-fallback"),
+            Tracer(None),
+            client=sdk,
+        )
+        # Before structured call
+        assert llm.model_name == "gemini/gemini-fallback"
+        # After structured call without purpose override
+        llm.structured(purpose="classify", system="s", prompt="p", schema=ClassifyOutput)
+        assert sdk.requests[0]["model"] == "gemini/gemini-fallback"
+        assert llm.model_name == "gemini/gemini-fallback"
+        assert llm.model_name == sdk.requests[0]["model"]
+
+    def test_explicit_override(self) -> None:
+        sdk = FakeOpenAISDK(vpn_answers())
+        llm = LiteLLMClient(
+            AgentSettings(
+                _env_file=None,
+                agent_llm_model="gemini/gemini-fallback",
+                agent_diagnostic_model="gemini/gemini-diagnostic",
+            ),
+            Tracer(None),
+            client=sdk,
+        )
+        llm.structured(
+            purpose="diagnose",
+            system="s",
+            prompt="p",
+            schema=DiagnoseOutput,
+            model="gemini/gemini-explicit-override",
+        )
+        assert sdk.requests[0]["model"] == "gemini/gemini-explicit-override"
+        assert llm.model_name == "gemini/gemini-explicit-override"
+        assert llm.model_name == sdk.requests[0]["model"]
+
+    def test_recorded_audit_model_matches_request_in_multi_agent_execution(self) -> None:
+        sdk = FakeOpenAISDK(vpn_answers())
+        llm = LiteLLMClient(
+            AgentSettings(
+                _env_file=None,
+                agent_llm_model="gemini/gemini-fallback",
+                agent_diagnostic_model="gemini/gemini-diag-model",
+                agent_resolution_model="gemini/gemini-res-model",
+                agent_critic_model="gemini/gemini-critic-model",
+            ),
+            Tracer(None),
+            client=sdk,
+        )
+        # 1. Diagnose executes with diagnostic model
+        llm.structured(purpose="diagnose", system="s", prompt="p", schema=DiagnoseOutput)
+        assert sdk.requests[0]["model"] == "gemini/gemini-diag-model"
+
+        # 2. Generate executes with resolution model
+        llm.structured(purpose="generate", system="s", prompt="p", schema=GenerateOutput)
+        assert sdk.requests[1]["model"] == "gemini/gemini-res-model"
+
+        # 3. Critic executes with critic model
+        llm.structured(purpose="verify_evidence", system="s", prompt="p", schema=CriticOutput)
+        assert sdk.requests[2]["model"] == "gemini/gemini-critic-model"
+
+        # 4. Audit model for act() reflects the resolution model that drafted the remediation
+        assert llm.model_name == "gemini/gemini-res-model"
+        assert llm.model_name == sdk.requests[1]["model"]
+        assert llm.get_used_model("diagnose") == "gemini/gemini-diag-model"
+        assert llm.get_used_model("generate") == "gemini/gemini-res-model"
+        assert llm.get_used_model("verify_evidence") == "gemini/gemini-critic-model"
 
     @pytest.mark.parametrize(
         ("kwargs", "error"),

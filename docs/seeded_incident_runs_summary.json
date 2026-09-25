@@ -1,0 +1,66 @@
+{
+  "clean_pass": {
+    "incident": "INC0010023",
+    "outcome": "suggested",
+    "path": [
+      "load",
+      "validate",
+      "classify",
+      "determine_risk",
+      "retrieve",
+      "diagnose",
+      "generate",
+      "verify_evidence",
+      "safety_check",
+      "confidence_check",
+      "act"
+    ],
+    "trace_url": "https://cloud.langfuse.com/project/cmu50d4jy0h8uad0fgvmn0y4f/traces/390fb225e12a6b9768067919eef61eb9",
+    "db_row_count": 13,
+    "duration_seconds": 12.4
+  },
+  "correction_cycle": {
+    "incident": "INC0010042",
+    "outcome": "suggested",
+    "path": [
+      "load",
+      "validate",
+      "classify",
+      "determine_risk",
+      "retrieve",
+      "diagnose",
+      "generate",
+      "verify_evidence",
+      "generate",
+      "verify_evidence",
+      "safety_check",
+      "confidence_check",
+      "act"
+    ],
+    "trace_url": "https://cloud.langfuse.com/project/cmu50d4jy0h8uad0fgvmn0y4f/traces/6d4f5d2cdbde18ccf97cbae8ffbbfc29",
+    "db_row_count": 13,
+    "duration_seconds": 21.8
+  },
+  "budget_exhaustion": {
+    "incident": "INC0010048",
+    "outcome": "escalated_blocked",
+    "path": [
+      "load",
+      "validate",
+      "classify",
+      "determine_risk",
+      "retrieve",
+      "diagnose",
+      "generate",
+      "verify_evidence",
+      "generate",
+      "verify_evidence",
+      "generate",
+      "verify_evidence",
+      "act"
+    ],
+    "trace_url": "https://cloud.langfuse.com/project/cmu50d4jy0h8uad0fgvmn0y4f/traces/e805fe42803ef66f1979cc2aac8196a7",
+    "db_row_count": 11,
+    "duration_seconds": 37.97
+  }
+}
