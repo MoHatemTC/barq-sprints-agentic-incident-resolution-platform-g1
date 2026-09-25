@@ -246,6 +246,9 @@ def act(state: AgentState, deps: AgentDependencies) -> dict[str, Any]:
     if not deps.settings.agent_write_back_enabled:
         output = output.model_copy(update={"actions": actions, "write_back": "dry_run"})
         return {"output": output.model_dump(mode="json")}
+    # Act-node writes currently run on synchronous Celery/graph worker threads without
+    # a running event loop, so asyncio.run() bridges to ToolRegistry. If execution moves
+    # to an async worker/task context, replace this bridge rather than nest asyncio.run().
     try:
         asyncio.run(
             deps.tools.invoke(
