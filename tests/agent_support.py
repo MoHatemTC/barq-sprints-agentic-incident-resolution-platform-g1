@@ -18,7 +18,13 @@ from pydantic import BaseModel
 
 from agent.config import AgentSettings
 from agent.dependencies import AgentDependencies
-from agent.prompts import ClassifyOutput, DiagnoseOutput, GenerateOutput, StepOutput
+from agent.prompts import (
+    ClassifyOutput,
+    CriticOutput,
+    DiagnoseOutput,
+    GenerateOutput,
+    StepOutput,
+)
 from agent.servicenow import AsyncRunner, IncidentGateway
 from agent.state import EvidenceItem, RetrievalResult
 from app.models.execution_log import ExecutionLogCreatePayload
@@ -177,10 +183,30 @@ class FakeLLM:
     answers: dict[str, Any] = field(default_factory=dict)
     calls: list[dict[str, str]] = field(default_factory=list)
     model_name: str = "gemini/gemini-3.5-flash"
+    last_model_used: str | None = None
+    purpose_models: dict[str, str] = field(default_factory=dict)
 
-    def structured(self, *, purpose: str, system: str, prompt: str, schema: type[Any]) -> Any:
-        self.calls.append({"purpose": purpose, "system": system, "prompt": prompt})
+    def model_for_purpose(self, purpose: str, override: str | None = None) -> str:
+        return override or self.model_name
+
+    def structured(
+        self,
+        *,
+        purpose: str,
+        system: str,
+        prompt: str,
+        schema: type[Any],
+        model: str | None = None,
+    ) -> Any:
+        selected_model = self.model_for_purpose(purpose, model)
+        self.last_model_used = selected_model
+        self.purpose_models[purpose] = selected_model
+        self.calls.append(
+            {"purpose": purpose, "system": system, "prompt": prompt, "model": selected_model}
+        )
         answer = self.answers[purpose]
+        if isinstance(answer, list):
+            answer = answer.pop(0)
         if isinstance(answer, BaseException):
             raise answer
         if callable(answer) and not isinstance(answer, BaseModel):
@@ -223,6 +249,12 @@ def vpn_answers(confidence: float = 0.82) -> dict[str, Any]:
                 ),
             ]
         ),
+        "verify_evidence": CriticOutput(
+            passed=True,
+            invalid_citations=[],
+            unsupported_claims=[],
+            feedback_instructions="",
+        ),
     }
 
 
@@ -236,6 +268,7 @@ class FakeOpenAISDK:
         "ClassifyOutput": "classify",
         "DiagnoseOutput": "diagnose",
         "GenerateOutput": "generate",
+        "CriticOutput": "verify_evidence",
     }
 
     def __init__(
@@ -256,7 +289,11 @@ class FakeOpenAISDK:
 
     def _parse(self, **request: Any) -> Any:
         self.requests.append(request)
-        answer = self.answers[self.SCHEMA_PURPOSE[request["response_format"].__name__]]
+        val = self.answers[self.SCHEMA_PURPOSE[request["response_format"].__name__]]
+        if isinstance(val, list):
+            answer = val.pop(0)
+        else:
+            answer = val
         if isinstance(answer, BaseException):
             raise answer
         completion = SimpleNamespace(
