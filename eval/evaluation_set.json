@@ -10,11 +10,12 @@
         "note": "Scores are computed per-incident against the article_ids returned by retrieval, not per-chunk. A hit is any returned chunk whose article_id matches. Surfacing any forbidden_article_id fails the incident regardless of any primary/acceptable hit also present."
     },
     "counts": {
-        "total_incidents": 27,
-        "manual": 13,
+        "total_incidents": 33,
+        "manual": 19,
         "synthetic": 14,
         "multi_article": 7,
-        "unanswerable": 6
+        "unanswerable": 6,
+        "stressor": 6
     },
     "incidents": [
         {
@@ -340,6 +341,48 @@
             "forbidden_article_ids": [],
             "is_answerable": true,
             "source": "synthetic"
+        },
+        {
+            "id": "stressor-layout-1",
+            "description": "I need to know the operating model working hours for Tier 1 analysts and what sections they should read.",
+            "expected_article_id": "1.1",
+            "type": "manual",
+            "stressor": "layout"
+        },
+        {
+            "id": "stressor-layout-2",
+            "description": "What sections should the delivery managers read according to the manual purpose and audience?",
+            "expected_article_id": "1.1",
+            "type": "manual",
+            "stressor": "layout"
+        },
+        {
+            "id": "stressor-ocr-1",
+            "description": "I need to translate an identifier in the run report. Should I translate INC0010023?",
+            "expected_article_id": "12.2",
+            "type": "manual",
+            "stressor": "ocr"
+        },
+        {
+            "id": "stressor-ocr-2",
+            "description": "Can I translate CHG0030455 in the operational reporting to service delivery managers?",
+            "expected_article_id": "12.2",
+            "type": "manual",
+            "stressor": "ocr"
+        },
+        {
+            "id": "stressor-table-1",
+            "description": "What is the priority for an incident with impact 2 and urgency 1?",
+            "expected_article_id": "3.3",
+            "type": "manual",
+            "stressor": "table"
+        },
+        {
+            "id": "stressor-table-2",
+            "description": "If the impact is individual and urgency is high, what priority is it?",
+            "expected_article_id": "C",
+            "type": "manual",
+            "stressor": "table"
         }
     ]
 }

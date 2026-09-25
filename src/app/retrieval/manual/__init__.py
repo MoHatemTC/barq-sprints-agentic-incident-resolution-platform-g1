@@ -29,8 +29,6 @@ __all__ = [
     "AppendixERelationships",
     "DEFAULT_MANUAL_COLLECTION_NAME",
     "ManualCorpusJSONSource",
-    "ManualSearchResult",
-    "ManualSectionHit",
     "ManualSource",
     "ParseReport",
     "RawSection",
@@ -40,8 +38,6 @@ __all__ = [
     "parse_appendix_e_body",
     "parse_manual",
     "relationships_for_section",
-    "search_manual_sections",
     "sections_and_relationships_to_json",
     "split_into_sections",
-    "timed_search_manual_sections",
 ]

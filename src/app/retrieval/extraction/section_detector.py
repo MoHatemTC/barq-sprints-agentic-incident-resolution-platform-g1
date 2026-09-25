@@ -23,6 +23,11 @@ _TOC_LEADER_RE = re.compile(r"\.{3,}\s*\d+\s*$")
 # header/footer stripping must never be read as a section title.
 _FOOTER_FRAGMENT_RE = re.compile(r"^\s*(?:of\s+\d+|page\s+\d+)\s*$", re.IGNORECASE)
 
+_APPENDIX_HEADING_RE = re.compile(
+    r"^[ \t]*Appendix[ \t]+([A-Z])\b(?:[ \t]*[·:-][ \t]*([^\n]{2,}))?[ \t]*$",
+    re.MULTILINE,
+)
+
 _MAX_HEADING_WORDS = 10
 _MAX_HEADING_CHARS = 80
 
@@ -74,6 +79,7 @@ def find_section_headings(stream: str, exclude_pages: set[int] = None) -> list[D
     """Find section headings in the text stream, returning their offsets."""
     exclude_pages = exclude_pages or set()
     headings: list[DetectedHeading] = []
+
     for match in SECTION_HEADING_RE.finditer(stream):
         line = match.group(0).strip()
         if _TOC_LEADER_RE.search(line):
@@ -95,6 +101,19 @@ def find_section_headings(stream: str, exclude_pages: set[int] = None) -> list[D
         if _looks_like_prose_sentence(title):
             continue
         headings.append(DetectedHeading(section_number, title, start, end))
+
+    for match in _APPENDIX_HEADING_RE.finditer(stream):
+        line = match.group(0).strip()
+        if _TOC_LEADER_RE.search(line):
+            continue
+        page_num = page_for_offset(stream, match.start())
+        if page_num in exclude_pages:
+            continue
+        letter = match.group(1)
+        title = (match.group(2) or f"Appendix {letter}").strip()
+        headings.append(DetectedHeading(letter, title, match.start(), match.end() + 1))
+
+    headings.sort(key=lambda h: h.start)
     return headings
 
 

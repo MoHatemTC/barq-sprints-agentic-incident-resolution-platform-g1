@@ -5,6 +5,7 @@ import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import pdfplumber
 import pytesseract
 from pdf2image import convert_from_path
 from PIL import Image
@@ -66,6 +67,23 @@ def extract_images_from_pdf(
     return images
 
 
+def find_page_image_bboxes(
+    pdf_path: Path, page_number: int, min_area: float = 2000.0
+) -> list[tuple[float, float, float, float]]:
+    """Return the bounding boxes of embedded raster images on one page, in
+    pdfplumber's (x0, top, x1, bottom) coordinates.
+    """
+    with pdfplumber.open(pdf_path) as pdf:
+        page = pdf.pages[page_number - 1]
+        boxes = []
+        for img in page.images:
+            x0, top, x1, bottom = img["x0"], img["top"], img["x1"], img["bottom"]
+            area = max(0.0, x1 - x0) * max(0.0, bottom - top)
+            if area >= min_area:
+                boxes.append((x0, top, x1, bottom))
+        return boxes
+
+
 def ocr_image(image: Image.Image, lang: str = DEFAULT_LANG, page_number: int = 0) -> OcrResult:
     """Run Tesseract OCR on a single PIL Image and return the result."""
     check_tesseract_installed()
@@ -73,17 +91,33 @@ def ocr_image(image: Image.Image, lang: str = DEFAULT_LANG, page_number: int = 0
 
     words: list[str] = []
     confidences: list[float] = []
-    for word, conf in zip(data["text"], data["conf"], strict=True):
+
+    current_block = None
+    current_line = None
+
+    for word, conf, block_num, line_num in zip(
+        data["text"], data["conf"], data["block_num"], data["line_num"], strict=True
+    ):
         conf_value = float(conf)
 
-        # Skip empty words with negative confidence
-        if conf_value < 0 and not word.strip():
+        if conf_value < 0 and not str(word).strip():
             continue
 
-        words.append(word)
+        # Add newlines when block or line changes
+        if current_block is not None and current_block != block_num:
+            words.append("\n\n")
+        elif current_line is not None and current_line != line_num:
+            words.append("\n")
+        elif words and not words[-1].endswith("\n"):
+            words.append(" ")
+
+        current_block = block_num
+        current_line = line_num
+
+        words.append(str(word))
         confidences.append(conf_value)
 
-    text = " ".join(words)
+    text = "".join(words)
     mean_confidence = (sum(confidences) / len(confidences) / 100) if confidences else 0.0
     return OcrResult(
         text=text,
@@ -91,6 +125,29 @@ def ocr_image(image: Image.Image, lang: str = DEFAULT_LANG, page_number: int = 0
         page_number=page_number,
         word_confidences=confidences,
     )
+
+
+def ocr_image_regions(
+    pdf_path: Path,
+    page_number: int,
+    boxes: list[tuple[float, float, float, float]],
+    lang: str = DEFAULT_LANG,
+    dpi: int = DEFAULT_DPI,
+) -> list[OcrResult]:
+    """Render and OCR just the given bounding boxes on one page, rather than
+    the whole page.
+    """
+    check_tesseract_installed()
+    results: list[OcrResult] = []
+    with pdfplumber.open(pdf_path) as pdf:
+        page = pdf.pages[page_number - 1]
+        for box in boxes:
+            cropped_image = page.crop(box).to_image(resolution=dpi).original
+            result = ocr_image(cropped_image, lang=lang, page_number=page_number)
+            result.text = post_process_technical_tokens(result.text)
+            if result.text.strip():
+                results.append(result)
+    return results
 
 
 def _protected_spans(text: str) -> list[tuple[int, int]]:
@@ -128,12 +185,6 @@ def post_process_technical_tokens(text: str) -> str:
 def extract_ocr_text(
     pdf_path: Path, pages: list[int], lang: str = DEFAULT_LANG, dpi: int = DEFAULT_DPI
 ) -> list[OcrPageResult]:
-    """Full OCR pipeline: PDF pages -> images -> OCR -> post-processing.
-
-    Each result carries the page number, cleaned text, and mean confidence,
-    so a caller can decide whether the page is trustworthy enough to ingest
-    as-is or needs a human pass before it becomes part of the corpus.
-    """
     check_tesseract_installed()
     images = extract_images_from_pdf(pdf_path, pages, dpi)
 

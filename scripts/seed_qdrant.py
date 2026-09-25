@@ -19,6 +19,8 @@ from app.core.config import Settings, get_retrieval_settings
 from app.core.logging import configure_logging
 from app.retrieval.embedding import FastEmbedEngine
 from app.retrieval.ingest import ingest_articles
+from app.retrieval.manual.manual_ingest import ingest_manual_sections
+from app.retrieval.manual.manual_sources import ManualCorpusJSONSource
 from app.retrieval.sources import LocalJSONSource
 
 settings = Settings()
@@ -105,6 +107,23 @@ def main() -> int:
         embedding_engine=engine,
         purge_unknown_articles=True,
     )
+
+    manual_path = Path("data/corpus/manual_sections.json")
+    if manual_path.exists():
+        logger.info("loading_manual_sections", corpus=str(manual_path))
+        manual_source = ManualCorpusJSONSource(manual_path)
+        sections, relationships = manual_source.load_sections_and_relationships()
+        logger.info("manual_sections_loaded", count=len(sections))
+
+        manual_points = ingest_manual_sections(
+            sections=sections,
+            relationships=relationships,
+            client=client,
+            collection_name=collection_name,
+            embedding_engine=engine,
+            purge_unknown_sections=True,
+        )
+        total_points += manual_points
 
     stored = client.get_collection(collection_name=collection_name).points_count
     if stored != total_points:

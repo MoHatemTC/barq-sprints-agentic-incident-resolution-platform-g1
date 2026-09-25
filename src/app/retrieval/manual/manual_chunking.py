@@ -65,6 +65,7 @@ def chunk_section(
 
 def chunk_sections(
     sections: list[ManualSection],
+    relationships: AppendixERelationships,
     chunk_size: int = DEFAULT_CHUNK_SIZE,
     chunk_overlap: int = DEFAULT_CHUNK_OVERLAP,
 ) -> list[ManualSectionChunk]:
@@ -74,6 +75,7 @@ def chunk_sections(
         chunks.extend(
             chunk_section(
                 section,
+                relationships=relationships,
                 chunk_size=chunk_size,
                 chunk_overlap=chunk_overlap,
             )

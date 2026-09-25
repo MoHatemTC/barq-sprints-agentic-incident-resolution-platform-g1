@@ -18,7 +18,11 @@ from app.retrieval.extraction.layout_extraction import (
     extract_text_blocks,
     reconstruct_reading_order,
 )
-from app.retrieval.extraction.ocr_extraction import extract_ocr_text
+from app.retrieval.extraction.ocr_extraction import (
+    extract_ocr_text,
+    find_page_image_bboxes,
+    ocr_image_regions,
+)
 from app.retrieval.extraction.parse_appendix import (
     AppendixERelationships,
     find_appendix_e,
@@ -32,21 +36,33 @@ from app.retrieval.extraction.section_detector import (
 from app.retrieval.extraction.table_extraction import (
     ExtractedTable,
     extract_tables_from_pdf,
+    is_plausible_table,
     propagate_merged_headers,
-    table_to_markdown,
+    table_to_flat_text,
 )
 
 logger = structlog.get_logger(__name__)
 
 # Below this character count, a page's (header/footer-stripped) pdftotext
-# yield is treated as no usable text layer and it is routed to OCR.
+# yield is treated as no usable text layer and it is routed to whole-page OCR.
 OCR_TEXT_LENGTH_FLOOR = 20
 
 # >=2 clustered columns means the page needs reading-order reconstruction
 # rather than a left-to-right read of pdftotext's column-mangled output.
 MIN_COLUMNS_FOR_LAYOUT_CLASS = 2
 
+# Embedded images smaller than this (in pt^2) are treated as decorative
+# (logos, bullets, rules) rather than content worth OCR'ing.
+MIN_EMBEDDED_IMAGE_AREA = 2000.0
+
 OCR_RELIABILITY_FLOOR = 0.60
+
+# Lower than OCR_RELIABILITY_FLOOR: embedded photos (a whiteboard, a phone
+# screenshot) are inherently noisier than a scanned text page, so a
+# fragment below this is still logged rather than treated as trustworthy.
+IMAGE_OCR_CONFIDENCE_FLOOR = 0.40
+
+_ALIGNMENT_WHITESPACE_RE = re.compile(r"[ \t]{2,}")
 
 
 @dataclass
@@ -66,6 +82,7 @@ class ParseReport:
     total_pages: int = 0
     total_sections: int = 0
     ocr_pages: list[int] = field(default_factory=list)
+    image_ocr_pages: list[int] = field(default_factory=list)
     table_pages: list[int] = field(default_factory=list)
     layout_pages: list[int] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
@@ -94,105 +111,137 @@ def _pdftotext_all_pages(pdf_path: Path, total_pages: int) -> dict[int, str]:
     return {i + 1: strip_page_headers_and_footers(text) for i, text in enumerate(pages)}
 
 
+def _collapse_alignment_whitespace(text: str) -> str:
+    """Collapse pdftotext's column-alignment padding (runs of 2+ spaces/tabs)
+    to a single space, one line at a time. Newlines are left alone so
+    paragraph structure survives."""
+    return "\n".join(_ALIGNMENT_WHITESPACE_RE.sub(" ", line).rstrip() for line in text.split("\n"))
+
+
 def _render_tables(tables: list[ExtractedTable]) -> str:
-    """Render every table found on a page to Markdown, in the order pdfplumber found them."""
+    """Render every plausible table to flat text; implausible detections
+    are dropped rather than rendered."""
     parts: list[str] = []
     for table in tables:
         rows = propagate_merged_headers(table.cells)
-        markdown = table_to_markdown(rows)
-        if markdown:
-            parts.append(markdown)
+        if not is_plausible_table(rows):
+            continue
+        text = table_to_flat_text(rows)
+        if text:
+            parts.append(text)
     return "\n\n".join(parts)
 
 
 def _is_table_of_contents(page_text: str) -> bool:
     lines = [line.strip() for line in page_text.splitlines() if line.strip()]
-
     if not lines:
         return False
-
     dotted_entries = sum(1 for line in lines if re.search(r"\.{3,}\s*\d+\s*$", line))
-
     return dotted_entries >= 5
 
 
-def classify_and_extract(
+def _run_whole_page_ocr(
     pdf_path: Path,
     total_pages: int,
+    plain_by_page: dict[int, str],
     table_pages: set[int],
     layout_pages: set[int],
     report: ParseReport,
 ) -> dict[int, PageInfo]:
-    """
-    Classify every page and extract its final text, batching OCR and table
-    detection across all pages that need them instead of per-page PDF opens.
-    """
-    plain_by_page = _pdftotext_all_pages(pdf_path, total_pages)
-    pages: dict[int, PageInfo] = {}
-
-    # Phase 1: OCR
-    ocr_candidates = sorted(
+    """Whole-page OCR for pages pdftotext found essentially no text on at
+    all -- a fully scanned page with no usable text layer."""
+    candidates = sorted(
         p
         for p in range(1, total_pages + 1)
         if p not in table_pages
         and p not in layout_pages
         and len(plain_by_page[p].strip()) < OCR_TEXT_LENGTH_FLOOR
     )
-    if ocr_candidates:
-        report.ocr_pages.extend(ocr_candidates)
+    if not candidates:
+        return {}
 
-        ocr_results = {r.page_number: r for r in extract_ocr_text(pdf_path, ocr_candidates)}
-        for page_number in ocr_candidates:
-            result = ocr_results.get(page_number)
-            if result is None:
-                report.warnings.append(
-                    f"page {page_number}: OCR requested but returned no result; using plain text"
-                )
-                pages[page_number] = PageInfo(
-                    page_number, ManualSectionType.OCR, plain_by_page[page_number], 0.0
-                )
-                continue
-            if result.mean_confidence < OCR_RELIABILITY_FLOOR:
-                report.warnings.append(
-                    f"page {page_number}: OCR confidence {result.mean_confidence:.2f} "
-                    f"below the {OCR_RELIABILITY_FLOOR} review threshold"
-                )
+    report.ocr_pages.extend(candidates)
+    results_by_page = {r.page_number: r for r in extract_ocr_text(pdf_path, candidates)}
 
+    pages: dict[int, PageInfo] = {}
+    for page_number in candidates:
+        result = results_by_page.get(page_number)
+        if result is None:
+            report.warnings.append(
+                f"page {page_number}: OCR requested but returned no result; using plain text"
+            )
             pages[page_number] = PageInfo(
-                page_number,
-                ManualSectionType.OCR,
-                strip_page_headers_and_footers(result.text),
-                result.mean_confidence,
+                page_number, ManualSectionType.OCR, plain_by_page[page_number], 0.0
+            )
+            continue
+
+        if result.mean_confidence < OCR_RELIABILITY_FLOOR:
+            report.warnings.append(
+                f"page {page_number}: OCR confidence {result.mean_confidence:.2f} "
+                f"below the {OCR_RELIABILITY_FLOOR} review threshold"
             )
 
-    # Phase 2: tables, batched across every remaining page not pinned to layout.
-    remaining = [p for p in range(1, total_pages + 1) if p not in pages]
-    table_candidates = [p for p in remaining if p not in layout_pages]
-    tables_by_page: dict[int, list[ExtractedTable]] = {}
-    if table_candidates:
-        for table in extract_tables_from_pdf(pdf_path, table_candidates):
-            tables_by_page.setdefault(table.page_number, []).append(table)
+        pages[page_number] = PageInfo(
+            page_number,
+            ManualSectionType.OCR,
+            strip_page_headers_and_footers(result.text),
+            result.mean_confidence,
+        )
+    return pages
 
-    # Phase 3: classify every remaining page, using the table detection results to
-    # decide whether to treat a page as a table or as prose.
+
+def _find_plausible_tables(
+    pdf_path: Path, page_numbers: list[int]
+) -> dict[int, list[ExtractedTable]]:
+    """Detect tables on the given pages and keep only the plausible ones
+    per page (see is_plausible_table)."""
+    if not page_numbers:
+        return {}
+
+    found_by_page: dict[int, list[ExtractedTable]] = {}
+    for table in extract_tables_from_pdf(pdf_path, page_numbers):
+        found_by_page.setdefault(table.page_number, []).append(table)
+
+    plausible_by_page: dict[int, list[ExtractedTable]] = {}
+    for page_number, found in found_by_page.items():
+        plausible = [t for t in found if is_plausible_table(propagate_merged_headers(t.cells))]
+        if plausible:
+            plausible_by_page[page_number] = plausible
+    return plausible_by_page
+
+
+def _classify_remaining_pages(
+    pdf_path: Path,
+    remaining: list[int],
+    plain_by_page: dict[int, str],
+    plausible_tables_by_page: dict[int, list[ExtractedTable]],
+    table_pages: set[int],
+    layout_pages: set[int],
+    report: ParseReport,
+) -> dict[int, PageInfo]:
+    """Classify each page as TABLE, LAYOUT or PROSE, in that priority order."""
+    pages: dict[int, PageInfo] = {}
+
     for page_number in remaining:
+        plausible_tables = plausible_tables_by_page.get(page_number, [])
         forced_table = page_number in table_pages
         forced_layout = page_number in layout_pages
-        found_tables = tables_by_page.get(page_number, [])
 
-        if forced_table or found_tables:
+        if forced_table or plausible_tables:
             report.table_pages.append(page_number)
-            rendered = _render_tables(found_tables)
+            table_text = _render_tables(plausible_tables)
+            prose = _collapse_alignment_whitespace(plain_by_page[page_number])
+
+            rendered = table_text
             if not rendered:
                 report.warnings.append(
-                    f"page {page_number}: classified as table but rendering was empty; "
-                    "using plain text"
+                    f"page {page_number}: classified as table (forced) but no "
+                    "plausible table was found; using plain text"
                 )
-                rendered = plain_by_page[page_number]
-            else:
-                prose = plain_by_page[page_number].strip()
-                if prose:
-                    rendered = f"{prose}\n\n{rendered}"
+                rendered = prose
+            elif prose:
+                rendered = f"{prose}\n\n{rendered}"
+
             pages[page_number] = PageInfo(page_number, ManualSectionType.TABLE, rendered)
             continue
 
@@ -212,8 +261,88 @@ def classify_and_extract(
             continue
 
         pages[page_number] = PageInfo(
-            page_number, ManualSectionType.PROSE, plain_by_page[page_number]
+            page_number,
+            ManualSectionType.PROSE,
+            _collapse_alignment_whitespace(plain_by_page[page_number]),
         )
+
+    return pages
+
+
+def _overlay_embedded_image_ocr(
+    pdf_path: Path, pages: dict[int, PageInfo], report: ParseReport
+) -> None:
+    """OCR embedded images and append the result to each page's text."""
+    for page_number, page_info in list(pages.items()):
+        if page_info.content_type == ManualSectionType.OCR:
+            continue  # already OCR'd whole-page
+
+        boxes = find_page_image_bboxes(pdf_path, page_number, MIN_EMBEDDED_IMAGE_AREA)
+        if not boxes:
+            continue
+
+        image_results = ocr_image_regions(pdf_path, page_number, boxes)
+        if not image_results:
+            continue
+
+        report.image_ocr_pages.append(page_number)
+        low_confidence = [r for r in image_results if r.confidence < IMAGE_OCR_CONFIDENCE_FLOOR]
+        if low_confidence:
+            report.warnings.append(
+                f"page {page_number}: {len(low_confidence)} embedded image(s) OCR'd "
+                f"below the {IMAGE_OCR_CONFIDENCE_FLOOR} confidence floor; verify "
+                "against the source PDF"
+            )
+
+        image_text = "\n\n".join(
+            _collapse_alignment_whitespace(r.text) for r in image_results if r.text.strip()
+        )
+        if image_text:
+            pages[page_number] = PageInfo(
+                page_number,
+                page_info.content_type,
+                f"{page_info.text}\n\n[Image content]\n{image_text}",
+                page_info.ocr_confidence,
+            )
+
+
+def classify_and_extract(
+    pdf_path: Path,
+    total_pages: int,
+    table_pages: set[int],
+    layout_pages: set[int],
+    report: ParseReport,
+) -> dict[int, PageInfo]:
+    """
+    Classify every page and extract its final text:
+      1. Whole-page OCR for pages with no real text layer.
+      2. Table detection on every remaining page.
+      3. Classify each remaining page as TABLE, LAYOUT or PROSE.
+      4. Overlay OCR for embedded images on any page not already OCR'd.
+    """
+    plain_by_page = _pdftotext_all_pages(pdf_path, total_pages)
+
+    pages = _run_whole_page_ocr(
+        pdf_path, total_pages, plain_by_page, table_pages, layout_pages, report
+    )
+
+    remaining = [p for p in range(1, total_pages + 1) if p not in pages]
+    table_candidates = [p for p in remaining if p not in layout_pages]
+    plausible_tables_by_page = _find_plausible_tables(pdf_path, table_candidates)
+
+    pages.update(
+        _classify_remaining_pages(
+            pdf_path,
+            remaining,
+            plain_by_page,
+            plausible_tables_by_page,
+            table_pages,
+            layout_pages,
+            report,
+        )
+    )
+
+    _overlay_embedded_image_ocr(pdf_path, pages, report)
 
     return pages
 
@@ -328,6 +457,7 @@ def parse_manual(
         pages=report.total_pages,
         sections=report.total_sections,
         ocr_pages=len(report.ocr_pages),
+        image_ocr_pages=len(report.image_ocr_pages),
         table_pages=len(report.table_pages),
         layout_pages=len(report.layout_pages),
         warnings=len(report.warnings),

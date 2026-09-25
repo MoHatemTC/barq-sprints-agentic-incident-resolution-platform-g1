@@ -130,7 +130,7 @@ def ensure_collection(
         name,
         dense_vector_size=dense_vector_size,
         force_recreate=force_recreate,
-        keyword_indexes=PAYLOAD_KEYWORD_INDEXES,
+        keyword_indexes=list(PAYLOAD_KEYWORD_INDEXES) + list(MANUAL_PAYLOAD_KEYWORD_INDEXES),
     )
 
 
