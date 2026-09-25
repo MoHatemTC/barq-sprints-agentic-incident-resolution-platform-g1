@@ -74,3 +74,42 @@ class ApprovalDecisionRequest(BaseModel):
         default=None,
         description="Optional structured evidence or parameter overrides",
     )
+    solution: str | None = Field(
+        default=None,
+        max_length=8000,
+        description=(
+            "Optional human-authored resolution knowledge contributed while deciding an "
+            "escalated incident. Distinct from 'reason': the reason annotates the "
+            "decision, the solution is the fix itself and is composed into a KB article "
+            "by knowledge capture (S3.5). Persisted folded into 'evidence' together "
+            "with the knowledge-capture tool name."
+        ),
+    )
+
+
+#: Tool name registered in the S3.2 registry for the KB write-back. Folding it into
+#: every decision's evidence keeps the registry's high-risk approval checker
+#: (PostgreSQLApprovalChecker matches evidence["tool_name"]) well-formed for the
+#: executions that carry a solution.
+KNOWLEDGE_CAPTURE_TOOL = "publish_kb_article"
+
+
+def fold_solution_into_evidence(
+    evidence: dict[str, Any] | None, solution: str | None
+) -> dict[str, Any] | None:
+    """Merge the human solution into the evidence persisted with the decision.
+
+    A Mapping is always produced when a solution is present (the strict approval
+    checker refuses executions whose evidence rows are not mappings). The caller's
+    evidence survives the merge; a conflicting ``tool_name`` is overwritten because
+    the knowledge-capture flow owns that key. Redaction runs here — the persistence
+    point — so the raw credential never reaches the database.
+    """
+    if not solution:
+        return evidence
+    from observability.redaction import redact_text
+
+    folded: dict[str, Any] = dict(evidence) if isinstance(evidence, dict) else {}
+    folded["tool_name"] = KNOWLEDGE_CAPTURE_TOOL
+    folded["solution"] = redact_text(solution)
+    return folded
