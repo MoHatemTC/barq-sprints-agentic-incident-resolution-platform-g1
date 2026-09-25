@@ -17,6 +17,7 @@ SECTION_HEADING_RE = re.compile(
     r"[ \t]*$",  # trailing whitespace, end of line
     re.MULTILINE,
 )
+_TOC_LEADER_RE = re.compile(r"\.{3,}\s*\d+\s*$")
 
 # A defensive second gate: a footer fragment like "of 52" that slipped past
 # header/footer stripping must never be read as a section title.
@@ -56,10 +57,20 @@ def page_for_offset(stream: str, offset: int) -> int:
     return stream.count(_PAGE_SEPARATOR, 0, offset) + 1
 
 
-def find_section_headings(stream: str) -> list[DetectedHeading]:
+def find_section_headings(stream: str, exclude_pages: set[int] = None) -> list[DetectedHeading]:
     """Find section headings in the text stream, returning their offsets."""
+    exclude_pages = exclude_pages or set()
     headings: list[DetectedHeading] = []
     for match in SECTION_HEADING_RE.finditer(stream):
+        line = match.group(0).strip()
+        if _TOC_LEADER_RE.search(line):
+            # Skip false positives that look like table-of-contents entries
+            continue
+
+        page_num = page_for_offset(stream, match.start())
+        if page_num in exclude_pages:
+            continue
+
         section_number = match.group(1).rstrip(".")
         title = match.group(2).strip()
         start = match.start()
@@ -71,9 +82,9 @@ def find_section_headings(stream: str) -> list[DetectedHeading]:
     return headings
 
 
-def split_into_sections(stream: str) -> list[RawSection]:
+def split_into_sections(stream: str, exclude_pages: set[int] = None) -> list[RawSection]:
     """Split the text stream into sections based on detected headings."""
-    headings = find_section_headings(stream)
+    headings = find_section_headings(stream, exclude_pages)
     if not headings:
         return []
 

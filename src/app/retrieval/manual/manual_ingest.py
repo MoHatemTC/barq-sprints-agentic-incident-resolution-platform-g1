@@ -16,7 +16,11 @@ from qdrant_client.models import (
     SparseVector,
 )
 
-from app.clients.qdrant import DENSE_VECTOR_NAME, SPARSE_VECTOR_NAME, ensure_collection
+from app.clients.qdrant import (
+    DENSE_VECTOR_NAME,
+    SPARSE_VECTOR_NAME,
+    ensure_manual_collection,
+)
 from app.models.manual_section import ManualSectionChunk, ManualSectionPayload
 from app.retrieval.embedding import EmbeddedText, EmbeddingEngine, FastEmbedEngine
 
@@ -103,7 +107,7 @@ def ingest_manual_sections(
 
     name = collection_name or DEFAULT_MANUAL_COLLECTION_NAME
     engine = embedding_engine or FastEmbedEngine()
-    ensure_collection(
+    ensure_manual_collection(
         client,
         name,
         dense_vector_size=engine.dense_vector_size,
