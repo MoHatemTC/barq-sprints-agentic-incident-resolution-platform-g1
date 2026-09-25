@@ -162,3 +162,39 @@ precisely so nothing else changes.
 | 4 | `test_knowledge_capture.py` | ordering, drift, retry, allocation, idempotency |
 | 5 | `test_loop_closure.py` | empirical retrievability within the security gate |
 | 7 | `scripts/demo_s35_loop_closure.py` | the live transcript (real SN, real Qdrant, real LLM) |
+
+## Live demo runbook (DoD sequence)
+
+```bash
+# 0. Preflight: publisher identity, custom fields, Qdrant up, corpus seeded.
+uv run python scripts/probe_sn_workflow_field.py
+
+# 1. Escalation leg: run the uncovered incident through the real graph and
+#    record ESCALATED_NO_EVIDENCE + awaiting_approval (S2.5/S3.1 behavior;
+#    the S3.4 interrupt() replaces the write-and-end when Ali's PR lands).
+uv run python scripts/run_seeded_incidents.py --help   # pick the seeded case
+
+# 2. Resolution leg: decide through the REAL approval endpoint, contributing
+#    the solution. EXECUTION_ID below is the execution/approval UUID from step 1.
+curl -X POST "$API/api/v1/approvals/$EXECUTION_ID/decide" \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"decision":"approved","decided_by":"mentor-demo",
+       "solution":"was a stale split tunnel route; flushed the vpn routes and reinstalled the client"}'
+# The endpoint folds {tool_name, solution} into the immutable evidence JSONB.
+
+# 3. Capture + closure leg: the exact call S3.4's resume path will make.
+#    --execution-id MUST match step 2: the registry's PostgreSQLApprovalChecker
+#    then finds the REAL human approval row (evidence.tool_name) and the
+#    HIGH_RISK gate passes because the human literally authorized it.
+uv run python scripts/demo_s35_loop_closure.py \
+  --incident-number INC0010123 --execution-id "$EXECUTION_ID" \
+  --short-description "VPN drops every few minutes" \
+  --description "Corporate VPN drops intermittently for the requester." \
+  --service corporate-vpn \
+  --solution "was a stale split tunnel route; flushed the vpn routes and reinstalled the client" \
+  --similar-query "vpn disconnects on the new laptop, split tunnel seems broken"
+# Expect: "== RESULT: LOOP CLOSED" and docs/evidence/s35_demo_transcript.json
+```
+
+Escalation → decision → capture → retrieval: every hop on the record; the one
+hop S3.4 will replace (graph pause/resume) is the documented seam above.
