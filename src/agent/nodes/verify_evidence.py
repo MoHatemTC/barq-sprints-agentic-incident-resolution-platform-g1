@@ -109,6 +109,7 @@ def verify_evidence(state: AgentState, deps: AgentDependencies) -> dict[str, Any
         # (Still run semantic verification on valid steps if any, or report citation errors)
         all_invalid = list(deterministic_invalid)
         all_unsupported = []
+        all_safety_issues: list[str] = []
         semantic_feedback_text = ""
 
         # 2. Semantic LLM verification (isolated completion for steps with valid citations)
@@ -135,10 +136,15 @@ def verify_evidence(state: AgentState, deps: AgentDependencies) -> dict[str, Any
 
             all_invalid.extend(critic_response.invalid_citations)
             all_unsupported.extend(critic_response.unsupported_claims)
+            all_safety_issues.extend(critic_response.safety_issues)
             semantic_feedback_text = critic_response.feedback_instructions
 
         # Consolidate verdict
-        passed = len(all_invalid) == 0 and len(all_unsupported) == 0
+        passed = (
+            len(all_invalid) == 0
+            and len(all_unsupported) == 0
+            and len(all_safety_issues) == 0
+        )
 
         instructions_parts = []
         if deterministic_invalid:
@@ -151,6 +157,11 @@ def verify_evidence(state: AgentState, deps: AgentDependencies) -> dict[str, Any
                 f"Fix {len(all_unsupported)} unsupported claims: "
                 + "; ".join(f"Step {u.step_index} ({u.reason})" for u in all_unsupported)
             )
+        if all_safety_issues:
+            instructions_parts.append(
+                f"Address {len(all_safety_issues)} safety issues: "
+                + "; ".join(all_safety_issues)
+            )
         if semantic_feedback_text:
             instructions_parts.append(semantic_feedback_text)
 
@@ -161,6 +172,7 @@ def verify_evidence(state: AgentState, deps: AgentDependencies) -> dict[str, Any
             attempt=attempt,
             invalid_citations=all_invalid,
             unsupported_claims=all_unsupported,
+            safety_issues=all_safety_issues,
             feedback_instructions=feedback_instructions,
         )
 
@@ -181,6 +193,11 @@ def verify_evidence(state: AgentState, deps: AgentDependencies) -> dict[str, Any
                     "check": "claims",
                     "supported": len(all_unsupported) == 0,
                     "unsupported_count": len(all_unsupported),
+                },
+                {
+                    "check": "safety",
+                    "safe": len(all_safety_issues) == 0,
+                    "safety_issues_count": len(all_safety_issues),
                 },
             ],
             reason=reason,

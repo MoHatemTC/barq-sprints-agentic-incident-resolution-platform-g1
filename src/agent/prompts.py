@@ -77,6 +77,10 @@ class CriticOutput(BaseModel):
             "Steps whose actions or assertions are not supported by the cited evidence text."
         ),
     )
+    safety_issues: list[str] = Field(
+        default_factory=list,
+        description="Any destructive, unsafe, or policy-violating instructions detected.",
+    )
     feedback_instructions: str = Field(
         default="",
         description=(

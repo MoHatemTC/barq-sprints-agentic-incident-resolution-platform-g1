@@ -381,6 +381,57 @@ class TestDiagnose:
         assert diagnosis["matched_article_ids"] == []
         assert diagnosis["symptom_match"] is False
 
+    def test_diagnostic_isolation_prompt_excludes_draft_and_critic_content(self) -> None:
+        """Asserts that no draft or critic feedback leaks into the Diagnostic prompt."""
+        llm = FakeLLM(vpn_answers())
+        state = self._state()
+        state["draft"] = {
+            "steps": [
+                {
+                    "text": "Secret resolution step that must not leak",
+                    "article_id": "KB0001-v2",
+                    "section": "Resolution",
+                }
+            ],
+            "rendered": "1. Secret resolution step that must not leak",
+            "dropped_steps": 0,
+            "sources": ["KB0001 v2"],
+            "revision_count": 2,
+        }
+        state["critic_feedback"] = {
+            "passed": False,
+            "attempt": 1,
+            "invalid_citations": [
+                {"step_index": 1, "citation": "KB9999", "reason": "Hallucinated"}
+            ],
+            "unsupported_claims": [
+                {"step_index": 1, "claim": "Secret claim", "reason": "Not in KB"}
+            ],
+            "safety_issues": ["Critical safety defect"],
+            "feedback_instructions": "DO NOT USE THIS RESOLUTION STEP",
+        }
+        state["revision_count"] = 2
+
+        diagnose(state, make_deps(llm=llm))
+
+        diagnostic_prompt = llm.calls[0]["prompt"]
+        diagnostic_system = llm.calls[0]["system"]
+
+        # Ensure no draft or critic terms leaked into prompt or system
+        assert "Secret resolution step" not in diagnostic_prompt
+        assert "KB9999" not in diagnostic_prompt
+        assert "Hallucinated" not in diagnostic_prompt
+        assert "Critical safety defect" not in diagnostic_prompt
+        assert "DO NOT USE THIS RESOLUTION STEP" not in diagnostic_prompt
+        assert "revision_count" not in diagnostic_prompt
+
+        assert "Secret resolution step" not in diagnostic_system
+        assert "DO NOT USE THIS RESOLUTION STEP" not in diagnostic_system
+
+        # Ensure prompt contains expected diagnostic inputs
+        assert '<evidence article_id="KB0001-v2"' in diagnostic_prompt
+        assert "Classification: network" in diagnostic_prompt
+
 
 # -- generate -----------------------------------------------------------------------------
 
@@ -431,6 +482,79 @@ class TestGenerate:
         assert len(draft["rendered"]) <= 4000
         assert 0 < len(draft["steps"]) < 8
 
+    def test_generate_handles_structured_critiques_and_increments_revision_count(self) -> None:
+        """Asserts that generate consumes critic feedback and increments revision_count."""
+        llm = FakeLLM(vpn_answers())
+        state = self._state()
+        state["draft"] = {
+            "steps": [
+                {
+                    "text": "Restart the core authentication server.",
+                    "article_id": "KB0001-v2",
+                    "section": "Resolution",
+                }
+            ],
+            "rendered": "1. Restart the core authentication server. [KB0001 v2 §Resolution]",
+            "dropped_steps": 0,
+            "sources": ["KB0001 v2 — VPN authentication fails after a password change"],
+            "revision_count": 0,
+        }
+        state["critic_feedback"] = {
+            "passed": False,
+            "attempt": 0,
+            "invalid_citations": [
+                {
+                    "step_index": 1,
+                    "citation": "KB9999-v1 §Troubleshooting",
+                    "reason": "Article ID 'KB9999-v1' was not found in retrieved evidence.",
+                }
+            ],
+            "unsupported_claims": [
+                {
+                    "step_index": 1,
+                    "claim": "Restart the core authentication server.",
+                    "reason": "Article does not authorize server restart.",
+                    "citation": "KB0001-v2 §Resolution",
+                }
+            ],
+            "safety_issues": ["Destructive restart operation without approval."],
+            "feedback_instructions": (
+                "Remove the restart instruction; guide the user through credential clearing."
+            ),
+        }
+        state["revision_count"] = 0
+
+        update = generate(state, make_deps(llm=llm))
+
+        assert update["revision_count"] == 1
+        assert update["draft"]["revision_count"] == 1
+
+        prompt = llm.calls[0]["prompt"]
+        assert "<previous_draft>" in prompt
+        assert "Restart the core authentication server." in prompt
+        assert "<critic_feedback>" in prompt
+        assert "Invalid Citations:" in prompt
+        assert "KB9999-v1 §Troubleshooting" in prompt
+        assert "Unsupported Claims:" in prompt
+        assert "Article does not authorize server restart." in prompt
+        assert "Safety Issues:" in prompt
+        assert "Destructive restart operation without approval." in prompt
+        assert "Actionable Instructions: Remove the restart instruction" in prompt
+
+    def test_generate_initial_attempt_uses_standard_prompt(self) -> None:
+        """When no critic feedback is present, standard prompt is used and revision_count is 0."""
+        llm = FakeLLM(vpn_answers())
+        state = self._state()
+        assert "critic_feedback" not in state
+
+        update = generate(state, make_deps(llm=llm))
+
+        assert update["revision_count"] == 0
+        assert update["draft"]["revision_count"] == 0
+        prompt = llm.calls[0]["prompt"]
+        assert "<previous_resolution_steps>" not in prompt
+        assert "<critic_feedback>" not in prompt
+
 
 # -- the Sprint 4 gates ---------------------------------------------------------------------
 
@@ -448,16 +572,153 @@ def test_safety_check_is_explicit_pass_through() -> None:
     }
 
 
-def test_verify_evidence_critic_validates_grounding() -> None:
-    state = reasoned_state()
-    update = verify_evidence(state, make_deps())
-    assert "verification" in update
-    assert "critic_feedback" in update
-    verification = update["verification"]
-    assert verification["gate"] == "verify_evidence"
-    assert verification["implemented"] is True
-    assert verification["passed"] is True
-    assert update["critic_feedback"]["passed"] is True
+class TestVerifyEvidence:
+    def test_passes_grounded_draft(self) -> None:
+        state = reasoned_state()
+        update = verify_evidence(state, make_deps())
+        assert "verification" in update
+        assert "critic_feedback" in update
+        verification = update["verification"]
+        assert verification["gate"] == "verify_evidence"
+        assert verification["implemented"] is True
+        assert verification["passed"] is True
+        assert update["critic_feedback"]["passed"] is True
+
+    def test_catches_nonexistent_article_id(self) -> None:
+        """Deterministic pre-check detects hallucinated article IDs not in retrieved hits."""
+        state = reasoned_state()
+        state["draft"] = {
+            "steps": [
+                {
+                    "text": "Execute command from phantom article.",
+                    "article_id": "KB9999-v1",
+                    "section": "Resolution",
+                }
+            ],
+            "rendered": "1. Execute command from phantom article. [KB9999 v1 §Resolution]",
+            "dropped_steps": 0,
+            "sources": [],
+            "revision_count": 0,
+        }
+        update = verify_evidence(state, make_deps())
+        verification = update["verification"]
+        feedback = update["critic_feedback"]
+
+        assert verification["passed"] is False
+        assert feedback["passed"] is False
+        assert len(feedback["invalid_citations"]) == 1
+        inv = feedback["invalid_citations"][0]
+        assert inv["step_index"] == 1
+        assert "KB9999-v1" in inv["citation"]
+        assert "was not found in retrieved evidence" in inv["reason"]
+        assert "Fix 1 invalid citations" in feedback["feedback_instructions"]
+        assert verification["reason"] == feedback["feedback_instructions"]
+
+    def test_catches_nonexistent_section(self) -> None:
+        """Deterministic pre-check detects cited section missing from valid retrieved article."""
+        state = reasoned_state()
+        state["draft"] = {
+            "steps": [
+                {
+                    "text": "Execute command from non-existent section.",
+                    "article_id": "KB0001-v2",
+                    "section": "NonExistentSection",
+                }
+            ],
+            "rendered": "1. Execute command [KB0001 v2 §NonExistentSection]",
+            "dropped_steps": 0,
+            "sources": ["KB0001 v2"],
+            "revision_count": 0,
+        }
+        update = verify_evidence(state, make_deps())
+        verification = update["verification"]
+        feedback = update["critic_feedback"]
+
+        assert verification["passed"] is False
+        assert feedback["passed"] is False
+        assert len(feedback["invalid_citations"]) == 1
+        inv = feedback["invalid_citations"][0]
+        assert inv["step_index"] == 1
+        assert "NonExistentSection" in inv["citation"]
+        assert "was not found in article 'KB0001-v2'" in inv["reason"]
+
+    def test_catches_semantic_unsupported_claim(self) -> None:
+        """Semantic verification catches unsupported claims despite valid citations."""
+        from agent.prompts import CriticOutput
+        from agent.state import UnsupportedClaim
+
+        state = reasoned_state()
+        critic_out = CriticOutput(
+            passed=False,
+            invalid_citations=[],
+            unsupported_claims=[
+                UnsupportedClaim(
+                    step_index=1,
+                    claim="Format the hard drive.",
+                    reason="KB0001 does not instruct to format disk.",
+                    citation="KB0001-v2 §Resolution",
+                )
+            ],
+            safety_issues=["Destructive disk formatting."],
+            feedback_instructions="Remove formatting instruction.",
+        )
+        llm = FakeLLM(vpn_answers() | {"verify_evidence": critic_out})
+        update = verify_evidence(state, make_deps(llm=llm))
+
+        verification = update["verification"]
+        feedback = update["critic_feedback"]
+        assert verification["passed"] is False
+        assert feedback["passed"] is False
+        assert len(feedback["unsupported_claims"]) == 1
+        claim = feedback["unsupported_claims"][0]
+        assert claim["claim"] == "Format the hard drive."
+        assert "Remove formatting instruction." in feedback["feedback_instructions"]
+        assert "Remove formatting instruction." in verification["reason"]
+
+    def test_context_isolation_filters_uncited_articles_and_incident_pii(self) -> None:
+        """Critic prompt must contain only candidate steps and their cited evidence chunks."""
+        llm = FakeLLM(vpn_answers())
+        state = reasoned_state()
+        # Add an uncited evidence hit
+        uncited_hit = evidence(
+            article="KB0099",
+            version="1",
+            section="Troubleshooting",
+            title="Unrelated Oracle DB Failure",
+            text="Oracle connection timeout error details.",
+        )
+        state["retrieval"]["hits"].append(uncited_hit.model_dump(mode="json"))
+
+        # Draft only cites KB0001-v2
+        state["draft"] = {
+            "steps": [
+                {
+                    "text": "Clear the cached VPN credential.",
+                    "article_id": "KB0001-v2",
+                    "section": "Resolution",
+                }
+            ],
+            "rendered": "1. Clear the cached VPN credential. [KB0001 v2 §Resolution]",
+            "dropped_steps": 0,
+            "sources": ["KB0001 v2"],
+            "revision_count": 0,
+        }
+
+        verify_evidence(state, make_deps(llm=llm))
+
+        critic_call = [c for c in llm.calls if c["purpose"] == "verify_evidence"][0]
+        prompt = critic_call["prompt"]
+
+        # Cited article is present
+        assert '<evidence article_id="KB0001-v2"' in prompt
+        # Uncited article is strictly excluded
+        assert "KB0099" not in prompt
+        assert "Oracle DB" not in prompt
+
+        # Incident PII/phone number from raw incident is not present in Critic prompt
+        assert "+971 50 123 4567" not in prompt
+        assert "***PHONE***" not in prompt
+        assert "Call me on" not in prompt
 
 
 # -- confidence_check ---------------------------------------------------------------------
