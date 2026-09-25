@@ -35,7 +35,6 @@ class ManualSection(BaseModel):
     title: str = Field(..., min_length=1, max_length=300)
     body: str = Field(
         ...,
-        min_length=1,
         description="Extracted section content, ready for chunking",
     )
     content_type: ManualSectionType

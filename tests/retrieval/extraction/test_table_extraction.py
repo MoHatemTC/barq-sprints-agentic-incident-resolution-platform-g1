@@ -31,9 +31,15 @@ class TestGridFromRawRows:
         assert all(c.rowspan == 1 and c.colspan == 1 for row in grid for c in row)
 
     def test_none_cells_treated_as_empty(self):
-        raw_rows = [["Name", None], ["x", "y"]]
+        # A blank cell immediately to the right of a non-blank one gets
+        # absorbed into that cell's colspan (see the horizontal-merge
+        # test below), so it never becomes a standalone Cell -- to
+        # observe "None -> empty text" in isolation, use a cell whose own
+        # position is blank (not a merge target of a neighbour).
+        raw_rows = [[None, "B"], ["x", "y"]]
         grid = _grid_from_raw_rows(raw_rows)
-        assert grid[0][1].text == ""
+        assert grid[0][0].text == ""
+        assert grid[0][1].text == "B"
 
     def test_internal_newlines_and_whitespace_are_collapsed_to_one_space(self):
         # pdfplumber often returns a wrapped cell as "Line one\nLine two";

@@ -151,7 +151,7 @@ def _grid_from_raw_rows(raw_rows: list[list[str | None]]) -> list[list[Cell]]:
 
             colspan = 1
             while (
-                c + colspan < n_cols
+                c + colspan < len(raw_rows[r])
                 and normalized[r][c + colspan] == ""
                 and not claimed[r][c + colspan]
             ):
@@ -160,7 +160,10 @@ def _grid_from_raw_rows(raw_rows: list[list[str | None]]) -> list[list[Cell]]:
             rowspan = 1
             while (
                 r + rowspan < n_rows
-                and all(normalized[r + rowspan][c + k] == "" for k in range(colspan))
+                and all(
+                    c + k < len(raw_rows[r + rowspan]) and normalized[r + rowspan][c + k] == ""
+                    for k in range(colspan)
+                )
                 and not any(claimed[r + rowspan][c + k] for k in range(colspan))
             ):
                 rowspan += 1
