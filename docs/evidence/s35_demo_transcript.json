@@ -1,13 +1,13 @@
 {
-  "when": "2026-09-25T23:02:52.067792+00:00",
+  "when": "2026-09-25T23:38:12.888559+00:00",
   "incident": {
     "number": "INC0010027",
     "sys_id": "0a4e628347470b10c148497f316d434b"
   },
-  "solution": "was a stale split tunnel route; flushed the vpn routes and reinstalled the client",
+  "solution": "Stripe webhook worker connection pool was exhausted; increased pool size from 10 to 50 in payment config and restarted celery-worker",
   "capture": {
-    "article_number": "KB1002",
-    "sys_id": "febb3361476fcb90c148497f316d43b1",
+    "article_number": "KB1004",
+    "sys_id": "29b3087147afcb90c148497f316d430c",
     "point_count": 1,
     "published": true,
     "ingested": true
@@ -18,57 +18,57 @@
   },
   "qdrant_points": [
     {
-      "article_number": "KB1002",
+      "article_number": "KB1004",
       "version": "1.0",
-      "title": "Resolving Intermittent VPN Drops Caused by Stale Split Tunnel Route",
-      "sys_id": "febb3361476fcb90c148497f316d43b1",
+      "title": "Resolving Stripe Webhook Worker Connection Pool Exhaustion",
+      "sys_id": "29b3087147afcb90c148497f316d430c",
       "category": "software",
-      "service": "corporate-vpn",
+      "service": "payment-service",
       "workflow_state": "human_resolved",
       "security_level": "internal",
       "section": "General",
       "chunk_index": 0,
       "total_chunks": 1,
-      "chunk_text": "The issue was due to a stale split tunnel route. To resolve this:  \n1. Flush the VPN routes.\n2. Reinstall the client.",
+      "chunk_text": "The Stripe webhook worker connection pool was exhausted.  \n1. Increase pool size from 10 to 50 in payment config.\n2. Restart celery-worker.",
       "related_records": [],
-      "article_id": "KB1002-v1.0"
+      "article_id": "KB1004-v1.0"
     }
   ],
-  "similar_query": "vpn disconnects on the new laptop, split tunnel seems broken",
+  "similar_query": "stripe payments timing out on callback webhook",
   "retrieval_hits": [
     {
-      "article_number": "KB1002",
+      "article_number": "KB1004",
       "version": "1.0",
-      "title": "Resolving Intermittent VPN Drops Caused by Stale Split Tunnel Route",
-      "relevance": 0.8074925,
+      "title": "Resolving Stripe Webhook Worker Connection Pool Exhaustion",
+      "relevance": 0.7790957,
       "captured": true
     },
     {
-      "article_number": "KB0001",
-      "version": "2.0",
-      "title": "VPN AUTHENTICATION FAILS AFTER A PASSWORD CHANGE",
-      "relevance": 0.6970924,
+      "article_number": "KB1003",
+      "version": "1.0",
+      "title": "Resolving Stripe Webhook Connection Pool Exhaustion in payment-service",
+      "relevance": 0.76137376,
       "captured": false
     },
     {
       "article_number": "KB0009",
       "version": "2.0",
       "title": "WI-FI DROPS REPEATEDLY ON THE 5 GHZ CORPORATE NETWORK",
-      "relevance": 0.68924594,
+      "relevance": 0.60855067,
       "captured": false
     },
     {
-      "article_number": "KB0001",
+      "article_number": "KB0003",
       "version": "2.0",
-      "title": "VPN AUTHENTICATION FAILS AFTER A PASSWORD CHANGE",
-      "relevance": 0.65009296,
+      "title": "MAPPED SHARED DRIVE IS MISSING AFTER SIGN-IN",
+      "relevance": 0.6030882,
       "captured": false
     },
     {
-      "article_number": "KB0001",
+      "article_number": "KB0009",
       "version": "2.0",
-      "title": "VPN AUTHENTICATION FAILS AFTER A PASSWORD CHANGE",
-      "relevance": 0.64907753,
+      "title": "WI-FI DROPS REPEATEDLY ON THE 5 GHZ CORPORATE NETWORK",
+      "relevance": 0.58526534,
       "captured": false
     }
   ],
