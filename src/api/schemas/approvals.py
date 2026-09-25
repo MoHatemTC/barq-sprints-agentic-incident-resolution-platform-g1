@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 ApprovalDecision = Literal["approved", "rejected", "cancelled", "expired"]
 
@@ -77,12 +77,14 @@ class ApprovalDecisionRequest(BaseModel):
     solution: str | None = Field(
         default=None,
         max_length=8000,
+        validation_alias=AliasChoices("solution", "human_solution"),
         description=(
             "Optional human-authored resolution knowledge contributed while deciding an "
             "escalated incident. Distinct from 'reason': the reason annotates the "
             "decision, the solution is the fix itself and is composed into a KB article "
             "by knowledge capture (S3.5). Persisted folded into 'evidence' together "
-            "with the knowledge-capture tool name."
+            "with the knowledge-capture tool name. Accepted as either 'solution' or "
+            "'human_solution'."
         ),
     )
 

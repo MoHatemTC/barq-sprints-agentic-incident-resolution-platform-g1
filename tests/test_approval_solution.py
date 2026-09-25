@@ -46,6 +46,11 @@ class TestSolutionField:
         with pytest.raises(ValidationError):
             _request(solutions="typo-plural")
 
+    def test_human_solution_alias_accepted(self) -> None:
+        """The mentor's spec names the field 'human_solution'; both spellings work."""
+        request = _request(human_solution="flushed the vpn routes")
+        assert request.solution == "flushed the vpn routes"
+
 
 class TestEvidenceFold:
     """The decide endpoint persists evidence through this fold (S3.5 D3)."""
