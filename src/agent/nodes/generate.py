@@ -81,49 +81,68 @@ def generate(state: AgentState, deps: AgentDependencies) -> dict[str, Any]:
     prev_draft_raw = state.get("draft")
     revision_count = state.get("revision_count", 0)
 
-    if critic_feedback_raw and prev_draft_raw:
-        feedback = CriticFeedback.model_validate(critic_feedback_raw)
-        prev_draft = Draft.model_validate(prev_draft_raw)
-        prompt = revision_prompt(
-            incident_text=incident_text(incident, deps.settings.agent_max_incident_chars),
-            evidence_text=evidence_block(evidence),
-            cause=diagnosis.probable_cause,
-            previous_steps=prev_draft.rendered,
-            feedback_text=_format_critic_feedback(feedback),
-        )
-        new_revision_count = revision_count + 1
-    else:
-        prompt = generate_prompt(
-            incident_text(incident, deps.settings.agent_max_incident_chars),
-            evidence_block(evidence),
-            diagnosis.probable_cause,
-        )
-        new_revision_count = revision_count
+    with deps.tracer.span(
+        "agent.resolution",
+        as_type="agent",
+        input={
+            "incident_number": incident.number,
+            "evidence_count": len(evidence),
+            "revision_count": revision_count,
+            "revising": bool(critic_feedback_raw and prev_draft_raw),
+            "confidence": diagnosis.model_confidence,
+            "probable_cause": diagnosis.probable_cause,
+            
+        },
+        metadata={
+            "agent": "resolution",
+            "execution_id": state.get("execution_id"),
+        },
+    ) as span:
+        if critic_feedback_raw and prev_draft_raw:
+            feedback = CriticFeedback.model_validate(critic_feedback_raw)
+            prev_draft = Draft.model_validate(prev_draft_raw)
+            prompt = revision_prompt(
+                incident_text=incident_text(incident, deps.settings.agent_max_incident_chars),
+                evidence_text=evidence_block(evidence),
+                cause=diagnosis.probable_cause,
+                previous_steps=prev_draft.rendered,
+                feedback_text=_format_critic_feedback(feedback),
+            )
+            new_revision_count = revision_count + 1
+        else:
+            prompt = generate_prompt(
+                incident_text(incident, deps.settings.agent_max_incident_chars),
+                evidence_block(evidence),
+                diagnosis.probable_cause,
+            )
+            new_revision_count = revision_count
 
-    answer = deps.llm.structured(
-        purpose="generate",
-        system=RESOLUTION_SYSTEM,
-        prompt=prompt,
-        schema=GenerateOutput,
-    )
-    allowed = {item.article_id for item in evidence}
-    steps = [
-        DraftStep(text=s.text, article_id=s.article_id, section=s.section)
-        for s in answer.steps
-        if s.article_id in allowed and s.text.strip()
-    ]
-    rendered, sources = render(steps, evidence)
-    while len(rendered) > MAX_SUGGESTION_CHARS and steps:
-        steps = steps[:-1]
+        answer = deps.llm.structured(
+            purpose="generate",
+            system=RESOLUTION_SYSTEM,
+            prompt=prompt,
+            schema=GenerateOutput,
+        )
+        allowed = {item.article_id for item in evidence}
+        steps = [
+            DraftStep(text=s.text, article_id=s.article_id, section=s.section)
+            for s in answer.steps
+            if s.article_id in allowed and s.text.strip()
+        ]
         rendered, sources = render(steps, evidence)
-    draft = Draft(
-        steps=steps,
-        rendered=rendered,
-        dropped_steps=len(answer.steps) - len(steps),
-        sources=sources,
-        revision_count=new_revision_count,
-    )
-    return {
-        "draft": draft.model_dump(mode="json"),
-        "revision_count": new_revision_count,
-    }
+        while len(rendered) > MAX_SUGGESTION_CHARS and steps:
+            steps = steps[:-1]
+            rendered, sources = render(steps, evidence)
+        draft = Draft(
+            steps=steps,
+            rendered=rendered,
+            dropped_steps=len(answer.steps) - len(steps),
+            sources=sources,
+            revision_count=new_revision_count,
+        )
+        result = {
+            "draft": draft.model_dump(mode="json"),
+            "revision_count": new_revision_count,
+        }
+        span.update(output=result)
+        return result

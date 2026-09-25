@@ -40,8 +40,10 @@ GRAPH_NAME = "incident-resolution"
 NodeFn = Callable[[AgentState, AgentDependencies], dict[str, Any]]
 
 _SPAN_TYPES = {
+    "diagnose": "agent",
+    "generate": "agent",
+    "verify_evidence": "agent",
     "retrieve": "retriever",
-    "verify_evidence": "guardrail",
     "safety_check": "guardrail",
     "confidence_check": "guardrail",
     "act": "tool",

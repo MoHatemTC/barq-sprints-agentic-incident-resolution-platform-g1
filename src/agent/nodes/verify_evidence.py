@@ -80,97 +80,122 @@ def verify_evidence(state: AgentState, deps: AgentDependencies) -> dict[str, Any
     retrieval = RetrievalResult.model_validate(retrieval_raw)
     diagnosis = Diagnosis.model_validate(diagnosis_raw)
 
-    # 1. Deterministic citation pre-check
-    deterministic_invalid: list[InvalidCitation] = []
-    valid_step_pairs: list[tuple[int, DraftStep]] = []
+    with deps.tracer.span(
+        "agent.critic",
+        as_type="agent",
+        input={
+            "attempt": attempt,
+            "steps_count": len(draft.steps),
+            "evidence_count": len(retrieval.hits),
+            "cause": diagnosis.probable_cause,
+        },
+        metadata={
+            "agent": "critic",
+            "execution_id": state.get("execution_id"),
+        },
+    ) as span:
+        # 1. Deterministic citation pre-check
+        deterministic_invalid: list[InvalidCitation] = []
+        valid_step_pairs: list[tuple[int, DraftStep]] = []
 
-    for idx, step in enumerate(draft.steps, start=1):
-        inv = validate_citation(idx, step, retrieval.hits)
-        if inv is not None:
-            deterministic_invalid.append(inv)
-        else:
-            valid_step_pairs.append((idx, step))
+        for idx, step in enumerate(draft.steps, start=1):
+            inv = validate_citation(idx, step, retrieval.hits)
+            if inv is not None:
+                deterministic_invalid.append(inv)
+            else:
+                valid_step_pairs.append((idx, step))
 
-    # If any deterministic citations failed, construct failure feedback immediately
-    # (Still run semantic verification on valid steps if any, or report citation errors)
-    all_invalid = list(deterministic_invalid)
-    all_unsupported = []
-    semantic_feedback_text = ""
+        # If any deterministic citations failed, construct failure feedback immediately
+        # (Still run semantic verification on valid steps if any, or report citation errors)
+        all_invalid = list(deterministic_invalid)
+        all_unsupported = []
+        semantic_feedback_text = ""
 
-    # 2. Semantic LLM verification (isolated completion for steps with valid citations)
-    if valid_step_pairs:
-        # Build prompt containing ONLY the candidate steps and their cited evidence chunks
-        steps_text = "\n".join(
-            f"Step {idx}: {step.text} [Citation: {step.article_id} §{step.section}]"
-            for idx, step in valid_step_pairs
+        # 2. Semantic LLM verification (isolated completion for steps with valid citations)
+        if valid_step_pairs:
+            # Build prompt containing ONLY the candidate steps and their cited evidence chunks
+            steps_text = "\n".join(
+                f"Step {idx}: {step.text} [Citation: {step.article_id} §{step.section}]"
+                for idx, step in valid_step_pairs
+            )
+            # Filter evidence to chunks cited by these steps
+            cited_article_ids = {s.article_id for _, s in valid_step_pairs}
+            relevant_evidence = [h for h in retrieval.hits if h.article_id in cited_article_ids]
+
+            critic_response = deps.llm.structured(
+                purpose="verify_evidence",
+                system=CRITIC_SYSTEM,
+                prompt=critic_prompt(
+                    steps_text=steps_text,
+                    evidence_text=evidence_block(relevant_evidence),
+                    cause=diagnosis.probable_cause,
+                ),
+                schema=CriticOutput,
+            )
+
+            all_invalid.extend(critic_response.invalid_citations)
+            all_unsupported.extend(critic_response.unsupported_claims)
+            semantic_feedback_text = critic_response.feedback_instructions
+
+        # Consolidate verdict
+        passed = len(all_invalid) == 0 and len(all_unsupported) == 0
+
+        instructions_parts = []
+        if deterministic_invalid:
+            instructions_parts.append(
+                f"Fix {len(deterministic_invalid)} invalid citations: "
+                + "; ".join(f"Step {c.step_index} ({c.reason})" for c in deterministic_invalid)
+            )
+        if all_unsupported:
+            instructions_parts.append(
+                f"Fix {len(all_unsupported)} unsupported claims: "
+                + "; ".join(f"Step {u.step_index} ({u.reason})" for u in all_unsupported)
+            )
+        if semantic_feedback_text:
+            instructions_parts.append(semantic_feedback_text)
+
+        feedback_instructions = " | ".join(instructions_parts) if instructions_parts else ""
+
+        feedback = CriticFeedback(
+            passed=passed,
+            attempt=attempt,
+            invalid_citations=all_invalid,
+            unsupported_claims=all_unsupported,
+            feedback_instructions=feedback_instructions,
         )
-        # Filter evidence to chunks cited by these steps
-        cited_article_ids = {s.article_id for _, s in valid_step_pairs}
-        relevant_evidence = [h for h in retrieval.hits if h.article_id in cited_article_ids]
 
-        critic_response = deps.llm.structured(
-            purpose="verify_evidence",
-            system=CRITIC_SYSTEM,
-            prompt=critic_prompt(
-                steps_text=steps_text,
-                evidence_text=evidence_block(relevant_evidence),
-                cause=diagnosis.probable_cause,
-            ),
-            schema=CriticOutput,
+        reason = (
+            None if passed else (feedback_instructions or "Draft failed evidence verification.")
+        )
+        result = GateResult(
+            gate="verify_evidence",
+            passed=passed,
+            implemented=True,
+            checks=[
+                {
+                    "check": "citations",
+                    "valid": len(all_invalid) == 0,
+                    "invalid_count": len(all_invalid),
+                },
+                {
+                    "check": "claims",
+                    "supported": len(all_unsupported) == 0,
+                    "unsupported_count": len(all_unsupported),
+                },
+            ],
+            reason=reason,
         )
 
-        all_invalid.extend(critic_response.invalid_citations)
-        all_unsupported.extend(critic_response.unsupported_claims)
-        semantic_feedback_text = critic_response.feedback_instructions
-
-    # Consolidate verdict
-    passed = len(all_invalid) == 0 and len(all_unsupported) == 0
-
-    instructions_parts = []
-    if deterministic_invalid:
-        instructions_parts.append(
-            f"Fix {len(deterministic_invalid)} invalid citations: "
-            + "; ".join(f"Step {c.step_index} ({c.reason})" for c in deterministic_invalid)
+        result_payload = {
+            "verification": result.model_dump(mode="json"),
+            "critic_feedback": feedback.model_dump(mode="json"),
+        }
+        span.update(
+            output={
+                "passed": passed,
+                "invalid_citations_count": len(all_invalid),
+                "unsupported_claims_count": len(all_unsupported),
+                "feedback_instructions": feedback_instructions,
+            }
         )
-    if all_unsupported:
-        instructions_parts.append(
-            f"Fix {len(all_unsupported)} unsupported claims: "
-            + "; ".join(f"Step {u.step_index} ({u.reason})" for u in all_unsupported)
-        )
-    if semantic_feedback_text:
-        instructions_parts.append(semantic_feedback_text)
-
-    feedback_instructions = " | ".join(instructions_parts) if instructions_parts else ""
-
-    feedback = CriticFeedback(
-        passed=passed,
-        attempt=attempt,
-        invalid_citations=all_invalid,
-        unsupported_claims=all_unsupported,
-        feedback_instructions=feedback_instructions,
-    )
-
-    reason = None if passed else (feedback_instructions or "Draft failed evidence verification.")
-    result = GateResult(
-        gate="verify_evidence",
-        passed=passed,
-        implemented=True,
-        checks=[
-            {
-                "check": "citations",
-                "valid": len(all_invalid) == 0,
-                "invalid_count": len(all_invalid),
-            },
-            {
-                "check": "claims",
-                "supported": len(all_unsupported) == 0,
-                "unsupported_count": len(all_unsupported),
-            },
-        ],
-        reason=reason,
-    )
-
-    return {
-        "verification": result.model_dump(mode="json"),
-        "critic_feedback": feedback.model_dump(mode="json"),
-    }
+        return result_payload
