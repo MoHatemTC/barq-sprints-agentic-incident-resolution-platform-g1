@@ -54,3 +54,65 @@ jobs:
 
       - name: Test
         run: uv run pytest -q
+
+  # The default pytest addopts deselect `-m integration`, so the job above has
+  # never run the queue, webhook-persistence or checkpointer tests against real
+  # services: on a developer machine they pass or skip depending on whether
+  # Docker happens to be up (#149). This job gives them the services and fails
+  # the PR when they break.
+  integration:
+    name: Integration tests (PostgreSQL + Redis)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: barq_incident_dev
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev --locked
+
+      # Hostnames point at the service containers; the fixtures create and
+      # migrate their own test databases (barq_s2_1_test) once Postgres answers.
+      - name: Integration test
+        run: uv run pytest -m integration -q
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: "5432"
+          POSTGRES_DB: barq_incident_dev
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          REDIS_HOST: localhost
+          REDIS_PORT: "6379"

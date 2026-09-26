@@ -220,8 +220,15 @@ class TestWorkflowStateTable:
 
         assert result["resumed"] is True
         assert result["outcome"] == "suggested"
-        assert llm.purposes() == ["classify", "diagnose", "generate", "generate"]
-        assert deps.servicenow.calls == ["read_incident", "write_ai_fields"]
+        # generate ran twice (the failed attempt and the resume); verify_evidence
+        # runs once, after the draft the resume produced.
+        assert llm.purposes() == ["classify", "diagnose", "generate", "generate", "verify_evidence"]
+        # write_execution_log is S3.1's multi-agent audit write-back (#156).
+        assert deps.servicenow.calls == [
+            "read_incident",
+            "write_ai_fields",
+            "write_execution_log",
+        ]
         stored = rows(pg_engine, execution_id)
         by_attempt = {(r.node_name, r.attempt) for r in stored}
         assert ("classify", 1) in by_attempt and ("classify", 2) not in by_attempt

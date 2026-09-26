@@ -26,6 +26,7 @@ import tests.helpers as h
 from app.db.redis.keys import INCIDENT_EVENTS_QUEUE
 from app.main import create_app
 from app.repositories.idempotency import EventAcceptanceResult, EventAcceptanceStatus
+from app.workers.producer import PROCESS_INCIDENT_TASK
 from tests.helpers import mock_settings
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -835,7 +836,19 @@ async def test_integration_event_persisted_and_enqueued_end_to_end(integration_a
 
     queue_items = await redis.lrange(QUEUE, 0, -1)
     assert len(queue_items) == 1
-    assert json.loads(queue_items[0])["event_id"] == payload["event_id"]
+    # The queue carries Celery's full message envelope, not a bare event dict
+    # (S2.3: a raw JSON string on the queue crashes the worker -- see
+    # docs/sprint2_worker_topology.md), so decode it before looking inside.
+    import base64
+
+    message = json.loads(queue_items[0])
+    assert message["headers"]["task"] == PROCESS_INCIDENT_TASK
+    body = message["body"]
+    if (message.get("properties") or {}).get("body_encoding") == "base64":
+        body = base64.b64decode(body)
+    # Kombu's body is [args, kwargs, embed]; send_task passes the event as arg 0.
+    task_args = json.loads(body)[0]
+    assert task_args[0]["event_id"] == payload["event_id"]
 
 
 @pytest.mark.integration
