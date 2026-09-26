@@ -40,7 +40,7 @@ dependencies = [
     # S2.5: the state machine and its tracing. langgraph-sdk caps websockets below 17.
     "langfuse>=4.15,<5",
     "langgraph>=1.2,<2",
-    "openai>=2,<3",
+    "openai>=2,<4",
 ]
 
 [dependency-groups]
