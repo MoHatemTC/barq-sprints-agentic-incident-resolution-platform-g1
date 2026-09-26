@@ -86,19 +86,30 @@ async def test_replay_dlq_requires_auth(app_instance) -> None:
 
 @pytest.mark.asyncio
 async def test_replay_dlq_requires_operator_role(app_instance) -> None:
-    """Ensure POST /api/v1/dlq/{event_id}/replay returns 403 Forbidden for non-operator users."""
+    """POST /api/v1/dlq/{event_id}/replay is 403 unless the *token* carries the role.
+
+    The X-User-Role request header has been ignored since #148: a valid operator
+    token whose roles claim is empty or lacks "operator" is refused, and sending
+    the header beside it changes nothing.
+    """
+    no_role = {"Authorization": f"Bearer {h.make_operator_token(roles=[])}"}
+    viewer_role = {"Authorization": f"Bearer {h.make_operator_token(roles=['viewer'])}"}
+
     async with AsyncClient(
         transport=ASGITransport(app=app_instance), base_url="http://test"
     ) as client:
-        # Without any X-User-Role header
-        resp_no_role = await client.post("/api/v1/dlq/evt-test-001/replay", headers=AUTH_HEADERS)
+        # Token with an empty roles claim, plus the header claiming to be an operator
+        resp_no_role = await client.post(
+            "/api/v1/dlq/evt-test-001/replay",
+            headers={**no_role, "X-User-Role": "operator"},
+        )
         assert resp_no_role.status_code == 403
         assert resp_no_role.json()["error"]["code"] == "PERMISSION_DENIED"
 
-        # With an unauthorized role
+        # Token carrying an unauthorized role
         resp_viewer = await client.post(
             "/api/v1/dlq/evt-test-001/replay",
-            headers={**AUTH_HEADERS, "X-User-Role": "viewer"},
+            headers={**viewer_role, "X-User-Role": "operator"},
         )
         assert resp_viewer.status_code == 403
         assert resp_viewer.json()["error"]["code"] == "PERMISSION_DENIED"

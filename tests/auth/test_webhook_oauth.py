@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+from dataclasses import replace
 from typing import Annotated, Any
 
 import pytest
@@ -23,6 +24,9 @@ CONFIG = WebhookOAuthConfig(
     client_id="barq-servicenow",
     client_secret="client-secret-for-tests",  # noqa: S106 - test value
     signing_key="k" * 40,
+    operator_client_id="barq-operator",
+    operator_client_secret="operator-api-token-for-tests",  # noqa: S106 - test value
+    operator_roles=("operator", "approver"),
     token_ttl_seconds=300,
 )
 NOW = 1_800_000_000.0
@@ -71,7 +75,7 @@ class TestIssueAndVerify:
             verify_access_token(CONFIG, _token(), now=NOW - 31)
 
     def test_other_signing_key_is_refused(self) -> None:
-        other = WebhookOAuthConfig(CONFIG.client_id, CONFIG.client_secret, "x" * 40)
+        other = replace(CONFIG, signing_key="x" * 40)
         with pytest.raises(InvalidTokenError, match="signature"):
             verify_access_token(other, _token(), now=NOW)
 

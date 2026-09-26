@@ -229,13 +229,17 @@ class TestWorkflowStateTable:
 
         assert result["resumed"] is True
         assert result["outcome"] == "suggested"
+        # generate ran twice (the failed attempt and the resume); verify_evidence
+        # runs once, after the draft the resume produced.
         assert llm.purposes() == [
             "injection_classifier",
             "classify",
             "diagnose",
             "generate",
             "generate",
+            "verify_evidence",
         ]
+        # write_execution_log is S3.1's multi-agent audit write-back (#156).
         assert backend.calls == [
             "read_incident",
             "write_ai_fields",

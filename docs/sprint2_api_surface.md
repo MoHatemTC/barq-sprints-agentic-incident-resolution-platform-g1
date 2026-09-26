@@ -3,7 +3,7 @@
 **Document Version**: 1.0.0  
 **Application Title**: BARQ Agentic Incident Resolution Platform API  
 **Base Path**: `/`  
-**OpenAPI Specification**: Committed at [openapi.json](../../openapi.json)
+**OpenAPI Specification**: Committed at [openapi.json](../openapi.json)
 
 ---
 
@@ -12,19 +12,29 @@
 The platform enforces multi-tiered security across all exposed HTTP interfaces:
 
 ### A. Bearer Token Authentication
-All `/api/v1/*` routes require a Bearer token in the `Authorization` header:
+All `/api/v1/*` routes require a Bearer token in the `Authorization` header.
+Two credentials are in play, each with its own audience (#136, #148), and both
+are obtained from `POST /api/v1/oauth/token` — the client credentials presented
+decide which one is issued:
 ```http
-Authorization: Bearer <WEBHOOK_AUTH_TOKEN>
+# ServiceNow's incident webhook
+Authorization: Bearer <webhook JWT, audience barq-webhook>
+
+# Operator routes: approvals, config, DLQ, executions, eval
+Authorization: Bearer <operator JWT, audience barq-operator>
 ```
-* Validation is performed using constant-time digest comparison (`secrets.compare_digest`) in [app/auth/auth.py](../../src/app/auth/auth.py) to prevent timing attacks.
+* Validation is performed using constant-time digest comparison (`secrets.compare_digest`) in [app/auth/auth.py](../src/app/auth/auth.py) to prevent timing attacks.
+* The webhook JWT is refused on operator routes and the operator JWT is refused on the webhook; a raw `WEBHOOK_AUTH_TOKEN` is not accepted as a bearer token at all.
 * Missing or invalid tokens return `HTTP 401 Unauthorized`.
 
 ### B. Role-Based Access Control (RBAC)
-Sensitive administrative endpoints (such as DLQ replay) require the Operator role:
+Sensitive administrative endpoints (such as DLQ replay) require the Operator role,
+which the operator token carries in its signed `roles` claim (supplied by `OPERATOR_ROLES`):
 ```http
-X-User-Role: operator
+Authorization: Bearer <operator JWT with "operator" in its roles claim>
 ```
-* Non-operator callers attempting operator-restricted operations receive `HTTP 403 Forbidden`.
+* `require_role()` reads the claim from the verified token; `X-User-Role` is ignored, so a request header cannot make up a missing role.
+* A valid token without the required role receives `HTTP 403 Forbidden`.
 
 ### C. Correlation ID Propagation (EC-09)
 * Every incoming request receives or generates a unique correlation ID via `CorrelationIdMiddleware`.
@@ -68,6 +78,11 @@ X-User-Role: operator
   "contract_version": "v1"
 }
 ```
+
+`contract_version` is optional and defaults to `"v1"` when omitted — the deployed S1.3
+script action sends only `event_id`, `sys_id`, `number` and `event_type`, and those
+events are accepted and stored as v1 (#137). A supplied but unsupported value is
+still rejected with 422 `UNKNOWN_CONTRACT_VERSION`.
 
 #### Response (`WebhookAcceptedResponse`, HTTP 202)
 ```json
@@ -170,7 +185,7 @@ All exceptions return a uniform, structured JSON error envelope across the entir
 |---|---|---|
 | **400 Bad Request** | `INVALID_REQUEST` | Malformed URL parameters or malformed JSON syntax |
 | **401 Unauthorized** | `AUTHENTICATION_FAILED` | Missing, expired, or invalid Bearer token |
-| **403 Forbidden** | `PERMISSION_DENIED` | Missing required `X-User-Role` (e.g. non-operator calling DLQ replay) |
+| **403 Forbidden** | `PERMISSION_DENIED` | The operator token's `roles` claim lacks the required role (e.g. calling DLQ replay without `operator`) |
 | **404 Not Found** | `RESOURCE_NOT_FOUND` | Execution, Approval, or Incident sys_id does not exist |
 | **409 Conflict** | `RESOURCE_CONFLICT` | Concurrent state transition conflict or attempting to mutate immutable approval |
 | **422 Unprocessable** | `CONTRACT_VALIDATION_FAILED` / `UNKNOWN_CONTRACT_VERSION` | Pydantic schema validation failure / invalid `contract_version` |

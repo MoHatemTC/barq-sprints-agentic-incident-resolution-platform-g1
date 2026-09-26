@@ -73,9 +73,11 @@ async def test_config_redacts_all_runtime_secrets(app_with_secrets) -> None:
     validated = RedactedConfigResponse.model_validate(data)
     assert validated.app_name == "incident-resolution-platform"
     assert validated.environment == "development"
-    assert validated.retrieval_mode == "hybrid_reranked"
+    # The shipped default is `hybrid`: the S2.4 ablation showed the reranker
+    # buys no accuracy for ~16x p50 latency (#150).
+    assert validated.retrieval_mode == "hybrid"
     assert validated.active_feature_flags.get("hitl_approvals") is True
-    assert data["retrieval_mode"] == "hybrid_reranked"
+    assert data["retrieval_mode"] == "hybrid"
     assert isinstance(data["active_feature_flags"], dict)
 
     # 2. Verify all required runtime secrets are redacted

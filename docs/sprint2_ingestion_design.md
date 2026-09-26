@@ -74,7 +74,7 @@ The webhook strictly parses and enforces the Outbound Event Contract v1 schema:
 * **`sys_id`**: 32-character hexadecimal string representing the ServiceNow incident record sys_id.
 * **`number`**: Incident ticket reference (e.g. `INC0042567`).
 * **`event_type`**: Literal enum constraint (`incident.created` or `incident.updated`).
-* **`contract_version`**: Required literal `"v1"`. Unsupported versions are rejected with HTTP 422.
+* **`contract_version`**: Optional, defaults to `"v1"` when the producer omits it (the deployed S1.3 script action sends no version field — #137). Unsupported values are rejected with HTTP 422.
 
 ---
 
@@ -141,5 +141,5 @@ Because Redis `LPUSH` is strictly an $O(1)$ constant-time operation, pushing to 
 When downstream asynchronous workers encounter persistent unrecoverable failures (e.g. poison payloads, schema mismatch, or retry exhaustion after 3 backoff attempts):
 1. The failing worker moves the incident payload from `barq:incident:events` to `barq:incident:dlq`.
 2. Operators inspect failed events via `GET /api/v1/dlq`.
-3. Operators replay failed events via `POST /api/v1/dlq/{event_id}/replay` (enforced via `X-User-Role: operator` RBAC).
+3. Operators replay failed events via `POST /api/v1/dlq/{event_id}/replay` (enforced by the `operator` role in the request's JWT).
 4. Replaying pops the item from the DLQ and pushes it back into `barq:incident:events` for immediate reprocessing without losing audit trace state.

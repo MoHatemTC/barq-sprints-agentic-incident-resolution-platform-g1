@@ -13,11 +13,11 @@ ripple into the other four.
 
 | Task | Owner | Scope | Tracking |
 |---|---|---|---|
-| **S1.1** | [@ali-ezz](https://github.com/ali-ezz) | Scoped application and Incident field model | Merged — [PR #1](../../pull/1) |
-| **S1.2** | [@MohamedAbdelaiem](https://github.com/MohamedAbdelaiem) | AI Execution Log table, OAuth integration identity, field-level ACLs | [#7](../../issues/7), [#8](../../issues/8) |
-| **S1.3** | [@ahmedtamer101](https://github.com/ahmedtamer101) | Eligibility Business Rule, identifier-only outbound event | [#10](../../issues/10) |
-| **S1.4** | [@kerolos-mohsen](https://github.com/kerolos-mohsen) | Knowledge corpus, ServiceNow KB, Qdrant hybrid collection | [#11](../../issues/11) |
-| **S1.5** | [@Tasneemmohammed0](https://github.com/Tasneemmohammed0) | ServiceNow Table API client, incident write-back | [#6](../../issues/6), [#9](../../issues/9), [#13](../../issues/13) |
+| **S1.1** | [@ali-ezz](https://github.com/ali-ezz) | Scoped application and Incident field model | Merged — [PR #1](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pull/1) |
+| **S1.2** | [@MohamedAbdelaiem](https://github.com/MohamedAbdelaiem) | AI Execution Log table, OAuth integration identity, field-level ACLs | [#7](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/issues/7), [#8](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/issues/8) |
+| **S1.3** | [@ahmedtamer101](https://github.com/ahmedtamer101) | Eligibility Business Rule, identifier-only outbound event | [#10](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/issues/10) |
+| **S1.4** | [@kerolos-mohsen](https://github.com/kerolos-mohsen) | Knowledge corpus, ServiceNow KB, Qdrant hybrid collection | [#11](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/issues/11) |
+| **S1.5** | [@Tasneemmohammed0](https://github.com/Tasneemmohammed0) | ServiceNow Table API client, incident write-back | [#6](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/issues/6), [#9](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/issues/9), [#13](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/issues/13) |
 
 ## Other roles
 
@@ -37,6 +37,6 @@ deadline.
 
 ## Live status
 
-The authoritative day-to-day status is the [Sprint 1 milestone](../../milestone/1) and
-its issues, not this file. This file answers "who owns what" and changes rarely; the
+The authoritative day-to-day status is the [milestones](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/milestones) (Sprint 1 … Sprint 4)
+and their issues, not this file. This file answers "who owns what" and changes rarely; the
 milestone answers "what's done right now" and changes daily.

@@ -1,6 +1,6 @@
 {
   "sprint": "S1.2",
-  "generated_at": "2026-09-16T19:52:19.570866+00:00",
+  "generated_at": "2026-09-26T03:28:26.902780+00:00",
   "instance": "https://dev434590.service-now.com",
   "service_account": "ai_orchestrator_svc",
   "summary": {
@@ -134,10 +134,10 @@
       "target": "x_2215032_ai_inc_0_ai_execution_log",
       "expected": "201 Created + status='succeeded' + action='execute'",
       "http_status": 201,
-      "observed": "HTTP 201 (sys_id=cac97cfa731b4b102aedfed25ab8b7ea)",
+      "observed": "HTTP 201 (sys_id=f478b4f1732b83902aedfed25ab8b743)",
       "persisted_change": true,
       "verdict": "PASS",
-      "notes": "exec_id=exec_verify_d3aa0b443d8c | sys_id=cac97cfa731b4b102aedfed25ab8b7ea | status=succeeded confirmed"
+      "notes": "exec_id=exec_verify_511beb65f98c | sys_id=f478b4f1732b83902aedfed25ab8b743 | status=succeeded confirmed"
     },
     {
       "test_id": "LOG-02",
@@ -147,10 +147,10 @@
       "target": "x_2215032_ai_inc_0_ai_execution_log",
       "expected": "201 Created + status='failed' + action='execute'",
       "http_status": 201,
-      "observed": "HTTP 201 (sys_id=0ec97cfa731b4b102aedfed25ab8b7ef)",
+      "observed": "HTTP 201 (sys_id=097874f1732b83902aedfed25ab8b73e)",
       "persisted_change": true,
       "verdict": "PASS",
-      "notes": "exec_id=exec_verify_f908c7968e20 | sys_id=0ec97cfa731b4b102aedfed25ab8b7ef | status=failed confirmed"
+      "notes": "exec_id=exec_verify_604138dd2a4e | sys_id=097874f1732b83902aedfed25ab8b73e | status=failed confirmed"
     },
     {
       "test_id": "LOG-03",
@@ -160,10 +160,10 @@
       "target": "x_2215032_ai_inc_0_ai_execution_log",
       "expected": "201 Created + status='blocked' + action='execute'",
       "http_status": 201,
-      "observed": "HTTP 201 (sys_id=16c9bcfa731b4b102aedfed25ab8b701)",
+      "observed": "HTTP 201 (sys_id=957874f1732b83902aedfed25ab8b7d5)",
       "persisted_change": true,
       "verdict": "PASS",
-      "notes": "exec_id=exec_verify_e45c62a418cb | sys_id=16c9bcfa731b4b102aedfed25ab8b701 | status=blocked confirmed"
+      "notes": "exec_id=exec_verify_b548461e88ad | sys_id=957874f1732b83902aedfed25ab8b7d5 | status=blocked confirmed"
     },
     {
       "test_id": "LOG-06",
@@ -173,10 +173,10 @@
       "target": "x_2215032_ai_inc_0_ai_execution_log",
       "expected": "201 Created + status='abandoned' + action='execute'",
       "http_status": 201,
-      "observed": "HTTP 201 (sys_id=56c9bcfa731b4b102aedfed25ab8b706)",
+      "observed": "HTTP 201 (sys_id=6578b4f1732b83902aedfed25ab8b7ba)",
       "persisted_change": true,
       "verdict": "PASS",
-      "notes": "exec_id=exec_verify_fe295c324238 | sys_id=56c9bcfa731b4b102aedfed25ab8b706 | status=abandoned confirmed"
+      "notes": "exec_id=exec_verify_fd6de8609166 | sys_id=6578b4f1732b83902aedfed25ab8b7ba | status=abandoned confirmed"
     },
     {
       "test_id": "LOG-04",
@@ -189,27 +189,27 @@
       "observed": "HTTP 200 (1 record(s) found)",
       "persisted_change": false,
       "verdict": "PASS",
-      "notes": "exec_id='exec_idx_7d5b5d3c13e5472f' -> sys_id=26c9bcfa731b4b102aedfed25ab8b724"
+      "notes": "exec_id='exec_idx_550f3ee3dcb84b94' -> sys_id=a578b4f1732b83902aedfed25ab8b7bf"
     },
     {
       "test_id": "LOG-05",
       "category": "Execution Log",
       "name": "Cannot delete execution log records (append-only)",
       "operation": "DELETE",
-      "target": "x_2215032_ai_inc_0_ai_execution_log/e6c9bcfa731b4b102aedfed25ab8b729",
+      "target": "x_2215032_ai_inc_0_ai_execution_log/3178b4f1732b83902aedfed25ab8b7d1",
       "expected": "403 or 404 (delete blocked)",
       "http_status": 403,
       "observed": "HTTP 403 (record_exists=True)",
       "persisted_change": false,
       "verdict": "PASS",
-      "notes": "DELETE HTTP 403; record_exists=True (blocked)."
+      "notes": "DELETE HTTP 403; record still present (blocked)."
     },
     {
       "test_id": "LOG-07",
       "category": "Execution Log",
       "name": "Cannot modify execution log records (append-only)",
       "operation": "PATCH",
-      "target": "x_2215032_ai_inc_0_ai_execution_log/bac9bcfa731b4b102aedfed25ab8b762",
+      "target": "x_2215032_ai_inc_0_ai_execution_log/7178b4f1732b83902aedfed25ab8b746",
       "expected": "401/403 or write ignored (record immutable)",
       "http_status": 403,
       "observed": "HTTP 403 (modified=False)",
@@ -251,10 +251,10 @@
       "target": "incident/0c5f3cece1b12010f877971dea0b1449.assigned_to",
       "expected": "Blocked (value unchanged after write)",
       "http_status": 200,
-      "observed": "HTTP 200 | before='' after=''",
+      "observed": "HTTP 200 | before='' after='' | wrote=b105f832731b4b102aedfed25ab8b7f3",
       "persisted_change": false,
       "verdict": "PASS",
-      "notes": "ACL blocked: field unchanged."
+      "notes": "ACL blocked: field unchanged. | attempted value (real sys_id): b105f832731b4b102aedfed25ab8b7f3"
     },
     {
       "test_id": "DENY-03",
@@ -345,12 +345,12 @@
       "observed": "HTTP 200 | before='true' after='true'",
       "persisted_change": false,
       "verdict": "PASS",
-      "notes": "Opt-in switch tamper-proof."
+      "notes": "Circuit breaker tamper-proof."
     },
     {
       "test_id": "LOCK-03",
       "category": "Human Lock",
-      "name": "Platform Business Rule enforces safety stop on locked incident",
+      "name": "Server refuses automated update on locked incident",
       "operation": "PATCH",
       "target": "incident/e8caedcbc0a80164017df472f39eaed1",
       "expected": "HTTP 400/403 abort + 0 journal entries",
@@ -358,7 +358,7 @@
       "observed": "HTTP 403 | journal_count=0",
       "persisted_change": false,
       "verdict": "PASS",
-      "notes": "Locked incident INC0000003: Business rule aborted automated update."
+      "notes": "Locked incident INC0000003: server refused the automated update."
     },
     {
       "test_id": "BULK-01",

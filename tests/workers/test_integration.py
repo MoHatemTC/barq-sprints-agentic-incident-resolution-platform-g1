@@ -470,8 +470,14 @@ def test_replay_of_cancelled_event_resets_and_reruns(
     outcome = replay_event(repo, redis_client, payload["event_id"], max_attempts=WORKER_MAX_RETRIES)
     assert outcome.replayed is True
 
+    # Wait for the terminal state too: the failure row for the replayed attempt
+    # is written before retry_state flips to `cancelled`, so reading right after
+    # `count_failures == 2` could still catch `ready` (seen ~1 run in 3).
     _wait_until(
-        lambda: repo.count_failures(execution_id) == 2,
+        lambda: (
+            repo.count_failures(execution_id) == 2
+            and (repo.get_retry_state(execution_id) or {}).get("state") == "cancelled"
+        ),
         description="replayed cancelled event to run again",
     )
     snapshot = repo.get_retry_state(execution_id)

@@ -884,6 +884,63 @@ def _read_field(
     return True, value, r.status_code
 
 
+def _journal_count(
+    client: httpx.Client,
+    hdrs: dict[str, str],
+    inc_sys_id: str,
+    element: str,
+    marker: str,
+) -> tuple[bool, int, int]:
+    """Count journal rows for a marker, reporting whether the query itself worked.
+
+    Returns ``(readable, count, status)``. A denied or malformed query carries no
+    ``result`` and used to be counted as 0 rows, which is indistinguishable from
+    "the write was blocked" — the exact fail-open the harness must not have (#46).
+    """
+    r = client.get(
+        f"{TABLE_API_BASE}/sys_journal_field"
+        f"?sysparm_query=element_id={inc_sys_id}^element={element}^valueLIKE{marker}",
+        headers=hdrs,
+        timeout=10.0,
+    )
+    if r.status_code != 200:
+        return False, 0, r.status_code
+    try:
+        result = r.json().get("result")
+    except ValueError:
+        return False, 0, r.status_code
+    if not isinstance(result, list):
+        return False, 0, r.status_code
+    return True, len(result), r.status_code
+
+
+def _resolve_service_account_sys_id(client: httpx.Client, hdrs: dict[str, str]) -> tuple[str, int]:
+    """The service account's own ``sys_user.sys_id``, resolved at run start.
+
+    DENY-02 writes to the ``assigned_to`` reference field. The literal ``"admin"``
+    is not a sys_id, so a stored value can never equal it and the test passed even
+    when the assignment went through. A real sys_id makes the comparison meaningful
+    (#46).
+    """
+    r = client.get(
+        f"{TABLE_API_BASE}/sys_user"
+        "?sysparm_query=sys_id=javascript:gs.getUserID()"
+        "&sysparm_fields=sys_id",
+        headers=hdrs,
+        timeout=10.0,
+    )
+    if r.status_code != 200:
+        return "", r.status_code
+    try:
+        results = r.json().get("result")
+    except ValueError:
+        return "", r.status_code
+    if not isinstance(results, list) or not results:
+        return "", r.status_code
+    sys_id = results[0].get("sys_id") if isinstance(results[0], dict) else None
+    return (str(sys_id), r.status_code) if sys_id else ("", r.status_code)
+
+
 def _forbidden_scalar(
     client: httpx.Client,
     hdrs: dict[str, str],
@@ -1031,64 +1088,79 @@ def _forbidden_journal(
 
 
 def _test_human_lock(client: httpx.Client, hdrs: dict[str, str], inc_sys_id: str) -> TestResult:
-    """LOCK-01: Integration account cannot modify the human-lock flag."""
-    get_before = client.get(
-        f"{TABLE_API_BASE}/incident/{inc_sys_id}?sysparm_fields={HUMAN_LOCK_FIELD}",
-        headers=hdrs,
-        timeout=10.0,
+    """LOCK-01: Integration account cannot modify the human-lock flag.
+
+    Both read-backs go through ``_read_field``: a missing field used to default to
+    ``"false"``, which is also what an unreadable field looked like, so a write that
+    landed while the response omitted the flag reported PASS (#46).
+    """
+    return _test_lock_flag(
+        client,
+        hdrs,
+        inc_sys_id,
+        test_id="LOCK-01",
+        field=HUMAN_LOCK_FIELD,
+        name="Integration CANNOT modify human-lock (circuit breaker)",
+        failure_label="human-lock",
     )
-    if get_before.status_code != 200:
+
+
+def _test_lock_flag(
+    client: httpx.Client,
+    hdrs: dict[str, str],
+    inc_sys_id: str,
+    *,
+    test_id: str,
+    field: str,
+    name: str,
+    failure_label: str,
+) -> TestResult:
+    """Read-patch-read for the two circuit-breaker flags, failing closed."""
+    category = "Human Lock"
+    target = f"incident/{inc_sys_id}.{field}"
+
+    def _unreadable(stage: str, status: int) -> TestResult:
         return TestResult(
-            test_id="LOCK-01",
-            category="Human Lock",
-            name="Integration CANNOT modify human-lock (circuit breaker)",
+            test_id=test_id,
+            category=category,
+            name=name,
             operation="GET",
-            target=f"incident/{inc_sys_id}.{HUMAN_LOCK_FIELD}",
-            expected="HTTP 200 baseline check",
-            http_status=get_before.status_code,
-            observed=f"Initial GET failed with HTTP {get_before.status_code}",
+            target=target,
+            expected="HTTP 200 read-back with the field present",
+            http_status=status,
+            observed=f"{stage} read-back unreadable (HTTP {status})",
             persisted_change=False,
             verdict="FAIL",
-            notes="Failed to retrieve baseline state before test.",
+            notes=(
+                f"INCONCLUSIVE: could not read {field!r} {stage} the write "
+                f"(HTTP {status}), so it is unknown whether the flag held. "
+                "Reported as FAIL because a harness must fail closed."
+            ),
         )
-    before = str(get_before.json().get("result", {}).get(HUMAN_LOCK_FIELD, "false"))
+
+    readable_before, before, status_before = _read_field(client, hdrs, inc_sys_id, field)
+    if not readable_before:
+        return _unreadable("before", status_before)
     attempt = "true" if before == "false" else "false"
 
     patch_r = client.patch(
         f"{TABLE_API_BASE}/incident/{inc_sys_id}",
         headers=hdrs,
-        json={HUMAN_LOCK_FIELD: attempt},
+        json={field: attempt},
         timeout=10.0,
     )
 
-    get_after = client.get(
-        f"{TABLE_API_BASE}/incident/{inc_sys_id}?sysparm_fields={HUMAN_LOCK_FIELD}",
-        headers=hdrs,
-        timeout=10.0,
-    )
-    if get_after.status_code != 200:
-        return TestResult(
-            test_id="LOCK-01",
-            category="Human Lock",
-            name="Integration CANNOT modify human-lock (circuit breaker)",
-            operation="GET",
-            target=f"incident/{inc_sys_id}.{HUMAN_LOCK_FIELD}",
-            expected="HTTP 200 post-patch check",
-            http_status=get_after.status_code,
-            observed=f"Post-patch GET failed with HTTP {get_after.status_code}",
-            persisted_change=False,
-            verdict="FAIL",
-            notes="Failed to retrieve post-patch state.",
-        )
-    after = str(get_after.json().get("result", {}).get(HUMAN_LOCK_FIELD, "false"))
+    readable_after, after, status_after = _read_field(client, hdrs, inc_sys_id, field)
+    if not readable_after:
+        return _unreadable("after", status_after)
 
     blocked = (patch_r.status_code in (401, 403) or after == before) and (after != attempt)
     return TestResult(
-        test_id="LOCK-01",
-        category="Human Lock",
-        name="Integration CANNOT modify human-lock (circuit breaker)",
+        test_id=test_id,
+        category=category,
+        name=name,
         operation="PATCH",
-        target=f"incident/{inc_sys_id}.{HUMAN_LOCK_FIELD}",
+        target=target,
         expected=f"Blocked (remains '{before}')",
         http_status=patch_r.status_code,
         observed=f"HTTP {patch_r.status_code} | before='{before}' after='{after}'",
@@ -1097,78 +1169,21 @@ def _test_human_lock(client: httpx.Client, hdrs: dict[str, str], inc_sys_id: str
         notes=(
             "Circuit breaker tamper-proof."
             if blocked
-            else f"SECURITY FAILURE: human-lock changed '{before}' -> '{after}'!"
+            else f"SECURITY FAILURE: {failure_label} changed '{before}' -> '{after}'!"
         ),
     )
 
 
 def _test_ai_enabled(client: httpx.Client, hdrs: dict[str, str], inc_sys_id: str) -> TestResult:
     """LOCK-02: Integration account cannot modify the AI-enabled flag (human opt-in switch)."""
-    get_before = client.get(
-        f"{TABLE_API_BASE}/incident/{inc_sys_id}?sysparm_fields={AI_ENABLED_FIELD}",
-        headers=hdrs,
-        timeout=10.0,
-    )
-    if get_before.status_code != 200:
-        return TestResult(
-            test_id="LOCK-02",
-            category="Human Lock",
-            name="Integration CANNOT modify AI-enabled (opt-in switch)",
-            operation="GET",
-            target=f"incident/{inc_sys_id}.{AI_ENABLED_FIELD}",
-            expected="HTTP 200 baseline check",
-            http_status=get_before.status_code,
-            observed=f"Initial GET failed with HTTP {get_before.status_code}",
-            persisted_change=False,
-            verdict="FAIL",
-            notes="Failed to retrieve baseline state before test.",
-        )
-    before = str(get_before.json().get("result", {}).get(AI_ENABLED_FIELD, "false"))
-    attempt = "true" if before == "false" else "false"
-
-    patch_r = client.patch(
-        f"{TABLE_API_BASE}/incident/{inc_sys_id}",
-        headers=hdrs,
-        json={AI_ENABLED_FIELD: attempt},
-        timeout=10.0,
-    )
-
-    get_after = client.get(
-        f"{TABLE_API_BASE}/incident/{inc_sys_id}?sysparm_fields={AI_ENABLED_FIELD}",
-        headers=hdrs,
-        timeout=10.0,
-    )
-    if get_after.status_code != 200:
-        return TestResult(
-            test_id="LOCK-02",
-            category="Human Lock",
-            name="Integration CANNOT modify AI-enabled (opt-in switch)",
-            operation="GET",
-            target=f"incident/{inc_sys_id}.{AI_ENABLED_FIELD}",
-            expected="HTTP 200 post-patch check",
-            http_status=get_after.status_code,
-            observed=f"Post-patch GET failed with HTTP {get_after.status_code}",
-            persisted_change=False,
-            verdict="FAIL",
-            notes="Failed to retrieve post-patch state.",
-        )
-    after = str(get_after.json().get("result", {}).get(AI_ENABLED_FIELD, "false"))
-
-    blocked = (patch_r.status_code in (401, 403) or after == before) and (after != attempt)
-    return TestResult(
+    return _test_lock_flag(
+        client,
+        hdrs,
+        inc_sys_id,
         test_id="LOCK-02",
-        category="Human Lock",
+        field=AI_ENABLED_FIELD,
         name="Integration CANNOT modify AI-enabled (opt-in switch)",
-        operation="PATCH",
-        target=f"incident/{inc_sys_id}.{AI_ENABLED_FIELD}",
-        expected=f"Blocked (remains '{before}')",
-        http_status=patch_r.status_code,
-        observed=f"HTTP {patch_r.status_code} | before='{before}' after='{after}'",
-        persisted_change=(after != before),
-        verdict="PASS" if blocked else "FAIL",
-        notes="Opt-in switch tamper-proof."
-        if blocked
-        else f"SECURITY FAILURE: ai_enabled changed '{before}' -> '{after}'!",
+        failure_label="ai_enabled",
     )
 
 
@@ -1260,14 +1275,31 @@ def _test_bulk_bypass(client: httpx.Client, hdrs: dict[str, str], inc_sys_id: st
     wn_marker = f"[AI-Bulk] {_uid()}"
     cmt_marker = f"BULK_UNAUTH_{_uid()}"
 
-    before_r = client.get(
-        f"{TABLE_API_BASE}/incident/{inc_sys_id}?sysparm_fields=state,priority",
-        headers=hdrs,
-        timeout=10.0,
-    )
-    orig = before_r.json().get("result", {})
-    orig_state = str(orig.get("state", ""))
-    orig_priority = str(orig.get("priority", ""))
+    def _unreadable(stage: str, what: str, status: int) -> TestResult:
+        return TestResult(
+            test_id="BULK-01",
+            category="Bulk Bypass",
+            name="Mixed payload: permitted persists, forbidden fields stripped",
+            operation="GET",
+            target=f"incident/{inc_sys_id}",
+            expected="HTTP 200 read-backs for state, priority and both journal queries",
+            http_status=status,
+            observed=f"{what} unreadable {stage} the write (HTTP {status})",
+            persisted_change=False,
+            verdict="FAIL",
+            notes=(
+                f"INCONCLUSIVE: could not read {what} {stage} the write (HTTP {status}), "
+                "so it is unknown whether the payload was stripped. Reported as FAIL "
+                "because a harness must fail closed."
+            ),
+        )
+
+    readable, orig_state, status = _read_field(client, hdrs, inc_sys_id, "state")
+    if not readable:
+        return _unreadable("before", "incident.state", status)
+    readable, orig_priority, status = _read_field(client, hdrs, inc_sys_id, "priority")
+    if not readable:
+        return _unreadable("before", "incident.priority", status)
 
     payload = {
         "work_notes": wn_marker,  # PERMITTED
@@ -1282,38 +1314,27 @@ def _test_bulk_bypass(client: httpx.Client, hdrs: dict[str, str], inc_sys_id: st
         timeout=10.0,
     )
 
-    wn_count = len(
-        client.get(
-            f"{TABLE_API_BASE}/sys_journal_field"
-            f"?sysparm_query=element_id={inc_sys_id}^element=work_notes^valueLIKE{wn_marker}",
-            headers=hdrs,
-            timeout=10.0,
-        )
-        .json()
-        .get("result", [])
-    )
-    cmt_count = len(
-        client.get(
-            f"{TABLE_API_BASE}/sys_journal_field"
-            f"?sysparm_query=element_id={inc_sys_id}^element=comments^valueLIKE{cmt_marker}",
-            headers=hdrs,
-            timeout=10.0,
-        )
-        .json()
-        .get("result", [])
-    )
-    after_r = client.get(
-        f"{TABLE_API_BASE}/incident/{inc_sys_id}?sysparm_fields=state,priority",
-        headers=hdrs,
-        timeout=10.0,
-    )
-    after = after_r.json().get("result", {})
-    state_changed = str(after.get("state", "")) != orig_state
-    priority_changed = str(after.get("priority", "")) != orig_priority
+    readable, wn_count, status = _journal_count(client, hdrs, inc_sys_id, "work_notes", wn_marker)
+    if not readable:
+        return _unreadable("after", "the work_notes journal query", status)
+    readable, cmt_count, status = _journal_count(client, hdrs, inc_sys_id, "comments", cmt_marker)
+    if not readable:
+        return _unreadable("after", "the comments journal query", status)
 
+    readable, state_after, status = _read_field(client, hdrs, inc_sys_id, "state")
+    if not readable:
+        return _unreadable("after", "incident.state", status)
+    readable, priority_after, status = _read_field(client, hdrs, inc_sys_id, "priority")
+    if not readable:
+        return _unreadable("after", "incident.priority", status)
+
+    state_changed = state_after != orig_state
+    priority_changed = priority_after != orig_priority
+    permitted_persisted = wn_count > 0
     forbidden_all_blocked = cmt_count == 0 and not state_changed and not priority_changed
+
     notes_parts = [
-        f"work_notes persisted={'yes' if wn_count > 0 else 'NO - FAIL'}",
+        f"work_notes persisted={'yes' if permitted_persisted else 'NO - FAIL'}",
         f"comments leaked={'NO - blocked' if cmt_count == 0 else f'YES ({cmt_count}) - FAIL'}",
         f"state changed={'NO - blocked' if not state_changed else 'YES - FAIL'}",
         f"priority changed={'NO - blocked' if not priority_changed else 'YES - FAIL'}",
@@ -1328,7 +1349,7 @@ def _test_bulk_bypass(client: httpx.Client, hdrs: dict[str, str], inc_sys_id: st
         http_status=patch_r.status_code,
         observed=f"HTTP {patch_r.status_code}",
         persisted_change=(cmt_count > 0 or state_changed or priority_changed),
-        verdict="PASS" if forbidden_all_blocked else "FAIL",
+        verdict="PASS" if permitted_persisted and forbidden_all_blocked else "FAIL",
         notes=" | ".join(notes_parts),
     )
 
@@ -1554,13 +1575,44 @@ def run_verification() -> None:
 
         # Phase 4: Forbidden incident fields
         _banner("PHASE 4 - Forbidden Incident Fields (read-before / patch / read-after)")
+        # DENY-02 writes a reference field, so the value has to be something that
+        # field could actually store: a real sys_id, resolved now (#46).
+        deny_user_sys_id, deny_user_status = _resolve_service_account_sys_id(client, hdrs)
         for tid, fld, val in [
             ("DENY-01", "state", "6"),
-            ("DENY-02", "assigned_to", "admin"),
+            ("DENY-02", "assigned_to", deny_user_sys_id or "admin"),
             ("DENY-03", "assignment_group", _DENY_GROUP_ID),
             ("DENY-04", "priority", "1"),
         ]:
-            r = _forbidden_scalar(client, hdrs, inc_sys_id, tid, fld, val)
+            if tid == "DENY-02" and not deny_user_sys_id:
+                r = TestResult(
+                    test_id="DENY-02",
+                    category="Forbidden",
+                    name="FORBIDDEN write to incident.assigned_to",
+                    operation="GET",
+                    target="/api/now/table/sys_user?sysparm_query=sys_id=javascript:gs.getUserID()",
+                    expected="a real user sys_id to write into assigned_to",
+                    http_status=deny_user_status,
+                    observed=(
+                        f"user sys_id lookup unreadable (HTTP {deny_user_status}), "
+                        "so no value the field can store is available"
+                    ),
+                    persisted_change=False,
+                    verdict="FAIL",
+                    notes=(
+                        "INCONCLUSIVE: without a real sys_id the comparison would be "
+                        "against a value assigned_to cannot hold, so a passing result "
+                        "would prove nothing. Fail closed."
+                    ),
+                )
+            else:
+                r = _forbidden_scalar(client, hdrs, inc_sys_id, tid, fld, val)
+                if tid == "DENY-02":
+                    # Record what was actually attempted: before/after alone look
+                    # identical to the old "admin" run, where the value could not
+                    # be stored at all (#46).
+                    r.notes = f"{r.notes} | attempted value (real sys_id): {deny_user_sys_id}"
+                    r.observed = f"{r.observed} | wrote={deny_user_sys_id}"
             results.append(r)
             _print_test(r)
         r = _forbidden_journal(client, hdrs, inc_sys_id, "DENY-05", "comments")
