@@ -51,7 +51,7 @@ class RetrievalSettings(BaseSettings):
     dense_embedding_model: str = "BAAI/bge-small-en-v1.5"
     sparse_embedding_model: str = "Qdrant/bm25"
     # Retrieval
-    retrieval_mode: RetrievalMode = RetrievalMode.HYBRID_RERANKED
+    retrieval_mode: RetrievalMode = RetrievalMode.HYBRID
     rerank_model: str = "Xenova/ms-marco-MiniLM-L-6-v2"
     rerank_top_k: int = 5
     rerank_candidate_limit: int = 20  # must be larger than rerank_top_k
@@ -59,9 +59,12 @@ class RetrievalSettings(BaseSettings):
     @field_validator("rerank_candidate_limit")
     @classmethod
     def validate_candidate_limit(cls, v: int, info) -> int:
-        top_n = info.data.get("rerank_top_n", 5)
-        if v < top_n:
-            raise ValueError(f"rerank_candidate_limit ({v}) must be >= rerank_top_n ({top_n})")
+        # Read ``rerank_top_k``, the field that exists. Reading ``rerank_top_n``
+        # (a name no field has) always fell back to 5, so any candidate limit
+        # >= 5 passed and the check could never fail (#150).
+        top_k = info.data.get("rerank_top_k", 5)
+        if v < top_k:
+            raise ValueError(f"rerank_candidate_limit ({v}) must be >= rerank_top_k ({top_k})")
         return v
 
 
