@@ -57,7 +57,7 @@ def dot_source() -> str:
         settings=AgentSettings(),
         llm=None,  # type: ignore[arg-type]
         retriever=None,  # type: ignore[arg-type]
-        servicenow=None,  # type: ignore[arg-type]
+        tools=None,  # type: ignore[arg-type]
         tracer=Tracer(None),
     )
     compiled = build_graph(deps).get_graph()

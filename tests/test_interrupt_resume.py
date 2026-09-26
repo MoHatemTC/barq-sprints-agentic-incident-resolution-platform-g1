@@ -256,7 +256,7 @@ def test_interrupt_at_high_risk() -> None:
     assert result["paused"] is True
     assert result["outcome"] == "escalated_high_risk"
     assert backend.updates == []
-    assert deps.servicenow.calls == ["read_incident"]
+    assert backend.calls == ["read_incident"]
 
     payload = deps.audit.get_interrupt(EXECUTION_ID)
     assert payload is not None

@@ -419,7 +419,7 @@ class TestScenarioDStateAuditabilityAndResilience:
             "verify_evidence",
             "generate",
         ]
-        assert deps1.servicenow.calls == ["read_incident"]
+        assert backend.calls == ["read_incident"]
 
         # Attempt 2: Resume with model recovered
         answers_attempt2 = vpn_answers()
@@ -436,7 +436,8 @@ class TestScenarioDStateAuditabilityAndResilience:
         # Earlier nodes (classify, diagnose, initial generate, initial verify) were NOT rerun
         assert llm2.purposes() == ["generate", "verify_evidence"]
         # load was skipped on resume; read_incident was not called again
-        assert deps2.servicenow.calls == [
+        assert backend.calls == [
+            "read_incident",
             "write_ai_fields",
             "write_execution_log",
         ]

@@ -51,7 +51,11 @@ def _dummy_mock_engine() -> MagicMock:
 
 
 def test_default_filter_has_published_and_security() -> None:
-    """With defaults, both mandatory conditions are present and nothing else."""
+    """With defaults, both mandatory conditions are present and nothing else.
+
+    S3.5: the default workflow-state set gains human_resolved so
+    knowledge-captured articles are retrievable the moment they land.
+    """
     filt = build_metadata_filter()
     assert filt.must is not None
     assert len(filt.must) == 2
@@ -59,7 +63,7 @@ def test_default_filter_has_published_and_security() -> None:
     wf_cond, sec_cond = filt.must
     assert isinstance(wf_cond, FieldCondition)
     assert wf_cond.key == "workflow_state"
-    assert getattr(wf_cond.match, "any", None) == ["published"]
+    assert getattr(wf_cond.match, "any", None) == ["published", "human_resolved"]
 
     # #45: restricted content is excluded unless the caller opts in.
     assert isinstance(sec_cond, FieldCondition)

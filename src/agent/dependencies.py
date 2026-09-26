@@ -17,6 +17,14 @@ from agent.config import AgentSettings, get_agent_settings
 from agent.llm import LLMClient, get_llm
 from agent.retrieval import Retriever, build_default_retriever
 from agent.servicenow import IncidentGateway, build_servicenow_backend
+from agent.tools import RefusalExplainer, ToolRegistry, build_servicenow_tool_registry
+from agent.tools.registry import PostgreSQLApprovalChecker
+from app.core.config import get_settings
+from app.workers.sync_engine import (
+    build_sync_database_url,
+    create_sync_engine,
+    create_sync_session_factory,
+)
 from observability.tracing import Tracer, get_tracer
 
 
@@ -29,24 +37,46 @@ class AgentDependencies:
     settings: AgentSettings
     llm: LLMClient
     retriever: Retriever
-    servicenow: IncidentGateway
+    tools: ToolRegistry
     tracer: Tracer
     clock: Callable[[], datetime] = field(default=utc_now)
     audit: GraphAuditStore = field(default_factory=MemoryGraphAuditStore)
+
+
+def build_production_tool_registry(
+    gateway: IncidentGateway,
+    llm: LLMClient,
+) -> ToolRegistry:
+    """Compose the trusted tool boundary with worker-safe production providers."""
+    app_settings = get_settings()
+    engine = create_sync_engine(build_sync_database_url(app_settings))
+    approval_checker = PostgreSQLApprovalChecker(create_sync_session_factory(engine))
+    return build_servicenow_tool_registry(
+        gateway,
+        approval_checker=approval_checker,
+        refusal_explainer=RefusalExplainer(llm),
+    )
 
 
 @lru_cache
 def get_agent_dependencies() -> AgentDependencies:
     tracer = get_tracer()
     settings = get_agent_settings()
+    llm = get_llm()
+    gateway = IncidentGateway(build_servicenow_backend, tracer)
     return AgentDependencies(
         settings=settings,
-        llm=get_llm(),
+        llm=llm,
         retriever=build_default_retriever(),
-        servicenow=IncidentGateway(build_servicenow_backend, tracer),
+        tools=build_production_tool_registry(gateway, llm),
         tracer=tracer,
         audit=build_audit_store(settings.agent_checkpointer_backend),
     )
 
 
-__all__ = ["AgentDependencies", "get_agent_dependencies", "utc_now"]
+__all__ = [
+    "AgentDependencies",
+    "build_production_tool_registry",
+    "get_agent_dependencies",
+    "utc_now",
+]

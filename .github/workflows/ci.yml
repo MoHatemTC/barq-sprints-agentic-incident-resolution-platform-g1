@@ -34,6 +34,9 @@ jobs:
       - name: Set up Python
         run: uv python install 3.12
 
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y tesseract-ocr
+
       # --locked, not a bare sync: without it uv silently re-resolves and rewrites
       # uv.lock when it disagrees with pyproject.toml, so CI could pass on dependency
       # versions nobody reviewed. With it, a pyproject edit that was not re-locked

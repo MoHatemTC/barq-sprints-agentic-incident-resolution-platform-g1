@@ -19,6 +19,7 @@ from api.auth import verify_bearer_token
 from api.schemas.approvals import (
     ApprovalDecisionRequest,
     ApprovalResponse,
+    fold_solution_into_evidence,
 )
 from app.api.dependencies import get_db_session
 from app.db.models import Approval, Execution, RetryState
@@ -238,7 +239,10 @@ async def decide_approval(
                 decision=payload.decision,
                 decided_by=payload.decided_by,
                 reason=payload.reason,
-                evidence=payload.evidence,
+                # The human solution rides in the immutable evidence JSONB (there is no
+                # solution column), folded with the knowledge-capture tool name so the
+                # registry's high-risk checker finds well-formed scope later.
+                evidence=fold_solution_into_evidence(payload.evidence, payload.solution),
                 decided_at=now,
             )
             db.add(resolved_approval)
