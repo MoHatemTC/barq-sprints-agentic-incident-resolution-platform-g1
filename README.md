@@ -47,8 +47,13 @@ Retrieval and operational state are deliberately separate: Qdrant holds vectors 
 |---|---|
 | `src/app/main.py` | FastAPI application entrypoint |
 | `src/app/core/config.py` | Pydantic settings. ServiceNow fields are **required** so the service fails fast rather than booting half-configured |
-| `src/app/api/` | HTTP routes. `webhook.py` is a placeholder — Sprint 2 |
-| `src/app/auth/` | OAuth token handling: `token_manager.py` acquires and refreshes the access token, including mid-run expiry (S1.5) |
+| `src/app/core/constants.py`, `src/app/core/logging.py` | Shared constants and the structlog JSON logging configuration |
+| `src/api/` | The API as it runs: `app.py` wiring, `routers/` (`webhook`, `executions`, `approvals`, `config`, `dlq`, `eval`, `health`), `schemas/`, bearer auth, correlation middleware and error handlers (S2.1, S2.4) |
+| `src/app/api/` | Re-export of the webhook router onto the `app` package; `webhook.py` is a one-line shim onto `api.routers.webhook`, not a placeholder |
+| `src/app/middlewares/` | Correlation-id middleware |
+| `src/app/db/` | SQLAlchemy base, models, session factory and the Redis key layout (S2.2) |
+| `src/db/` | Compatibility package for import paths that predate `app.db`; canonical database code is under `src/app/db/` |
+| `src/app/auth/` | OAuth: `token_manager.py` acquires and refreshes the ServiceNow access token, including mid-run expiry (S1.5); `webhook_oauth.py` issues and verifies the webhook JWT (#139, #143) |
 | `src/app/clients/` | Outbound integrations: `servicenow_client.py` (S1.5 Table API client) and `qdrant.py` (S1.4 vector store) |
 | `src/app/models/` | Pydantic domain models: `incident.py`, `execution_log.py`, `oauth.py`, `work_note.py` (S1.5) and `knowledge.py` (S1.4) |
 | `src/app/exceptions/` | Typed ServiceNow errors raised by the client (S1.5) |
@@ -56,15 +61,22 @@ Retrieval and operational state are deliberately separate: Qdrant holds vectors 
 | `src/app/retrieval/` | S1.4 knowledge pipeline: `barq_manual.py`, `extraction.py`, `chunking.py`, `embedding.py`, `ingest.py`, `search.py`, `sources.py` |
 | `src/app/utils/` | Shared helpers, including timezone handling for ServiceNow datetimes |
 | `src/retrieval/` | Re-export shim onto `src/app/retrieval/`. Kept for import paths predating the `app` package; no logic of its own |
-| `src/app/repositories/` | Persistence layer — Sprint 2 |
-| `src/app/services/` | Business logic and orchestration — Sprint 2 |
-| `src/app/core/constants.py`, `core/logging.py` | Placeholders, not yet imported anywhere |
-| `scripts/` | Operational entry points: `verify_permissions.py` (S1.2 permission harness), `extract_barq_kb.py`, `validate_corpus.py`, `setup_qdrant.py`, `seed_qdrant.py` (S1.4); `test_client.py` (S1.5 client exercise) |
+| `src/app/repositories/` | Persistence layer: `audit.py` and `idempotency.py` against PostgreSQL (S2.2) |
+| `src/app/services/` | Intentionally empty — business logic lands here |
+| `src/app/workers/` | Celery application, producer, replay, retry policy, sync engine and the incident task (S2.3) |
+| `src/workers/` | Compatibility re-export of `src/app/workers/`; no logic of its own |
+| `src/agent/` | The LangGraph state machine: `graph.py`, `nodes/` (load → validate → classify → determine_risk → retrieve → generate → verify_evidence → safety_check → act), `llm.py` (Gemini through the LiteLLM proxy), `retrieval.py`, `policy.py` and `checkpointer.py` (S2.4, S2.5, S3.4) |
+| `src/observability/` | Langfuse tracing and the log/trace redaction helpers |
+| `eval/` | Retrieval ablation and the report generator that writes `docs/sprint-2/s2.4-hybrid-retrieval/` (S2.4) |
+| `migrations/` | Alembic versions for the PostgreSQL state schema (S2.2) |
+| `scripts/` | Operational entry points: `verify_permissions.py` (S1.2 permission harness), `extract_barq_kb.py`, `validate_corpus.py`, `setup_qdrant.py`, `seed_qdrant.py`, `publish_kb.py` (S1.4); `test_client.py` (S1.5 client exercise); `export_openapi.py`, `s2_3_cli_walkthrough.sh` |
 | `data/` | `corpus/` — the knowledge articles and ingestion report; `coverage_matrix.csv` — the incident-to-article ground truth (S1.4) |
 | `tests/` | pytest suite. `conftest.py` injects fake ServiceNow settings so tests never depend on a local `.env` |
 | `servicenow/ai_incident_orchestrator/` | Scoped ServiceNow application: exported update-set XML plus the SDK source it was built from |
 | `docs/` | Sprint deliverables, field dictionary, verification records, screenshots |
-| `docker-compose.yml` | Qdrant, PostgreSQL and Redis. Ports bind to `127.0.0.1` by default |
+| `openapi.json` | The generated API contract; `scripts/export_openapi.py [--check]` regenerates it or verifies it is in sync |
+| `Dockerfile` | One unified image serving both the FastAPI ingestion API and the Celery workers |
+| `docker-compose.yml` | Qdrant, PostgreSQL, Redis, the API and the Celery worker. Ports bind to `127.0.0.1` by default |
 | `justfile` | Task shortcuts for the common lint / type-check / test loop |
 | `.github/workflows/ci.yml` | Lint, format check, type-check and tests on every PR |
 | `.github/workflows/servicenow-sdk.yml` | Builds the scoped app with `--frozenKeys`, runs the S1.3 eligibility tests, and checks the build still reproduces the exported update set (#54, #99) |
@@ -73,7 +85,7 @@ Retrieval and operational state are deliberately separate: Qdrant holds vectors 
 | `TEAM.md` | Who owns which task, and the other project roles |
 | `docs/ROADMAP.md` | The full four-sprint PRD scope, not just what is built so far |
 
-Several `src/app` modules are intentionally empty. They mark the agreed structure for work that lands in later sprints; the table above says which.
+`src/app/services/` is intentionally empty. It marks the agreed structure for work that lands later; every other row above matches the tree as it stands.
 
 ---
 

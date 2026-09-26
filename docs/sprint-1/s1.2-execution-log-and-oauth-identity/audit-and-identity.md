@@ -347,8 +347,8 @@ In response to architectural review on test harness integrity, the `LOCK` test s
 
 All credentials and sensitive configuration adhere to strict hygiene:
 - Credentials reside solely in local, git-ignored `.env` files.
-- Tracked configuration (`src/app/core/config.py`) defines settings via Pydantic `SecretStr` models with zero hardcoded credentials or defaults.
-- Repository-level protection is enforced via GitHub Secret Scanning and Push Protection, preventing committed tokens or credentials across the codebase.
+- Tracked configuration (`src/app/core/config.py`) defines settings via Pydantic `SecretStr` models with zero hardcoded credentials or defaults. This became true when #139 removed the default bearer token; the required `SecretStr` is asserted by `tests/auth/test_config_required_secrets.py`.
+- GitHub secret scanning and push protection are enabled; they detect known provider token formats, not generic secrets such as passwords or client secrets.
 
 ---
 
