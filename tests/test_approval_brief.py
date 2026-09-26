@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import time
+
+from agent import approval_brief
 from agent.approval_brief import BRIEF_TIMEOUT_SECONDS, _fallback, render_brief
+from agent.prompts import ApprovalBriefOutput
 from tests.agent_support import build_fake_deps
 
 
@@ -96,3 +100,54 @@ def test_render_brief_large_payload_truncation() -> None:
     assert len(deps.llm.calls) == 1
     prompt = deps.llm.calls[0]["prompt"]
     assert len(prompt) < 10000  # Truncated
+
+
+class _SlowLLM:
+    """An LLM client whose approval-brief call never returns in time."""
+
+    def __init__(self, delay: float) -> None:
+        self._delay = delay
+        self.calls: list[dict] = []
+
+    def structured(self, **kwargs: object) -> object:
+        self.calls.append(kwargs)
+        time.sleep(self._delay)
+        return ApprovalBriefOutput(
+            incident_summary="never delivered",
+            gate="escalated_high_risk",
+            planned_action="none",
+            judgment_required="none",
+        )
+
+
+def test_a_brief_that_overruns_its_budget_degrades_instead_of_hanging(monkeypatch) -> None:
+    """A hung model call must not hold the pause open.
+
+    ``render_brief`` runs inside ``act``, so before the budget was enforced a
+    stalled LiteLLM connection blocked the run with the execution neither parked
+    nor written. The brief is descriptive only, so overrunning it is worth
+    exactly the fallback.
+    """
+    monkeypatch.setattr(approval_brief, "BRIEF_TIMEOUT_SECONDS", 0.2)
+    deps = build_fake_deps(llm=_SlowLLM(delay=5.0))
+    payload = {"outcome": "escalated_high_risk", "work_note": "P1 escalation"}
+
+    started = time.monotonic()
+    brief = render_brief(payload, deps)
+    elapsed = time.monotonic() - started
+
+    assert elapsed < 3.0, "render_brief returned only because the budget was enforced"
+    assert brief["degraded"] is True
+    assert brief["degraded_reason"] == "BriefTimeout"
+    # The fallback is still a usable brief built from the same payload.
+    assert brief["gate"] == "escalated_high_risk"
+    assert brief["planned_action"] == "P1 escalation"
+
+
+def test_a_brief_within_budget_is_not_marked_degraded(monkeypatch) -> None:
+    """The timeout must not turn a healthy brief into a fallback."""
+    monkeypatch.setattr(approval_brief, "BRIEF_TIMEOUT_SECONDS", 10.0)
+    deps = build_fake_deps(llm=_SlowLLM(delay=0.05))
+    brief = render_brief({"outcome": "escalated_high_risk"}, deps)
+    assert brief["degraded"] is False
+    assert brief["incident_summary"] == "never delivered"
