@@ -158,7 +158,10 @@ thread and flushed on process shutdown, so a real run pays less than this. Again
 real execution, which makes three model calls taking seconds each and has a 90 s p95
 budget (NFR-02), tracing costs under 0.1%. The webhook adds two spans: an estimated ~0.4 ms
 at that per-span cost (not measured separately), against S2.3's measured 22.7 ms p95
-for the 202. With Langfuse keys set, the script also
+for the 202. Note that 22.7 ms figure is a *different workload* from the ingestion
+benchmark — 200 sequential deliveries, not 500 requests at concurrency 50 — so it is
+not comparable with the p95 values in `docs/sprint2_latency_report.md` and the other
+four latency reports. Quote headroom from the worst recorded run, not this one. With Langfuse keys set, the script also
 measures the real export path.
 
 ### Evidence gate calibration

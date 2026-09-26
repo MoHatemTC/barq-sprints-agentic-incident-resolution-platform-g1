@@ -22,6 +22,7 @@ from api.schemas.approvals import (
     ApprovalResponse,
     fold_solution_into_evidence,
 )
+from api.schemas.errors import ErrorResponse
 from app.api.dependencies import get_db_session
 from app.db.models import Approval, Execution, RetryState
 from app.exceptions.app_errors import (
@@ -157,6 +158,16 @@ async def get_pending_approval(execution_id: UUID) -> ApprovalResponse:
         "token and never from the body: 409 if that execution is already decided, "
         "404 if the id resolves to neither."
     ),
+    responses={
+        401: {"model": ErrorResponse, "description": "Missing or invalid operator token."},
+        403: {"model": ErrorResponse, "description": "Token lacks the approver role."},
+        404: {"model": ErrorResponse, "description": "No approval or execution with this id."},
+        409: {
+            "model": ErrorResponse,
+            "description": "Already decided, or the execution is not paused.",
+        },
+        503: {"model": ErrorResponse, "description": "Audit store or database unavailable."},
+    },
 )
 async def decide_approval(
     id: UUID,

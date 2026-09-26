@@ -2,6 +2,18 @@
 
 Generated: 2026-09-18 07:17 UTC by `tests/load/run_load_test.py`
 
+> [!NOTE]
+> This is a *smaller* sweep (100 requests per depth, 2 depths, concurrency 20) than the
+> five 500-request runs recorded at `docs/sprint2_latency_report.md`,
+> `docs/sprint-2/sprint-2.1/verification_evidence.md`,
+> `docs/sprint-2/sprint-2.1/baseline_latency_report.md`,
+> `docs/sprint-2/sprint-2.1/sprint2_latency_report.md` and
+> `docs/sprint2_ingestion_design.md`; its figures are not comparable with those and no run
+> is designated authoritative.
+>
+> Captured on **Windows 11 (AMD64)** with Python 3.12.13. Reproduction steps are already
+> POSIX.
+
 ## Environment
 
 - OS: Windows 11 (AMD64)

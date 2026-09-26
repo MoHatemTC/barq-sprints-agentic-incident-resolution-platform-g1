@@ -21,7 +21,8 @@ Sprint 2 (this sprint) builds the **query-side** engine on top of that collectio
 
 1. Combine dense + sparse search into one fused candidate list (FR-14).
 2. Enforce metadata pre-filtering that cannot be bypassed by a caller (FR-14, and the
-   P3 safety invariant carried over from Sprint 1's `retrieve_knowledge`).
+   P3 safety invariant carried over from Sprint 1's single-entry-point filter — then
+   `retrieve_knowledge`, now `hybrid_search`).
 3. Re-score fused candidates with a cross-encoder before generation sees them.
 4. Prove, with a real ablation run on a versioned eval set, that hybrid+reranked beats
    dense-only by a *measured* margin (NFR-08) — not an asserted one.
@@ -76,7 +77,8 @@ Two things worth internalizing immediately:
 
 - **The filter is applied three times when hybrid**: once per `Prefetch` (dense, sparse)
   and once more at the top-level `query_filter`. This is deliberate — it's the same
-  P3 defense-in-depth pattern from Sprint 1's `retrieve_knowledge`, now generalized.
+  P3 defense-in-depth pattern Sprint 1 established in `retrieve_knowledge` (since replaced
+  by this function), now generalized.
   If you refactor this to "simplify" by dropping the top-level filter, you reopen the
   candidate-starvation bug Qdrant Advisor flagged in S1.4.
 - **Reranking only ever narrows, never widens, the candidate set.** `fetch_limit` for
@@ -91,13 +93,21 @@ Two things worth internalizing immediately:
 
 ### 3.1 The two conditions that are never optional
 
-- `workflow_state` defaults to `["published"]` only. Retired/draft articles are
-  invisible unless a caller explicitly overrides `MetadataFilterBuilder.workflow_state`
-  — and even then, this is a builder field, not something an `extra: Filter` can force,
-  because `extra` is appended to `must` **after** these two, never merged into them.
+- `workflow_state` defaults to `DEFAULT_WORKFLOW_STATES`, which is **two** members —
+  `["published", "human_resolved"]`, not `["published"]` alone. `human_resolved` is the
+  origin marker S3.5 knowledge capture stamps on a human-written article, and having it
+  in the default is what makes a freshly captured resolution retrievable as evidence
+  immediately; the widening is load-bearing, not incidental — see
+  [docs/sprint3_knowledge_capture_design.md](../../sprint3_knowledge_capture_design.md).
+  `retired` and `draft` are invisible unless a caller explicitly overrides
+  `MetadataFilterBuilder.workflow_state` — and even then, this is a builder field, not
+  something an `extra: Filter` can force, because `extra` is appended to `must`
+  **after** these two, never merged into them.
 - `security_level` defaults to `DEFAULT_MAX_SECURITY_LEVEL = INTERNAL`, i.e.
-  `["public", "internal"]`. `restricted` content (5 of 11 corpus articles) is invisible
-  by default. This mirrors the #45 fix from Sprint 1 — before that fix, restricted
+  `["public", "internal"]`. `restricted` content is invisible by default: four of the
+  corpus's articles are `restricted` (`KB0004`, `KB0007`, `KB0008`, `KB0010`), which is
+  five of the eleven indexed records because `KB0010` is present in two versions.
+  This mirrors the #45 fix from Sprint 1 — before that fix, restricted
   articles leaked to every caller because `RetrievalHit` didn't even carry the field.
 
 ### 3.2 Cumulative security tiers, not exact match
@@ -139,8 +149,11 @@ should be a new builder field, not an overload of `max_security_level`.
   `.rerank()` call (`_load()` checks `self._model is None`), and
   `get_default_reranker()` is `@lru_cache`d so the model loads at most once per
   process. If you're writing a script that calls this in a loop (like `ablation.py`
-  does across 25 incidents × 3 modes), you want `get_default_reranker()`, not a fresh
+  does across the **23 incidents** of the recorded run × 3 modes), you want
+  `get_default_reranker()`, not a fresh
   `CrossEncoderReranker()` per call, or you'll reload the model every time.
+  (23 is the size of the eval run recorded in `sprint2_retrieval_report.md`; 25 is the
+  size of `data/coverage_matrix.csv`, an unrelated number.)
 - **Scoring contract**: `model.rerank(query, documents)` returns one score per
   document, in the same order. `zip(hits, raw_scores, strict=True)` means a count
   mismatch between hits and scores raises immediately rather than silently
@@ -156,7 +169,7 @@ should be a new builder field, not an overload of `max_security_level`.
 
 ---
 
-## 6. Config and mode switching (`src/core/config.py`)
+## 6. Config and mode switching (`src/app/core/config.py`)
 
 `RetrievalMode` is the enum with three values: `DENSE_ONLY`, `HYBRID`,
 `HYBRID_RERANKED`. The active mode resolves as: explicit `mode=` argument to
@@ -262,7 +275,8 @@ set, corpus, or retrieval implementation changes.
      not produce a rescue.
 
 3. **Working hypothesis for why `KB0010-v2.0` resists rescue where `KB0006-v3.0`
-   did not**: with only 11 published articles in the corpus, "top 5" is
+   did not**: with only **10 published** articles in the corpus (11 records, of which
+   `KB0010-v1.0` is retired), "top 5" is
    effectively the top half. `KB0010-v2.0`'s dense embedding already sits in a
    less crowded semantic neighborhood (order-processing/database language is
    distinct from anything else in the corpus), so it tends to survive on dense

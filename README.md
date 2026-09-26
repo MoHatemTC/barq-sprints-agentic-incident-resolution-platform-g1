@@ -65,7 +65,7 @@ Retrieval and operational state are deliberately separate: Qdrant holds vectors 
 | `src/app/services/` | Intentionally empty — business logic lands here |
 | `src/app/workers/` | Celery application, producer, replay, retry policy, sync engine and the incident task (S2.3) |
 | `src/workers/` | Compatibility re-export of `src/app/workers/`; no logic of its own |
-| `src/agent/` | The LangGraph state machine: `graph.py`, `nodes/` (load → validate → classify → determine_risk → retrieve → generate → verify_evidence → safety_check → act), `llm.py` (Gemini through the LiteLLM proxy), `retrieval.py`, `policy.py` and `checkpointer.py` (S2.4, S2.5, S3.4) |
+| `src/agent/` | The LangGraph state machine: `graph.py`, `nodes/` (load → validate → classify → determine_risk → retrieve → diagnose → generate → verify_evidence → safety_check → confidence_check → act), `llm.py` (Gemini through the LiteLLM proxy), `retrieval.py`, `policy.py` and `checkpointer.py` (S2.4, S2.5, S3.4) |
 | `src/observability/` | Langfuse tracing and the log/trace redaction helpers |
 | `eval/` | Retrieval ablation and the report generator that writes `docs/sprint-2/s2.4-hybrid-retrieval/` (S2.4) |
 | `migrations/` | Alembic versions for the PostgreSQL state schema (S2.2) |
@@ -84,6 +84,7 @@ Retrieval and operational state are deliberately separate: Qdrant holds vectors 
 | `.github/workflows/labeler.yml`, `.github/labeler.yml` | Auto-labels PRs by which task's paths they touch |
 | `TEAM.md` | Who owns which task, and the other project roles |
 | `docs/ROADMAP.md` | The full four-sprint PRD scope, not just what is built so far |
+| `docs/demo_runbook.md` | Step-by-step runbook for driving the end-to-end demo against the real stack, with the prerequisites and the expected output of each phase |
 
 `src/app/services/` is intentionally empty. It marks the agreed structure for work that lands later; every other row above matches the tree as it stands.
 
@@ -156,7 +157,7 @@ Goal: the platform side exists as a real ServiceNow application, with an audit t
 
 ## Sprint 2 — Event Integration
 
-Goal: ServiceNow talks to the backend, nothing polls, and the ingestion path survives bursts. Hybrid retrieval and the state machine were pulled forward into this sprint as S2.4 and S2.5. Tracked in the [Sprint 2 milestone](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/milestone/2); all five milestone issues are closed and every task below is merged.
+Goal: ServiceNow talks to the backend, nothing polls, and the ingestion path survives bursts. Hybrid retrieval and the state machine were pulled forward into this sprint as S2.4 and S2.5. Tracked in the [Sprint 2 milestone](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/milestone/2); all six milestone issues are closed and every task below is merged.
 
 | Task | Scope | Owner | Merged |
 |---|---|---|---|

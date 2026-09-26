@@ -11,6 +11,7 @@ from sqlalchemy import delete
 from sqlalchemy.exc import MissingGreenlet, SQLAlchemyError
 
 from api.auth import verify_webhook_oauth_token
+from api.schemas.errors import ErrorResponse
 from api.schemas.webhook import IncidentWebhookPayload, WebhookAcceptedResponse
 from app.api.dependencies import get_session_factory
 from app.core.correlation import get_correlation_id
@@ -45,6 +46,14 @@ router = APIRouter(
     description=(
         "Validates Outbound Event Contract v1, persists idempotently, and enqueues to Redis."
     ),
+    responses={
+        401: {"model": ErrorResponse, "description": "Missing or invalid webhook bearer token."},
+        422: {"model": ErrorResponse, "description": "Payload failed contract validation."},
+        503: {
+            "model": ErrorResponse,
+            "description": "Database or queue unavailable; nothing was accepted.",
+        },
+    },
 )
 async def ingest_incident_webhook(
     payload: IncidentWebhookPayload,

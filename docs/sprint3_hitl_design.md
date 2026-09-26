@@ -93,8 +93,11 @@ never touches the graph.
    (`status`, `ended_at`, `termination_cause`) and returns the resumed result with
    `brief` and `facts` fields
 
-If no interrupt is stored, the endpoint keeps the Sprint 2.1 stub contract (it
-answers `200` with the decision echoed) and does not call the runtime.
+If no interrupt is stored, the endpoint still requires a paused execution: the path id
+is looked up as an approval id and then as an execution id, an execution that is not in
+`awaiting_approval` is refused with **409**, and an id that resolves to neither is **404**
+(#147, closed). There is no stub that answers `200` with a decision nothing stored, and
+the runtime is only called when there is a real interrupt to resume.
 
 The resume flow uses LangGraph's `Command(resume=decision)`:
 
@@ -105,6 +108,14 @@ def run_graph(..., resume: dict[str, Any] | None = None):
         resumed = True
     final = graph.invoke(payload, config)
 ```
+
+### 404 for an unresolvable id (#147, closed)
+
+The Sprint 2.1 contract answered `200` with the decision echoed and stored nothing. That
+is gone: `decide_approval` raises `ResourceNotFoundError` when the id is neither an
+approval nor an execution, and its own docstring says so — *"there is no stub that reports
+a saved decision nothing stored (#147)"*. `tests/test_approvals_resume.py::test_decide_for_an_unknown_id_is_404`
+and `tests/test_approvals.py::test_decide_approval_unknown_id_returns_404` pin it.
 
 ### Human Decision Application
 
@@ -155,6 +166,68 @@ Three audit records are written:
    - `record_pause` is idempotent: a redelivery that parks the same node under the
      same attempt returns without writing a second row
 
+## Running the live demo
+
+`scripts/demo_s34_hitl_live.py` runs the whole mechanism against the real stack — real
+ServiceNow instance with the OAuth integration user, real PostgreSQL, Redis and Celery,
+real Qdrant hybrid retrieval, real Gemini through the LiteLLM proxy, real Langfuse
+tracing. Nothing is faked. Every phase prints `PASS`/`FAIL` and the script exits non-zero
+if any phase fails, so it works as a gate and not only as a transcript.
+[`docs/demo_runbook.md`](demo_runbook.md) is the step-by-step runbook (prerequisites,
+instance selection, credentials, troubleshooting); this section is the design-relevant
+summary.
+
+```bash
+docker compose up -d postgres redis qdrant
+uv run uvicorn app.main:app --host 127.0.0.1 --port 8099
+uv run celery -A app.workers.celery_app worker \
+  --queues=barq:incident:events --loglevel=INFO --pool=threads --concurrency=1
+uv run python scripts/demo_s34_hitl_live.py --all
+```
+
+### macOS: the Celery pool must be threads
+
+`--pool=threads --concurrency=1` is required on macOS and only on macOS. With the default
+prefork pool every task dies instantly with
+`ValueError: not enough values to unpack (expected 3, got 0)`. It is not an application
+bug: `celery/app/trace.py` populates a module-level `_localized` list during worker
+startup and reads it in the child process, and macOS defaults `multiprocessing` to
+`spawn`, so the child starts with an empty list. Linux and the Docker/EC2 deployment use
+`fork` and are unaffected. Recognise it by that exact message: it means the pool, not
+the graph.
+
+### What the script proves
+
+| Phase | Proves | Requirement |
+|---|---|---|
+| unauthenticated call → 401 | the caller is authenticated before anything else | FR-07 |
+| 202 in ~15 ms | no model on the request thread | FR-08, NFR-01 |
+| replay flagged idempotent | one event, one execution | FR-09 |
+| parked at `awaiting_approval` | a real LangGraph interrupt, not a terminal write | FR-17 |
+| incident untouched while parked | no premature ServiceNow write | FR-17, NFR-05 |
+| pending approval carries `facts` | the raw audit payload rode the checkpoint | NFR-07 |
+| brief present before any decision | the brief agent is descriptive only | Approval Brief Agent |
+| `decided_by` from the token | the body cannot write the audit identity | #148 |
+| write lands only after the decision | the write is authorised by the human | NFR-05 |
+| `interrupt_resume:…` termination cause | audit separates resume from crash-recovery | Audit Trail |
+| second decision → 409 | approvals are immutable | Audit Trail, Edge Cases |
+
+A high-risk incident (`--priority 1`) escalates at `determine_risk` *before* retrieval, so
+the graph interrupts with nothing written at all — not even the state field. A low/medium
+incident runs all eleven nodes straight through and no approval is raised. `--keep-parked`
+stops at the pause and prints the exact `curl` for the decide call, which is the run to
+use when the approval screen is being shown to a room.
+
+### The transcript
+
+`docs/evidence/s34_hitl_demo.json` is the recorded run, with the before/at-park/after
+field snapshots per incident, the brief, the decision, the final status and the node
+trace. Its two runs are the two paths above: a P1 that parks at `determine_risk` and
+resumes with termination cause `interrupt_resume:escalated_high_risk`, and a priority 3
+that reaches `act` having visited all eleven nodes. Read the node list with the caveat
+from [`sprint3_graph_design.md`](sprint3_graph_design.md) §1 in mind: `safety_check:
+succeeded` means the node ran, not that anything was checked.
+
 ## Edge Cases
 
 ### Double Resume Protection
@@ -176,10 +249,15 @@ The approvals router validates:
   two contradictory decisions cannot both be stored for one execution
 - A decision that could not be applied (the graph failed to resume) is **not**
   recorded, so the caller may retry
-- An id with no execution and no interrupt falls through to the Sprint 2.1 stub
-  response (`200`, decision echoed, nothing saved). That is the pre-existing
-  contract, not a new one: returning 404 there is **#147**, owned by Mohamed and
-  Ahmed Tamer, and is deliberately left to that fix
+- An id that resolves to neither an approval nor an execution is **404**, and nothing is
+  stored. This closed #147: the Sprint 2.1 stub answered `200` with the decision echoed
+  and saved nothing, so a caller could believe a decision had been recorded when no row
+  existed. The router's docstring carries the same statement — *"there is no stub that
+  reports a saved decision nothing stored (#147)"*
+- An execution that exists but is not `awaiting_approval` is **409**. Without this the
+  route could write an immutable approval against a run that already succeeded and was
+  written back to ServiceNow, and the audit would assert that a human approved a run no
+  human was ever asked about
 
 ### Unit Test Direct Calls
 
@@ -219,8 +297,10 @@ def _request_human_decision(payload: dict[str, Any]) -> dict[str, Any]:
 - `test_decide_resumes_the_parked_execution`: Parks a P1 in `act`, POSTs a decision
   and asserts the very thread that paused is resumed, the ServiceNow write happens
   only after the decision, and the approval row is recorded against that execution
-- `test_decide_without_a_pause_keeps_the_stub_contract`: No interrupt stored → the
-  Sprint 2.1 stub still answers and nothing is resumed
+- `test_decide_for_an_unknown_id_is_404`: an id that resolves to neither an approval nor
+  an execution is 404 and nothing is stored — the stub is gone (#147)
+- `test_second_decision_on_one_execution_is_refused`: whichever id form the caller uses,
+  a second decision on the same execution is 409
 - `test_pending_endpoint_returns_the_brief_before_a_decision`: `GET .../pending/{id}`
   returns `brief` and `facts` while the ServiceNow backend stays untouched
 

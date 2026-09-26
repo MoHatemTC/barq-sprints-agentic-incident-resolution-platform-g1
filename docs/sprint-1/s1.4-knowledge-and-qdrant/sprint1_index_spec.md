@@ -83,11 +83,11 @@ $$IDF(t) = \ln\left(1 + \frac{N - n(t) + 0.5}{n(t) + 0.5}\right)$$
 
 ### 3.2 Audience filtering is mandatory, like `workflow_state`
 
-`retrieve_knowledge` applies two non-negotiable conditions, not one:
+`hybrid_search` applies two non-negotiable conditions, not one:
 
 | Condition | Behaviour |
 |---|---|
-| `workflow_state == "published"` | Retired and draft articles are never returned. |
+| `workflow_state` in `DEFAULT_WORKFLOW_STATES` — `published` **and** `human_resolved` | `retired` and `draft` articles are never returned. Excluding `retired` is the control that keeps the retired `KB0010-v1.0` out of results, and it must stay. `human_resolved` is returned alongside `published` because S3.5 knowledge capture marks human-written articles with it so they are retrievable evidence the moment they are ingested; the set is a constant in `src/app/retrieval/filters.py`, not a literal. |
 | `security_level` within `max_security_level` | Defaults to `SecurityLevel.INTERNAL`, so `restricted` articles are excluded unless the caller explicitly passes `SecurityLevel.RESTRICTED`. |
 
 Both are placed in the parent `must` list, so an `extra_filter` can narrow results further but cannot widen them past either boundary.
@@ -95,11 +95,13 @@ Both are placed in the parent `must` list, so an `extra_filter` can narrow resul
 `RetrievalHit` carries `security_level`, so a caller can see and log the tier of anything it received.
 
 > [!WARNING]
-> Before #45 the tier was documented but never enforced: `retrieve_knowledge` had no
-> audience parameter, and `RetrievalHit` did not carry `security_level`, so **all 5
-> `restricted` articles in the 11-article corpus were returned to every caller** and no
-> caller could have filtered them afterwards. The only workaround was for every call site
-> to remember an `extra_filter`.
+> Before #45 the tier was documented but never enforced: the Sprint 1 entry point (then
+> `retrieve_knowledge`, now `hybrid_search`) had no audience parameter, and
+> `RetrievalHit` did not carry `security_level`, so **all four `restricted` articles**
+> (`KB0004`, `KB0007`, `KB0008`, `KB0010` — five of the eleven indexed records, since
+> `KB0010` is indexed in two versions) **in the 11-record corpus were returned to every
+> caller** and no caller could have filtered them afterwards. The only workaround was
+> for every call site to remember an `extra_filter`.
 
 ### 3.1 Chunking Parameters
 
@@ -134,9 +136,9 @@ The following 7 fields are indexed as `PayloadSchemaType.KEYWORD` during collect
 | `article_id` | String | `KB0001-v2.0`, `KB0010-v2.0` | `keyword` | Exact versioned point resolution |
 | `category` | String | `network`, `software`, `hardware`, `inquiry` | `keyword` | ServiceNow incident taxonomy filtering |
 | `service` | String | `corporate-vpn`, `sap-erp`, `order-processing` | `keyword` | Configuration item / service filtering |
-| `workflow_state` | String | `published`, `draft`, `retired` | `keyword` | Excludes draft and decommissioned runbooks |
+| `workflow_state` | String | `published`, `human_resolved`, `draft`, `retired` | `keyword` | Excludes draft and decommissioned runbooks; `human_resolved` is returned by default (§3.2) |
 | `version` | String | `1.0`, `2.0`, `3.0`, `4.0` | `keyword` | Version disambiguation |
-| `security_level` | String | `public`, `internal`, `restricted` | `keyword` | Tiered role-based retrieval (desk cards vs platform). **Enforced** by `retrieve_knowledge`'s `max_security_level`, which defaults to `internal` — see §3.2 |
+| `security_level` | String | `public`, `internal`, `restricted` | `keyword` | Tiered role-based retrieval (desk cards vs platform). **Enforced** by `build_metadata_filter`'s `max_security_level` in `src/app/retrieval/filters.py`, which defaults to `internal` — see §3.2 |
 
 ### 5.2 Non-Indexed Retrievable Payload Fields
 
@@ -174,18 +176,20 @@ Because UUIDv5 is pure and deterministic, re-running `seed_qdrant.py` results in
 
 ## 7. Docker Persistence Guarantee
 
-The vector store is hosted in Docker via `docker-compose.yml`:
+The vector store is hosted in Docker via `docker-compose.yml` (this snippet is the `qdrant:` service, verbatim apart from indentation):
 ```yaml
   qdrant:
     image: qdrant/qdrant:v1.14.0
     container_name: barq-qdrant
     restart: unless-stopped
     ports:
-      - "${QDRANT_BIND_IP:-127.0.0.1}:${QDRANT_PORT:-6333}:6333"
-      - "${QDRANT_BIND_IP:-127.0.0.1}:${QDRANT_GRPC_PORT:-6334}:6334"
+      - "${BIND_IP:-127.0.0.1}:${QDRANT_HTTP_PORT:-6333}:6333"
+      - "${BIND_IP:-127.0.0.1}:${QDRANT_GRPC_PORT:-6334}:6334"
     volumes:
       - qdrant_data:/qdrant/storage
 ```
+
+The bind address is `BIND_IP` and the HTTP port variable is `QDRANT_HTTP_PORT`. There is no `QDRANT_BIND_IP` and no `QDRANT_PORT` in this project — an earlier revision of this snippet used both, so editing the bind address in it changed nothing.
 
 Because `/qdrant/storage` is mounted to the `qdrant_data` volume (named `barq_qdrant_data` in Docker), shutting down the container (`docker compose down`) and restarting it (`docker compose up -d`) preserves all 45 indexed points and their payload indexes without requiring re-indexing.
 
@@ -196,8 +200,8 @@ Because `/qdrant/storage` is mounted to the `qdrant_data` volume (named `barq_qd
 > [!NOTE]
 > **Implemented Safety Invariant (P3 Resolution):**
 > Unfiltered hybrid search allowed the retired `KB0010-v1.0` to rank FIRST for pool-exhaustion queries (reproducing the MIR-2026-03 failure mode).
-> The single retrieval entry point is implemented in `src/app/retrieval/search.py` (`retrieve_knowledge`).
-> The `workflow_state == "published"` filter is constructed internally and cannot be omitted or bypassed by callers.
+> The single retrieval entry point is `hybrid_search` in `src/app/retrieval/hybrid_search.py`. **It is no longer `retrieve_knowledge`**: #110 replaced it, and `src/app/retrieval/search.py` — the file this section used to name — no longer exists. The only `search.py` remaining is a ten-line re-export shim at `src/retrieval/search.py` that exposes `RetrievalHit` and nothing else.
+> The `workflow_state` filter is built internally from `DEFAULT_WORKFLOW_STATES` and cannot be omitted or bypassed by callers. Leaving `retired` out of that set is what keeps `KB0010-v1.0` out of results.
 > Furthermore, based on Qdrant Advisor validation, the filter is placed inside **both `Prefetch` clauses AND the top-level `query_filter`** (ensuring filter enforcement across in-memory mock engines and preventing candidate starvation on production Qdrant).
 > Callers can only narrow further via `extra_filter` (e.g. by service, category, or security level).
 > The acceptance test suite in `tests/retrieval/test_search.py` asserts that querying with the `INC0010052` phrasing never returns `KB0010-v1.0` and always returns `KB0010-v2.0`.
@@ -205,15 +209,20 @@ Because `/qdrant/storage` is mounted to the `qdrant_data` volume (named `barq_qd
 Retrieval combines dense and sparse scores using Reciprocal Rank Fusion (RRF):
 
 ```python
-from app.retrieval import retrieve_knowledge
+from app.retrieval.hybrid_search import hybrid_search
 
-# Hybrid query with mandatory published filter (cannot be omitted)
-hits = retrieve_knowledge(
+# Hybrid query with the mandatory workflow_state filter (cannot be omitted)
+hits = hybrid_search(
     client=client,
     query="the order service is returning errors and the pool is exhausted",
     limit=5,
 )
 ```
+
+> [!WARNING]
+> The import line this example used to carry — `from app.retrieval import retrieve_knowledge`
+> — raises `ImportError`. `app.retrieval.__init__` exports `RetrievalHit` only, and the
+> symbol `retrieve_knowledge` no longer exists anywhere in the package.
 
 ---
 
@@ -227,11 +236,11 @@ hits = retrieve_knowledge(
   ```bash
   uv run python scripts/seed_qdrant.py
   ```
-- **Automated Ingestion Test Suite (8 Tests)**:
+- **Automated Ingestion Test Suite (11 Tests)**:
   ```bash
   uv run pytest tests/retrieval/test_ingest.py -v
   ```
-- **Single Retrieval Entry Point & P3 Filter Test Suite (12 Tests)**:
+- **Single Retrieval Entry Point & P3 Filter Test Suite (24 Tests)**:
   ```bash
   uv run pytest tests/retrieval/test_search.py -v
   ```
