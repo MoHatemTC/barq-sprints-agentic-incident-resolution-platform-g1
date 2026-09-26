@@ -44,14 +44,22 @@ class _Section(BaseModel):
 
 
 class EventPayload(_Section):
-    """The minimal outbound event (Outbound Event Contract v1): identifiers only."""
+    """The minimal outbound event (Outbound Event Contract v1): identifiers only.
+
+    The webhook already validates this contract, but the graph does not only run
+    from the webhook: a Celery message, a DLQ replay and a test can all construct
+    one. So the same constraints are restated here. ``sys_id`` in particular is
+    interpolated into a Table API *path* segment, so it is held to the 32-hex shape
+    rather than trusted — a value carrying ``../`` would otherwise redirect an
+    authenticated PATCH at a different table.
+    """
 
     model_config = ConfigDict(extra="ignore")
 
     event_id: str
-    sys_id: str
-    number: str
-    event_type: str = "incident.created"
+    sys_id: str = Field(..., pattern=r"^[0-9a-fA-F]{32}$")
+    number: str = Field(..., pattern=r"^INC\d{7,}$", max_length=32)
+    event_type: Literal["incident.created", "incident.updated"] = "incident.created"
 
 
 class IncidentSnapshot(_Section):

@@ -385,6 +385,7 @@ class FakeServiceNow:
         self.read_error: BaseException | None = None
         self.write_error: BaseException | None = None
         self.crash_after_write: BaseException | None = None
+        self.crash_before_log_recorded: BaseException | None = None
         self.on_update: Callable[[str], None] | None = None
         self.write_calls: list[tuple[str, IncidentUpdatePayload]] = []  # Track AI field writes
 
@@ -414,6 +415,11 @@ class FakeServiceNow:
 
     async def write_execution_log(self, payload: ExecutionLogCreatePayload) -> None:
         self.calls.append("write_execution_log")
+        if self.crash_before_log_recorded is not None:
+            # Simulate the worker dying after the incident PATCH landed but before
+            # the execution-log row existed — the window a single receipt phase
+            # cannot describe, and the one that used to duplicate the log.
+            raise self.crash_before_log_recorded
         self.execution_logs.append(payload)
 
     async def write_ai_fields(self, sys_id: str, payload: IncidentUpdatePayload) -> None:

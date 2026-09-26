@@ -589,6 +589,31 @@ def test_safety_check_is_explicit_pass_through() -> None:
 
 
 class TestVerifyEvidence:
+    def test_a_critic_verdict_of_false_fails_the_gate_even_with_no_findings(self) -> None:
+        """The critic's own ``passed`` is honoured, not only its enumerated findings.
+
+        A model that returns ``passed=false`` with all three finding lists empty has
+        spotted something it could not itemise — the case the system prompt invites.
+        Deriving the verdict from the lists alone recorded that as a PASS and the
+        draft went on to be written to ServiceNow. Manual §11.6 requires the
+        evidence check to be code the model cannot route around.
+        """
+        from agent.prompts import CriticOutput
+
+        deps = make_deps()
+        deps.llm.answers["verify_evidence"] = CriticOutput(
+            passed=False,
+            invalid_citations=[],
+            unsupported_claims=[],
+            feedback_instructions="Something is wrong that I cannot itemise.",
+        )
+        state = reasoned_state()
+        update = verify_evidence(state, deps)
+        verification = update["verification"]
+        assert verification["gate"] == "verify_evidence"
+        assert verification["passed"] is False
+        assert update["critic_feedback"]["passed"] is False
+
     def test_passes_grounded_draft(self) -> None:
         state = reasoned_state()
         update = verify_evidence(state, make_deps())

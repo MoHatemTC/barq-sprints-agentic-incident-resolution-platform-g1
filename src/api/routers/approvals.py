@@ -32,6 +32,11 @@ from app.exceptions.app_errors import (
 
 logger = structlog.getLogger("api.approvals")
 
+#: The one execution status a human decision can be applied to. Spelled out here
+#: rather than imported so the check reads as the literal database contract it is:
+#: ``ck_executions_status`` in ``models.py`` carries exactly these eight values.
+_PAUSED_STATUS = "awaiting_approval"
+
 router = APIRouter(
     prefix="/api/v1",
     tags=["Approvals"],
@@ -204,6 +209,22 @@ async def decide_approval(
         execution = await db.get(Execution, id)
         if execution is None:
             raise ResourceNotFoundError(f"No approval request or execution '{id}' found")
+        # Only a paused thread can be decided. Without this the route recorded an
+        # immutable Approval against an execution in *any* state — including one
+        # that already succeeded and was written back to ServiceNow — and the
+        # approvals table is immutable by trigger, so the false audit record could
+        # not be corrected afterwards. The audit would then assert that a human
+        # approved a run no human was ever asked about.
+        if execution.status != _PAUSED_STATUS:
+            logger.warning(
+                "approval_execution_not_paused",
+                execution_id=str(execution.execution_id),
+                status=execution.status,
+            )
+            raise ConflictError(
+                f"Execution '{execution.execution_id}' is '{execution.status}', not "
+                f"'{_PAUSED_STATUS}'; only a paused run can be decided."
+            )
     except (ConflictError, ResourceNotFoundError, MissingGreenlet):
         raise
     except IntegrityError as exc:

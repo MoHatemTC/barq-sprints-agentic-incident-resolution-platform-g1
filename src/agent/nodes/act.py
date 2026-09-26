@@ -314,9 +314,11 @@ def act(state: AgentState, deps: AgentDependencies) -> dict[str, Any]:
     receipt = deps.audit.get_receipt(execution_id) if execution_id else None
     if receipt and receipt.get("output"):
         phase = receipt.get("phase")
-        if phase in (None, "written"):
-            # A receipt saved without a phase predates the boundary markers and can
-            # only have been written after the write completed.
+        if phase in (None, "logged", "written"):
+            # "logged" is terminal: both ServiceNow calls landed and only the final
+            # receipt save was lost, so replaying it would duplicate the execution
+            # log. A receipt saved without a phase predates the boundary markers and
+            # can only have been written after the write completed.
             return {"output": receipt["output"]}
         # The previous attempt died inside the write boundary. Resume at the boundary
         # with the output it was writing rather than recomputing the decision, which
@@ -390,8 +392,20 @@ def _perform_write(
     # Resuming after a crash inside this boundary: the PATCH is skipped only when
     # ServiceNow itself says it landed, so a kill between the write and the receipt
     # cannot append the work note twice.
+    #
+    # ``logged`` is a further terminal phase, saved once the execution-log row has
+    # landed. Without it a kill between that write and the final receipt save
+    # restarted the log write, because the receipt still said ``fields_written``.
+    #
+    # Known residual, deliberately not closed here: a kill in the window *after*
+    # the log row lands but *before* the receipt reaches ``logged`` still replays
+    # the log. Closing it needs a read-back probe for the execution-log table the
+    # way _write_already_landed probes the incident, and execution_id is not unique
+    # on that table, so existence cannot distinguish this attempt from an earlier
+    # one. The duplicate is an extra audit row; the authoritative record of the run
+    # is executions + workflow_state. See docs/sprint3_recovery_design.md.
     write_fields = True
-    if resume_phase == "fields_written":
+    if resume_phase in ("fields_written", "logged"):
         write_fields = False
     elif resume_phase is not None:
         write_fields = not _write_already_landed(state, deps, incident, payload)
@@ -441,8 +455,11 @@ def _perform_write(
         output,
         status=ExecutionStatus.AWAITING_APPROVAL,
     )
-    output = output.model_copy(update={"actions": actions, "write_back": "written"})
-    dumped = output.model_dump(mode="json")
+    final = output.model_copy(update={"actions": actions, "write_back": "written"})
+    dumped = final.model_dump(mode="json")
+    # Both terminal phases carry the *final* payload, not the in-flight one, so a
+    # restart from either returns the run as it actually completed.
+    deps.audit.save_receipt(execution_id, {**receipt_base, "phase": "logged", "output": dumped})
     deps.audit.save_receipt(execution_id, {**receipt_base, "phase": "written", "output": dumped})
     return {"output": dumped}
 

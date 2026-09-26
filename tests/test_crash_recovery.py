@@ -10,25 +10,33 @@ from tests.agent_support import FakeServiceNow, build_fake_deps, state_before_ac
 
 
 def test_receipt_prevents_duplicate_writes() -> None:
-    """A write receipt prevents duplicate ServiceNow writes on re-run."""
-    store = MemoryGraphAuditStore()
-    execution_id = "test-receipt-1"
+    """A write receipt prevents duplicate ServiceNow writes on re-run.
 
-    # Simulate first write completing
-    receipt = {
-        "output": {"outcome": "suggested"},
-        "lifecycle": "direct",
-        "incident_sys_id": "abc123",
-    }
-    store.save_receipt(execution_id, receipt)
+    Executed against a real ``act``. A terminal receipt must short-circuit the
+    whole write boundary: no PATCH, no work note, no second execution-log row. The
+    previous version of this test saved a dict and read it back, which proved only
+    that ``MemoryGraphAuditStore`` is two dict operations.
+    """
+    from agent.nodes.act import act
 
-    # On restart, receipt exists
-    retrieved = store.get_receipt(execution_id)
-    assert retrieved is not None
-    assert retrieved["lifecycle"] == "direct"
+    backend = FakeServiceNow()
+    deps = build_fake_deps(servicenow=backend)
+    state = state_before_act(deps)
 
-    # If act() checks receipt first, it would skip the write
-    # This test verifies the receipt exists and can be checked
+    first = act(state, deps)
+    assert first["output"]["write_back"] == "written"
+    assert len(backend.updates) == 1
+    assert len(backend.execution_logs) == 1
+
+    # A redelivery of the same execution: the receipt is terminal, so the second
+    # entry into act must return the recorded output without touching ServiceNow.
+    again = act(state, deps)
+
+    assert again["output"] == first["output"]
+    assert len(backend.updates) == 1
+    assert backend.calls.count("write_ai_fields") == 1
+    assert len(backend.execution_logs) == 1
+    assert backend.calls.count("write_execution_log") == 1
 
 
 def test_audit_lifecycle_direct() -> None:
@@ -79,30 +87,105 @@ def test_audit_lifecycle_interrupt_resume() -> None:
     assert retrieved_receipt["lifecycle"] == "interrupt_resume"
 
 
+def test_kill_between_the_execution_log_and_the_final_receipt_does_not_replay_the_log() -> None:
+    """The ``logged`` phase is terminal: a kill after the log row lands is not replayed.
+
+    Both ServiceNow calls — the incident PATCH and the execution-log insert — have
+    landed by this point, and only the final receipt save was lost. Without the
+    ``logged`` phase the restarted ``act`` still saw ``fields_written`` and wrote a
+    second log row. This is the window this test exists to protect.
+    """
+    from agent.audit_store import MemoryGraphAuditStore
+    from agent.nodes.act import act
+
+    backend = FakeServiceNow()
+    deps = build_fake_deps(servicenow=backend)
+    state = state_before_act(deps)
+
+    class DiesOnFinalReceipt(MemoryGraphAuditStore):
+        """Loses the process exactly when the terminal receipt would be written."""
+
+        def save_receipt(self, execution_id, receipt):  # type: ignore[no-untyped-def]
+            if receipt.get("phase") == "written":
+                raise RuntimeError("worker killed before the terminal receipt")
+            super().save_receipt(execution_id, receipt)
+
+    deps.audit = DiesOnFinalReceipt()
+
+    with pytest.raises(RuntimeError, match="terminal receipt"):
+        act(state, deps)
+
+    # Both ServiceNow writes happened; the receipt is stuck one step behind.
+    assert len(backend.updates) == 1
+    assert len(backend.execution_logs) == 1
+    receipt = deps.audit.get_receipt(state["execution_id"])
+    assert receipt is not None
+    assert receipt["phase"] == "logged"
+
+    deps.audit = MemoryGraphAuditStore()
+    deps.audit.save_receipt(state["execution_id"], receipt)
+    result = act(state, deps)
+
+    assert result["output"]["write_back"] == "written"
+    assert len(backend.updates) == 1
+    assert len(backend.execution_logs) == 1
+    # The restart returns the recorded final output and does not re-open the
+    # boundary, so the receipt legitimately stays at "logged".
+    final_receipt = deps.audit.get_receipt(state["execution_id"])
+    assert final_receipt is not None
+    assert final_receipt["phase"] == "logged"
+    assert final_receipt["output"]["write_back"] == "written"
+
+
 def test_multiple_crashes_after_write() -> None:
-    """Multiple crashes after write still result in exactly one ServiceNow write."""
-    store = MemoryGraphAuditStore()
-    execution_id = "test-multi-crash"
+    """Repeated crashes across the write boundary still yield exactly one write.
 
-    # First write
-    receipt = {
-        "output": {"outcome": "suggested"},
-        "lifecycle": "direct",
-        "incident_sys_id": "ghi012",
-    }
-    store.save_receipt(execution_id, receipt)
+    Executed against a real ``act`` and a real ``FakeServiceNow``. Each cycle dies
+    at a different point — before the PATCH, after the PATCH but before the log,
+    and after both — and every restart must add nothing. The previous version of
+    this test read the same dict three times and asserted a comment.
+    """
+    from agent.nodes.act import act
 
-    # Simulate multiple crash/restart cycles
-    # Each restart would check receipt and skip write
-    for _ in range(3):
-        retrieved = store.get_receipt(execution_id)
-        assert retrieved is not None
-        assert retrieved["lifecycle"] == "direct"
+    backend = FakeServiceNow()
+    deps = build_fake_deps(servicenow=backend)
+    state = state_before_act(deps)
 
-    # Receipt still exists, only one write happened
-    final = store.get_receipt(execution_id)
-    assert final is not None
-    assert final["lifecycle"] == "direct"
+    # Cycle 1: dies before ServiceNow is asked to write anything.
+    backend.write_error = RuntimeError("kill 1: before the write")
+    with pytest.raises(RuntimeError, match="kill 1"):
+        act(state, deps)
+    assert backend.updates == []
+
+    # Cycle 2: the PATCH lands, the process dies before the execution log exists.
+    backend.write_error = None
+    backend.crash_before_log_recorded = RuntimeError("kill 2: after the fields, before the log")
+    with pytest.raises(RuntimeError, match="kill 2"):
+        act(state, deps)
+    assert len(backend.updates) == 1
+    assert backend.execution_logs == []
+    receipt = deps.audit.get_receipt(state["execution_id"])
+    assert receipt is not None
+    assert receipt["phase"] == "fields_written"
+
+    # Cycle 3: a clean restart. It must skip the PATCH, write the log exactly once,
+    # and close the receipt.
+    backend.crash_before_log_recorded = None
+    result = act(state, deps)
+
+    assert result["output"]["write_back"] == "written"
+    # ``calls`` counts attempts — cycle 1's failed attempt is recorded too — so what
+    # matters is that ServiceNow persisted exactly one write and one log row.
+    assert len(backend.updates) == 1
+    assert len(backend.execution_logs) == 1
+    receipt = deps.audit.get_receipt(state["execution_id"])
+    assert receipt is not None
+    assert receipt["phase"] == "written"
+
+    # Cycle 4: one more redelivery after completion changes nothing at all.
+    act(state, deps)
+    assert len(backend.updates) == 1
+    assert len(backend.execution_logs) == 1
 
 
 def test_interrupt_without_resume_stays_awaiting() -> None:
