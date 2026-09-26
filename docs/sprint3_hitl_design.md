@@ -28,7 +28,37 @@ INTERRUPT_OUTCOMES = frozenset(
 )
 ```
 
-**Why `ESCALATED_NO_EVIDENCE` is excluded**: A missing retrieval result is a data issue, not a gate verdict. The agent cannot proceed without evidence, so it escalates directly without requiring human approval. The incident remains `awaiting_approval` in ServiceNow, but the graph does not pause.
+**Why `ESCALATED_NO_EVIDENCE` stays a terminal write.** The three FR-17 interrupt
+outcomes are *gate verdicts* — the graph reached a decision about an action it could
+otherwise have taken, and a person should decide that action. "No evidence" is not a
+verdict about an action; it is the absence of the material any action would rest on. There
+is nothing to approve: no draft was produced, so there is no proposed write for a human to
+authorise. Pausing would put a decision in front of an operator about an execution with
+no candidate outcome — an empty approval, which is worse than an escalation because it
+looks like a choice.
+
+So `ESCALATED_NO_EVIDENCE` keeps Sprint 2's terminal behaviour: `act` writes the
+escalation record (`ai_processing_state = awaiting_approval`, `ai_human_review_required`,
+the classification and a work note naming what was searched and the best score found) and
+returns. The incident is still parked for a person, and the work note still says the run
+was escalated rather than that it failed. What it does not do is create an `approvals` row
+or a resumable thread, because there is no checkpointed decision to resume into — the
+`interrupt()` payload would describe an action that does not exist. Manual §11.4 lists this
+as its own outcome, *"Escalated — no evidence"*, distinct from the three that carry a draft.
+
+This is a deliberate difference from the other three, and it is the reason
+`ESCALATED_NO_EVIDENCE` is absent from `INTERRUPT_OUTCOMES` in `act.py` while the other
+three are present.
+
+**Resume routing reads the decision payload only.** The Approval Brief Agent's output is
+stored in the same persisted payload as the interrupt facts, so it is worth being explicit
+that routing never consults it: `_apply_human_decision` reads `decision`, `decided_by` and
+`reason` from the value `interrupt()` returns, and nothing else. A brief cannot approve a
+run, cannot reject one, and cannot change the write that follows. If it could, a model
+call would be steering whether ServiceNow is written.
+`tests/test_interrupt_resume.py::test_resume_routing_ignores_the_approval_brief_entirely`
+proves it by storing a brief that instructs the opposite of the operator's decision and
+asserting the operator's decision is what takes effect.
 
 ### Interrupt Payload (NFR-07)
 
