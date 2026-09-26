@@ -25,25 +25,75 @@ MODE_LABELS = {
 }
 
 
+def _signed(value: float) -> str:
+    return f"{value:+.4f}"
+
+
 def render_narrative_header(results: dict) -> list[str]:
+    summary = results["summary"]
+    margin = results["margin_hybrid_reranked_over_dense_only"]
+    movement = results["rerank_rank_movement"]
+    rescues = results["sparse_rescue_cases"]
+
+    dense = summary["dense_only"]
+    hybrid = summary["hybrid"]
+    reranked = summary["hybrid_reranked"]
+
+    improved = sum(1 for m in movement if (m["movement"] or 0) > 0)
+    worsened = sum(1 for m in movement if (m["movement"] or 0) < 0)
+    unchanged = len(movement) - improved - worsened
+    latency_ratio = reranked["p50_latency_ms"] / dense["p50_latency_ms"]
+
+    precision_margin = margin.get("context_precision_margin", 0.0)
+    recall_margin = margin.get("context_recall_margin", 0.0)
+    accuracy_margin = margin.get("accuracy_margin", 0.0)
+
+    # Everything below is computed from this run's numbers: the summary is not
+    # allowed to claim something the comparison table (#1) contradicts (#150).
+    verdict = (
+        "hybrid-plus-reranked gains accuracy but loses context precision"
+        if accuracy_margin > 0 and precision_margin < 0
+        else "hybrid-plus-reranked does not beat the dense-only baseline"
+        if (accuracy_margin <= 0 and recall_margin <= 0 and precision_margin <= 0)
+        else "hybrid-plus-reranked beats the dense-only baseline"
+    )
+
     lines: list[str] = []
     lines.append("# Sprint 2 Retrieval Report — Hybrid Search, Filtering & Reranking (S2.4)\n")
     lines.append(
         f"Generated from `{RESULTS_PATH}` -- seed `{results['seed']}`, "
-        f"collection `{results['collection']}`, top_k `{results['limit']}`, "
-        f"max_security_level `{results['max_security_level']}`. "
+        f"collection `{results['collection']}`, top_k `{results['limit']}`. "
         "Regenerate with `uv run python eval/generate_report.py` after any change "
         "to the eval set, corpus, or retrieval code -- do not hand-edit the tables below.\n"
     )
+    lines.append(
+        f"**Security levels, both reported on purpose:** this ablation ran at "
+        f"`{results['max_security_level']}`, the level the eval set needs so "
+        "restricted articles (KB0010, MIR-2026-03) are reachable at all. The "
+        f"application itself defaults to `"
+        f"{results.get('app_default_security_level', 'internal')}` "
+        "(`AGENT_MAX_SECURITY_LEVEL` in `.env.example`, enforced by "
+        "`retrieve_knowledge`). The two differ by design: widen the app's level "
+        "only per-incident, never to make this table's numbers look better.\n"
+    )
     lines.append("## Summary\n")
     lines.append(
-        "Hybrid-plus-reranked outperforms the dense-only baseline on context recall "
-        "and overall accuracy, consistent with NFR-08. The cross-encoder correctly "
-        "refuses out-of-KB incidents that dense-only's cosine threshold let through, "
-        "at the cost of a substantial latency increase, which should be weighed "
-        "against the platform's latency headroom NFR before defaulting production "
-        "traffic to `hybrid_reranked`. See §5 for whether this run's data satisfies "
-        "the sparse-rescue requirement, and §7 for the duplicate-`article_id` decision.\n"
+        f"On this run of {len(movement)} incidents, {verdict}: context precision "
+        f"{_signed(precision_margin)}, context recall {_signed(recall_margin)}, "
+        f"accuracy {_signed(accuracy_margin)} versus dense-only. "
+        f"Rank movement after reranking: {improved} incident(s) improved, "
+        f"{worsened} regressed, {unchanged} unchanged. "
+        f"Latency is the deciding cost: hybrid + reranked p50 "
+        f"{reranked['p50_latency_ms']} ms against {dense['p50_latency_ms']} ms for "
+        f"dense-only ({latency_ratio:.1f}x), while hybrid without the reranker "
+        f"sits at {hybrid['p50_latency_ms']} ms. "
+        "That is why the shipped default `RETRIEVAL_MODE` is `hybrid` -- it takes "
+        "the sparse recall win (see §5: "
+        f"{len(rescues)} sparse-rescue case(s) in this run) without paying for a "
+        "cross-encoder that moved no answer into reach. Select "
+        "`hybrid_reranked` per-request only where the extra latency budget "
+        "exists. See §5 for whether this run's data satisfies the sparse-rescue "
+        "requirement, and §7 for the duplicate-`article_id` decision.\n"
     )
     return lines
 

@@ -17,7 +17,7 @@ from observability.redaction import REDACTED
 
 
 def _request(**overrides: object) -> ApprovalDecisionRequest:
-    payload: dict[str, object] = {"decision": "approved", "decided_by": "operator-1"}
+    payload: dict[str, object] = {"decision": "approved"}
     payload.update(overrides)
     return ApprovalDecisionRequest(**payload)
 

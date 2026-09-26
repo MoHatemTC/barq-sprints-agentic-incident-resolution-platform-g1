@@ -16,7 +16,7 @@ from app.core.logging import redact_sensitive_data
 
 def mock_settings(**overrides: object) -> Settings:
     defaults = {
-        "retrieval_mode": "hybrid_reranked",
+        "retrieval_mode": "hybrid",
         "servicenow_instance_url": "https://dev00000.service-now.com",
         "servicenow_client_id": "test-cid",
         "servicenow_client_secret": "test-secret",
@@ -44,7 +44,7 @@ def mock_settings(**overrides: object) -> Settings:
 
 
 def make_oauth_token(settings: Settings | None = None) -> str:
-    """Issue a valid short-lived OAuth token for tests."""
+    """Issue a valid short-lived ServiceNow webhook token (audience barq-webhook)."""
     from app.auth.webhook_oauth import config_from_settings, issue_access_token
 
     resolved = settings or mock_settings()
@@ -52,8 +52,33 @@ def make_oauth_token(settings: Settings | None = None) -> str:
     return issue_access_token(config, config.client_id, config.client_secret)["access_token"]
 
 
+def make_operator_token(settings: Settings | None = None, *, roles: list[str] | None = None) -> str:
+    """Issue a valid operator token (audience barq-operator).
+
+    ``roles`` re-mints the token with a different ``roles`` claim, which is how
+    the tests prove a missing role comes back 403 rather than trusting a
+    request header (#148).
+    """
+    from dataclasses import replace
+
+    from app.auth.webhook_oauth import config_from_settings, issue_access_token
+
+    resolved = settings or mock_settings()
+    config = config_from_settings(resolved)
+    if roles is not None:
+        config = replace(config, operator_roles=tuple(roles))
+    return issue_access_token(config, config.operator_client_id, config.operator_client_secret)[
+        "access_token"
+    ]
+
+
 WEBHOOK_TOKEN = make_oauth_token()
-AUTH_HEADERS = {"Authorization": f"Bearer {WEBHOOK_TOKEN}"}
+OPERATOR_TOKEN = make_operator_token()
+#: Headers for operator-facing routes. AUTH_HEADERS carries the operator token;
+#: the webhook has its own (``webhook_oauth_headers``).
+AUTH_HEADERS = {"Authorization": f"Bearer {OPERATOR_TOKEN}"}
+#: Kept for the tests that still send the header: since #148 it is ignored, and
+#: the role is read from the token instead.
 OPERATOR_HEADERS = {**AUTH_HEADERS, "X-User-Role": "operator"}
 
 

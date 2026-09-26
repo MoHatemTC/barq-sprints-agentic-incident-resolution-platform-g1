@@ -17,7 +17,6 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 import tests.helpers as h
-from api.schemas.approvals import ApprovalResponse
 from api.schemas.config import REDACTED_SENTINEL, RedactedConfigResponse
 from api.schemas.dlq import DLQEventResponse, DLQReplayResponse
 from api.schemas.eval import EvalResultResponse, EvalRunResponse
@@ -177,10 +176,13 @@ async def test_every_protected_endpoint_rejects_missing_auth_with_401(client) ->
 
 
 @pytest.mark.asyncio
-async def test_servicenow_oauth_token_can_access_operator_routes(app, client) -> None:
+async def test_servicenow_oauth_token_is_refused_on_operator_routes(app, client) -> None:
+    """The credential ServiceNow holds must not reach operator routes (#136)."""
     token_headers = h.webhook_oauth_headers(app.state.settings)
-    response = await client.get("/api/v1/config", headers=token_headers)
-    assert response.status_code == 200
+    for path in ("/api/v1/config", "/api/v1/approvals", "/api/v1/dlq"):
+        response = await client.get(path, headers=token_headers)
+        assert response.status_code == 401, path
+        assert response.json()["error"]["code"] == "AUTHENTICATION_FAILED"
 
 
 # ---------------------------------------------------------------------------
@@ -249,8 +251,10 @@ async def test_incident_executions_rejects_over_length_sys_id(app, client) -> No
 # ---------------------------------------------------------------------------
 @pytest.mark.asyncio
 async def test_approvals_list_and_decide_stub_contract(app, client) -> None:
-    session = _db_session_mock({})  # no existing approval/execution -> stub path
-    session.execute = AsyncMock(return_value=_execute_result([]))
+    session = _db_session_mock({})  # neither the approval nor the execution exists
+    no_row = _execute_result([])
+    no_row.scalar_one_or_none.return_value = None
+    session.execute = AsyncMock(return_value=no_row)
     _with_db(app, session)
 
     listed = await client.get("/api/v1/approvals", headers=AUTH)
@@ -261,26 +265,33 @@ async def test_approvals_list_and_decide_stub_contract(app, client) -> None:
     assert filtered.status_code == 200
 
     approval_id = uuid4()
-    decision = {"decision": "approved", "decided_by": "lead_ops", "reason": "verified"}
+    # An id that resolves to neither an approval nor an execution is a 404: the
+    # schema-valid stub that used to answer 200 for a decision nothing stored is
+    # gone (#147).
     decided = await client.post(
-        f"/api/v1/approvals/{approval_id}/decide", json=decision, headers=AUTH
+        f"/api/v1/approvals/{approval_id}/decide",
+        json={"decision": "approved", "reason": "verified"},
+        headers=AUTH,
     )
-    assert decided.status_code == 200, decided.text
-    body = ApprovalResponse.model_validate(decided.json())
-    assert body.decision == "approved"
-    assert body.decided_by == "lead_ops"
+    assert decided.status_code == 404, decided.text
+    assert decided.json()["error"]["code"] == "RESOURCE_NOT_FOUND"
 
-    # Invalid decision values / extra fields / malformed UUID -> 422.
+    # Invalid decision values, a body trying to pick its own decider, extra
+    # fields and a malformed UUID -> 422.
     invalid_bodies = [
-        {"decision": "maybe", "decided_by": "x"},
-        {"decision": "approved"},  # missing decided_by
-        {"decision": "approved", "decided_by": "x", "extra": 1},
+        {"decision": "maybe"},
+        {"decision": "approved", "decided_by": "lead_ops"},  # not accepted since #148
+        {"decision": "approved", "extra": 1},
     ]
     for body_ in invalid_bodies:
         resp = await client.post(f"/api/v1/approvals/{uuid4()}/decide", json=body_, headers=AUTH)
         assert resp.status_code == 422, f"{body_} must return 422"
 
-    bad_uuid = await client.post("/api/v1/approvals/not-a-uuid/decide", json=decision, headers=AUTH)
+    bad_uuid = await client.post(
+        "/api/v1/approvals/not-a-uuid/decide",
+        json={"decision": "approved"},
+        headers=AUTH,
+    )
     assert bad_uuid.status_code == 422
 
 
@@ -301,10 +312,16 @@ async def test_dlq_list_contract_and_replay_rbac_matrix(client) -> None:
     assert no_auth.status_code == 401
     assert no_auth.json()["error"]["code"] == "AUTHENTICATION_FAILED"
 
-    # 2/3. Authenticated normal user or invalid role -> 403 FORBIDDEN.
-    for role_header in ({}, {"X-User-Role": "user"}, {"X-User-Role": "viewer"}):
-        resp = await client.post(f"/api/v1/dlq/{event_id}/replay", headers={**AUTH, **role_header})
-        assert resp.status_code == 403, f"role={role_header or 'none'} must be 403"
+    # 2/3. Authenticated but without the operator role in the *token* -> 403
+    # FORBIDDEN. The X-User-Role header is ignored (#148), so it is sent along
+    # to show it cannot make up a missing role.
+    for roles in ([], ["viewer"], ["approver"]):
+        headers = {
+            "Authorization": f"Bearer {h.make_operator_token(roles=list(roles))}",
+            "X-User-Role": "operator",
+        }
+        resp = await client.post(f"/api/v1/dlq/{event_id}/replay", headers=headers)
+        assert resp.status_code == 403, f"roles={roles or 'none'} must be 403"
         body = resp.json()
         assert body["error"]["code"] == "PERMISSION_DENIED"
         assert "role" in body["error"]["message"].lower()

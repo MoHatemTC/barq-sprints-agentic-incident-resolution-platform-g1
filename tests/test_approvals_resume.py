@@ -107,7 +107,7 @@ async def test_decide_resumes_the_parked_execution(app_with_db) -> None:
 
     mock_session.get.side_effect = mock_get
 
-    payload = {"decision": "approved", "decided_by": "ops_analyst_1", "reason": "P1 change window"}
+    payload = {"decision": "approved", "reason": "P1 change window"}
     with (
         patch.object(approvals_router, "get_audit_store", return_value=store),
         patch.object(
@@ -148,8 +148,12 @@ async def test_decide_resumes_the_parked_execution(app_with_db) -> None:
 
 
 @pytest.mark.asyncio
-async def test_decide_without_a_pause_keeps_the_stub_contract(app_with_db) -> None:
-    """No interrupt stored → nothing to resume, and the S2.1 stub still answers."""
+async def test_decide_for_an_unknown_id_is_404(app_with_db) -> None:
+    """An id that resolves to neither an approval nor an execution is 404 (#147).
+
+    The Sprint 2.1 stub answered 200 with a decision it had stored nowhere; the
+    decision has to be a real row or there is nothing to report.
+    """
     store = MemoryGraphAuditStore()
     app, mock_session = app_with_db
     mock_session.get.return_value = None
@@ -161,12 +165,12 @@ async def test_decide_without_a_pause_keeps_the_stub_contract(app_with_db) -> No
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.post(
                 f"/api/v1/approvals/{uuid4()}/decide",
-                json={"decision": "approved", "decided_by": "lead_ops", "reason": "ok"},
+                json={"decision": "approved", "reason": "ok"},
                 headers=AUTH_HEADERS,
             )
 
-    assert resp.status_code == 200
-    assert resp.json()["decision"] == "approved"
+    assert resp.status_code == 404
+    assert resp.json()["error"]["code"] == "RESOURCE_NOT_FOUND"
     resume.assert_not_called()
     mock_session.add.assert_not_called()
 
@@ -240,7 +244,7 @@ async def test_second_decision_on_one_execution_is_refused(app_with_db) -> None:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             first = await client.post(
                 f"/api/v1/approvals/{EXECUTION_ID}/decide",
-                json={"decision": "approved", "decided_by": "ali.ezz", "reason": "ok"},
+                json={"decision": "approved", "reason": "ok"},
                 headers=AUTH_HEADERS,
             )
             assert first.status_code == 200, first.text
@@ -256,7 +260,7 @@ async def test_second_decision_on_one_execution_is_refused(app_with_db) -> None:
             mock_session.execute.side_effect = execute
             second = await client.post(
                 f"/api/v1/approvals/{EXECUTION_ID}/decide",
-                json={"decision": "rejected", "decided_by": "ali.ezz", "reason": "changed my mind"},
+                json={"decision": "rejected", "reason": "changed my mind"},
                 headers=AUTH_HEADERS,
             )
 

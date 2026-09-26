@@ -51,7 +51,7 @@ class RetrievalSettings(BaseSettings):
     dense_embedding_model: str = "BAAI/bge-small-en-v1.5"
     sparse_embedding_model: str = "Qdrant/bm25"
     # Retrieval
-    retrieval_mode: RetrievalMode = RetrievalMode.HYBRID_RERANKED
+    retrieval_mode: RetrievalMode = RetrievalMode.HYBRID
     rerank_model: str = "Xenova/ms-marco-MiniLM-L-6-v2"
     rerank_top_k: int = 5
     rerank_candidate_limit: int = 20  # must be larger than rerank_top_k
@@ -59,9 +59,12 @@ class RetrievalSettings(BaseSettings):
     @field_validator("rerank_candidate_limit")
     @classmethod
     def validate_candidate_limit(cls, v: int, info) -> int:
-        top_n = info.data.get("rerank_top_n", 5)
-        if v < top_n:
-            raise ValueError(f"rerank_candidate_limit ({v}) must be >= rerank_top_n ({top_n})")
+        # Read ``rerank_top_k``, the field that exists. Reading ``rerank_top_n``
+        # (a name no field has) always fell back to 5, so any candidate limit
+        # >= 5 passed and the check could never fail (#150).
+        top_k = info.data.get("rerank_top_k", 5)
+        if v < top_k:
+            raise ValueError(f"rerank_candidate_limit ({v}) must be >= rerank_top_k ({top_k})")
         return v
 
 
@@ -118,11 +121,29 @@ class Settings(RetrievalSettings):
     servicenow_kb_username: str = ""
     servicenow_kb_password: SecretStr | None = None
 
-    # API and inbound ServiceNow webhook authentication. The static token protects
-    # operator-facing API routes; ServiceNow receives only short-lived OAuth JWTs.
+    # API and inbound ServiceNow webhook authentication.
+    #
+    # Two credentials, two audiences. ServiceNow only ever holds the OAuth client
+    # below and receives short-lived JWTs for the webhook. Operators exchange
+    # webhook_auth_token for a *separate* operator JWT, whose subject and roles
+    # come from the two fields after it -- so ServiceNow's credential cannot reach
+    # /approvals, /config, /dlq, /executions or /eval (#136, #148).
     webhook_auth_token: SecretStr = Field(
         ...,
-        description="Bearer token for operator-facing API routes (not ServiceNow)",
+        description="Client secret of the operator API credential, exchanged for an "
+        "operator access token at /api/v1/oauth/token. Never accepted as a bearer "
+        "token itself and never accepted by the ServiceNow webhook.",
+    )
+    operator_client_id: str = Field(
+        default="barq-operator",
+        min_length=1,
+        description="OAuth client id for human operators; the subject of every "
+        "operator token and therefore the value recorded as decided_by",
+    )
+    operator_roles: list[str] = Field(
+        default=["operator", "approver"],
+        description="Roles granted to operator tokens, carried in the signed "
+        "'roles' claim that require_role() reads",
     )
     webhook_oauth_client_id: str = Field(
         ...,

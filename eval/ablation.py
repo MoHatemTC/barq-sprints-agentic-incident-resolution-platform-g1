@@ -21,6 +21,7 @@ from pathlib import Path
 
 from qdrant_client import QdrantClient
 
+from agent.config import AgentSettings
 from app.core.config import RetrievalMode, get_retrieval_settings
 from app.models.knowledge import SecurityLevel
 from app.retrieval.embedding import FastEmbedEngine
@@ -334,6 +335,9 @@ def main() -> None:
         "collection": collection_name,
         "limit": args.limit,
         "max_security_level": args.max_security_level,
+        "app_default_security_level": AgentSettings.model_fields[
+            "agent_max_security_level"
+        ].get_default(call_default_factory=False),
         "modes": [m.value for m in MODES],
         "low_confidence_thresholds": {m.value: LOW_CONFIDENCE_THRESHOLDS[m] for m in MODES},
         "summary": summary,

@@ -451,7 +451,7 @@
           "Approvals"
         ],
         "summary": "Submit human operator approval decision and resume graph (S3.4)",
-        "description": "Resume a paused LangGraph thread with Command(resume=...), then record the approval decision for audit. The id is the execution_id.",
+        "description": "Resume a paused LangGraph thread with Command(resume=...), then record the decision for audit. The id is an approval id or the id of the execution it belongs to. Who decided, and whether they may, come from the operator token and never from the body: 409 if that execution is already decided, 404 if the id resolves to neither.",
         "operationId": "decide_approval_api_v1_approvals__id__decide_post",
         "security": [
           {
@@ -586,22 +586,6 @@
               "title": "Event Id"
             },
             "description": "The unique event ID of the dead-lettered event to replay"
-          },
-          {
-            "name": "X-User-Role",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-User-Role"
-            }
           }
         ],
         "responses": {
@@ -752,13 +736,6 @@
             "title": "Decision",
             "description": "Decision: 'approved', 'rejected', 'cancelled', or 'expired'"
           },
-          "decided_by": {
-            "type": "string",
-            "maxLength": 255,
-            "minLength": 1,
-            "title": "Decided By",
-            "description": "Identity of the deciding operator"
-          },
           "reason": {
             "anyOf": [
               {
@@ -801,8 +778,7 @@
         "additionalProperties": false,
         "type": "object",
         "required": [
-          "decision",
-          "decided_by"
+          "decision"
         ],
         "title": "ApprovalDecisionRequest",
         "description": "Schema for submitting a human operator approval decision."
@@ -1454,7 +1430,8 @@
           "contract_version": {
             "type": "string",
             "title": "Contract Version",
-            "description": "Contract version"
+            "description": "Contract version. Optional: a producer that omits it is treated as v1.",
+            "default": "v1"
           }
         },
         "additionalProperties": false,
@@ -1463,8 +1440,7 @@
           "event_id",
           "sys_id",
           "number",
-          "event_type",
-          "contract_version"
+          "event_type"
         ],
         "title": "IncidentWebhookPayload",
         "description": "Pydantic model for an inbound ServiceNow incident event payload."

@@ -11,12 +11,12 @@ from uuid import UUID, uuid4
 import structlog
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy import select, update
-from sqlalchemy.exc import MissingGreenlet, SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, MissingGreenlet, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.audit_store import GraphAuditStore, build_audit_store
 from agent.runtime import resume_incident_graph
-from api.auth import verify_bearer_token
+from api.auth import require_role, verify_bearer_token
 from api.schemas.approvals import (
     ApprovalDecisionRequest,
     ApprovalResponse,
@@ -146,23 +146,36 @@ async def get_pending_approval(execution_id: UUID) -> ApprovalResponse:
     status_code=status.HTTP_200_OK,
     summary="Submit human operator approval decision and resume graph (S3.4)",
     description=(
-        "Resume a paused LangGraph thread with Command(resume=...), "
-        "then record the approval decision for audit. The id is the execution_id."
+        "Resume a paused LangGraph thread with Command(resume=...), then record "
+        "the decision for audit. The id is an approval id or the id of the execution "
+        "it belongs to. Who decided, and whether they may, come from the operator "
+        "token and never from the body: 409 if that execution is already decided, "
+        "404 if the id resolves to neither."
     ),
 )
 async def decide_approval(
     id: UUID,
     payload: ApprovalDecisionRequest,
     db: Annotated[AsyncSession, Depends(get_db_session)],
+    claims: Annotated[dict[str, Any], Depends(verify_bearer_token)],
+    _approver: Annotated[str, Depends(require_role("approver"))],
 ) -> ApprovalResponse:
-    """Submit an approval decision and resume the exact paused execution.
+    """Resume the paused execution, then record the decision for audit.
 
-    The id is the execution_id of a paused thread. Ordering matters: the decision
-    is applied to the graph *before* it is recorded, because a decision that could
-    not be applied must stay retryable — recording it first would make the retry
-    hit the immutability conflict instead of resuming.
+    Ordering matters: the decision is applied to the graph *before* it is recorded,
+    because a decision that could not be applied must stay retryable — recording it
+    first would make the retry hit the immutability conflict instead of resuming.
+
+    Who decided and whether they may come from the verified operator token:
+    ``decided_by`` is the token's subject and the role is its ``roles`` claim
+    (#148); the body carries the decision, the reason, the evidence and the
+    solution only. The path id is either an approval's primary key or the execution
+    it belongs to, so a second decision for the same execution is 409 whichever id
+    form the caller uses, and an id that resolves to neither is 404 — there is no
+    stub that reports a saved decision nothing stored (#147).
     """
     execution_id_str = str(id)
+    decided_by = str(claims.get("sub") or "")
 
     # 1. Immutability check, then the execution this decision belongs to.
     #
@@ -177,20 +190,29 @@ async def decide_approval(
             existing = (
                 await db.execute(select(Approval).where(Approval.execution_id == id).limit(1))
             ).scalar_one_or_none()
-        if existing:
+        if existing is not None:
             logger.warning(
                 "approval_already_decided",
-                approval_id=str(id),
+                approval_id=str(existing.id),
                 execution_id=str(existing.execution_id),
                 decision=existing.decision,
             )
             raise ConflictError(
-                f"Approval '{id}' has already been decided "
-                f"('{existing.decision}') and is immutable."
+                f"Execution '{existing.execution_id}' has already been decided "
+                f"('{existing.decision}') and approvals are immutable."
             )
         execution = await db.get(Execution, id)
-    except (ConflictError, MissingGreenlet):
+        if execution is None:
+            raise ResourceNotFoundError(f"No approval request or execution '{id}' found")
+    except (ConflictError, ResourceNotFoundError, MissingGreenlet):
         raise
+    except IntegrityError as exc:
+        # Lost the race against a concurrent decision: the unique index on
+        # (execution_id, coalesced workflow_state_id) is what makes this
+        # impossible to bypass, so report it the same way as the check above.
+        raise ConflictError(
+            f"Execution '{id}' has already been decided by a concurrent request."
+        ) from exc
     except SQLAlchemyError as exc:
         logger.exception("database_operation_failed", approval_id=str(id), error=str(exc))
         raise ServiceUnavailableError("Database unavailable to record approval decision.") from exc
@@ -206,7 +228,7 @@ async def decide_approval(
     if interrupt_payload is not None:
         decision = {
             "decision": payload.decision,
-            "decided_by": payload.decided_by,
+            "decided_by": decided_by,
             "reason": payload.reason,
         }
         try:
@@ -235,54 +257,50 @@ async def decide_approval(
 
     # 3. Record the decision (immutable) and close the execution row it resumed.
     try:
-        resolved_approval: Approval | None = None
-        if execution is not None:
-            now = datetime.now(UTC)
-            resolved_approval = Approval(
-                id=uuid4(),
-                execution_id=execution.execution_id,
-                decision=payload.decision,
-                decided_by=payload.decided_by,
-                reason=payload.reason,
-                # The human solution rides in the immutable evidence JSONB (there is no
-                # solution column), folded with the knowledge-capture tool name so the
-                # registry's high-risk checker finds well-formed scope later.
-                evidence=fold_solution_into_evidence(payload.evidence, payload.solution),
-                decided_at=now,
-            )
-            db.add(resolved_approval)
-            if resumed is not None:
-                await _close_resumed_execution(db, id, resumed, now)
-            await db.commit()
-            await db.refresh(resolved_approval)
-            logger.info(
-                "approval_recorded",
-                approval_id=str(resolved_approval.id),
-                execution_id=str(id),
-                decision=payload.decision,
-            )
+        now = datetime.now(UTC)
+        resolved_approval = Approval(
+            id=uuid4(),
+            execution_id=execution.execution_id,
+            decision=payload.decision,
+            decided_by=decided_by,
+            reason=payload.reason,
+            # The human solution rides in the immutable evidence JSONB (there is no
+            # solution column), folded with the knowledge-capture tool name so the
+            # registry's high-risk checker finds well-formed scope later.
+            evidence=fold_solution_into_evidence(payload.evidence, payload.solution),
+            decided_at=now,
+        )
+        db.add(resolved_approval)
+        if resumed is not None:
+            await _close_resumed_execution(db, id, resumed, now)
+        await db.commit()
+        await db.refresh(resolved_approval)
+        logger.info(
+            "approval_recorded",
+            approval_id=str(resolved_approval.id),
+            execution_id=str(id),
+            decision=payload.decision,
+            decided_by=decided_by,
+        )
+    except IntegrityError as exc:
+        # Two decisions for one execution raced; the unique index is what makes the
+        # duplicate impossible, so report it as the conflict the first one already is.
+        raise ConflictError(
+            f"Execution '{id}' has already been decided by a concurrent request."
+        ) from exc
     except (ConflictError, MissingGreenlet):
         raise
     except SQLAlchemyError as exc:
         logger.exception("approval_record_failed", execution_id=str(id), error=str(exc))
         raise ServiceUnavailableError("Database unavailable to record approval decision.") from exc
 
-    if resolved_approval is not None:
-        response = ApprovalResponse.model_validate(resolved_approval)
-        if interrupt_payload is not None:
-            # The row is the audit record; the brief and the raw facts it was
-            # written from ride along so the caller never has to re-fetch them.
-            response.brief = interrupt_payload.get("brief")
-            response.facts = interrupt_payload
-        return response
-
-    logger.info(
-        "approval_decision_stubbed",
-        approval_id=str(id),
-        decision=payload.decision,
-        decided_by=payload.decided_by,
-    )
-    return _decided_response(id, payload, interrupt_payload)
+    response = ApprovalResponse.model_validate(resolved_approval)
+    if interrupt_payload is not None:
+        # The row is the audit record; the brief and the raw facts it was
+        # written from ride along so the caller never has to re-fetch them.
+        response.brief = interrupt_payload.get("brief")
+        response.facts = interrupt_payload
+    return response
 
 
 async def _close_resumed_execution(
@@ -322,24 +340,6 @@ async def _close_resumed_execution(
         update(RetryState)
         .where(RetryState.execution_id == execution_id)
         .values(state="succeeded", next_retry_at=None)
-    )
-
-
-def _decided_response(
-    id: UUID, payload: ApprovalDecisionRequest, interrupt_payload: dict[str, Any] | None
-) -> ApprovalResponse:
-    return ApprovalResponse(
-        id=id,
-        execution_id=id,
-        workflow_state_id=None,
-        decision=payload.decision,
-        decided_by=payload.decided_by,
-        reason=payload.reason,
-        evidence=payload.evidence,
-        decided_at=datetime.now(UTC),
-        status="decided",
-        brief=(interrupt_payload or {}).get("brief"),
-        facts=interrupt_payload,
     )
 
 

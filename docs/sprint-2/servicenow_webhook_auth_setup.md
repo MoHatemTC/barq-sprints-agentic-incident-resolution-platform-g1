@@ -1,87 +1,37 @@
 # ServiceNow Outbound Webhook Authentication Setup (Sprint 2)
 
-## Overview
-Per **FR-08** and the Sprint 2 deliverables specification, all inbound webhook traffic to the platform (`POST /api/v1/webhook/incident`) must enforce caller authentication with an HTTP `401 Unauthorized` response on missing or invalid credentials.
+> **This file is a pointer, not the setup.** It used to describe a static
+> `Authorization: Bearer <WEBHOOK_AUTH_TOKEN>` header on the REST message, which
+> ServiceNow cannot deliver: the S1.3 REST message authenticates with **OAuth 2.0
+> client credentials** since #125/#139, and the backend answers `401` to the static
+> token (`AUTHENTICATION_FAILED`). Following the old instructions produces events
+> that never reach the webhook (#137).
 
-In Sprint 1, outbound calls from ServiceNow used `No Authentication` because they targeted a temporary inspection endpoint (`webhook.site`). In Sprint 2, ServiceNow attaches a shared secret Bearer token to all outbound incident event dispatches.
+**The setup lives in
+[`sprint-2.1/servicenow_webhook_auth_setup.md`](sprint-2.1/servicenow_webhook_auth_setup.md)**
+— the same OAuth flow S1.3 documents in
+[`../sprint-1/s1.3-eligibility-rule-and-event/outbound-oauth.md`](../sprint-1/s1.3-eligibility-rule-and-event/outbound-oauth.md):
 
----
+1. `oauth_entity` **BARQ Webhook OAuth** → Token URL `{backend}/api/v1/oauth/token`,
+   Client Secret = the backend's `WEBHOOK_OAUTH_CLIENT_SECRET`.
+2. REST message **AI Incident Orchestrator S1.3 Event** → Authentication `oauth2`,
+   profile `BARQ Webhook OAuth default_profile`.
+3. Property `x_2215032_ai_inc_0.s1_3_event_endpoint` → `{backend}/api/v1/webhook/incident`.
 
-## Configuration in ServiceNow PDI
+ServiceNow fetches a token per call and sends `Authorization: Bearer <JWT>`; the
+backend verifies it with `verify_webhook_oauth_token` (`src/api/auth.py`).
 
-### Method 1: REST Message Header Configuration (Recommended)
-This approach configures the static Bearer token directly on the ServiceNow Outbound REST Message without modifying scripts:
+## Payload
 
-1. In the ServiceNow Filter Navigator, navigate to:
-   `System Web Services` ➔ `Outbound` ➔ `REST Message`
-2. Open the record:
-   **`AI Incident Orchestrator S1.3 Event`**
-3. In the **HTTP Methods** related list at the bottom, click into the **`post`** method.
-4. **Authentication Tab**:
-   - Set / Keep **Authentication type**: `No authentication`
-   - *Rationale*: Setting this to `Basic` causes ServiceNow to auto-inject an `Authorization: Basic ...` header. Keeping it as `No authentication` allows our custom header to pass through cleanly without interference.
-5. **HTTP Request ➔ HTTP Headers Section**:
-   - Click **New** (or insert row):
-     - **Name**: `Authorization`
-     - **Value**: `Bearer <WEBHOOK_AUTH_TOKEN>` (e.g. `Bearer barq-webhook-secret-token-123`)
-6. Click **Update** to save changes.
+The script action sends exactly the S1.3 four-field payload
+(`event_id`, `sys_id`, `number`, `event_type`). `contract_version` is **not** sent;
+the webhook defaults it to `"v1"` (#137), so no ServiceNow-side change is required.
+Unsupported versions are still rejected with `422 UNKNOWN_CONTRACT_VERSION`.
 
----
+## Static token: local testing only
 
-### Method 2: Dynamic System Property via Script Action
-If dynamic configuration via ServiceNow System Properties is preferred:
-
-1. **Create System Property**:
-   - Navigate to `sys_properties.list` in the filter navigator.
-   - Click **New**:
-     - **Name**: `x_2215032_ai_inc_0.webhook_token`
-     - **Type**: `string`
-     - **Value**: `<your-pre-shared-secret-token>`
-   - Save the record.
-
-2. **Update Script Action**:
-   - Navigate to `System Policy` ➔ `Events` ➔ `Script Actions`.
-   - Open **`AI Incident Orchestrator - Send S1.3 Event`**.
-   - Right after `request.setEndpoint(endpoint);`, attach the header:
-     ```javascript
-     var token = String(gs.getProperty('x_2215032_ai_inc_0.webhook_token', '') || '').trim();
-     if (token) {
-         request.setRequestHeader('Authorization', 'Bearer ' + token);
-     }
-     ```
-   - Save the script action.
-
----
-
-## Backend Alignment (FastAPI)
-
-1. **Configuration**:
-   - The same secret token is configured in `.env`:
-     ```bash
-     WEBHOOK_AUTH_TOKEN="<your-pre-shared-secret-token>"
-     ```
-   - Loaded in `src/app/core/config.py` as a `SecretStr`.
-
-2. **Endpoint Enforcement (`src/app/api/routers/webhook.py`)**:
-   - Extracts `Authorization: Bearer <token>`.
-   - Performs constant-time comparison against `settings.webhook_auth_token.get_secret_value()`.
-   - If missing or mismatched ➔ Raises `AuthenticationError` returning:
-     ```json
-     {
-       "error": {
-         "code": "AUTHENTICATION_FAILED",
-         "message": "Invalid or missing Bearer token",
-         "details": {},
-         "correlation_id": "...",
-         "timestamp": "..."
-       }
-     }
-     ```
-
----
-
-## Test Verification
-Automated test coverage in `tests/test_webhook.py` validates both authentication paths:
-- Missing `Authorization` header ➔ **401 Unauthorized**
-- Malformed or invalid Bearer token ➔ **401 Unauthorized**
-- Valid Bearer token matching `settings.webhook_auth_token` ➔ **202 Accepted**
+`WEBHOOK_AUTH_TOKEN` remains in the configuration for local development — pointing a
+hand-rolled client at the webhook without an OAuth round trip. It is **not** the
+ServiceNow setup: the production webhook path verifies the OAuth JWT, and a static
+value in the `Authorization` header is refused. Do not document or demo it as the
+integration path.

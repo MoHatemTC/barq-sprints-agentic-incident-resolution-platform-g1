@@ -143,3 +143,26 @@ def test_kb_publisher_username_without_password_is_an_error() -> None:
         kb_publisher_settings(
             mock_settings(servicenow_kb_username="kb_publisher", servicenow_kb_password="")
         )
+
+
+def test_rerank_candidate_limit_must_cover_top_k(monkeypatch) -> None:
+    """RERANK_TOP_K=30 with RERANK_CANDIDATE_LIMIT=20 must be rejected (#150).
+
+    The validator used to read a field named `rerank_top_n`, which does not
+    exist, so it always fell back to 5 and every limit >= 5 passed.
+    """
+    monkeypatch.setenv("RERANK_TOP_K", "30")
+    monkeypatch.setenv("RERANK_CANDIDATE_LIMIT", "20")
+    with pytest.raises(ValidationError, match="must be >= rerank_top_k"):
+        RetrievalSettings()
+
+    monkeypatch.setenv("RERANK_CANDIDATE_LIMIT", "30")
+    settings = RetrievalSettings()
+    assert settings.rerank_candidate_limit >= settings.rerank_top_k
+
+
+def test_default_retrieval_mode_is_hybrid() -> None:
+    """hybrid_reranked costs ~16x p50 latency for no accuracy gain (#150)."""
+    from app.core.config import RetrievalMode
+
+    assert get_retrieval_settings().retrieval_mode == RetrievalMode.HYBRID
