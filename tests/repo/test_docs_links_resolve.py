@@ -16,7 +16,7 @@ import pathlib
 import re
 import subprocess
 
-LINK = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
+LINK = re.compile(r"\]\(([^)\s]+)\)")  # also matches the outer link of a [![badge](img)](target)
 SKIP_SCHEMES = ("http://", "https://", "#", "mailto:")
 
 

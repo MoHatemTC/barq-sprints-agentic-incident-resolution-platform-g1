@@ -1,6 +1,6 @@
 # AI Incident Orchestrator
 
-[![CI](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/actions/workflows/ci.yml/badge.svg)](../../actions/workflows/ci.yml)
+[![CI](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/actions/workflows/ci.yml/badge.svg)](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/actions/workflows/ci.yml)
 [![Sprint 1](https://img.shields.io/github/milestones/progress/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/1)](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/milestone/1)
 
 Agentic incident resolution on ServiceNow: event-driven, observable, and guardrailed. A Business Rule inside a scoped ServiceNow application evaluates eligibility when an incident is created or meaningfully updated, then emits a minimal event carrying identifiers only. A FastAPI webhook authenticates it, validates the schema, checks idempotency and returns `202` without ever waiting on a model. Work is queued in Redis and executed by Celery workers running an explicit LangGraph state machine over hybrid retrieval from Qdrant, with operational state and audit in PostgreSQL and per-node tracing in Langfuse.
@@ -9,7 +9,7 @@ Agentic incident resolution on ServiceNow: event-driven, observable, and guardra
 
 Built by BARQ × Sprints G1 across four one-week sprints. See [TEAM.md](TEAM.md) for who
 owns what, and [docs/ROADMAP.md](docs/ROADMAP.md) for the full four-sprint scope — this
-repository currently implements Sprint 1 only.
+Sprints 1 and 2 are merged and Sprint 3 is in progress.
 
 ---
 
@@ -130,7 +130,7 @@ All thirteen Incident columns carry the `x_2215032_ai_inc_0_ai_` prefix. **Scrip
 
 ## Sprint 1 — Platform Build
 
-Goal: the platform side exists as a real ServiceNow application, with an audit trail and an identity a risk owner would sign off. Covers FR-01, FR-02 and FR-06. Tracked in the [Sprint 1 milestone](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/milestone/1); Sprints 2–4 are [scoped in the roadmap](docs/ROADMAP.md) with their own milestones for planning, ahead of implementation.
+Goal: the platform side exists as a real ServiceNow application, with an audit trail and an identity a risk owner would sign off. Covers FR-01, FR-02 and FR-06. Tracked in the [Sprint 1 milestone](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/milestone/1); Sprints 2–4 are [scoped in the roadmap](docs/ROADMAP.md) with their own milestones; Sprints 1 and 2 are merged, Sprint 3 is in progress.
 
 | Task | Scope | Owner |
 |---|---|---|
@@ -156,7 +156,7 @@ Goal: the platform side exists as a real ServiceNow application, with an audit t
 
 ## Contributing
 
-Branch from `main`, open a pull request, and let CI run. Work is tracked in GitHub issues labelled by task (`S1.1` … `S1.5`) against the Sprint milestone.
+Branch from `main`, open a pull request, and let CI run. Work is tracked in GitHub issues against the sprint milestones.
 
 Two rules worth stating explicitly, because both have bitten this repository:
 

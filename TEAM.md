@@ -37,6 +37,6 @@ deadline.
 
 ## Live status
 
-The authoritative day-to-day status is the [Sprint 1 milestone](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/milestone/1) and
-its issues, not this file. This file answers "who owns what" and changes rarely; the
+The authoritative day-to-day status is the [milestones](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/milestones) (Sprint 1 … Sprint 4)
+and their issues, not this file. This file answers "who owns what" and changes rarely; the
 milestone answers "what's done right now" and changes daily.
