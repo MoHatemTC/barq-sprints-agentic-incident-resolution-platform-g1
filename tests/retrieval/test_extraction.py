@@ -1,6 +1,6 @@
 """Adversarial and functional test suite for HTML to Markdown extraction."""
 
-from app.retrieval.extraction import html_to_markdown
+from app.retrieval.html_markdown import html_to_markdown
 
 
 def test_empty_or_none_input() -> None:
