@@ -1,10 +1,12 @@
 # Sprint 2 Retrieval Report — Hybrid Search, Filtering & Reranking (S2.4)
 
-Generated from `eval/ablation_results.json` -- seed `42`, collection `incident_knowledge_base`, top_k `5`, max_security_level `restricted`. Regenerate with `uv run python eval/generate_report.py` after any change to the eval set, corpus, or retrieval code -- do not hand-edit the tables below.
+Generated from `eval/ablation_results.json` -- seed `42`, collection `incident_knowledge_base`, top_k `5`. Regenerate with `uv run python eval/generate_report.py` after any change to the eval set, corpus, or retrieval code -- do not hand-edit the tables below.
+
+**Security levels, both reported on purpose:** this ablation ran at `restricted`, the level the eval set needs so restricted articles (KB0010, MIR-2026-03) are reachable at all. The application itself defaults to `internal` (`AGENT_MAX_SECURITY_LEVEL` in `.env.example`, enforced by `retrieve_knowledge`). The two differ by design: widen the app's level only per-incident, never to make this table's numbers look better.
 
 ## Summary
 
-Hybrid-plus-reranked outperforms the dense-only baseline on context recall and overall accuracy, consistent with NFR-08. The cross-encoder correctly refuses out-of-KB incidents that dense-only's cosine threshold let through, at the cost of a substantial latency increase, which should be weighed against the platform's latency headroom NFR before defaulting production traffic to `hybrid_reranked`. See §5 for whether this run's data satisfies the sparse-rescue requirement, and §7 for the duplicate-`article_id` decision.
+On this run of 23 incidents, hybrid-plus-reranked gains accuracy but loses context precision: context precision -0.0552, context recall +0.0000, accuracy +0.0345 versus dense-only. Rank movement after reranking: 0 incident(s) improved, 1 regressed, 22 unchanged. Latency is the deciding cost: hybrid + reranked p50 71.16 ms against 4.42 ms for dense-only (16.1x), while hybrid without the reranker sits at 4.53 ms. That is why the shipped default `RETRIEVAL_MODE` is `hybrid` -- it takes the sparse recall win (see §5: 1 sparse-rescue case(s) in this run) without paying for a cross-encoder that moved no answer into reach. Select `hybrid_reranked` per-request only where the extra latency budget exists. See §5 for whether this run's data satisfies the sparse-rescue requirement, and §7 for the duplicate-`article_id` decision.
 
 ## 1. Comparison Table
 
@@ -26,9 +28,9 @@ Hybrid-plus-reranked outperforms the dense-only baseline on context recall and o
 
 | Mode | p50 | p95 | mean |
 |---|---|---|---|
-| Dense-Only (baseline) | 47.47 | 64.92 | 48.35 |
-| Hybrid (dense + sparse, RRF) | 47.91 | 61.91 | 48.55 |
-| Hybrid + Reranked (cross-encoder) | 604.18 | 725.67 | 614.98 |
+| Dense-Only (baseline) | 4.42 | 5.18 | 4.48 |
+| Hybrid (dense + sparse, RRF) | 4.53 | 5.38 | 4.64 |
+| Hybrid + Reranked (cross-encoder) | 71.16 | 76.26 | 71.33 |
 
 ## 4. Cross-Encoder Rank Movement (hybrid -> hybrid+reranked)
 

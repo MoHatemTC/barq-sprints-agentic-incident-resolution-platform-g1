@@ -402,7 +402,7 @@
           "Approvals"
         ],
         "summary": "Submit human operator approval decision",
-        "description": "Record or submit a human operator decision ('approved', 'rejected', 'cancelled', 'expired') for an approval request.",
+        "description": "Record a human operator decision ('approved', 'rejected', 'cancelled', 'expired') for an approval request. The id is an approval id or the id of the execution it belongs to. The decider and the authorisation both come from the operator token, never from the body or a header: 409 if that execution is already decided, 404 if the id resolves to neither.",
         "operationId": "decide_approval_api_v1_approvals__id__decide_post",
         "security": [
           {
@@ -537,22 +537,6 @@
               "title": "Event Id"
             },
             "description": "The unique event ID of the dead-lettered event to replay"
-          },
-          {
-            "name": "X-User-Role",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-User-Role"
-            }
           }
         ],
         "responses": {
@@ -703,13 +687,6 @@
             "title": "Decision",
             "description": "Decision: 'approved', 'rejected', 'cancelled', or 'expired'"
           },
-          "decided_by": {
-            "type": "string",
-            "maxLength": 255,
-            "minLength": 1,
-            "title": "Decided By",
-            "description": "Identity of the deciding operator"
-          },
           "reason": {
             "anyOf": [
               {
@@ -739,8 +716,7 @@
         "additionalProperties": false,
         "type": "object",
         "required": [
-          "decision",
-          "decided_by"
+          "decision"
         ],
         "title": "ApprovalDecisionRequest",
         "description": "Schema for submitting a human operator approval decision."
@@ -1342,7 +1318,8 @@
           "contract_version": {
             "type": "string",
             "title": "Contract Version",
-            "description": "Contract version"
+            "description": "Contract version. Optional: a producer that omits it is treated as v1.",
+            "default": "v1"
           }
         },
         "additionalProperties": false,
@@ -1351,8 +1328,7 @@
           "event_id",
           "sys_id",
           "number",
-          "event_type",
-          "contract_version"
+          "event_type"
         ],
         "title": "IncidentWebhookPayload",
         "description": "Pydantic model for an inbound ServiceNow incident event payload."
@@ -1435,7 +1411,24 @@
           "webhook_auth_token": {
             "type": "string",
             "title": "Webhook Auth Token",
-            "description": "Redacted webhook bearer authentication secret",
+            "description": "Redacted operator API bearer authentication secret",
+            "default": "***REDACTED***"
+          },
+          "webhook_oauth_client_id": {
+            "type": "string",
+            "title": "Webhook Oauth Client Id",
+            "description": "ServiceNow webhook OAuth client ID"
+          },
+          "webhook_oauth_client_secret": {
+            "type": "string",
+            "title": "Webhook Oauth Client Secret",
+            "description": "Redacted ServiceNow webhook OAuth client secret",
+            "default": "***REDACTED***"
+          },
+          "webhook_oauth_signing_key": {
+            "type": "string",
+            "title": "Webhook Oauth Signing Key",
+            "description": "Redacted webhook OAuth signing key",
             "default": "***REDACTED***"
           },
           "postgres_host": {
@@ -1567,6 +1560,7 @@
           "servicenow_timeout_seconds",
           "servicenow_token_expiry_buffer_seconds",
           "servicenow_kb_id",
+          "webhook_oauth_client_id",
           "postgres_host",
           "postgres_port",
           "postgres_db",

@@ -60,12 +60,9 @@ class ApprovalDecisionRequest(BaseModel):
         ...,
         description="Decision: 'approved', 'rejected', 'cancelled', or 'expired'",
     )
-    decided_by: str = Field(
-        ...,
-        max_length=255,
-        min_length=1,
-        description="Identity of the deciding operator",
-    )
+    # decided_by is deliberately absent: it comes from the verified operator
+    # token's subject, and accepting it here let any caller write any name
+    # into the audit record (#148).
     reason: str | None = Field(
         default=None,
         description="Optional justification, feedback, or remediation note",

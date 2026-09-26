@@ -38,9 +38,9 @@ graph TD
 
 | Agent Role | Node Implementation | Input Boundaries | Output Artifacts | Primary Responsibility |
 |:---|:---|:---|:---|:---|
-| **Diagnostic Agent** | [`src/agent/nodes/diagnose.py`](file:///d:/spritns/barq-sprints-agentic-incident-resolution-platform-g1/src/agent/nodes/diagnose.py) | Incident telemetry, classification, retrieved KB chunks. | `Diagnosis` (`hypothesis`, `matched_article_ids`, `confidence`, `reasoning`) | Infers the probable failure mechanism and identifies applicable KB articles *without* prescribing remediation actions. |
-| **Resolution Agent** | [`src/agent/nodes/generate.py`](file:///d:/spritns/barq-sprints-agentic-incident-resolution-platform-g1/src/agent/nodes/generate.py) | Incident details, diagnosis hypothesis, cited KB articles, optional `critic_feedback`. | `Draft` (`steps: list[StepOutput]`, `confidence`), `revision_count` | Drafts numbered, atomic resolution steps citing exact article IDs and sections. Revises steps conditionally when critiques are provided. |
-| **Critic / Verifier Agent** | [`src/agent/nodes/verify_evidence.py`](file:///d:/spritns/barq-sprints-agentic-incident-resolution-platform-g1/src/agent/nodes/verify_evidence.py) | Candidate resolution steps, retrieved KB text chunks. | `GateResult` (`passed`), `CriticFeedback` (`unsupported_claims`, `safety_issues`, `feedback_instructions`) | Validates citation existence deterministically, then audits semantic claims and safety impacts using LLM evaluation against cited text. |
+| **Diagnostic Agent** | [`src/agent/nodes/diagnose.py`](../src/agent/nodes/diagnose.py) | Incident telemetry, classification, retrieved KB chunks. | `Diagnosis` (`hypothesis`, `matched_article_ids`, `confidence`, `reasoning`) | Infers the probable failure mechanism and identifies applicable KB articles *without* prescribing remediation actions. |
+| **Resolution Agent** | [`src/agent/nodes/generate.py`](../src/agent/nodes/generate.py) | Incident details, diagnosis hypothesis, cited KB articles, optional `critic_feedback`. | `Draft` (`steps: list[StepOutput]`, `confidence`), `revision_count` | Drafts numbered, atomic resolution steps citing exact article IDs and sections. Revises steps conditionally when critiques are provided. |
+| **Critic / Verifier Agent** | [`src/agent/nodes/verify_evidence.py`](../src/agent/nodes/verify_evidence.py) | Candidate resolution steps, retrieved KB text chunks. | `GateResult` (`passed`), `CriticFeedback` (`unsupported_claims`, `safety_issues`, `feedback_instructions`) | Validates citation existence deterministically, then audits semantic claims and safety impacts using LLM evaluation against cited text. |
 
 ---
 
@@ -51,14 +51,14 @@ To ensure auditability, eliminate confirmation bias, and prevent hallucination f
 ### 2.1 Diagnostic Isolation Guarantee
 - **Rule**: The Diagnostic Agent must *never* receive candidate resolution steps, previous draft attempts, or Critic feedback in its execution context or prompt.
 - **Rationale**: If the diagnostic engine sees proposed fixes, it is susceptible to confirmation bias—justifying a flawed draft rather than independently assessing root cause from raw symptom telemetry.
-- **Verification**: Verified in [`tests/test_nodes.py::test_diagnostic_isolation_prompt_excludes_draft_and_critic_content`](file:///d:/spritns/barq-sprints-agentic-incident-resolution-platform-g1/tests/test_nodes.py).
+- **Verification**: Verified in [`tests/test_nodes.py::test_diagnostic_isolation_prompt_excludes_draft_and_critic_content`](../tests/test_nodes.py).
 
 ### 2.2 Critic Isolation & Scoping Guarantee
 - **Rule**: The Critic evaluates candidate steps *only* against the exact `(article_id, section)` KB chunks cited by those steps. Uncited sections (even within the same cited article), raw incident customer telemetry, and free-form diagnostic outputs (`diagnosis.probable_cause`) are strictly omitted from the Critic prompt.
 - **Rationale**: 
   1. Limiting evidence to cited `(article_id, section)` pairs prevents cross-section context contamination where a claim in `Resolution` is spuriously justified by text found in an uncited `Troubleshooting` section of the same article.
   2. Omitting free-form diagnostic text guarantees that any customer PII echoed by the Diagnostic Agent (such as phone numbers, emails, or names) never reaches the Critic evaluation context.
-- **Verification**: Verified in [`tests/test_nodes.py::TestVerifyEvidence::test_context_isolation_filters_uncited_articles_and_incident_pii`](file:///d:/spritns/barq-sprints-agentic-incident-resolution-platform-g1/tests/test_nodes.py) and [`test_context_isolation_filters_uncited_sections_of_same_article`](file:///d:/spritns/barq-sprints-agentic-incident-resolution-platform-g1/tests/test_nodes.py).
+- **Verification**: Verified in [`tests/test_nodes.py::TestVerifyEvidence::test_context_isolation_filters_uncited_articles_and_incident_pii`](../tests/test_nodes.py) and [`test_context_isolation_filters_uncited_sections_of_same_article`](../tests/test_nodes.py).
 
 ---
 
@@ -114,7 +114,7 @@ All multi-agent interactions utilize strictly typed Pydantic output schemas via 
 
 ## 4. Supervisor Routing Mechanics & Revision Loop
 
-The multi-agent revision loop is governed by the LangGraph conditional router [`edges.after_verify_evidence`](file:///d:/spritns/barq-sprints-agentic-incident-resolution-platform-g1/src/agent/edges.py#L90):
+The multi-agent revision loop is governed by the LangGraph conditional router [`edges.after_verify_evidence`](../src/agent/edges.py#L90):
 
 ```python
 def after_verify_evidence(state: AgentState, settings: AgentSettings | None = None) -> str:
@@ -157,7 +157,7 @@ The maximum revision count defaults to `2` (`AGENT_MAX_REVISIONS=2`). This confi
 
 ## 6. Latency & Performance Benchmarks
 
-Empirical performance measurements conducted under Step 5.4 across 100 in-process iterations and live production runs (documented in [`docs/benchmarking_report.md`](file:///d:/spritns/barq-sprints-agentic-incident-resolution-platform-g1/docs/benchmarking_report.md)):
+Empirical performance measurements conducted under Step 5.4 across 100 in-process iterations and live production runs (documented in [`docs/benchmarking_report.md`](benchmarking_report.md)):
 
 ### 6.1 In-Process Graph Overhead (Mocked LLM, N=100)
 | Scenario | Median (p50) | 95th Percentile (p95) | Mean $\pm$ Stdev |

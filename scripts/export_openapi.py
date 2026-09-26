@@ -34,6 +34,9 @@ def _export_settings() -> Settings:
         servicenow_username="export-placeholder",
         servicenow_password="export-placeholder",  # type: ignore[arg-type]
         webhook_auth_token="export-placeholder",
+        webhook_oauth_client_id="export-placeholder",
+        webhook_oauth_client_secret="export-placeholder-secrets",
+        webhook_oauth_signing_key="export-placeholder-signing-key-32-plus",
         app_version="0.1.0",
     )
 

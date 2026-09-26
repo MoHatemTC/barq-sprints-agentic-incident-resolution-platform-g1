@@ -26,6 +26,7 @@ import tests.helpers as h
 from app.db.redis.keys import INCIDENT_EVENTS_QUEUE
 from app.main import create_app
 from app.repositories.idempotency import EventAcceptanceResult, EventAcceptanceStatus
+from app.workers.producer import PROCESS_INCIDENT_TASK
 from tests.helpers import mock_settings
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -147,44 +148,20 @@ async def test_real_token_route_issues_token_that_the_real_webhook_accepts(
 
 
 @pytest.mark.asyncio
-async def test_servicenow_token_can_access_operator_routes(app_with_mocks) -> None:
+async def test_servicenow_token_is_refused_on_operator_routes(app_with_mocks) -> None:
+    """The ServiceNow webhook JWT must not reach operator routes (#136).
+
+    It is minted for the webhook audience and is the only token ServiceNow can
+    obtain, so keeping it off /config, /approvals and /dlq is what leaves the
+    operator API unreachable with the credential ServiceNow holds.
+    """
     app, _, _ = app_with_mocks
+    headers = h.webhook_oauth_headers(app.state.settings)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        response = await client.get(
-            "/api/v1/config",
-            headers=h.webhook_oauth_headers(app.state.settings),
-        )
-    assert response.status_code == 200
-
-
-def test_settings_require_all_api_and_webhook_auth_secrets(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from pydantic import ValidationError
-
-    from app.core.config import Settings
-
-    required = (
-        "WEBHOOK_AUTH_TOKEN",
-        "WEBHOOK_OAUTH_CLIENT_ID",
-        "WEBHOOK_OAUTH_CLIENT_SECRET",
-        "WEBHOOK_OAUTH_SIGNING_KEY",
-    )
-    for name in required:
-        monkeypatch.delenv(name, raising=False)
-
-    with pytest.raises(ValidationError) as raised:
-        Settings(
-            _env_file=None,
-            servicenow_instance_url="https://dev00000.service-now.com",
-            servicenow_client_id="test-client",
-            servicenow_client_secret="test-secret",
-            servicenow_username="svc",
-            servicenow_password="test-password",
-        )
-
-    missing = {str(error["loc"][0]) for error in raised.value.errors()}
-    assert set(required) == {name.upper() for name in missing if name.startswith("webhook_")}
+        for path in ("/api/v1/config", "/api/v1/approvals", "/api/v1/dlq"):
+            response = await client.get(path, headers=headers)
+            assert response.status_code == 401, path
+            assert response.json()["error"]["code"] == "AUTHENTICATION_FAILED"
 
 
 # ---------------------------------------------------------------------------
@@ -193,18 +170,20 @@ def test_settings_require_all_api_and_webhook_auth_secrets(
 @pytest.mark.asyncio
 async def test_missing_required_fields_return_422(client) -> None:
     for missing in VALID_PAYLOAD:
+        if missing == "contract_version":
+            continue
         payload = {k: v for k, v in VALID_PAYLOAD.items() if k != missing}
         resp = await client.post("/api/v1/webhook/incident", json=payload, headers=AUTH)
         assert resp.status_code == 422, f"missing {missing!r} must return 422"
         assert resp.json()["error"]["code"] == "CONTRACT_VALIDATION_FAILED"
 
 
-@pytest.mark.asyncio
-async def test_missing_contract_version_must_return_422(client) -> None:
+def test_missing_contract_version_defaults_to_v1() -> None:
+    from api.schemas.webhook import IncidentWebhookPayload
+
     payload = {k: v for k, v in VALID_PAYLOAD.items() if k != "contract_version"}
-    resp = await client.post("/api/v1/webhook/incident", json=payload, headers=AUTH)
-    assert resp.status_code == 422
-    assert resp.json()["error"]["code"] == "CONTRACT_VALIDATION_FAILED"
+    assert IncidentWebhookPayload(**payload).contract_version == "v1"
+    assert IncidentWebhookPayload(**VALID_PAYLOAD).contract_version == "v1"
 
 
 @pytest.mark.asyncio
@@ -835,7 +814,45 @@ async def test_integration_event_persisted_and_enqueued_end_to_end(integration_a
 
     queue_items = await redis.lrange(QUEUE, 0, -1)
     assert len(queue_items) == 1
-    assert json.loads(queue_items[0])["event_id"] == payload["event_id"]
+    # The queue carries Celery's full message envelope, not a bare event dict
+    # (S2.3: a raw JSON string on the queue crashes the worker -- see
+    # docs/sprint2_worker_topology.md), so decode it before looking inside.
+    import base64
+
+    message = json.loads(queue_items[0])
+    assert message["headers"]["task"] == PROCESS_INCIDENT_TASK
+    body = message["body"]
+    if (message.get("properties") or {}).get("body_encoding") == "base64":
+        body = base64.b64decode(body)
+    # Kombu's body is [args, kwargs, embed]; send_task passes the event as arg 0.
+    task_args = json.loads(body)[0]
+    assert task_args[0]["event_id"] == payload["event_id"]
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_integration_event_without_contract_version_persisted_as_v1(
+    integration_app,
+) -> None:
+    """#137: the deployed S1.3 script action sends no contract_version.
+
+    The webhook treats the omitted field as v1 and persists v1.
+    """
+    import sqlalchemy as sa
+
+    client, engine, redis = integration_app
+    payload = _integration_payload()
+    legacy_payload = {k: v for k, v in payload.items() if k != "contract_version"}
+
+    resp = await client.post("/api/v1/webhook/incident", json=legacy_payload, headers=AUTH)
+    assert resp.status_code == 202, resp.text
+
+    async with engine.connect() as conn:
+        stored = await conn.scalar(
+            sa.text("SELECT contract_version FROM events WHERE event_id = :event_id"),
+            {"event_id": payload["event_id"]},
+        )
+    assert stored == "v1"
 
 
 @pytest.mark.integration

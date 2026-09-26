@@ -404,7 +404,9 @@ Two further defects were found while verifying the above:
 Merging #110 into a scratch copy of this branch fails
 `tests/test_config_router.py::test_config_redacts_all_runtime_secrets`: #110 changes the
 default `retrieval_mode` to `hybrid_reranked` and S2.1's test asserts `hybrid`. That
-collision is between S2.1 and S2.4 and is untouched here.
+collision is between S2.1 and S2.4 and is untouched here. **Resolved by #150**: the
+shipped default is now `hybrid` in `Settings`, `.env.example` and the config-router test,
+so both sides assert the same value.
 
 ## 10. Live re-verification after the review fixes (2026-09-18)
 

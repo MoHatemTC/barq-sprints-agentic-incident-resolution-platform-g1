@@ -266,6 +266,17 @@ class Approval(Base):
             name="decision",
         ),
         Index("ix_approvals_execution_decided", "execution_id", "decided_at"),
+        # One decision per (execution, node). workflow_state_id is nullable and
+        # today always NULL, and Postgres treats NULLs as distinct in a unique
+        # index, so the column is coalesced to the all-zero uuid: without that
+        # two contradictory decisions could still be stored for one execution
+        # (#147).
+        Index(
+            "uq_approvals_execution_workflow_state",
+            "execution_id",
+            text("COALESCE(workflow_state_id, '00000000-0000-0000-0000-000000000000'::uuid)"),
+            unique=True,
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(
