@@ -178,9 +178,12 @@ class TestOcrImageRegions:
 
     def test_no_boxes_returns_no_results(self):
         fake_page = SimpleNamespace(crop=lambda box: None)
-        with patch(
-            "app.retrieval.extraction.ocr_extraction.pdfplumber.open",
-            return_value=_FakePDF([fake_page]),
+        with (
+            patch(
+                "app.retrieval.extraction.ocr_extraction.pdfplumber.open",
+                return_value=_FakePDF([fake_page]),
+            ),
+            patch("app.retrieval.extraction.ocr_extraction.check_tesseract_installed"),
         ):
             results = ocr_image_regions(Path("fake.pdf"), 1, [])
         assert results == []
