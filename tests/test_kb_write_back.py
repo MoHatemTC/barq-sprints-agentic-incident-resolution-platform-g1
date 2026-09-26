@@ -27,7 +27,10 @@ from agent.tools.registry import (
     ToolRegistration,
 )
 from app.models.knowledge import Article, SecurityLevel, WorkflowState
+from app.publishing.exceptions import ServiceNowWriteRejectedError
+from app.publishing.payload import build_kb_payload
 from app.retrieval.filters import DEFAULT_WORKFLOW_STATES, build_metadata_filter
+from app.publishing.servicenow_kb import _verify_stored
 from tests.agent_support import FakeServiceNow, Tracer, shared_runner
 
 EXECUTION_ID = "11111111-1111-4111-8111-111111111111"
@@ -173,6 +176,29 @@ class TestRegistration:
             build_servicenow_tool_registry(
                 _gateway(), approval_checker=PERMITTED, extra_registrations=[duplicate]
             )
+
+
+class TestReadBackVerification:
+    """Mentor polish: the verify-stored step must fail closed on its own."""
+
+    def test_verify_stored_rejects_state_mismatch(self) -> None:
+        article = _article(workflow_state=WorkflowState.PUBLISHED)
+        sent = build_kb_payload(article, "kb-sys-1")
+        stored = {**sent, "workflow_state": "draft"}
+        with pytest.raises(ServiceNowWriteRejectedError):
+            _verify_stored(stored, sent, article.article_id)
+
+    def test_verify_stored_rejects_body_tampering(self) -> None:
+        article = _article(workflow_state=WorkflowState.PUBLISHED)
+        sent = build_kb_payload(article, "kb-sys-1")
+        stored = {**sent, "text": "<p>tampered — provenance marker removed</p>"}
+        with pytest.raises(ServiceNowWriteRejectedError):
+            _verify_stored(stored, sent, article.article_id)
+
+    def test_verify_stored_accepts_faithful_readback(self) -> None:
+        article = _article(workflow_state=WorkflowState.PUBLISHED)
+        sent = build_kb_payload(article, "kb-sys-1")
+        _verify_stored(dict(sent), sent, article.article_id)  # must not raise
 
 
 class TestPublishHandler:

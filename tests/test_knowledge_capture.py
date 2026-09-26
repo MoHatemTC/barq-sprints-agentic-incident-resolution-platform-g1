@@ -180,6 +180,21 @@ class TestFailureRules:
         assert result is None
         assert "ingest" not in events  # never touches Qdrant after a refusal
 
+    async def test_readback_rejection_means_no_qdrant_write(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from app.publishing.exceptions import ServiceNowWriteRejectedError
+
+        events: list[str] = []
+        deps, _, _ = _deps(
+            events,
+            monkeypatch=monkeypatch,
+            publish_error=ServiceNowWriteRejectedError("read-back mismatch"),
+        )
+        result = await capture_human_resolution(**_capture_args(deps, events))
+        assert result is None
+        assert "ingest" not in events
+
     async def test_publish_error_means_no_qdrant_write(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
