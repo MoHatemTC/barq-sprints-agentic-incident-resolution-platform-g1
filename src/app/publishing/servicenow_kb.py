@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import html
 import re
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 import httpx
@@ -22,7 +23,7 @@ from app.exceptions.servicenow import (
     ServiceNowConnectionError,
     ServiceNowTimeoutError,
 )
-from app.models.knowledge import Article
+from app.models.knowledge import Article, WorkflowState
 from app.publishing.exceptions import (
     ServiceNowAccessError,
     ServiceNowAuthError,
@@ -277,6 +278,37 @@ class ServiceNowKBClient:
 
         return None
 
+    async def find_source_ids_by_prefix(
+        self,
+        prefix: str,
+        *,
+        kb_sys_id: str | None = None,
+    ) -> list[str]:
+        """List ``u_source_id`` values starting with ``prefix`` (S3.5 allocation).
+
+        The prefix is validated strictly (``KB`` plus digits only) because it is
+        interpolated into an encoded query — the same injection guard
+        ``find_by_source_id`` applies to whole article IDs.
+        """
+        if not re.fullmatch(r"KB\d{0,3}", prefix):
+            raise ServiceNowKBError(
+                f"Refusing to query with prefix={prefix!r}: only 'KB' plus up to "
+                "three digits is allowed (e.g. 'KB1' for the human-captured range)."
+            )
+        params = {
+            "sysparm_fields": U_SOURCE_ID_FIELD,
+            "sysparm_limit": "1000",
+        }
+        if kb_sys_id:
+            params["sysparm_query"] = f"kb_knowledge_base={kb_sys_id}"
+        res = await self.request("GET", f"/api/now/table/{KB_TABLE}", params=params)
+        records = res.json().get("result", [])
+        return [
+            str(r.get(U_SOURCE_ID_FIELD))
+            for r in records
+            if r.get(U_SOURCE_ID_FIELD) and str(r.get(U_SOURCE_ID_FIELD)).startswith(prefix)
+        ]
+
     async def create(self, payload: dict[str, Any]) -> str:
         """POST a new kb_knowledge record; returns its sys_id."""
         response = await self.request("POST", f"/api/now/table/{KB_TABLE}", json=payload)
@@ -433,3 +465,35 @@ def _verify_stored(
             f"Read-back mismatch for {article_id!r}: stored body no longer contains "
             f"the provenance Source marker (sys_id={stored.get('sys_id')})."
         )
+
+
+def make_kb_publish_handler(
+    client: ServiceNowKBClient,
+    kb_sys_id: str,
+) -> Callable[[Article], Awaitable[str]]:
+    """Registry handler for the ``publish_kb_article`` tool (S3.5 knowledge capture).
+
+    ServiceNow's ``workflow_state`` choice list cannot hold ``human_resolved``,
+    and :func:`_verify_stored` fail-closes on any sent/stored mismatch — so the
+    handler publishes a *published copy* while the caller's original article
+    keeps the ``human_resolved`` marker for Qdrant ingestion. Returns the
+    ServiceNow ``sys_id`` fetched by ``find_by_source_id`` (``publish_article``
+    itself reports only the outcome).
+    """
+
+    async def handler(article: Article) -> str:
+        sn_article = (
+            article
+            if article.workflow_state is not WorkflowState.HUMAN_RESOLVED
+            else article.model_copy(update={"workflow_state": WorkflowState.PUBLISHED})
+        )
+        await publish_article(client, sn_article, kb_sys_id)
+        record = await client.find_by_source_id(article.article_id, kb_sys_id=kb_sys_id)
+        if record is None or not record.get("sys_id"):
+            raise ServiceNowKBError(
+                f"published article {article.article_id!r} not found by u_source_id "
+                f"in kb {kb_sys_id!r} after a successful publish — possible drift."
+            )
+        return str(record["sys_id"])
+
+    return handler

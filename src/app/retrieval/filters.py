@@ -13,7 +13,13 @@ SECURITY_LEVEL_ORDER: tuple[SecurityLevel, ...] = (
 )
 
 DEFAULT_MAX_SECURITY_LEVEL = SecurityLevel.INTERNAL
-DEFAULT_WORKFLOW_STATES: tuple[WorkflowState, ...] = (WorkflowState.PUBLISHED,)
+# Workflow states discoverable by default searches. human_resolved (S3.5
+# knowledge capture) sits beside published so human-captured articles are
+# retrievable evidence the moment they are ingested.
+DEFAULT_WORKFLOW_STATES: tuple[WorkflowState, ...] = (
+    WorkflowState.PUBLISHED,
+    WorkflowState.HUMAN_RESOLVED,
+)
 
 
 StrOrList = str | list[str] | None
@@ -52,7 +58,7 @@ def build_metadata_filter(
     states = (
         metadata.workflow_state
         if metadata.workflow_state is not None
-        else [WorkflowState.PUBLISHED]
+        else list(DEFAULT_WORKFLOW_STATES)
     )
     if not states:
         raise ValueError("workflow_states must not be an empty list")
