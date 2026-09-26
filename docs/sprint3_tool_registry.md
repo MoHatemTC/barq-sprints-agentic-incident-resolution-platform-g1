@@ -404,7 +404,26 @@ approval for the execution, require `evidence["tool_name"]` to equal the final S
 name, emit the structured enforcement audit, and add permit/refusal and direct-bypass
 tests.
 
-**Requirement status: PARTIAL / BLOCKED BY S3.5 INTERFACE.**
+**Requirement status: COMPLETE — resolved by S3.5 (PR #159).**
+
+The interface this section anticipated now exists on `feat/s3-5-knowledge-capture`:
+
+- **Stable tool identifier:** `publish_kb_article`.
+- **Narrow typed handler:** `make_kb_publish_handler(client, kb_sys_id)` in
+  `src/app/publishing/servicenow_kb.py` — publishes a *published copy* for
+  ServiceNow (its `workflow_state` choice list cannot hold S3.5's
+  `human_resolved` marker, and `_verify_stored` is fail-closed) and returns the
+  verified `sys_id` via `find_by_source_id`.
+- **Registration:** `HIGH_RISK`, through the new `extra_registrations` parameter
+  on `build_servicenow_tool_registry` (`src/agent/tools/servicenow.py`) —
+  exactly the registration path this section prescribed.
+- **Approval scope:** the approvals decide endpoint folds
+  `evidence={"tool_name": "publish_kb_article", "solution": <redacted>}` into
+  the immutable `Approval.evidence` JSONB (`src/api/routers/approvals.py`), so
+  `PostgreSQLApprovalChecker` finds well-formed scope with no schema change.
+- **Tests:** `tests/test_kb_write_back.py` (permit, `APPROVAL_MISSING`,
+  `APPROVAL_SCOPE_INVALID`, duplicate-name refusal) and
+  `tests/test_knowledge_capture.py` (refusal ⇒ no Qdrant write).
 
 ## 14. Requirement Traceability Matrix
 
@@ -433,11 +452,11 @@ not claim executable runtime functionality or test coverage.
 | 18 | Audit records tool and permission class | COMPLETE | `src/agent/tools/registry.py::EnforcementAuditEvent`; `src/agent/tools/registry.py::StructuredLoggingAuditSink` | `tests/test_tool_registry.py::test_structured_logging_audit_sink_emits_only_safe_semantic_fields`; `tests/test_servicenow_tool_registration.py::test_all_four_core_actions_have_exact_server_owned_permissions` | §8 |
 | 19 | Least-privilege documentation | COMPLETE | Registrations in `src/agent/tools/servicenow.py`; ACL-bound gateway operations in `src/agent/servicenow.py` | `tests/test_servicenow_tool_registration.py` | §11 |
 | 20 | Extension contract | DOCUMENTED / NOT IMPLEMENTED | Future contract; no production implementation claimed | No runtime tests claimed | §12 |
-| 21 | S3.5 KB write-back registration | PARTIAL / BLOCKED BY S3.5 INTERFACE | Separate existing publishing code in `src/app/publishing/servicenow_kb.py` and `scripts/publish_kb.py`; no registry registration | Existing subsystem tests in `tests/publishing/test_servicenow_kb.py` and `tests/publishing/test_publish_kb.py`; registry permit/refusal/bypass tests cannot be added until the interface exists | §13 |
+| 21 | S3.5 KB write-back registration | COMPLETE (S3.5, PR #159) | `publish_kb_article` registered `HIGH_RISK` via `extra_registrations` in `src/agent/tools/servicenow.py`; handler `make_kb_publish_handler` in `src/app/publishing/servicenow_kb.py`; approval scope folded into `Approval.evidence["tool_name"]` by the decide endpoint | `tests/test_kb_write_back.py` (permit, APPROVAL_MISSING / APPROVAL_SCOPE_INVALID refusals, duplicate-name); audit-path tests in `tests/test_tool_registry.py` | §13 |
 
 ## 15. Known Limitations
 
-- S3.5 has not defined a stable registry-facing KB write-back tool name or handler.
+- Resolved (PR #159): S3.5's stable registry-facing KB write-back tool (`publish_kb_article`) and handler (`make_kb_publish_handler`) now exist — see §13.
 - Approval tool scope is stored in `Approval.evidence["tool_name"]`; the approval model
   has no dedicated `tool_name` column.
 - Approval rows are not consumed after a permitted invocation. The latest matching
