@@ -7,6 +7,13 @@ updates:
     open-pull-requests-limit: 5
     commit-message:
       prefix: "chore(deps)"
+    ignore:
+      # kombu[redis] == 5.6.2 pins redis < 6.5, and the only kombu that accepts
+      # redis 8 is 5.7.0a1 -- a pre-release. Every redis 6.x/7.x/8.x bump is
+      # therefore unmergeable and opened a PR that could never pass (#151).
+      # Remove this once kombu's pin moves.
+      - dependency-name: "redis"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
