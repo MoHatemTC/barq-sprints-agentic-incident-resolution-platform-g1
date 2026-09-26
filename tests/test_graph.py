@@ -154,7 +154,7 @@ class TestRoutes:
         result = run(VPN, make_deps(llm=llm, servicenow=backend))
         assert result["path"] == ["load", "validate", "act"]
         assert result["outcome"] == "skipped_ineligible"
-        assert llm.calls == []
+        assert llm.purposes() == ["injection_classifier"]
         assert backend.updates == []
 
     def test_elevated_risk_drafts_and_awaits_approval(self) -> None:

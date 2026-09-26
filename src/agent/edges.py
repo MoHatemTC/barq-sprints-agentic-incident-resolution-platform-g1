@@ -109,7 +109,8 @@ def after_load(state: AgentState) -> str:
 #: (source, condition, target). Unconditional edges use the condition "always".
 EDGE_TABLE: tuple[tuple[str, str, str], ...] = (
     ("__start__", "always", "load"),
-    ("load", "always", "validate"),
+    ("load", "input_guardrail.passed", "validate"),
+    ("load", "not input_guardrail.passed", "act"),
     ("validate", "eligibility.eligible", "classify"),
     ("validate", "not eligibility.eligible", "act"),
     ("classify", "always", "determine_risk"),
@@ -127,8 +128,6 @@ EDGE_TABLE: tuple[tuple[str, str, str], ...] = (
     ("safety_check", "not safety.passed", "act"),
     ("confidence_check", "always (act applies the floor)", "act"),
     ("act", "always", "__end__"),
-    ("load", "act"),
-    ("load", "validate"),
 )
 
 __all__ = [
