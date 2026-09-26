@@ -3,7 +3,7 @@
 **Document Version**: 1.0.0  
 **Application Title**: BARQ Agentic Incident Resolution Platform API  
 **Base Path**: `/`  
-**OpenAPI Specification**: Committed at [openapi.json](../../openapi.json)
+**OpenAPI Specification**: Committed at [openapi.json](../openapi.json)
 
 ---
 
@@ -23,7 +23,7 @@ Authorization: Bearer <webhook JWT, audience barq-webhook>
 # Operator routes: approvals, config, DLQ, executions, eval
 Authorization: Bearer <operator JWT, audience barq-operator>
 ```
-* Validation is performed using constant-time digest comparison (`secrets.compare_digest`) in [app/auth/auth.py](../../src/app/auth/auth.py) to prevent timing attacks.
+* Validation is performed using constant-time digest comparison (`secrets.compare_digest`) in [app/auth/auth.py](../src/app/auth/auth.py) to prevent timing attacks.
 * The webhook JWT is refused on operator routes and the operator JWT is refused on the webhook; a raw `WEBHOOK_AUTH_TOKEN` is not accepted as a bearer token at all.
 * Missing or invalid tokens return `HTTP 401 Unauthorized`.
 

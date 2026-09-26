@@ -45,27 +45,27 @@ To respect sprint boundaries and teammate workstream ownership, endpoints are ca
 ## 3. Detailed Endpoint Strategy
 
 ### 3.1. Executions (`src/api/routers/executions.py`)
-* **Schemas**: `ExecutionResponse`, `TraceResponse`, `IncidentExecutionsResponse` in [src/api/schemas/executions.py](file:///d:/spritns/barq-sprints-agentic-incident-resolution-platform-g1/src/api/schemas/executions.py).
+* **Schemas**: `ExecutionResponse`, `TraceResponse`, `IncidentExecutionsResponse` in [src/api/schemas/executions.py](../../../src/api/schemas/executions.py).
 * **Business Logic Status**: **Implemented with Real Database Logic**.
 * **Rationale**: Ahmed Tamer (S2.2) already deployed the canonical PostgreSQL operational schema (`events`, `executions`, `execution_node_states`). Queries for incident executions and execution statuses read directly from the database session. If an execution has not yet generated detailed agent trace steps, the trace endpoint returns a structured response indicating trace progression.
 
 ### 3.2. HITL Approvals (`src/api/routers/approvals.py`)
-* **Schemas**: `ApprovalResponse`, `ApprovalDecisionRequest` in [src/api/schemas/approvals.py](file:///d:/spritns/barq-sprints-agentic-incident-resolution-platform-g1/src/api/schemas/approvals.py).
+* **Schemas**: `ApprovalResponse`, `ApprovalDecisionRequest` in [src/api/schemas/approvals.py](../../../src/api/schemas/approvals.py).
 * **Business Logic Status**: **Real Database Logic**.
 * **Rationale**: `GET /approvals` and `GET /approvals/{id}` query the live PostgreSQL `approvals` table. `POST /approvals/{id}/decide` writes an approval record for an existing execution and refuses a second one: `409` if that execution is already decided, `404` if the id resolves to neither an approval nor an execution. There is no stub fallback — a decision that was never stored is never reported as stored (#147). The decider is read from the operator token, not from the body (#148).
 
 ### 3.3. Dead-Letter Queue (DLQ) Management (`src/api/routers/dlq.py`)
-* **Schemas**: `DLQEventResponse`, `DLQReplayResponse` in [src/api/schemas/dlq.py](file:///d:/spritns/barq-sprints-agentic-incident-resolution-platform-g1/src/api/schemas/dlq.py).
+* **Schemas**: `DLQEventResponse`, `DLQReplayResponse` in [src/api/schemas/dlq.py](../../../src/api/schemas/dlq.py).
 * **Business Logic Status**: **Real Redis Logic + RBAC Enforcement**.
 * **Rationale**: `GET /dlq` reads all events from the `barq:incident:dlq` Redis key via `LRANGE`. `POST /dlq/{event_id}/replay` pops the matching event from the DLQ and re-pushes it to `barq:incident:events` for reprocessing. Both endpoints enforce strict **Operator Role RBAC** — the `operator` role must be present in the verified token's `roles` claim, returning `403 PERMISSION_DENIED` when it is not (#148).
 
 ### 3.4. Evaluation & Benchmarking (`src/api/routers/eval.py`)
-* **Schemas**: `EvalRunRequest`, `EvalRunResponse`, `EvalResultResponse` in [src/api/schemas/eval.py](file:///d:/spritns/barq-sprints-agentic-incident-resolution-platform-g1/src/api/schemas/eval.py).
+* **Schemas**: `EvalRunRequest`, `EvalRunResponse`, `EvalResultResponse` in [src/api/schemas/eval.py](../../../src/api/schemas/eval.py).
 * **Business Logic Status**: **Contract Stub**.
 * **Rationale**: The benchmark evaluation runner against test incident datasets is scheduled for **Sprint 4**. The endpoints validate dataset parameters and return structured execution IDs and placeholder metric envelopes.
 
 ### 3.5. Runtime Configuration (`src/api/routers/config.py`)
-* **Schemas**: `RedactedConfigResponse` in [src/api/schemas/config.py](file:///d:/spritns/barq-sprints-agentic-incident-resolution-platform-g1/src/api/schemas/config.py).
+* **Schemas**: `RedactedConfigResponse` in [src/api/schemas/config.py](../../../src/api/schemas/config.py).
 * **Business Logic Status**: **Real Inspection with Secret Hygiene**.
 * **Rationale**: Returns application runtime metadata (environment, version, hostnames) while strictly redacting sensitive credentials (passwords, tokens, client secrets to `"***REDACTED***"`).
 
@@ -74,6 +74,6 @@ To respect sprint boundaries and teammate workstream ownership, endpoints are ca
 ## 4. Key Architectural Guarantees
 
 1. **Strict Request Validation (`extra="forbid"`)**: Any unexpected fields or invalid types submitted to these endpoints will be rejected with HTTP 422 `CONTRACT_VALIDATION_FAILED`.
-2. **Deterministic Response Contracts**: All responses strictly match their Pydantic V2 definitions, ensuring complete compatibility with the committed [openapi.json](file:///d:/spritns/barq-sprints-agentic-incident-resolution-platform-g1/openapi.json).
+2. **Deterministic Response Contracts**: All responses strictly match their Pydantic V2 definitions, ensuring complete compatibility with the committed [openapi.json](../../../openapi.json).
 3. **Zero Downstream Execution on Request Thread**: Neither the active webhook nor the endpoint stubs invoke heavy model execution, vector search, or synchronous ServiceNow calls during the request cycle.
 4. **Seamless Upgrades in Sprints 3 & 4**: When background workers (Sprint 3) and benchmark runners (Sprint 4) are completed, the endpoint logic can be swapped in internally without altering the public API schema.
