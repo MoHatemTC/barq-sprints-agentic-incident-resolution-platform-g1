@@ -97,6 +97,14 @@ def after_safety_check(state: AgentState) -> Literal["confidence_check", "act"]:
         return ACT
 
 
+def after_load(state: AgentState) -> str:
+    guardrail = state.get("input_guardrail")
+    if guardrail is None:
+        return "act"
+    gate = GateResult.model_validate(guardrail)
+    return "validate" if gate.passed else "act"
+
+
 #: Every transition, for the design record and the exhaustive edge tests.
 #: (source, condition, target). Unconditional edges use the condition "always".
 EDGE_TABLE: tuple[tuple[str, str, str], ...] = (
@@ -119,6 +127,8 @@ EDGE_TABLE: tuple[tuple[str, str, str], ...] = (
     ("safety_check", "not safety.passed", "act"),
     ("confidence_check", "always (act applies the floor)", "act"),
     ("act", "always", "__end__"),
+    ("load", "act"),
+    ("load", "validate"),
 )
 
 __all__ = [

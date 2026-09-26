@@ -89,7 +89,7 @@ _DISALLOWED_ACTION_PATTERNS: tuple[re.Pattern[str], ...] = (
         r"(?i)\b(clos(?:e|ed|ing)|resolv(?:e|ed|ing))\s+(?:this|the)\s+(?:incident|ticket|case)\b"
     ),
     re.compile(r"(?i)\bcontact(?:ing|ed)?\s+the\s+(?:user|requester|customer)\b"),
-    re.compile(r"(?i)\bgrant(?:ing|ed)?\s+(?:access|permissions?)\b"),
+    re.compile(r"(?i)\bgrant(?:ing|ed)?\b[^.]{0,40}\b(?:access|permissions?)\b"),
     re.compile(r"(?i)\bapprov(?:e|ing|ed)\s+(?:the\s+)?(?:request|change)\b"),
 )
 

@@ -25,7 +25,7 @@ class ClassifierOutcome:
     is_injection: bool = False
     reason: str | None = None
     # set only when available is false
-    failure_type: str | None = None
+    failure_category: str | None = None
 
 
 def classify_injection(llm: LLMClient, sanitized_text: str) -> ClassifierOutcome:
@@ -44,7 +44,7 @@ def classify_injection(llm: LLMClient, sanitized_text: str) -> ClassifierOutcome
     try:
         result = llm.structured(
             purpose=CLASSIFIER_PURPOSE,
-            system_prompt=INJECTION_CLASSIFIER_SYSTEM,
+            system=INJECTION_CLASSIFIER_SYSTEM,
             prompt=injection_classifier_prompt(sanitized_text),
             schema=InjectionClassification,
         )

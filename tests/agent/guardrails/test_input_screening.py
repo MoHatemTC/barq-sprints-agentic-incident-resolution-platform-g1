@@ -14,7 +14,7 @@ from observability.redaction import redact_text, redact_text_with_count
 from observability.tracing import get_tracer
 
 DATASET_PATH = (
-    Path(__file__).resolve().parents[1] / "data" / "adversarial" / "sprint3_seed_set.json"
+    Path(__file__).resolve().parents[3] / "data" / "adversarial" / "sprint3_seed_set.json"
 )
 
 
@@ -182,11 +182,15 @@ class _MalformedLLM:
 
 
 def _make_deps(llm: Any, raw_incident: dict[str, Any]) -> AgentDependencies:
+    from unittest.mock import AsyncMock, Mock
+
+    tools_mock = Mock()
+    tools_mock.invoke = AsyncMock(return_value=raw_incident)
     return AgentDependencies(
         settings=None,
         llm=llm,
         retriever=None,
-        servicenow=_FakeServiceNow(raw_incident),
+        tools=tools_mock,
         tracer=get_tracer(),
     )
 
@@ -206,7 +210,11 @@ def _event_state() -> dict[str, Any]:
     event = EventPayload(
         event_id="ev-1", sys_id="8a1e0c2b4f1d4e2ab0a1c9d3e4f5a6b7", number="INC0010052"
     )
-    return {"event": event.model_dump(mode="json")}
+    return {
+        "event": event.model_dump(mode="json"),
+        "execution_id": "test-exec-1",
+        "correlation_id": "corr-1",
+    }
 
 
 def test_raw_secret_never_reaches_the_llm(dataset: dict[str, Any]) -> None:

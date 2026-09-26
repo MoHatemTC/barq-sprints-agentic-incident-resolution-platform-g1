@@ -32,8 +32,8 @@ from langgraph.graph.state import CompiledStateGraph
 from agent import edges
 from agent.config import AGENT_VERSION
 from agent.dependencies import AgentDependencies
+from agent.errors import HumanLockedError
 from agent.nodes import NODE_ORDER, NODES
-from agent.servicenow import HumanLockedError
 from agent.state import AgentState, EventPayload, FinalOutput, Outcome, initial_state
 from app.workers.retry_policy import TerminalError
 
@@ -91,7 +91,7 @@ def build_graph(
         builder.add_node(name, cast(Any, instrument(name, table[name], deps)))
 
     builder.add_edge(START, "load")
-    builder.add_conditional_edges("load", edges.after_load, {"validate": "validate", "act": "act"})
+    builder.add_edge("load", "validate")
     builder.add_conditional_edges(
         "validate", edges.after_validate, {"classify": "classify", "act": "act"}
     )

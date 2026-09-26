@@ -23,6 +23,7 @@ from agent.prompts import (
     CriticOutput,
     DiagnoseOutput,
     GenerateOutput,
+    InjectionClassification,
     StepOutput,
 )
 from agent.servicenow import AsyncRunner, IncidentGateway
@@ -204,7 +205,12 @@ class FakeLLM:
         self.last_model_used = selected_model
         self.purpose_models[purpose] = selected_model
         self.calls.append(
-            {"purpose": purpose, "system": system, "prompt": prompt, "model": selected_model}
+            {
+                "purpose": purpose,
+                "system": system,
+                "prompt": prompt,
+                "model": selected_model,
+            }
         )
         answer = self.answers[purpose]
         if isinstance(answer, list):
@@ -222,6 +228,9 @@ class FakeLLM:
 
 def vpn_answers(confidence: float = 0.82) -> dict[str, Any]:
     return {
+        "injection_classifier": InjectionClassification(
+            is_injection=False, reason="ordinary VPN incident, no manipulation attempt"
+        ),
         "classify": ClassifyOutput(
             label="network", rationale="VPN auth after password reset", confidence=0.93
         ),
@@ -322,7 +331,9 @@ def sdk_llm(tracer: Tracer, answers: dict[str, Any] | None = None) -> Any:
     from agent.llm import LiteLLMClient
 
     return LiteLLMClient(
-        AgentSettings(_env_file=None), tracer, client=FakeOpenAISDK(answers or vpn_answers())
+        AgentSettings(_env_file=None),
+        tracer,
+        client=FakeOpenAISDK(answers or vpn_answers()),
     )
 
 

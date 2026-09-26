@@ -9,11 +9,12 @@ closes, reassigns or contacts the requester: those actions do not exist.
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime
 from typing import Any
 
 from agent.dependencies import AgentDependencies
-from agent.servicenow import HumanLockedError
+from agent.errors import HumanLockedError
 from agent.state import (
     AgentState,
     ClassificationResult,
@@ -29,6 +30,7 @@ from agent.state import (
     RiskAssessment,
     RiskLevel,
 )
+from agent.tools import ToolCallContext
 from app.models.execution_log import (
     ExecutionAction,
     ExecutionLogCreatePayload,
@@ -252,7 +254,13 @@ def act(state: AgentState, deps: AgentDependencies) -> dict[str, Any]:
         output = output.model_copy(update={"actions": actions, "write_back": "dry_run"})
         return {"output": output.model_dump(mode="json")}
     try:
-        deps.servicenow.write_ai_fields(incident.sys_id, payload)
+        asyncio.run(
+            deps.tools.invoke(
+                "write_ai_fields",
+                context=_tool_context(state),
+                arguments={"sys_id": incident.sys_id, "payload": payload},
+            )
+        )
     except HumanLockedError:
         output = FinalOutput(
             outcome=Outcome.SKIPPED_HUMAN_LOCK,
@@ -301,7 +309,20 @@ def _write_execution_log(
         result=output.summary,
         error=error,
     )
-    deps.servicenow.write_execution_log(incident.sys_id, payload)
+    asyncio.run(
+        deps.tools.invoke(
+            "write_execution_log",
+            context=_tool_context(state),
+            arguments={"sys_id": incident.sys_id, "payload": payload},
+        )
+    )
+
+
+def _tool_context(state: AgentState) -> ToolCallContext:
+    return ToolCallContext(
+        execution_id=state["execution_id"],
+        correlation_id=state.get("correlation_id"),
+    )
 
 
 def _parse_ts(value: str | None) -> datetime | None:

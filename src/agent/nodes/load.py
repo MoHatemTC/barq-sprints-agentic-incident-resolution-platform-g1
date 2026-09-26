@@ -6,6 +6,7 @@ over is read here, under the integration user's own permissions.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from agent.dependencies import AgentDependencies
@@ -16,16 +17,24 @@ from agent.guardrails.semantic_injection_classifier import (
 )
 from agent.policy import snapshot_incident
 from agent.state import AgentState, EventPayload, GateResult, IncidentSnapshot
+from agent.tools import ToolCallContext
 from observability.redaction import redact_text_with_count
 
 
 def load(state: AgentState, deps: AgentDependencies) -> dict[str, Any]:
     event = EventPayload.model_validate(state["event"])
-    raw = deps.servicenow.read_incident(event.sys_id)
+    raw = asyncio.run(
+        deps.tools.invoke(
+            "read_incident",
+            context=ToolCallContext(
+                execution_id=state["execution_id"],
+                correlation_id=state.get("correlation_id"),
+            ),
+            arguments={"sys_id": event.sys_id},
+        )
+    )
     incident = snapshot_incident(raw)
-
     sanitized_incident, gate = _run_input_guardrails(incident, deps)
-
     return {
         "incident": sanitized_incident.model_dump(mode="json"),
         "input_guardrail": gate.model_dump(mode="json"),
