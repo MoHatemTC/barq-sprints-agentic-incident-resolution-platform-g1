@@ -11,7 +11,7 @@ contacts the requester: those actions do not exist.
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from langgraph.types import interrupt
@@ -313,7 +313,20 @@ def act(state: AgentState, deps: AgentDependencies) -> dict[str, Any]:
     execution_id = str(state.get("execution_id") or "")
     receipt = deps.audit.get_receipt(execution_id) if execution_id else None
     if receipt and receipt.get("output"):
-        return {"output": receipt["output"]}
+        phase = receipt.get("phase")
+        if phase in (None, "written"):
+            # A receipt saved without a phase predates the boundary markers and can
+            # only have been written after the write completed.
+            return {"output": receipt["output"]}
+        # The previous attempt died inside the write boundary. Resume at the boundary
+        # with the output it was writing rather than recomputing the decision, which
+        # would interrupt the same human again.
+        return _perform_write(
+            state,
+            deps,
+            FinalOutput.model_validate(receipt["output"]),
+            resume_phase=phase,
+        )
 
     outcome = decide_outcome(state)
     output = compose(state, outcome)
@@ -340,7 +353,11 @@ def act(state: AgentState, deps: AgentDependencies) -> dict[str, Any]:
 
 
 def _perform_write(
-    state: AgentState, deps: AgentDependencies, output: FinalOutput
+    state: AgentState,
+    deps: AgentDependencies,
+    output: FinalOutput,
+    *,
+    resume_phase: str | None = None,
 ) -> dict[str, Any]:
     incident = IncidentSnapshot.model_validate(state["incident"])
     fields: dict[str, Any] = {
@@ -362,33 +379,61 @@ def _perform_write(
     if not deps.settings.agent_write_back_enabled:
         output = output.model_copy(update={"actions": actions, "write_back": "dry_run"})
         return {"output": output.model_dump(mode="json")}
-    # Act-node writes currently run on synchronous Celery/graph worker threads without
-    # a running event loop, so asyncio.run() bridges to ToolRegistry. If execution moves
-    # to an async worker/task context, replace this bridge rather than nest asyncio.run().
-    try:
-        asyncio.run(
-            deps.tools.invoke(
-                "write_ai_fields",
-                context=_tool_context(state),
-                arguments={"sys_id": incident.sys_id, "payload": payload},
+    execution_id = str(state["execution_id"])
+    lifecycle = "interrupt_resume" if deps.audit.get_interrupt(execution_id) else "direct"
+    receipt_base: dict[str, Any] = {
+        "lifecycle": lifecycle,
+        "incident_sys_id": incident.sys_id,
+    }
+    in_flight = output.model_dump(mode="json")
+
+    # Resuming after a crash inside this boundary: the PATCH is skipped only when
+    # ServiceNow itself says it landed, so a kill between the write and the receipt
+    # cannot append the work note twice.
+    write_fields = True
+    if resume_phase == "fields_written":
+        write_fields = False
+    elif resume_phase is not None:
+        write_fields = not _write_already_landed(state, deps, incident, payload)
+
+    if write_fields:
+        # The intent receipt is saved before the call that can die, so a restarted
+        # worker can always tell "in flight" from "never started".
+        deps.audit.save_receipt(
+            execution_id, {**receipt_base, "phase": "writing", "output": in_flight}
+        )
+        # Act-node writes currently run on synchronous Celery/graph worker threads
+        # without a running event loop, so asyncio.run() bridges to ToolRegistry. If
+        # execution moves to an async worker/task context, replace this bridge rather
+        # than nest asyncio.run().
+        try:
+            asyncio.run(
+                deps.tools.invoke(
+                    "write_ai_fields",
+                    context=_tool_context(state),
+                    arguments={"sys_id": incident.sys_id, "payload": payload},
+                )
             )
+        except HumanLockedError:
+            output = FinalOutput(
+                outcome=Outcome.SKIPPED_HUMAN_LOCK,
+                summary="An analyst locked the incident before the write; nothing was written.",
+                human_review_required=False,
+                processing_state=AIProcessingState.PENDING.value,
+            )
+            _write_execution_log(
+                state,
+                deps,
+                incident,
+                output,
+                status=ExecutionStatus.BLOCKED,
+                error="Human lock prevented incident write-back.",
+            )
+            return {"output": output.model_dump(mode="json")}
+        deps.audit.save_receipt(
+            execution_id,
+            {**receipt_base, "phase": "fields_written", "output": in_flight},
         )
-    except HumanLockedError:
-        output = FinalOutput(
-            outcome=Outcome.SKIPPED_HUMAN_LOCK,
-            summary="An analyst locked the incident before the write; nothing was written.",
-            human_review_required=False,
-            processing_state=AIProcessingState.PENDING.value,
-        )
-        _write_execution_log(
-            state,
-            deps,
-            incident,
-            output,
-            status=ExecutionStatus.BLOCKED,
-            error="Human lock prevented incident write-back.",
-        )
-        return {"output": output.model_dump(mode="json")}
     _write_execution_log(
         state,
         deps,
@@ -398,16 +443,77 @@ def _perform_write(
     )
     output = output.model_copy(update={"actions": actions, "write_back": "written"})
     dumped = output.model_dump(mode="json")
-    lifecycle = (
-        "interrupt_resume"
-        if deps.audit.get_interrupt(str(state.get("execution_id") or ""))
-        else "direct"
-    )
-    deps.audit.save_receipt(
-        str(state["execution_id"]),
-        {"output": dumped, "lifecycle": lifecycle, "incident_sys_id": incident.sys_id},
-    )
+    deps.audit.save_receipt(execution_id, {**receipt_base, "phase": "written", "output": dumped})
     return {"output": dumped}
+
+
+#: Fields whose ServiceNow-side values describe this attempt's PATCH, used to prove a
+#: write landed when its receipt never did.
+_LANDED_PROBE_FIELDS = (
+    "work_notes",
+    "ai_classification",
+    "ai_suggestion",
+    "ai_agent_version",
+    "ai_model_name",
+)
+
+
+def _write_already_landed(
+    state: AgentState,
+    deps: AgentDependencies,
+    incident: IncidentSnapshot,
+    payload: IncidentUpdatePayload,
+) -> bool:
+    """Ask ServiceNow whether the PATCH this attempt was about to send is already there.
+
+    Recovery only: called when a receipt says a write was in flight. ``False`` (write
+    again) is the safe answer on any read failure -- at worst the work note is appended
+    twice, which is the pre-existing failure, rather than a write silently skipped.
+    """
+    sent = payload.model_dump(exclude_none=True)
+    try:
+        current = asyncio.run(
+            deps.tools.invoke(
+                "read_incident",
+                context=_tool_context(state),
+                arguments={"sys_id": incident.sys_id},
+            )
+        )
+    except Exception:  # noqa: BLE001 — a failed probe must never block the retry
+        return False
+    if not isinstance(current, dict):
+        return False
+
+    expected_start = sent.get("ai_processing_start")
+    if expected_start is not None:
+        # This run's own processing-start timestamp: it is written by the same PATCH,
+        # so ServiceNow handing it back proves *this* attempt landed, not an earlier
+        # run that left similar fields behind.
+        started = _as_utc(expected_start)
+        return started is not None and started == _as_utc(current.get("ai_processing_start"))
+
+    probes = {k: str(v) for k, v in sent.items() if k in _LANDED_PROBE_FIELDS and v is not None}
+    if not probes:
+        return False
+    return all(str(current.get(k)) == v for k, v in probes.items())
+
+
+def _as_utc(value: Any) -> datetime | None:
+    """Normalise a written or read-back timestamp to UTC.
+
+    ``to_table_api_body`` formats datetimes as UTC text without an offset, so a value
+    read back from ServiceNow arrives naive; it is UTC by construction.
+    """
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    else:
+        return None
+    return parsed.replace(tzinfo=UTC) if parsed.tzinfo is None else parsed.astimezone(UTC)
 
 
 def _write_execution_log(

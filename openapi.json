@@ -783,6 +783,19 @@
             ],
             "title": "Evidence",
             "description": "Optional structured evidence or parameter overrides"
+          },
+          "solution": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 8000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Solution",
+            "description": "Optional human-authored resolution knowledge contributed while deciding an escalated incident. Distinct from 'reason': the reason annotates the decision, the solution is the fix itself and is composed into a KB article by knowledge capture (S3.5). Persisted folded into 'evidence' together with the knowledge-capture tool name. Accepted as either 'solution' or 'human_solution'."
           }
         },
         "additionalProperties": false,

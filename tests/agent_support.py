@@ -384,6 +384,7 @@ class FakeServiceNow:
         self.calls: list[str] = []
         self.read_error: BaseException | None = None
         self.write_error: BaseException | None = None
+        self.crash_after_write: BaseException | None = None
         self.on_update: Callable[[str], None] | None = None
         self.write_calls: list[tuple[str, IncidentUpdatePayload]] = []  # Track AI field writes
 
@@ -401,6 +402,9 @@ class FakeServiceNow:
             raise self.write_error
         self.updates.append((sys_id, payload))
         self.records[sys_id].update(payload.to_table_api_body())
+        if self.crash_after_write is not None:
+            # ServiceNow applied the PATCH; the caller dies before recording it.
+            raise self.crash_after_write
         return Incident.model_validate(self.records[sys_id])
 
     async def add_work_note(self, sys_id: str, note: str) -> Incident:

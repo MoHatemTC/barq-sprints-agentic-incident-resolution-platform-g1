@@ -195,12 +195,12 @@ def test_lifecycle_field_distinguishes_paths() -> None:
 # -- the two cases FR-12 / NFR-03 name, executed against a real ``act`` --------------
 
 
-def test_kill_before_the_write_leaves_no_receipt_and_the_retry_writes_once() -> None:
+def test_kill_before_the_write_records_an_in_flight_receipt_and_the_retry_writes_once() -> None:
     """Kill before ServiceNow acknowledges: the retry must write exactly once.
 
-    The first attempt dies at the write boundary, so no receipt is recorded and
-    nothing reached ServiceNow. The redelivery re-enters ``act`` from the same
-    checkpoint state and performs the one write that never happened.
+    The intent receipt is saved before the PATCH, so the restart finds a receipt
+    whose phase says the write was still in flight. The retry consults ServiceNow,
+    finds nothing written, and performs the one write that never happened.
     """
     from agent.nodes.act import act
 
@@ -211,7 +211,9 @@ def test_kill_before_the_write_leaves_no_receipt_and_the_retry_writes_once() -> 
     backend.write_error = RuntimeError("worker killed before the write")
     with pytest.raises(RuntimeError, match="worker killed"):
         act(state, deps)
-    assert deps.audit.get_receipt(state["execution_id"]) is None
+    receipt = deps.audit.get_receipt(state["execution_id"])
+    assert receipt is not None
+    assert receipt["phase"] == "writing"
     assert backend.updates == []
 
     backend.write_error = None
@@ -221,15 +223,18 @@ def test_kill_before_the_write_leaves_no_receipt_and_the_retry_writes_once() -> 
     assert len(backend.updates) == 1
     receipt = deps.audit.get_receipt(state["execution_id"])
     assert receipt is not None
+    assert receipt["phase"] == "written"
     assert receipt["lifecycle"] == "direct"
 
 
 def test_kill_after_the_write_never_duplicates_it() -> None:
-    """Kill after ServiceNow acknowledged but before the task reported success.
+    """Kill after ServiceNow applied the PATCH but before the receipt recorded it.
 
-    The receipt written at the boundary is what the restarted worker reads: the
-    second entry into ``act`` returns the recorded output without touching
-    ServiceNow again.
+    This is the window a receipt-after-the-write design cannot see: the incident
+    carries the work note, the audit store does not know. The restarted ``act``
+    reads the in-flight receipt, asks ServiceNow whether the write landed, and on
+    finding it there finishes the run without sending the PATCH again -- one
+    incident write, one work note, one execution log.
     """
     from agent.nodes.act import act
 
@@ -237,11 +242,26 @@ def test_kill_after_the_write_never_duplicates_it() -> None:
     deps = build_fake_deps(servicenow=backend)
     state = state_before_act(deps)
 
-    first = act(state, deps)
-    assert len(backend.updates) == 1
+    backend.crash_after_write = RuntimeError("worker killed after the write")
+    with pytest.raises(RuntimeError, match="killed after the write"):
+        act(state, deps)
 
-    # Restart, same checkpoint state, same audit store.
-    second = act(state, deps)
-    assert second["output"] == first["output"]
+    # ServiceNow applied it; the receipt that would have recorded it never landed.
     assert len(backend.updates) == 1
+    receipt = deps.audit.get_receipt(state["execution_id"])
+    assert receipt is not None
+    assert receipt["phase"] == "writing"
+
+    backend.crash_after_write = None
+    result = act(state, deps)
+
+    assert result["output"]["write_back"] == "written"
+    assert len(backend.updates) == 1
+    assert backend.calls.count("write_ai_fields") == 1
     assert len(backend.execution_logs) == 1
+    receipt = deps.audit.get_receipt(state["execution_id"])
+    assert receipt is not None
+    assert receipt["phase"] == "written"
+    assert receipt["lifecycle"] == "direct"
+    # The retry proved the write had landed instead of guessing.
+    assert "read_incident" in backend.calls
