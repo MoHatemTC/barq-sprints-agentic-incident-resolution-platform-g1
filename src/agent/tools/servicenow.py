@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+
 from agent.servicenow import IncidentGateway
 from agent.tools.permissions import PermissionClass
 from agent.tools.refusal_explainer import RefusalExplainer
@@ -19,8 +21,14 @@ def build_servicenow_tool_registry(
     approval_checker: ApprovalChecker,
     audit_sink: EnforcementAuditSink | None = None,
     refusal_explainer: RefusalExplainer | None = None,
+    extra_registrations: Iterable[ToolRegistration] = (),
 ) -> ToolRegistry:
-    """Bind the existing gateway methods to their server-owned permissions."""
+    """Bind the existing gateway methods to their server-owned permissions.
+
+    ``extra_registrations`` lets callers extend the registry (e.g. S3.5's
+    ``publish_kb_article``) without editing this builder; duplicates of the
+    four names below raise at ToolRegistry construction.
+    """
     registrations = (
         ToolRegistration(
             "read_incident",
@@ -42,6 +50,7 @@ def build_servicenow_tool_registry(
             PermissionClass.LOW_RISK_WRITE,
             gateway.write_execution_log,
         ),
+        *extra_registrations,
     )
     return ToolRegistry(
         registrations,

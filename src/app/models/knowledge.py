@@ -6,8 +6,12 @@ must normalize its data into this model, and chunking / embedding / ingestion
 only ever see articles in this shape.
 
 Vocabulary policy:
-- ``workflow_state`` and ``security_level`` are closed enums — they mirror
-  platform-level states and new values indicate a bug, not new data.
+- ``security_level`` is a closed enum — it mirrors platform-level states and
+  new values indicate a bug, not new data.
+- ``workflow_state`` mirrors the ServiceNow KB workflow plus exactly one
+  platform-owned extension: ``human_resolved`` (S3.5 knowledge capture) —
+  an article born published from a human's approval-flow solution. Any
+  other new value is still a bug, not new data.
 - ``category`` and ``service`` are an *open* controlled vocabulary — incoming
   data may legitimately introduce services or categories, so new slug-shaped
   values are accepted rather than rejected.
@@ -27,11 +31,18 @@ ARTICLE_NUMBER_PATTERN = re.compile(r"^KB\d{4}$")
 
 
 class WorkflowState(StrEnum):
-    """Lifecycle states mirrored from the ServiceNow KB workflow."""
+    """Lifecycle states mirrored from the ServiceNow KB workflow.
+
+    ``HUMAN_RESOLVED`` is the one platform-owned extension (S3.5 knowledge
+    capture): the article's origin marker in Qdrant metadata. ServiceNow
+    itself stores such articles as ``published`` — its choice list cannot
+    hold this value; the publish handler maps it before writing.
+    """
 
     DRAFT = "draft"
     PUBLISHED = "published"
     RETIRED = "retired"
+    HUMAN_RESOLVED = "human_resolved"
 
 
 class SecurityLevel(StrEnum):
