@@ -221,7 +221,7 @@ class TestWorkflowStateTable:
         assert result["resumed"] is True
         assert result["outcome"] == "suggested"
         assert llm.purposes() == ["classify", "diagnose", "generate", "generate"]
-        assert deps.servicenow.calls == ["read_incident", "write_ai_fields"]
+        assert backend.calls == ["read_incident", "write_ai_fields", "write_execution_log"]
         stored = rows(pg_engine, execution_id)
         by_attempt = {(r.node_name, r.attempt) for r in stored}
         assert ("classify", 1) in by_attempt and ("classify", 2) not in by_attempt
