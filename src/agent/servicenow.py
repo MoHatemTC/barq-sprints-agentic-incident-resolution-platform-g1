@@ -1,8 +1,8 @@
-"""ServiceNow access for the graph: OAuth client (S1.5) behind a permitted-action list.
+"""Synchronous ServiceNow transport adapter over the OAuth client (S1.5).
 
 Manual §11.6 lists what the pilot may do; everything else "does not exist in the
-service". :class:`IncidentGateway` is the only way a node reaches ServiceNow, and
-it refuses any action not on :data:`PERMITTED_ACTIONS` at call time.
+service". The ToolRegistry owns application allowlisting and permission policy;
+this module owns transport adaptation, tracing, and error translation.
 
 The S1.5 client is async and the Celery task is sync. The gateway owns one
 background event loop per worker process, so the HTTP client and its OAuth token
@@ -17,6 +17,7 @@ from collections.abc import Awaitable, Callable, Coroutine
 from concurrent.futures import Future
 from typing import Any, Protocol, TypeVar
 
+from agent.errors import HumanLockedError
 from app.exceptions.servicenow import (
     ServiceNowAuthenticationError,
     ServiceNowAuthorizationError,
@@ -35,16 +36,6 @@ from observability.tracing import Tracer
 
 T = TypeVar("T")
 
-#: Manual §11.6 "Permitted actions" — name → risk class.
-PERMITTED_ACTIONS: dict[str, str] = {
-    "read_incident": "read",
-    "search_knowledge": "read",
-    "write_work_note": "low",
-    "flag_human_review": "low",
-    "write_ai_fields": "low",
-    "write_execution_log": "low",
-}
-
 _RETRYABLE = (
     ServiceNowConnectionError,
     ServiceNowTimeoutError,
@@ -56,14 +47,6 @@ _TERMINAL = (
     ServiceNowAuthorizationError,
     ServiceNowNotFoundError,
 )
-
-
-class ActionNotPermittedError(TerminalError):
-    """A node asked for an action outside the permitted list."""
-
-
-class HumanLockedError(Exception):
-    """The incident was locked by an analyst between read and write."""
 
 
 class AsyncCancellationError(RuntimeError):
@@ -137,7 +120,7 @@ def translate_error(exc: BaseException) -> BaseException:
 
 
 class IncidentGateway:
-    """Allow-listed, traced, sync access to the incident record."""
+    """Traced, synchronous adaptation of the asynchronous incident client."""
 
     def __init__(
         self,
@@ -159,14 +142,18 @@ class IncidentGateway:
             self._backend = self._backend_factory()
         return self._backend
 
-    def _call(self, action: str, sys_id: str, make: Callable[[IncidentBackend], Awaitable[T]]) -> T:
-        if action not in PERMITTED_ACTIONS:
-            raise ActionNotPermittedError(f"action '{action}' is not permitted")
+    def _call(
+        self,
+        action: str,
+        sys_id: str,
+        risk: str,
+        make: Callable[[IncidentBackend], Awaitable[T]],
+    ) -> T:
         self.calls.append(action)
         with self._tracer.span(
             f"servicenow.{action}",
             as_type="tool",
-            metadata={"sys_id": sys_id, "risk": PERMITTED_ACTIONS[action]},
+            metadata={"sys_id": sys_id, "risk": risk},
         ) as span:
             try:
                 result = self._await(make(self._get_backend()))
@@ -187,23 +174,23 @@ class IncidentGateway:
             self._runner = AsyncRunner()
         return self._runner.run(_wrap(), timeout=self._timeout)
 
-    # -- permitted actions -------------------------------------------------------------
+    # -- transport operations ----------------------------------------------------------
 
     def read_incident(self, sys_id: str) -> dict[str, Any]:
-        incident = self._call("read_incident", sys_id, lambda b: b.get_incident(sys_id))
+        incident = self._call("read_incident", sys_id, "read", lambda b: b.get_incident(sys_id))
         return (
             incident.model_dump(mode="json") if hasattr(incident, "model_dump") else dict(incident)
         )
 
     def write_ai_fields(self, sys_id: str, payload: IncidentUpdatePayload) -> None:
         action = "flag_human_review" if _only_review_flag(payload) else "write_ai_fields"
-        self._call(action, sys_id, lambda b: b.update_incident(sys_id, payload))
+        self._call(action, sys_id, "low", lambda b: b.update_incident(sys_id, payload))
 
     def write_work_note(self, sys_id: str, note: str) -> None:
-        self._call("write_work_note", sys_id, lambda b: b.add_work_note(sys_id, note))
+        self._call("write_work_note", sys_id, "low", lambda b: b.add_work_note(sys_id, note))
 
     def write_execution_log(self, sys_id: str, payload: ExecutionLogCreatePayload) -> None:
-        self._call("write_execution_log", sys_id, lambda b: b.write_execution_log(payload))
+        self._call("write_execution_log", sys_id, "low", lambda b: b.write_execution_log(payload))
 
 
 def _only_review_flag(payload: IncidentUpdatePayload) -> bool:
@@ -219,8 +206,6 @@ def build_servicenow_backend() -> IncidentBackend:
 
 
 __all__ = [
-    "PERMITTED_ACTIONS",
-    "ActionNotPermittedError",
     "AsyncCancellationError",
     "AsyncRunner",
     "HumanLockedError",

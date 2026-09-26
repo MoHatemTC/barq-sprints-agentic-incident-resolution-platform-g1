@@ -6,7 +6,9 @@ no graph, no model, no network, no database.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -35,7 +37,6 @@ from agent.policy import (
     snapshot_incident,
 )
 from agent.prompts import ClassifyOutput, DiagnoseOutput, GenerateOutput, StepOutput
-from agent.servicenow import PERMITTED_ACTIONS, ActionNotPermittedError
 from agent.state import (
     ClassificationResult,
     Diagnosis,
@@ -45,6 +46,7 @@ from agent.state import (
     Outcome,
     RiskLevel,
 )
+from agent.tools import RegistryRefusalError, ToolCallContext
 from app.exceptions.servicenow import (
     ServiceNowConnectionError,
     ServiceNowHumanLockError,
@@ -127,7 +129,7 @@ def test_the_graph_has_exactly_the_eleven_brief_nodes() -> None:
 
 
 class TestLoad:
-    def test_reads_the_incident_through_the_gateway(self) -> None:
+    def test_reads_the_incident_through_the_registry(self) -> None:
         backend = FakeServiceNow()
         deps = make_deps(servicenow=backend)
         update = load(base_state(), deps)
@@ -137,7 +139,21 @@ class TestLoad:
         assert incident["service"] == "corporate-vpn"
         assert incident["ai_enabled"] is True
         assert incident["ai_human_lock"] is False
-        assert deps.servicenow.calls == ["read_incident"]
+        assert backend.calls == ["read_incident"]
+
+    def test_registry_invocation_uses_authoritative_context_and_sys_id(self) -> None:
+        deps = make_deps()
+        invoke = AsyncMock(wraps=deps.tools.invoke)
+        deps.tools.invoke = invoke  # type: ignore[method-assign]
+
+        update = load(base_state(), deps)
+
+        assert update["incident"]["sys_id"] == VPN["sys_id"]
+        invoke.assert_awaited_once_with(
+            "read_incident",
+            context=ToolCallContext(EXECUTION_ID, correlation_id="corr-1"),
+            arguments={"sys_id": VPN["sys_id"]},
+        )
 
     def test_transient_servicenow_failure_is_retryable(self) -> None:
         backend = FakeServiceNow()
@@ -837,8 +853,30 @@ class TestAct:
         assert log.action.value == "propose"
         assert log.status.value == "awaiting_approval"
         # Nothing outside §11.6 is ever called.
-        assert set(deps.servicenow.calls) <= set(PERMITTED_ACTIONS)
+        assert backend.calls == ["write_ai_fields", "write_execution_log"]
         assert "comments" not in body
+
+    def test_registry_invocations_preserve_payload_context_and_single_patch(self) -> None:
+        backend = FakeServiceNow()
+        deps = make_deps(servicenow=backend)
+        invoke = AsyncMock(wraps=deps.tools.invoke)
+        deps.tools.invoke = invoke  # type: ignore[method-assign]
+
+        act(reasoned_state(incident=snapshot(VPN)), deps)
+
+        assert [call.args[0] for call in invoke.await_args_list] == [
+            "write_ai_fields",
+            "write_execution_log",
+        ]
+        assert all(
+            call.kwargs["context"] == ToolCallContext(EXECUTION_ID, correlation_id="corr-1")
+            for call in invoke.await_args_list
+        )
+        write_arguments = invoke.await_args_list[0].kwargs["arguments"]
+        assert write_arguments["sys_id"] == VPN["sys_id"]
+        assert write_arguments["payload"] is backend.updates[0][1]
+        assert len(backend.updates) == 1
+        assert "write_work_note" not in [call.args[0] for call in invoke.await_args_list]
 
     def test_act_records_resolution_model_override_in_servicenow_payload(self) -> None:
         backend = FakeServiceNow()
@@ -961,9 +999,14 @@ class TestAct:
 
     def test_forbidden_action_does_not_exist(self) -> None:
         deps = make_deps()
-        with pytest.raises(ActionNotPermittedError):
-            deps.servicenow._call("resolve_incident", VPN["sys_id"], lambda b: b.get_incident(""))
-        assert "resolve_incident" not in deps.servicenow.calls
+        with pytest.raises(RegistryRefusalError):
+            asyncio.run(
+                deps.tools.invoke(
+                    "resolve_incident",
+                    context=ToolCallContext(EXECUTION_ID),
+                    arguments={"sys_id": VPN["sys_id"]},
+                )
+            )
 
 
 @pytest.mark.parametrize(

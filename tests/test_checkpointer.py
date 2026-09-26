@@ -224,7 +224,7 @@ class TestWorkflowStateTable:
         # runs once, after the draft the resume produced.
         assert llm.purposes() == ["classify", "diagnose", "generate", "generate", "verify_evidence"]
         # write_execution_log is S3.1's multi-agent audit write-back (#156).
-        assert deps.servicenow.calls == [
+        assert backend.calls == [
             "read_incident",
             "write_ai_fields",
             "write_execution_log",
