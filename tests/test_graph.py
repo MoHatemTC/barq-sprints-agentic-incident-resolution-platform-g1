@@ -294,7 +294,7 @@ class TestCheckpointing:
         with pytest.raises(RetryableError):
             run(VPN, deps, checkpointer=saver, attempt=1)
         assert llm.purposes() == ["classify", "diagnose", "generate"]
-        assert deps.servicenow.calls == ["read_incident"]
+        assert backend.calls == ["read_incident"]
 
         answers["generate"] = good_generate
         result = run(VPN, deps, checkpointer=saver, attempt=2)
@@ -303,7 +303,7 @@ class TestCheckpointing:
         assert result["outcome"] == "suggested"
         # classify and diagnose were not paid for twice; load did not re-read.
         assert llm.purposes() == ["classify", "diagnose", "generate", "generate", "verify_evidence"]
-        assert deps.servicenow.calls == [
+        assert backend.calls == [
             "read_incident",
             "write_ai_fields",
             "write_execution_log",
