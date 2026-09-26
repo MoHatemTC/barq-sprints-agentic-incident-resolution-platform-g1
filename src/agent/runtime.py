@@ -49,6 +49,7 @@ def invoke_incident_graph(
     correlation_id: str,
     attempt: int,
     runtime: AgentRuntime | None = None,
+    resume: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     runtime = runtime or get_runtime()
     try:
@@ -64,7 +65,43 @@ def invoke_incident_graph(
         correlation_id=correlation_id,
         attempt=attempt,
         deps=runtime.deps,
+        resume=resume,
     )
 
 
-__all__ = ["AgentRuntime", "build_runtime", "get_runtime", "invoke_incident_graph"]
+def resume_incident_graph(
+    *,
+    execution_id: str,
+    decision: dict[str, Any],
+    correlation_id: str,
+    attempt: int = 1,
+    runtime: AgentRuntime | None = None,
+) -> dict[str, Any]:
+    """Resume a paused thread with ``Command(resume=...)`` on the same checkpointer."""
+    runtime = runtime or get_runtime()
+    stored = runtime.deps.audit.get_interrupt(execution_id) or {}
+    incident = stored.get("incident") or {}
+    event = EventPayload(
+        event_id=f"resume-{execution_id}",
+        sys_id=str(incident.get("sys_id") or "0" * 32),
+        number=str(incident.get("number") or "INC0"),
+        event_type="incident.created",
+    )
+    return run_graph(
+        runtime.graph,
+        event,
+        execution_id=execution_id,
+        correlation_id=str(stored.get("correlation_id") or correlation_id),
+        attempt=attempt,
+        deps=runtime.deps,
+        resume=decision,
+    )
+
+
+__all__ = [
+    "AgentRuntime",
+    "build_runtime",
+    "get_runtime",
+    "invoke_incident_graph",
+    "resume_incident_graph",
+]

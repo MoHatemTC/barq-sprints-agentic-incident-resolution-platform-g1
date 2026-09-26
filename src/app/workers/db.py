@@ -121,6 +121,16 @@ class WorkerRepo(Protocol):
         the attempt that failed — history is never forged to max_attempts."""
         ...
 
+    def mark_awaiting_approval(
+        self,
+        execution_id: UUID,
+        *,
+        node_reached: str | None = None,
+        agent_version: str | None = None,
+    ) -> None:
+        """Park a HITL interrupt: non-terminal, no ServiceNow write yet."""
+        ...
+
     def mark_succeeded(
         self,
         execution_id: UUID,
@@ -324,6 +334,27 @@ class PostgresRepo:
             )
             session.execute(
                 update(RetryState).where(RetryState.execution_id == execution_id).values(**values)
+            )
+
+    def mark_awaiting_approval(
+        self,
+        execution_id: UUID,
+        *,
+        node_reached: str | None = None,
+        agent_version: str | None = None,
+    ) -> None:
+        values: dict[str, Any] = {
+            "status": "awaiting_approval",
+            "ended_at": None,
+            "termination_cause": None,
+        }
+        if node_reached is not None:
+            values["node_reached"] = node_reached
+        if agent_version is not None:
+            values["agent_version"] = agent_version
+        with self._session_factory() as session, session.begin():
+            session.execute(
+                update(Execution).where(Execution.execution_id == execution_id).values(**values)
             )
 
     def mark_succeeded(
@@ -598,6 +629,22 @@ class InMemoryRepo:
             row["attempt_count"] = max_attempts
         elif attempt_count is not None:
             row["attempt_count"] = attempt_count
+
+    def mark_awaiting_approval(
+        self,
+        execution_id: UUID,
+        *,
+        node_reached: str | None = None,
+        agent_version: str | None = None,
+    ) -> None:
+        execution = self.executions[execution_id]
+        execution["status"] = "awaiting_approval"
+        execution["ended_at"] = None
+        execution["termination_cause"] = None
+        if node_reached is not None:
+            execution["node_reached"] = node_reached
+        if agent_version is not None:
+            execution["agent_version"] = agent_version
 
     def mark_succeeded(
         self,

@@ -10,9 +10,9 @@
 
 All acceptance criteria for Sprint 2 (S2.1) have been implemented, tested, and validated with zero regressions:
 1. **Canonical Endpoint Implemented**: `POST /api/v1/webhook/incident` strictly serves as the canonical ingestion interface with Bearer token authentication and strict Outbound Event Contract v1 schema validation.
-2. **100% Passing Test Suites**: 458 tests across all test suites are passing with zero failures.
+2. **100% Passing Test Suites**: the full suite (1255 passed, 30 skipped) is green with zero failures.
 3. **Live ServiceNow Ingestion Verified**: Real outbound incident events dispatched from a live ServiceNow instance through ngrok tunnel were ingested, authenticated, persisted, and enqueued with immediate HTTP 202 response (`81.08ms` duration).
-4. **NFR-01 Latency Benchmark Met**: Sustained load testing across Redis queue depths 0, 1,000, and 10,000 at 50 concurrency achieved **p95 ≤ 386 ms**, well under the mandatory 500 ms SLA budget.
+4. **NFR-01 Latency Benchmark Met**: Sustained load testing across Redis queue depths 0, 1,000, and 10,000 at 50 concurrency achieved **p95 ≤ 285 ms** in the run tabulated in §4, inside the mandatory 500 ms SLA budget. See the run-note above §4 before quoting this as the platform's latency.
 5. **Langfuse Tracing Integrated**: Langfuse client is initialised in the application lifespan and fails gracefully when unreachable, with no impact on request processing.
 
 ---
@@ -31,7 +31,11 @@ All automated test suites executed cleanly:
 | `tests/test_dlq_router.py` | ✓ | **PASS** | DLQ Redis list/replay logic, Operator RBAC enforcement |
 | `tests/test_approvals.py` | ✓ | **PASS** | HITL approval read/write against real PostgreSQL approvals table |
 | Additional suites (idempotency, executions, eval, config, etc.) | ✓ | **PASS** | Full platform coverage |
-| **Total** | **458 passed / 17 skipped** | **100% PASS** | **Complete Sprint 2 automated test coverage** |
+| **Total** | **1255 passed / 30 skipped** | **100% PASS** | **Complete Sprint 2 automated test coverage** |
+
+> **Run count correction.** The suite-size figure in this table was refreshed to the
+> current repository. The per-file counts above it were captured on 2026-09-18 against
+> `feat/s2-1-*` and are point-in-time for that branch; only the total is current.
 
 ---
 
@@ -70,6 +74,30 @@ INFO: 148.139.125.20:0 - "POST /api/v1/webhook/incident HTTP/1.1" 202 Accepted
 ---
 
 ## 4. NFR-01 Latency & Queue Depth Benchmarks
+
+> [!NOTE]
+> **These figures are one run of a benchmark that was executed several times with
+> different results.** The sweep below (500 requests per depth, 3 depths, concurrency
+> 50) was run repeatedly and each run produced its own numbers. The other recorded runs
+> are [`docs/sprint2_latency_report.md`](../../sprint2_latency_report.md),
+> [`docs/sprint-2/sprint-2.1/baseline_latency_report.md`](baseline_latency_report.md),
+> [`docs/sprint-2/sprint-2.1/sprint2_latency_report.md`](sprint2_latency_report.md) and
+> [`docs/sprint2_ingestion_design.md`](../../sprint2_ingestion_design.md). **No run is
+> designated authoritative** and nothing records which one supersedes which, so do not
+> present any single figure as *the* latency, and never splice numbers from two runs into
+> one table. Across those runs p95 at depth 0 ranges from 237.5 ms to 403.7 ms — a spread
+> far larger than any difference between queue depths, which is why the depth-independence
+> claim below has to be argued from within a single run, not by comparing runs.
+>
+> This run was also captured on **Windows 11 (AMD64)** with Python 3.12.13. The commands
+> are given in PowerShell form below; the repository's `CONTRIBUTING.md`, `README.md` and
+> `justfile` (`set shell := ["bash", "-cu"]`) are POSIX, so the equivalent is a single
+> line with no backtick continuations:
+>
+> ```bash
+> uv run python tests/load/run_load_test.py --base-url http://127.0.0.1:8000 \
+>   --depths 0 1000 10000 --requests-per-depth 500 --concurrency 50
+> ```
 
 The NFR-01 non-functional requirement specifies that `POST /api/v1/webhook/incident` must return an HTTP 202 acknowledgment with **p95 latency < 500 ms**, independent of Redis queue backlog size ($O(1)$ LPUSH).
 

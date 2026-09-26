@@ -110,3 +110,29 @@ def test_incident_update_payload_to_table_api_body():
     payload_no_notes = IncidentUpdatePayload(ai_confidence=0.8)
     body_no_notes = payload_no_notes.to_table_api_body()
     assert "work_notes" not in body_no_notes
+
+
+def test_update_payload_rejects_an_unknown_field_instead_of_dropping_it() -> None:
+    """A mistyped AI-field alias must fail loudly, not vanish from the write.
+
+    Every field here is written through a hand-typed ``x_2215032_ai_inc_0_ai_*``
+    alias. Under Pydantic's default an unrecognised key is accepted and then left
+    out of ``to_table_api_body()``, so the PATCH goes out missing the field and
+    nothing reports it — not even the client's write verification, which only
+    compares fields that were actually requested.
+    """
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError, match="sugestion"):
+        IncidentUpdatePayload(**{"x_2215032_ai_inc_0_ai_sugestion": "typo"})
+
+
+def test_update_payload_still_accepts_both_the_field_name_and_the_alias() -> None:
+    """Forbidding extras must not break either supported spelling."""
+    by_name = IncidentUpdatePayload(ai_confidence=0.5, ai_suggestion="ok")
+    assert by_name.to_table_api_body() == {
+        "x_2215032_ai_inc_0_ai_confidence": "0.50",
+        "x_2215032_ai_inc_0_ai_suggestion": "ok",
+    }
+    by_alias = IncidentUpdatePayload(**{"x_2215032_ai_inc_0_ai_confidence": 0.5})
+    assert by_alias.to_table_api_body() == {"x_2215032_ai_inc_0_ai_confidence": "0.50"}

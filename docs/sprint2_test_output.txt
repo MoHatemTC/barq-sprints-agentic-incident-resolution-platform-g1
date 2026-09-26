@@ -18,6 +18,12 @@ branch: feat/s2-3-redis-celery-dlq @ d896080
 ════ 4. version pins ════
 celery 5.6.3
 kombu 5.6.2
-redis 5.2.1
-psycopg 3.3.5
-sqlalchemy 2.0.53
+redis 5.3.1
+psycopg 3.3.6
+sqlalchemy 2.0.54
+
+  Note: the psycopg/sqlalchemy pins in the block above were 3.3.5 / 2.0.53 when
+  this run was captured on 2026-09-16 and the redis pin was 5.2.1. The current lock
+  (uv.lock: psycopg 3.3.6, SQLAlchemy 2.0.54, redis==5.3.1) is the authoritative
+  set; the figures above have been updated to it. The pass/skip counts in blocks
+  1-3 are left as captured.

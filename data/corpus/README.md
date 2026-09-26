@@ -5,11 +5,13 @@ This directory contains the canonical technical knowledge base corpus extracted 
 
 All articles strictly adhere to the `app.models.knowledge.Article` Pydantic domain model and are validated before vector ingestion into Qdrant.
 
+These files are **tracked in git** — this directory is not ignored. The source manual they were extracted from (`data/barq-system-kb.pdf`, marked INTERNAL) is not committed; the extracted text in `barq_articles.json` is.
+
 ---
 
 ## Article Schema Specification
 
-Each article in `barq_articles.json` is a JSON object with the following fields:+
+Each article in `barq_articles.json` is a JSON object with the following fields:
 
 | Field | Type | Description | Example |
 |---|---|---|---|
@@ -19,7 +21,7 @@ Each article in `barq_articles.json` is a JSON object with the following fields:
 | `short_description` | `str` | One-line summary (max 255 chars, ServiceNow limit) | `Resolve VPN authentication failure following domain password update.` |
 | `category` | `str` (slug) | Controlled vocabulary category (`network`, `software`, `hardware`, `inquiry`) | `network` |
 | `service` | `str` (slug) | Controlled vocabulary service | `corporate-vpn` |
-| `workflow_state` | `str` | Lifecycle state (`published`, `draft`, `retired`) | `published` |
+| `workflow_state` | `str` | Lifecycle state (`published`, `human_resolved`, `draft`, `retired`) | `published` |
 | `security_level` | `str` | Audience visibility (`public`, `internal`, `restricted`) | `internal` |
 | `body` | `str` | Canonical Markdown body (`## Symptom`, `## Cause`, `## Resolution`, `## Escalation`) | `## Symptom\n\nUser cannot authenticate...` |
 | `owner` | `str \| null` | Team or department owning the article | `Collaboration Services` |
@@ -32,7 +34,7 @@ Each article in `barq_articles.json` is a JSON object with the following fields:
 
 ## Knowledge Base Inventory & Distribution
 
-The 11 extracted records span 4 core ITIL categories across 9 enterprise services:
+The 11 extracted records span 4 core ITIL categories across 9 enterprise services. By security level they split 6 `internal` and 5 `restricted` records — the 5 restricted records are **4 articles** (`KB0004`, `KB0007`, `KB0008`, `KB0010`), since `KB0010` appears in two versions.
 
 | Number | Version | State | Security | Service | Category | Title |
 |---|---|---|---|---|---|---|

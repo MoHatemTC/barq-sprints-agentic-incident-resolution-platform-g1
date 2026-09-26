@@ -39,23 +39,28 @@ Definition of done: creating an eligible incident produces a 202 within 500ms at
 the same event fired twice produces exactly one execution; a job failing repeatedly
 lands in the dead-letter path rather than looping.
 
-## Sprint 3 — Retrieval & Reasoning
+## Sprint 3 — Multi-Agent Resolution & Human Control
 
-> Hybrid retrieval and the LangGraph state machine were moved into Sprint 2 as S2.4 and
-> S2.5. See the task table in [README.md](README.md).
+> Ingestion, hybrid retrieval and the LangGraph state machine were moved forward
+> into Sprint 2 as S2.4 and S2.5 and shipped there, so they are no longer Sprint 3
+> scope. Sprint 3 is the reasoning and control layer built on top of them. The
+> authoritative task table, owners and merge state is in [README.md](README.md).
 
-**Goal:** an explicit, checkpointed state machine that retrieves well and knows when
-not to act.
+**Goal:** the graph reasons with more than one agent, cannot act without authority, and
+stops for a person before anything reaches ServiceNow.
 
-Scope: ingestion producing dense and sparse vectors in one Qdrant collection with full
-metadata including security level; hybrid retrieval with fusion, metadata filtering and
-reranking; dense-only baseline kept switchable so the hybrid improvement is measured,
-not asserted; the LangGraph state machine as explicit nodes with explicit edge
-conditions; checkpointing so an interrupted execution resumes from its last completed
-node; risk determined before retrieval, with high-risk incidents routed to the human
-path; the PostgreSQL schema completed.
+Scope: multi-agent diagnosis and resolution with a critic that verifies every step against
+retrieved evidence; a tool registry where every tool declares a permission class and only
+registered tools are callable; input and output guardrails; a true LangGraph
+interrupt/resume with an approval audit trail and crash recovery at the write boundary;
+and capture of a human resolution back into the knowledge base and the vector store.
 
-Requirements: FR-11 → FR-15 · A-08, A-09, A-10, A-11
+Requirements: FR-16 → FR-18, plus FR-12 · A-12, A-13, A-14
+
+Status at the end of Sprint 3: S3.1, S3.2, S3.4 and S3.5 merged. **S3.3 (input and
+output guardrails) is not delivered** — `safety_check` ships as an explicit
+pass-through that returns `passed=True, implemented=False`, and the input screening
+stage is absent. That is the one gap in this sprint's scope.
 
 Definition of done: a live incident runs the full graph to a cited draft; a high-risk
 incident stops at the risk node; killing the process mid-run and retrying resumes from
@@ -66,17 +71,19 @@ the checkpoint rather than restarting.
 **Goal:** make it operable — permission classes, human approval, guardrails, evaluation
 in CI, and a demo that includes deliberate failure.
 
-Scope: tool registry with permission classes (read, low-risk write, high-risk), only
-registered tools callable; LangGraph interrupt and resume for high-risk actions and
-below-threshold confidence; input guardrails for prompt-injection screening and
-credential/PII redaction; output guardrails for schema validation, per-step evidence
-verification and a server-enforced tool allowlist; an adversarial red-team set with
-recorded results; Langfuse tracing with cost, latency and prompt-version linkage; a
+Scope: input guardrails for prompt-injection screening and credential/PII redaction;
+output guardrails for schema validation, per-step evidence verification and a
+server-enforced tool allowlist; an adversarial red-team set with recorded results; a
 versioned evaluation dataset wired into CI as a regression gate; a reliability pass
 covering timeouts, retries, dead-letter handling, fallback paths and health checks;
-GitHub Actions building a deployable image.
+GitHub Actions building a deployable image on every pull request.
 
-Requirements: FR-16 → FR-20 and all ten NFRs · A-12, A-13, A-14, A-15
+Already delivered ahead of Sprint 4: the tool registry with permission classes and
+server-side allowlist (S3.2), LangGraph interrupt and resume for high-risk actions and
+below-threshold confidence (S3.4), and Langfuse tracing with per-node spans, retrieval,
+tool calls, generations, token usage, latency and cost (S2.5, S3.1).
+
+Requirements: FR-18 → FR-20 and the remaining NFRs · A-14, A-15
 
 Definition of done: no high-risk action reaches ServiceNow without a recorded approval;
 a deliberately regressed prompt fails the CI evaluation gate; a worker killed

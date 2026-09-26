@@ -35,6 +35,12 @@ for _key, _value in {
 }.items():
     os.environ[_key] = _value
 
+# S3.4: the same reasoning for the checkpointer/audit store. The default suite
+# must not need Postgres, so the audit copy of an interrupt lives in memory.
+# ``tests/test_checkpointer.py`` builds the Postgres saver explicitly and is
+# marked ``integration``.
+os.environ.setdefault("AGENT_CHECKPOINTER_BACKEND", "memory")
+
 
 @pytest.fixture
 def settings():

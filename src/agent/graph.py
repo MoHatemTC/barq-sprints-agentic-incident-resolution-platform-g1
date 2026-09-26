@@ -28,6 +28,7 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
+from langgraph.types import Command
 
 from agent import edges
 from agent.config import AGENT_VERSION
@@ -129,36 +130,112 @@ def run_graph(
     correlation_id: str,
     attempt: int,
     deps: AgentDependencies,
+    resume: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run (or resume) one execution and return its final output.
 
     With a checkpointer, a later attempt resumes after the last completed node; a
-    thread that already reached ``act`` returns the recorded output without running
-    anything again.
+    thread that already reached ``act`` and finished returns the recorded output
+    without running anything again. A thread paused in ``interrupt()`` returns a
+    ``paused`` result until ``resume`` carries the operator decision.
     """
     config: RunnableConfig = {
         "configurable": {"thread_id": execution_id, "attempt": attempt},
         "run_name": GRAPH_NAME,
         "recursion_limit": 25,
     }
-    payload: AgentState | None = initial_state(
+    payload: AgentState | Command[Any] | None = initial_state(
         event,
         execution_id=execution_id,
         correlation_id=correlation_id,
         started_at=deps.clock().isoformat(),
     )
+    resumed = False
     if graph.checkpointer is not None:
         snapshot = graph.get_state(config)
         if snapshot.values:
             if not snapshot.next:
                 return _result(snapshot.values, resumed=True)
-            payload = None  # resume from the checkpoint
+            if resume is None:
+                paused_value = _interrupt_value(snapshot)
+                if paused_value is not None:
+                    _record_pause(graph, config, _parked_node(snapshot))
+                    return _paused(paused_value, snapshot.values)
+            payload = Command(resume=resume) if resume is not None else None
+            resumed = True
+    elif resume is not None:
+        payload = Command(resume=resume)
+        resumed = True
 
     try:
         final = graph.invoke(cast(Any, payload), config)
     except HumanLockedError as exc:  # raised by load/read paths
         raise TerminalError(str(exc)) from exc
-    return _result(final, resumed=payload is None)
+    if isinstance(final, dict) and final.get("__interrupt__"):
+        parked = graph.get_state(config) if graph.checkpointer is not None else None
+        values = parked.values if parked is not None else final
+        interrupts = final.get("__interrupt__") or []
+        value = getattr(interrupts[0], "value", None) if interrupts else None
+        if not isinstance(value, dict):
+            value = {}
+        _record_pause(graph, config, _parked_node(parked))
+        return _paused(value, values if isinstance(values, dict) else {})
+    return _result(final, resumed=resumed)
+
+
+def _parked_node(snapshot: Any) -> str:
+    """The node the graph is parked in — the one its pending task would run."""
+    next_nodes = getattr(snapshot, "next", None) or ()
+    return str(next_nodes[0]) if next_nodes else "act"
+
+
+def _record_pause(graph: CompiledStateGraph[Any, Any, Any, Any], config: Any, node: str) -> None:
+    """Let the checkpointer record the parked node (S3.4, FR-17).
+
+    ``workflow_state`` is the authoritative history and only holds nodes the graph
+    completed, so a node that parks in ``interrupt()`` would otherwise leave no
+    trace there. Backends that do not record rows (the in-memory saver) ignore it.
+    """
+    record = getattr(graph.checkpointer, "record_pause", None)
+    if record is not None:
+        record(config, node)
+
+
+def _interrupt_value(snapshot: Any) -> dict[str, Any] | None:
+    interrupts = getattr(snapshot, "interrupts", None) or ()
+    if not interrupts:
+        tasks = getattr(snapshot, "tasks", None) or ()
+        for task in tasks:
+            packed = getattr(task, "interrupts", None) or ()
+            if packed:
+                interrupts = packed
+                break
+    if not interrupts:
+        return None
+    value = getattr(interrupts[0], "value", None)
+    return value if isinstance(value, dict) else None
+
+
+def _paused(payload: dict[str, Any], values: dict[str, Any]) -> dict[str, Any]:
+    path = values.get("path", [])
+    outcome = str(payload.get("outcome") or "escalated_high_risk")
+    return {
+        "paused": True,
+        "outcome": outcome,
+        "summary": payload.get("summary") or "Awaiting human approval",
+        "suggestion": payload.get("suggestion"),
+        "confidence": payload.get("confidence"),
+        "processing_state": "awaiting_approval",
+        "write_back": "skipped",
+        "path": path,
+        "node_reached": "act",
+        "agent_version": AGENT_VERSION,
+        "resumed": False,
+        "escalated": True,
+        "suggested": False,
+        "interrupt_payload": payload,
+        "lifecycle": "interrupt",
+    }
 
 
 def _result(values: dict[str, Any], *, resumed: bool) -> dict[str, Any]:
@@ -167,7 +244,11 @@ def _result(values: dict[str, Any], *, resumed: bool) -> dict[str, Any]:
         raise TerminalError("graph ended without an output")
     parsed = FinalOutput.model_validate(output)
     path = values.get("path", [])
+    lifecycle = (
+        "interrupt_resume" if resumed and parsed.outcome.value.startswith("escalated") else "direct"
+    )
     return {
+        "paused": False,
         "outcome": parsed.outcome.value,
         "summary": parsed.summary,
         "suggestion": parsed.suggestion,
@@ -175,14 +256,12 @@ def _result(values: dict[str, Any], *, resumed: bool) -> dict[str, Any]:
         "processing_state": parsed.processing_state,
         "write_back": parsed.write_back,
         "path": path,
-        # Carried so the worker can record the decision on the executions summary
-        # row: without it every run terminates as "completed", including a
-        # high-risk escalation. workflow_state remains the authoritative history.
         "node_reached": path[-1] if path else None,
         "agent_version": AGENT_VERSION,
         "resumed": resumed,
         "escalated": parsed.outcome.value.startswith("escalated"),
         "suggested": parsed.outcome is Outcome.SUGGESTED,
+        "lifecycle": lifecycle,
     }
 
 

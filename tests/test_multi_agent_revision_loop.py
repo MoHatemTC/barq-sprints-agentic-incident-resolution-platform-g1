@@ -44,6 +44,7 @@ def run(
     checkpointer: Any = None,
     attempt: int = 1,
     execution_id: str = EXECUTION_ID,
+    resume: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     graph = build_graph(deps, checkpointer=checkpointer)
     return run_graph(
@@ -53,6 +54,7 @@ def run(
         correlation_id="corr-revision-test",
         attempt=attempt,
         deps=deps,
+        resume=resume,
     )
 
 
@@ -249,8 +251,9 @@ class TestScenarioCBudgetExhaustion:
         answers["verify_evidence"] = [critic_reject_1, critic_reject_2, critic_reject_3]
         llm = FakeLLM(answers)
         deps = make_deps(llm=llm, servicenow=backend, agent_max_revisions=2)
+        saver = InMemorySaver()
 
-        result = run(VPN, deps)
+        result = run(VPN, deps, checkpointer=saver)
 
         expected_path = [
             "load",
@@ -265,12 +268,21 @@ class TestScenarioCBudgetExhaustion:
             "verify_evidence",
             "generate",
             "verify_evidence",
-            "act",
         ]
+        # An exhausted revision budget is a human decision now (S3.4): the graph
+        # pauses in act with nothing written, rather than writing the escalation.
         assert result["path"] == expected_path
+        assert result["paused"] is True
         assert result["outcome"] == "escalated_blocked"
         assert result["escalated"] is True
         assert result["suggested"] is False
+        assert backend.updates == []
+
+        # The operator approves the blocked draft's escalation note, and only then
+        # does the very same execution write to ServiceNow.
+        resumed = run(VPN, deps, checkpointer=saver, resume={"decision": "approved"})
+        assert resumed["outcome"] == "escalated_blocked"
+        assert resumed["resumed"] is True
 
         # Verify ServiceNow incident update withheld the suggestion and recorded work notes
         assert len(backend.updates) == 1

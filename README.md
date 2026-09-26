@@ -65,7 +65,7 @@ Retrieval and operational state are deliberately separate: Qdrant holds vectors 
 | `src/app/services/` | Intentionally empty — business logic lands here |
 | `src/app/workers/` | Celery application, producer, replay, retry policy, sync engine and the incident task (S2.3) |
 | `src/workers/` | Compatibility re-export of `src/app/workers/`; no logic of its own |
-| `src/agent/` | The LangGraph state machine: `graph.py`, `nodes/` (load → validate → classify → determine_risk → retrieve → generate → verify_evidence → safety_check → act), `llm.py` (Gemini through the LiteLLM proxy), `retrieval.py`, `policy.py` and `checkpointer.py` (S2.4, S2.5, S3.4) |
+| `src/agent/` | The LangGraph state machine: `graph.py`, `nodes/` (load → validate → classify → determine_risk → retrieve → diagnose → generate → verify_evidence → safety_check → confidence_check → act), `llm.py` (Gemini through the LiteLLM proxy), `retrieval.py`, `policy.py` and `checkpointer.py` (S2.4, S2.5, S3.4) |
 | `src/observability/` | Langfuse tracing and the log/trace redaction helpers |
 | `eval/` | Retrieval ablation and the report generator that writes `docs/sprint-2/s2.4-hybrid-retrieval/` (S2.4) |
 | `migrations/` | Alembic versions for the PostgreSQL state schema (S2.2) |
@@ -84,6 +84,7 @@ Retrieval and operational state are deliberately separate: Qdrant holds vectors 
 | `.github/workflows/labeler.yml`, `.github/labeler.yml` | Auto-labels PRs by which task's paths they touch |
 | `TEAM.md` | Who owns which task, and the other project roles |
 | `docs/ROADMAP.md` | The full four-sprint PRD scope, not just what is built so far |
+| `docs/demo_runbook.md` | Step-by-step runbook for driving the end-to-end demo against the real stack, with the prerequisites and the expected output of each phase |
 
 `src/app/services/` is intentionally empty. It marks the agreed structure for work that lands later; every other row above matches the tree as it stands.
 
@@ -151,6 +152,39 @@ Goal: the platform side exists as a real ServiceNow application, with an audit t
 - [Secondary-PDI clean-import verification](docs/sprint-1/s1.1-scoped-app-and-field-model/secondary-import-verification.md)
 - [Submission checklist](docs/sprint-1/s1.1-scoped-app-and-field-model/submission-checklist.md)
 - [Screenshot evidence](docs/sprint-1/s1.1-scoped-app-and-field-model/screenshots/)
+
+---
+
+## Sprint 2 — Event Integration
+
+Goal: ServiceNow talks to the backend, nothing polls, and the ingestion path survives bursts. Hybrid retrieval and the state machine were pulled forward into this sprint as S2.4 and S2.5. Tracked in the [Sprint 2 milestone](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/milestone/2); all six milestone issues are closed and every task below is merged.
+
+| Task | Scope | Owner | Merged |
+|---|---|---|---|
+| S2.1 | FastAPI application: webhook, all project endpoints and 202 semantics | [@MohamedAbdelaiem](https://github.com/MohamedAbdelaiem) | [#130](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pull/130) |
+| S2.2 | PostgreSQL state schema, migrations and idempotency enforcement | [@ahmedtamer101](https://github.com/ahmedtamer101) | [#128](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pull/128) |
+| S2.3 | Redis queue, Celery workers, exponential backoff and a dead-letter path | [@kerolos-mohsen](https://github.com/kerolos-mohsen) | [#127](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pull/127) |
+| S2.4 | Hybrid retrieval: fusion, metadata filtering, reranking and a measured baseline | [@Tasneemmohammed0](https://github.com/Tasneemmohammed0) | [#110](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pull/110) |
+| S2.5 | Langfuse tracing, agent initialisation and the explicit LangGraph state machine | [@ali-ezz](https://github.com/ali-ezz) | [#129](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pull/129) |
+| S2.6 | RAG corpus hardening: OCR images, nested/merged-cell tables, multi-column layouts | [@Tasneemmohammed0](https://github.com/Tasneemmohammed0) | [#155](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pull/155) |
+
+Design notes live in [`docs/sprint2_ingestion_design.md`](docs/sprint2_ingestion_design.md), [`docs/sprint2_state_schema.md`](docs/sprint2_state_schema.md), [`docs/sprint2_worker_topology.md`](docs/sprint2_worker_topology.md), [`docs/sprint2_tracing_and_agent.md`](docs/sprint2_tracing_and_agent.md) and the [S2.4 retrieval report](docs/sprint-2/s2.4-hybrid-retrieval/sprint2_retrieval_report.md).
+
+---
+
+## Sprint 3 — Retrieval & Reasoning
+
+Goal: an explicit, checkpointed state machine that retrieves well, knows when not to act, and stops for a human before anything is written. Tracked in the [Sprint 3 milestone](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/milestone/3).
+
+| Task | Scope | Owner | State |
+|---|---|---|---|
+| S3.1 | Multi-agent diagnosis and resolution: diagnostic, resolution and critic/verifier agents | [@MohamedAbdelaiem](https://github.com/MohamedAbdelaiem) | Merged — [#156](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pull/156) |
+| S3.2 | Tool registry, permission classes and server-side allowlist enforcement | [@ahmedtamer101](https://github.com/ahmedtamer101) | Merged — [#157](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pull/157) |
+| S3.3 | Input and output guardrails: injection screening, redaction, schema validation, enforcing `safety_check` | [@Tasneemmohammed0](https://github.com/Tasneemmohammed0) | In progress |
+| S3.4 | True LangGraph interrupt/resume, approval audit trail and crash-recovery completion | [@ali-ezz](https://github.com/ali-ezz) | In review — [#158](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pull/158) |
+| S3.5 | Human-resolution knowledge capture: KB write-back and Qdrant re-ingestion loop | [@kerolos-mohsen](https://github.com/kerolos-mohsen) | Merged — [#159](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pull/159) |
+
+Design notes: [`docs/sprint3_multi_agent_design.md`](docs/sprint3_multi_agent_design.md), [`docs/sprint3_tool_registry.md`](docs/sprint3_tool_registry.md), [`docs/sprint3_hitl_design.md`](docs/sprint3_hitl_design.md), [`docs/sprint3_recovery_design.md`](docs/sprint3_recovery_design.md) and [`docs/sprint3_knowledge_capture_design.md`](docs/sprint3_knowledge_capture_design.md).
 
 ---
 

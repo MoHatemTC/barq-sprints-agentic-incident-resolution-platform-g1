@@ -30,6 +30,12 @@ def app_with_db():
     mock_session.refresh = AsyncMock()
     mock_session.rollback = AsyncMock()
     mock_session.add = MagicMock()
+    # A real session answers "no rows" here; an unconfigured AsyncMock would
+    # hand back a truthy mock and make every immutability check fire.
+    default_result = MagicMock()
+    default_result.scalar_one_or_none.return_value = None
+    default_result.scalars.return_value.all.return_value = []
+    mock_session.execute.return_value = default_result
 
     class MockAsyncSessionContext:
         async def __aenter__(self):

@@ -161,7 +161,12 @@ def rows(engine, execution_id: UUID) -> list[Any]:
 
 
 def run(
-    record: dict[str, Any], deps: Any, saver: WorkflowStateSaver, execution_id: UUID, attempt: int
+    record: dict[str, Any],
+    deps: Any,
+    saver: WorkflowStateSaver,
+    execution_id: UUID,
+    attempt: int,
+    resume: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return run_graph(
         build_graph(deps, checkpointer=saver),
@@ -170,6 +175,7 @@ def run(
         correlation_id="corr-pg",
         attempt=attempt,
         deps=deps,
+        resume=resume,
     )
 
 
@@ -224,11 +230,7 @@ class TestWorkflowStateTable:
         # runs once, after the draft the resume produced.
         assert llm.purposes() == ["classify", "diagnose", "generate", "generate", "verify_evidence"]
         # write_execution_log is S3.1's multi-agent audit write-back (#156).
-        assert backend.calls == [
-            "read_incident",
-            "write_ai_fields",
-            "write_execution_log",
-        ]
+        assert backend.calls == ["read_incident", "write_ai_fields", "write_execution_log"]
         stored = rows(pg_engine, execution_id)
         by_attempt = {(r.node_name, r.attempt) for r in stored}
         assert ("classify", 1) in by_attempt and ("classify", 2) not in by_attempt
@@ -245,7 +247,12 @@ class TestWorkflowStateTable:
         answers = vpn_answers() | {
             "classify": ClassifyOutput(label="software", rationale="r", confidence=0.9)
         }
-        run(ORDER_P1, make_deps(llm=FakeLLM(answers)), saver, execution_id, attempt=1)
+        backend = FakeServiceNow()
+        deps = make_deps(llm=FakeLLM(answers), servicenow=backend)
+        paused = run(ORDER_P1, deps, saver, execution_id, attempt=1)
+        assert paused["paused"] is True
+        assert backend.updates == []
+
         stored = rows(pg_engine, execution_id)
         assert [r.node_name for r in stored][2:] == [
             "load",
@@ -254,10 +261,81 @@ class TestWorkflowStateTable:
             "determine_risk",
             "act",
         ]
-        assert stored[-1].status == "blocked"
+        # act parked inside interrupt(), so it has no completed checkpoint of its
+        # own; record_pause() writes the row a reader of workflow_state needs.
+        assert stored[-1].status == "awaiting_approval"
+        assert stored[-1].decision["processing_state"] == "awaiting_approval"
         assert (
             next(r for r in stored if r.node_name == "determine_risk").decision["level"] == "high"
         )
+
+        resumed = run(
+            ORDER_P1,
+            deps,
+            saver,
+            execution_id,
+            1,
+            resume={"decision": "approved", "decided_by": "lead_ops", "reason": "change window"},
+        )
+        assert resumed["paused"] is False
+        assert resumed["resumed"] is True
+        assert len(backend.updates) == 1
+
+        final = rows(pg_engine, execution_id)
+        assert [r.node_name for r in final] == [r.node_name for r in stored]
+        assert final[-1].status == "blocked"
+        assert final[-1].decision["outcome"] == "escalated_high_risk"
+
+    def test_audit_rows_are_not_read_as_checkpoints(self, pg_engine, saver) -> None:
+        """S3.4's audit store shares ``workflow_state``; its rows are not checkpoints.
+
+        ``act`` saves the interrupt *before* it parks, so on a paused thread the
+        audit row is the newest row — reading it as a checkpoint raised
+        ``KeyError('checkpoint')`` and failed the run instead of pausing it.
+        Every unit test uses the in-memory audit store, so only this pairing of
+        the Postgres audit store with the Postgres checkpointer sees it.
+        """
+        from agent.audit_store import PostgresGraphAuditStore
+        from app.workers.sync_engine import create_sync_session_factory
+
+        execution_id = seed_execution(pg_engine, ORDER_P1)
+        answers = vpn_answers() | {
+            "classify": ClassifyOutput(label="software", rationale="r", confidence=0.9)
+        }
+        backend = FakeServiceNow()
+        deps = make_deps(llm=FakeLLM(answers), servicenow=backend)
+        deps.audit = PostgresGraphAuditStore(create_sync_session_factory(pg_engine))
+
+        paused = run(ORDER_P1, deps, saver, execution_id, attempt=1)
+        assert paused["paused"] is True
+        assert backend.updates == []
+
+        stored = rows(pg_engine, execution_id)
+        assert "hitl.interrupt" in [r.node_name for r in stored]
+
+        # Whether the audit row lands before or after the graph's own rows depends
+        # on LangGraph's write timing, so force the case that broke: the audit row
+        # re-upserted last, then a plain read of the thread.
+        interrupt = deps.audit.get_interrupt(str(execution_id))
+        assert interrupt is not None
+        deps.audit.save_interrupt(str(execution_id), interrupt)
+        assert rows(pg_engine, execution_id)[-1].node_name == "hitl.interrupt"
+        config = {"configurable": {"thread_id": str(execution_id), "attempt": 1}}
+        assert saver.get_tuple(config) is not None
+        assert saver.get_tuple(config).checkpoint["id"] is not None  # type: ignore[union-attr]
+
+        resumed = run(
+            ORDER_P1,
+            deps,
+            saver,
+            execution_id,
+            1,
+            resume={"decision": "approved", "decided_by": "lead_ops", "reason": "change window"},
+        )
+        assert resumed["paused"] is False
+        assert resumed["resumed"] is True
+        assert len(backend.updates) == 1
+        assert deps.audit.get_interrupt(str(execution_id)) is not None
 
     def test_same_node_same_attempt_replaces_the_row(self, pg_engine, saver) -> None:
         execution_id = seed_execution(pg_engine, VPN)

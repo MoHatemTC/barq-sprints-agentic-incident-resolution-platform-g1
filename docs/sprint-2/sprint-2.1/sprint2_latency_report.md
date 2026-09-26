@@ -2,6 +2,23 @@
 
 Generated: 2026-09-18 13:22 UTC by `tests/load/run_load_test.py`
 
+> [!NOTE]
+> **This is one run of a benchmark that was executed several times with different
+> results.** The sweep below (500 requests per depth, 3 depths, concurrency 50) was run
+> repeatedly and each run produced its own numbers. The other recorded runs are
+> [`docs/sprint2_latency_report.md`](../../sprint2_latency_report.md),
+> [`docs/sprint-2/sprint-2.1/verification_evidence.md`](verification_evidence.md),
+> [`docs/sprint-2/sprint-2.1/baseline_latency_report.md`](baseline_latency_report.md) and
+> [`docs/sprint2_ingestion_design.md`](../../sprint2_ingestion_design.md). **No run is
+> designated authoritative** and nothing records which one supersedes which, so do not
+> present this file's figures as *the* latency and never splice numbers from two runs into
+> one table. Note that this run's p95 is *highest at depth 0* (403.7 ms) and lowest at
+> depth 10,000 (237.8 ms) — the reverse of a queue-depth effect, which is what run-to-run
+> variance looks like.
+>
+> Captured on **Windows 11 (AMD64)** with Python 3.12.13; the reproduction commands below
+> are already POSIX.
+
 ## Environment
 
 - OS: Windows 11 (AMD64)

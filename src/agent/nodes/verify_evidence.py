@@ -27,6 +27,7 @@ from agent.state import (
     GateResult,
     InvalidCitation,
     RetrievalResult,
+    UnsupportedClaim,
 )
 
 
@@ -108,9 +109,13 @@ def verify_evidence(state: AgentState, deps: AgentDependencies) -> dict[str, Any
         # If any deterministic citations failed, construct failure feedback immediately
         # (Still run semantic verification on valid steps if any, or report citation errors)
         all_invalid = list(deterministic_invalid)
-        all_unsupported = []
+        all_unsupported: list[UnsupportedClaim] = []
         all_safety_issues: list[str] = []
         semantic_feedback_text = ""
+        # The critic's own conclusion. Absent when there was nothing to ask about
+        # (no step survived the deterministic citation check), in which case the
+        # deterministic findings decide the verdict on their own.
+        critic_passed: bool | None = None
 
         # 2. Semantic LLM verification (isolated completion for steps with valid citations)
         if valid_step_pairs:
@@ -139,9 +144,21 @@ def verify_evidence(state: AgentState, deps: AgentDependencies) -> dict[str, Any
             all_unsupported.extend(critic_response.unsupported_claims)
             all_safety_issues.extend(critic_response.safety_issues)
             semantic_feedback_text = critic_response.feedback_instructions
+            critic_passed = critic_response.passed
 
-        # Consolidate verdict
-        passed = len(all_invalid) == 0 and len(all_unsupported) == 0 and len(all_safety_issues) == 0
+        # Consolidate verdict. The critic's own ``passed`` is honoured as well as
+        # its enumerated findings: a model that returns ``passed=false`` with all
+        # three lists empty — a natural answer when it spots a problem it cannot
+        # itemise, and the one the system prompt invites — must not be recorded as
+        # a pass. Manual §11.6 requires the evidence check to be code the model
+        # cannot route around, and a gate that overrides the critic's verdict is
+        # neither. The gate fails closed on disagreement.
+        passed = (
+            critic_passed is not False
+            and len(all_invalid) == 0
+            and len(all_unsupported) == 0
+            and len(all_safety_issues) == 0
+        )
 
         instructions_parts = []
         if deterministic_invalid:

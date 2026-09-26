@@ -80,13 +80,15 @@ class TestRoutes:
 
         result = run(ORDER_P1, deps)
 
-        assert result["path"] == ["load", "validate", "classify", "determine_risk", "act"]
+        # FR-17: the graph pauses in act and nothing reaches ServiceNow first.
+        assert result["paused"] is True
+        assert result["path"] == ["load", "validate", "classify", "determine_risk"]
         assert result["outcome"] == "escalated_high_risk"
         assert retriever.calls == []
-        assert llm.purposes() == ["classify"]  # no diagnose, no generate
-        body = backend.updates[0][1].to_table_api_body()
-        assert "x_2215032_ai_inc_0_ai_suggestion" not in body
-        assert body["x_2215032_ai_inc_0_ai_human_review_required"] == "true"
+        # classify, then the Approval Brief Agent at the interrupt — no diagnose/generate.
+        assert llm.purposes() == ["classify", "approval_brief"]
+        assert backend.updates == []
+        assert backend.calls == ["read_incident"]
 
     def test_no_evidence_escalates_after_retrieve(self) -> None:
         llm = FakeLLM(vpn_answers() | label("hardware"))
@@ -129,11 +131,11 @@ class TestRoutes:
         backend = FakeServiceNow()
         deps = make_deps(llm=FakeLLM(vpn_answers(confidence=0.3)), servicenow=backend)
         result = run(VPN, deps)
-        assert result["path"] == FULL_PATH
+        # Every gate node ran; act then paused instead of writing the draft away.
+        assert result["paused"] is True
+        assert result["path"] == FULL_PATH[:-1]
         assert result["outcome"] == "escalated_low_confidence"
-        body = backend.updates[0][1].to_table_api_body()
-        assert "x_2215032_ai_inc_0_ai_suggestion" not in body
-        assert body["x_2215032_ai_inc_0_ai_confidence"] == "0.30"
+        assert backend.updates == []
 
     def test_ineligible_goes_straight_to_act_and_writes_nothing(self) -> None:
         backend = FakeServiceNow()
@@ -175,7 +177,9 @@ class TestRoutes:
             attempt=1,
             deps=deps,
         )
-        assert result["path"][-2:] == ["safety_check", "act"]
+        # The edge still routes to act; act then pauses rather than writing.
+        assert result["path"][-1] == "safety_check"
+        assert result["paused"] is True
         assert result["outcome"] == "escalated_blocked"
 
     def test_graph_is_deterministic(self) -> None:
