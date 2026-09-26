@@ -3,19 +3,17 @@
 Every path through the graph ends here, so there is exactly one place that writes
 to ServiceNow and exactly one record of the outcome. The writes are the manual's
 §11.6 permitted actions only — AI fields, an internal work note and the human
-review flag — sent as one PATCH through ToolRegistry to IncidentGateway. ToolRegistry
-owns allowlisting and permission enforcement. Nothing resolves, closes, reassigns or
-contacts the requester: those actions do not exist.
+review flag — sent as one PATCH through the allow-listed gateway. Nothing resolves,
+closes, reassigns or contacts the requester: those actions do not exist.
 """
 
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime
 from typing import Any
 
 from agent.dependencies import AgentDependencies
-from agent.errors import HumanLockedError
+from agent.servicenow import HumanLockedError
 from agent.state import (
     AgentState,
     ClassificationResult,
@@ -31,7 +29,6 @@ from agent.state import (
     RiskAssessment,
     RiskLevel,
 )
-from agent.tools import ToolCallContext
 from app.models.execution_log import (
     ExecutionAction,
     ExecutionLogCreatePayload,
@@ -50,6 +47,9 @@ PAUSED = AIProcessingState.AWAITING_APPROVAL.value
 
 def decide_outcome(state: AgentState) -> Outcome:
     """The outcome implied by the recorded state. Mirrors the edge conditions."""
+    guardrail = state.get("input_guardrail")
+    if guardrail is not None and not GateResult.model_validate(guardrail).passed:
+        return Outcome.ESCALATED_BLOCKED
     eligibility = state.get("eligibility")
     if eligibility is not None and not Eligibility.model_validate(eligibility).eligible:
         return Outcome.SKIPPED_INELIGIBLE
@@ -77,7 +77,7 @@ def decide_outcome(state: AgentState) -> Outcome:
 
 
 def _blocked_gate(state: AgentState) -> GateResult | None:
-    for key in ("verification", "safety"):
+    for key in ("input_guardrail", "verification", "safety"):
         gate = state.get(key)
         if gate is not None and not GateResult.model_validate(gate).passed:
             return GateResult.model_validate(gate)
@@ -242,21 +242,17 @@ def act(state: AgentState, deps: AgentDependencies) -> dict[str, Any]:
         # The S1.1 model rejects an explicit None timestamp, so it is omitted instead.
         fields["ai_processing_start"] = started
     payload = IncidentUpdatePayload(**fields)
-    actions = ["write_ai_fields", "write_work_note", "flag_human_review", "write_execution_log"]
+    actions = [
+        "write_ai_fields",
+        "write_work_note",
+        "flag_human_review",
+        "write_execution_log",
+    ]
     if not deps.settings.agent_write_back_enabled:
         output = output.model_copy(update={"actions": actions, "write_back": "dry_run"})
         return {"output": output.model_dump(mode="json")}
-    # Act-node writes currently run on synchronous Celery/graph worker threads without
-    # a running event loop, so asyncio.run() bridges to ToolRegistry. If execution moves
-    # to an async worker/task context, replace this bridge rather than nest asyncio.run().
     try:
-        asyncio.run(
-            deps.tools.invoke(
-                "write_ai_fields",
-                context=_tool_context(state),
-                arguments={"sys_id": incident.sys_id, "payload": payload},
-            )
-        )
+        deps.servicenow.write_ai_fields(incident.sys_id, payload)
     except HumanLockedError:
         output = FinalOutput(
             outcome=Outcome.SKIPPED_HUMAN_LOCK,
@@ -305,20 +301,7 @@ def _write_execution_log(
         result=output.summary,
         error=error,
     )
-    asyncio.run(
-        deps.tools.invoke(
-            "write_execution_log",
-            context=_tool_context(state),
-            arguments={"sys_id": incident.sys_id, "payload": payload},
-        )
-    )
-
-
-def _tool_context(state: AgentState) -> ToolCallContext:
-    return ToolCallContext(
-        execution_id=state["execution_id"],
-        correlation_id=state.get("correlation_id"),
-    )
+    deps.servicenow.write_execution_log(incident.sys_id, payload)
 
 
 def _parse_ts(value: str | None) -> datetime | None:
