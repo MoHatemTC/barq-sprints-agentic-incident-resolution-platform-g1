@@ -29,8 +29,8 @@ from agent.tools.registry import (
 from app.models.knowledge import Article, SecurityLevel, WorkflowState
 from app.publishing.exceptions import ServiceNowWriteRejectedError
 from app.publishing.payload import build_kb_payload
-from app.retrieval.filters import DEFAULT_WORKFLOW_STATES, build_metadata_filter
 from app.publishing.servicenow_kb import _verify_stored
+from app.retrieval.filters import DEFAULT_WORKFLOW_STATES, build_metadata_filter
 from tests.agent_support import FakeServiceNow, Tracer, shared_runner
 
 EXECUTION_ID = "11111111-1111-4111-8111-111111111111"
