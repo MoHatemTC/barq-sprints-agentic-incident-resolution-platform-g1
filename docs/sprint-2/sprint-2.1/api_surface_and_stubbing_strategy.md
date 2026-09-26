@@ -52,12 +52,12 @@ To respect sprint boundaries and teammate workstream ownership, endpoints are ca
 ### 3.2. HITL Approvals (`src/api/routers/approvals.py`)
 * **Schemas**: `ApprovalResponse`, `ApprovalDecisionRequest` in [src/api/schemas/approvals.py](file:///d:/spritns/barq-sprints-agentic-incident-resolution-platform-g1/src/api/schemas/approvals.py).
 * **Business Logic Status**: **Real Database Logic**.
-* **Rationale**: `GET /approvals` and `GET /approvals/{id}` query the live PostgreSQL `approvals` table. `POST /approvals/{id}/decide` writes or updates an approval record. Falls back to a schema-valid stub response only when no pre-seeded record exists, ensuring the frontend can build against the contract before Sprint 3 HITL state machine is completed.
+* **Rationale**: `GET /approvals` and `GET /approvals/{id}` query the live PostgreSQL `approvals` table. `POST /approvals/{id}/decide` writes an approval record for an existing execution and refuses a second one: `409` if that execution is already decided, `404` if the id resolves to neither an approval nor an execution. There is no stub fallback — a decision that was never stored is never reported as stored (#147). The decider is read from the operator token, not from the body (#148).
 
 ### 3.3. Dead-Letter Queue (DLQ) Management (`src/api/routers/dlq.py`)
 * **Schemas**: `DLQEventResponse`, `DLQReplayResponse` in [src/api/schemas/dlq.py](file:///d:/spritns/barq-sprints-agentic-incident-resolution-platform-g1/src/api/schemas/dlq.py).
 * **Business Logic Status**: **Real Redis Logic + RBAC Enforcement**.
-* **Rationale**: `GET /dlq` reads all events from the `barq:incident:dlq` Redis key via `LRANGE`. `POST /dlq/{event_id}/replay` pops the matching event from the DLQ and re-pushes it to `barq:incident:events` for reprocessing. Both endpoints enforce strict **Operator Role RBAC** (`X-User-Role: operator`) returning `403 PERMISSION_DENIED` for unauthorized users.
+* **Rationale**: `GET /dlq` reads all events from the `barq:incident:dlq` Redis key via `LRANGE`. `POST /dlq/{event_id}/replay` pops the matching event from the DLQ and re-pushes it to `barq:incident:events` for reprocessing. Both endpoints enforce strict **Operator Role RBAC** — the `operator` role must be present in the verified token's `roles` claim, returning `403 PERMISSION_DENIED` when it is not (#148).
 
 ### 3.4. Evaluation & Benchmarking (`src/api/routers/eval.py`)
 * **Schemas**: `EvalRunRequest`, `EvalRunResponse`, `EvalResultResponse` in [src/api/schemas/eval.py](file:///d:/spritns/barq-sprints-agentic-incident-resolution-platform-g1/src/api/schemas/eval.py).

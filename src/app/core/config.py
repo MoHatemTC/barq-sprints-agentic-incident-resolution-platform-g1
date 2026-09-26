@@ -121,11 +121,29 @@ class Settings(RetrievalSettings):
     servicenow_kb_username: str = ""
     servicenow_kb_password: SecretStr | None = None
 
-    # API and inbound ServiceNow webhook authentication. The static token protects
-    # operator-facing API routes; ServiceNow receives only short-lived OAuth JWTs.
+    # API and inbound ServiceNow webhook authentication.
+    #
+    # Two credentials, two audiences. ServiceNow only ever holds the OAuth client
+    # below and receives short-lived JWTs for the webhook. Operators exchange
+    # webhook_auth_token for a *separate* operator JWT, whose subject and roles
+    # come from the two fields after it -- so ServiceNow's credential cannot reach
+    # /approvals, /config, /dlq, /executions or /eval (#136, #148).
     webhook_auth_token: SecretStr = Field(
         ...,
-        description="Bearer token for operator-facing API routes (not ServiceNow)",
+        description="Client secret of the operator API credential, exchanged for an "
+        "operator access token at /api/v1/oauth/token. Never accepted as a bearer "
+        "token itself and never accepted by the ServiceNow webhook.",
+    )
+    operator_client_id: str = Field(
+        default="barq-operator",
+        min_length=1,
+        description="OAuth client id for human operators; the subject of every "
+        "operator token and therefore the value recorded as decided_by",
+    )
+    operator_roles: list[str] = Field(
+        default=["operator", "approver"],
+        description="Roles granted to operator tokens, carried in the signed "
+        "'roles' claim that require_role() reads",
     )
     webhook_oauth_client_id: str = Field(
         ...,

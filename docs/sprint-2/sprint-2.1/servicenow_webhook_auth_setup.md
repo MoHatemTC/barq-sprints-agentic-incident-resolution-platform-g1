@@ -14,9 +14,14 @@ for the exported ServiceNow record IDs and clean-install evidence.
 Set four independent values. None has a repository default:
 
 ```dotenv
-# Operator-facing routes such as approvals, config, DLQ and evaluation.
-# ServiceNow does not receive this value.
+# Operator client's secret, exchanged at /api/v1/oauth/token for an operator
+# JWT. ServiceNow does not receive this value, and it is never accepted as a
+# bearer token itself.
 WEBHOOK_AUTH_TOKEN=
+
+# Subject of every operator token, and the roles its claim carries.
+OPERATOR_CLIENT_ID=barq-operator
+OPERATOR_ROLES=["operator","approver"]
 
 # ServiceNow's outbound OAuth client.
 WEBHOOK_OAUTH_CLIENT_ID=barq-servicenow
@@ -35,11 +40,18 @@ The backend exposes:
   HTTP Basic authentication and returns a five-minute HS256 JWT;
 - `POST /api/v1/webhook/incident` — accepts only a valid, unexpired JWT issued by
   that endpoint;
-- operator-facing API routes — accept only `WEBHOOK_AUTH_TOKEN`, never the
-  ServiceNow OAuth token.
+- operator-facing API routes — accept only an operator JWT, issued to the
+  operator client (`OPERATOR_CLIENT_ID`) in exchange for `WEBHOOK_AUTH_TOKEN`,
+  with its `roles` claim from `OPERATOR_ROLES`.
 
-This separation prevents the ServiceNow integration identity from using human
-approval, configuration, DLQ, execution-query or evaluation endpoints.
+`POST /api/v1/oauth/token` therefore serves two clients with two audiences: the
+ServiceNow client gets the webhook token, the operator client gets the operator
+token. A token is refused wherever its audience does not match, so the webhook
+JWT is `401` on `/approvals`, `/config`, `/dlq`, `/executions` and `/eval`, and
+the operator JWT is `401` on the incident webhook. The raw `WEBHOOK_AUTH_TOKEN`
+is never accepted as a bearer token, so nothing ServiceNow can present reaches
+the human approval, configuration, DLQ, execution-query or evaluation
+endpoints.
 
 ## ServiceNow configuration
 

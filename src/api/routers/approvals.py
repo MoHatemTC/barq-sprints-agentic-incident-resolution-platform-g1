@@ -3,16 +3,16 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Annotated
+from typing import Annotated, Any
 from uuid import UUID, uuid4
 
 import structlog
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy import select
-from sqlalchemy.exc import MissingGreenlet, SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, MissingGreenlet, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.auth import verify_bearer_token
+from api.auth import require_role, verify_bearer_token
 from api.schemas.approvals import (
     ApprovalDecisionRequest,
     ApprovalResponse,
@@ -110,84 +110,86 @@ async def get_approval(
     status_code=status.HTTP_200_OK,
     summary="Submit human operator approval decision",
     description=(
-        "Record or submit a human operator decision "
-        "('approved', 'rejected', 'cancelled', 'expired') for an approval request."
+        "Record a human operator decision ('approved', 'rejected', 'cancelled', "
+        "'expired') for an approval request. The id is an approval id or the id of "
+        "the execution it belongs to. The decider and the authorisation both come "
+        "from the operator token, never from the body or a header: 409 if that "
+        "execution is already decided, 404 if the id resolves to neither."
     ),
 )
 async def decide_approval(
     id: UUID,
     payload: ApprovalDecisionRequest,
     db: Annotated[AsyncSession, Depends(get_db_session)],
+    claims: Annotated[dict[str, Any], Depends(verify_bearer_token)],
+    _approver: Annotated[str, Depends(require_role("approver"))],
 ) -> ApprovalResponse:
-    """Submit approval decision.
+    """Record an approval decision, refusing anything that is not a first decision.
 
-    Updates or creates an approval record in the database when associated with an existing
-    approval or execution. Under Sprint 2 contract stub semantics, returns a schema-compliant
-    approval response when operating without pre-seeded state.
+    Who decided and whether they may are read from the verified operator token:
+    ``decided_by`` is the token's subject and the role is its ``roles`` claim
+    (#148). The body carries the decision, the reason and the evidence only.
+
+    The path id is either an approval's primary key or the execution it belongs
+    to, so a second decision for the same execution is 409 whatever id form the
+    caller uses, an id that resolves to neither is 404, and there is no stub
+    fallback that reports a saved decision nothing stored (#147).
     """
-    resolved_approval = None
+    decided_by = str(claims.get("sub") or "")
+    created: Approval | None = None
 
     try:
-        # 1. Check if an approval record with this ID already exists
-        # Approvals are immutable audit records protected by trg_approvals_immutable trigger.
-        approval = await db.get(Approval, id)
-        if approval:
+        existing = await db.get(Approval, id)
+        if existing is None:
+            existing = (
+                await db.execute(select(Approval).where(Approval.execution_id == id).limit(1))
+            ).scalar_one_or_none()
+        if existing is not None:
             logger.warning(
                 "approval_already_decided",
-                approval_id=str(id),
-                decision=approval.decision,
+                approval_id=str(existing.id),
+                execution_id=str(existing.execution_id),
+                decision=existing.decision,
             )
             raise ConflictError(
-                f"Approval '{id}' has already been decided "
-                f"('{approval.decision}') and is immutable."
+                f"Execution '{existing.execution_id}' has already been decided "
+                f"('{existing.decision}') and approvals are immutable."
             )
 
-        # 2. Check if this ID corresponds to an existing Execution
         execution = await db.get(Execution, id)
-        if execution:
-            new_approval = Approval(
-                id=uuid4(),
-                execution_id=execution.execution_id,
-                decision=payload.decision,
-                decided_by=payload.decided_by,
-                reason=payload.reason,
-                evidence=payload.evidence,
-                decided_at=datetime.now(UTC),
-            )
-            db.add(new_approval)
-            await db.commit()
-            await db.refresh(new_approval)
-            logger.info(
-                "approval_created_for_execution",
-                approval_id=str(new_approval.id),
-                execution_id=str(execution.execution_id),
-                decision=payload.decision,
-                decided_by=payload.decided_by,
-            )
-            resolved_approval = new_approval
-    except (ConflictError, MissingGreenlet):
+        if execution is None:
+            raise ResourceNotFoundError(f"No approval request or execution '{id}' found")
+
+        created = Approval(
+            id=uuid4(),
+            execution_id=execution.execution_id,
+            decision=payload.decision,
+            decided_by=decided_by,
+            reason=payload.reason,
+            evidence=payload.evidence,
+            decided_at=datetime.now(UTC),
+        )
+        db.add(created)
+        await db.commit()
+        await db.refresh(created)
+        logger.info(
+            "approval_created_for_execution",
+            approval_id=str(created.id),
+            execution_id=str(execution.execution_id),
+            decision=payload.decision,
+            decided_by=decided_by,
+        )
+    except (ConflictError, ResourceNotFoundError, MissingGreenlet):
         raise
+    except IntegrityError as exc:
+        # Lost the race against a concurrent decision: the unique index on
+        # (execution_id, coalesced workflow_state_id) is what makes this
+        # impossible to bypass, so report it the same way as the check above.
+        raise ConflictError(
+            f"Execution '{id}' has already been decided by a concurrent request."
+        ) from exc
     except SQLAlchemyError as exc:
         logger.exception("database_operation_failed", approval_id=str(id), error=str(exc))
         raise ServiceUnavailableError("Database unavailable to record approval decision.") from exc
 
-    if resolved_approval is not None:
-        return ApprovalResponse.model_validate(resolved_approval)
-
-    # 3. Contract Stub Fallback: return a valid schema response (Tier 2 Sprint 2 contract stub)
-    logger.info(
-        "approval_decision_stubbed",
-        approval_id=str(id),
-        decision=payload.decision,
-        decided_by=payload.decided_by,
-    )
-    return ApprovalResponse(
-        id=id,
-        execution_id=id,
-        workflow_state_id=None,
-        decision=payload.decision,
-        decided_by=payload.decided_by,
-        reason=payload.reason,
-        evidence=payload.evidence,
-        decided_at=datetime.now(UTC),
-    )
+    return ApprovalResponse.model_validate(created)

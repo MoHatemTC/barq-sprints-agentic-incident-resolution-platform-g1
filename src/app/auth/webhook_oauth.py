@@ -5,6 +5,11 @@ it requests a token from ``POST /api/v1/oauth/token`` with the client credential
 form body, then sends ``Authorization: Bearer <token>``. This module issues those tokens
 and verifies them.
 
+The same endpoint mints a second kind of token for human operators. It carries a
+different audience and its own subject, so a credential ServiceNow holds can never open
+an operator route (#136, #148), and it carries the roles the operator was granted so the
+role check reads a signed claim instead of a header the caller writes (#148).
+
 Tokens are compact JWTs signed with HMAC-SHA256. They are short-lived and carry no
 incident data.
 """
@@ -30,6 +35,9 @@ from pydantic import SecretStr
 
 ISSUER = "barq-webhook"
 AUDIENCE = "barq-webhook"
+#: Audience of tokens minted for the human operator client. Distinct from
+#: ``AUDIENCE`` so a ServiceNow token is rejected on every operator route.
+OPERATOR_AUDIENCE = "barq-operator"
 TOKEN_PATH = "/api/v1/oauth/token"
 _HEADER = {"alg": "HS256", "typ": "JWT"}
 _BEARER_CHALLENGE = {"WWW-Authenticate": 'Bearer realm="barq-webhook"'}
@@ -41,6 +49,9 @@ class WebhookOAuthSettings(Protocol):
     webhook_oauth_client_id: str
     webhook_oauth_client_secret: SecretStr
     webhook_oauth_signing_key: SecretStr
+    webhook_auth_token: SecretStr
+    operator_client_id: str
+    operator_roles: list[str]
 
 
 @dataclass(frozen=True)
@@ -48,6 +59,10 @@ class WebhookOAuthConfig:
     client_id: str
     client_secret: str
     signing_key: str
+    #: The human operator client: its own id, its own secret, its own audience.
+    operator_client_id: str = ""
+    operator_client_secret: str = ""
+    operator_roles: tuple[str, ...] = ()
     token_ttl_seconds: int = 300
     leeway_seconds: int = 30
 
@@ -56,6 +71,11 @@ class WebhookOAuthConfig:
             raise ValueError("webhook OAuth client_id and client_secret must be set")
         if len(self.signing_key) < 32:
             raise ValueError("webhook OAuth signing_key must be at least 32 characters")
+        if not self.operator_client_id or not self.operator_client_secret:
+            raise ValueError(
+                "operator client_id and secret must be set: operator routes have no "
+                "other credential to check"
+            )
 
 
 def config_from_settings(settings: WebhookOAuthSettings) -> WebhookOAuthConfig:
@@ -64,6 +84,9 @@ def config_from_settings(settings: WebhookOAuthSettings) -> WebhookOAuthConfig:
         client_id=settings.webhook_oauth_client_id,
         client_secret=settings.webhook_oauth_client_secret.get_secret_value(),
         signing_key=settings.webhook_oauth_signing_key.get_secret_value(),
+        operator_client_id=settings.operator_client_id,
+        operator_client_secret=settings.webhook_auth_token.get_secret_value(),
+        operator_roles=tuple(settings.operator_roles),
     )
 
 
@@ -94,21 +117,39 @@ def issue_access_token(
     *,
     now: float | None = None,
 ) -> dict[str, Any]:
-    """Return an RFC 6749 token response, or raise InvalidClientError."""
-    id_ok = secrets.compare_digest(client_id.encode(), config.client_id.encode())
-    secret_ok = secrets.compare_digest(client_secret.encode(), config.client_secret.encode())
-    if not (id_ok and secret_ok):
+    """Return an RFC 6749 token response, or raise InvalidClientError.
+
+    Two clients can be presented: the ServiceNow webhook client, which receives
+    audience ``AUDIENCE``, and the human operator client, which receives
+    audience ``OPERATOR_AUDIENCE`` together with the roles it was granted.
+    """
+    webhook_id = secrets.compare_digest(client_id.encode(), config.client_id.encode())
+    webhook_secret = secrets.compare_digest(client_secret.encode(), config.client_secret.encode())
+    operator_id = secrets.compare_digest(client_id.encode(), config.operator_client_id.encode())
+    operator_secret = secrets.compare_digest(
+        client_secret.encode(), config.operator_client_secret.encode()
+    )
+
+    roles: tuple[str, ...] | None = None
+    if webhook_id and webhook_secret:
+        audience, subject = AUDIENCE, config.client_id
+    elif operator_id and operator_secret:
+        audience, subject = OPERATOR_AUDIENCE, config.operator_client_id
+        roles = config.operator_roles
+    else:
         raise InvalidClientError("invalid client credentials")
 
     issued_at = int(time.time() if now is None else now)
-    claims = {
+    claims: dict[str, Any] = {
         "iss": ISSUER,
-        "aud": AUDIENCE,
-        "sub": config.client_id,
+        "aud": audience,
+        "sub": subject,
         "iat": issued_at,
         "exp": issued_at + config.token_ttl_seconds,
         "jti": uuid.uuid4().hex,
     }
+    if roles is not None:
+        claims["roles"] = list(roles)
     header = _b64encode(json.dumps(_HEADER, separators=(",", ":")).encode())
     payload = _b64encode(json.dumps(claims, separators=(",", ":")).encode())
     signature = _sign(f"{header}.{payload}".encode(), config.signing_key)
@@ -121,6 +162,33 @@ def issue_access_token(
 
 def verify_access_token(
     config: WebhookOAuthConfig, token: str, *, now: float | None = None
+) -> dict[str, Any]:
+    """Return the claims of a ServiceNow webhook token, or raise InvalidTokenError."""
+    return _verify_claims(config, token, audience=AUDIENCE, sub=config.client_id, now=now)
+
+
+def verify_operator_token(
+    config: WebhookOAuthConfig, token: str, *, now: float | None = None
+) -> dict[str, Any]:
+    """Return the claims of an operator token, or raise InvalidTokenError.
+
+    A webhook token fails here on audience before anything else is looked at,
+    and a token minted for another subject fails on ``sub``. Roles are *not*
+    checked here: a token whose roles are missing or empty must reach
+    ``require_role`` and come back as 403, not 401 (#148).
+    """
+    return _verify_claims(
+        config, token, audience=OPERATOR_AUDIENCE, sub=config.operator_client_id, now=now
+    )
+
+
+def _verify_claims(
+    config: WebhookOAuthConfig,
+    token: str,
+    *,
+    audience: str,
+    sub: str,
+    now: float | None = None,
 ) -> dict[str, Any]:
     """Return the token's claims, or raise InvalidTokenError."""
     parts = token.split(".")
@@ -150,9 +218,9 @@ def verify_access_token(
         raise InvalidTokenError("token expired")
     if iat > current + config.leeway_seconds:
         raise InvalidTokenError("token issued in the future")
-    if claims.get("iss") != ISSUER or claims.get("aud") != AUDIENCE:
+    if claims.get("iss") != ISSUER or claims.get("aud") != audience:
         raise InvalidTokenError("wrong issuer or audience")
-    if claims.get("sub") != config.client_id:
+    if claims.get("sub") != sub:
         raise InvalidTokenError("unknown client")
     return claims
 

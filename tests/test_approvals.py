@@ -74,7 +74,7 @@ async def test_approvals_require_authentication(app_with_db) -> None:
         # 4. POST /api/v1/approvals/{id}/decide without auth
         resp = await client.post(
             f"/api/v1/approvals/{approval_id}/decide",
-            json={"decision": "approved", "decided_by": "operator@test.com"},
+            json={"decision": "approved"},
         )
         assert resp.status_code == 401
         assert resp.json()["error"]["code"] == "AUTHENTICATION_FAILED"
@@ -257,34 +257,32 @@ async def test_decide_approval_rejects_extra_fields(app_with_db) -> None:
 
 
 @pytest.mark.asyncio
-async def test_decide_approval_stub_fallback(app_with_db) -> None:
-    """When neither Approval nor Execution is in DB, contract stub returns schema-valid response."""
+async def test_decide_approval_unknown_id_returns_404(app_with_db) -> None:
+    """Neither the Approval nor the Execution exists -> 404, and nothing is stored (#147)."""
     app, mock_session = app_with_db
     approval_id = uuid4()
     mock_session.get.return_value = None
-
-    payload = {
-        "decision": "approved",
-        "decided_by": "ops_analyst_1",
-        "reason": "Safe to proceed with restart",
-        "evidence": {"service": "redis", "memory_ok": True},
-    }
+    no_row = MagicMock()
+    no_row.scalar_one_or_none.return_value = None
+    mock_session.execute.return_value = no_row
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.post(
             f"/api/v1/approvals/{approval_id}/decide",
-            json=payload,
+            json={
+                "decision": "approved",
+                "reason": "Safe to proceed with restart",
+                "evidence": {"service": "redis", "memory_ok": True},
+            },
             headers=AUTH_HEADERS,
         )
 
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["id"] == str(approval_id)
-    assert data["decision"] == "approved"
-    assert data["decided_by"] == "ops_analyst_1"
-    assert data["reason"] == "Safe to proceed with restart"
-    assert data["evidence"]["service"] == "redis"
-    assert data["decided_at"] is not None
+    assert resp.status_code == 404
+    body = resp.json()
+    assert body["error"]["code"] == "RESOURCE_NOT_FOUND"
+    assert str(approval_id) in body["error"]["message"]
+    mock_session.add.assert_not_called()
+    mock_session.commit.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -314,7 +312,6 @@ async def test_decide_approval_rejects_mutation_of_existing_approval(app_with_db
 
     payload = {
         "decision": "approved",
-        "decided_by": "lead_operator",
         "reason": "Manual override approved",
     }
 
@@ -328,7 +325,7 @@ async def test_decide_approval_rejects_mutation_of_existing_approval(app_with_db
     assert resp.status_code == 409
     body = resp.json()
     assert body["error"]["code"] == "RESOURCE_CONFLICT"
-    assert f"Approval '{approval_id}' has already been decided" in body["error"]["message"]
+    assert f"Execution '{execution_id}' has already been decided" in body["error"]["message"]
     mock_session.commit.assert_not_awaited()
 
 
@@ -352,10 +349,12 @@ async def test_decide_approval_creates_for_existing_execution(app_with_db) -> No
         return None
 
     mock_session.get.side_effect = mock_get
+    no_row = MagicMock()
+    no_row.scalar_one_or_none.return_value = None
+    mock_session.execute.return_value = no_row
 
     payload = {
         "decision": "rejected",
-        "decided_by": "security_officer",
         "reason": "Risk threshold exceeded",
     }
 
@@ -373,7 +372,53 @@ async def test_decide_approval_creates_for_existing_execution(app_with_db) -> No
     assert isinstance(created_approval, Approval)
     assert created_approval.execution_id == target_id
     assert created_approval.decision == "rejected"
-    assert created_approval.decided_by == "security_officer"
+    # decided_by is the operator token's subject; the body cannot set it (#148)
+    assert created_approval.decided_by == "barq-operator"
+
+
+@pytest.mark.asyncio
+async def test_decide_approval_lost_race_is_409(app_with_db) -> None:
+    """Losing the race to the unique index reports the same conflict as the check.
+
+    The route's own already-decided lookup can be bypassed by a concurrent
+    request that commits first; ``uq_approvals_execution_workflow_state`` then
+    rejects the insert, and that has to surface as 409, not 500 (#147).
+    """
+    from sqlalchemy.exc import IntegrityError
+
+    app, mock_session = app_with_db
+    execution = Execution(
+        execution_id=uuid4(),
+        event_record_id=uuid4(),
+        incident_sys_id=h.VALID_SYS_ID,
+        status="awaiting_approval",
+    )
+
+    async def mock_get(model, pk):
+        if model is Approval:
+            return None
+        if model is Execution:
+            return execution
+        return None
+
+    mock_session.get.side_effect = mock_get
+    no_row = MagicMock()
+    no_row.scalar_one_or_none.return_value = None
+    mock_session.execute.return_value = no_row
+    mock_session.commit.side_effect = IntegrityError(
+        "INSERT INTO approvals", {}, Exception("duplicate key value violates unique constraint")
+    )
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post(
+            f"/api/v1/approvals/{execution.execution_id}/decide",
+            json={"decision": "rejected", "reason": "manual override"},
+            headers=AUTH_HEADERS,
+        )
+
+    assert resp.status_code == 409
+    assert resp.json()["error"]["code"] == "RESOURCE_CONFLICT"
+    assert str(execution.execution_id) in resp.json()["error"]["message"]
 
 
 @pytest.mark.asyncio
@@ -404,7 +449,7 @@ async def test_approvals_db_failure_returns_503(app_with_db) -> None:
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.post(
             f"/api/v1/approvals/{approval_id}/decide",
-            json={"decision": "approved", "decided_by": "operator"},
+            json={"decision": "approved"},
             headers=AUTH_HEADERS,
         )
     assert resp.status_code == 503
