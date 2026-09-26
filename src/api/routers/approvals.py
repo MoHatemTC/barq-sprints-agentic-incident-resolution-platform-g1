@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime
 from functools import lru_cache
 from typing import Annotated, Any
@@ -212,7 +213,11 @@ async def decide_approval(
             correlation_id = str(
                 interrupt_payload.get("correlation_id") or f"resume-{execution_id_str}"
             )
-            resumed = resume_incident_graph(
+            # The graph nodes bridge to async tool calls with asyncio.run(), which
+            # needs a thread with no running loop; this handler is async, so the
+            # resume runs off-loop rather than inside it.
+            resumed = await asyncio.to_thread(
+                resume_incident_graph,
                 execution_id=execution_id_str,
                 decision=decision,
                 correlation_id=correlation_id,

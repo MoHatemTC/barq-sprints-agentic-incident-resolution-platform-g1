@@ -7,6 +7,7 @@ written only once the graph has taken the decision.
 
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID, uuid4
 
@@ -85,7 +86,9 @@ def _parked_execution(store: MemoryGraphAuditStore, backend: FakeServiceNow):
 async def test_decide_resumes_the_parked_execution(app_with_db) -> None:
     store = MemoryGraphAuditStore()
     backend = FakeServiceNow()
-    runtime, deps = _parked_execution(store, backend)
+    # The graph's nodes bridge to async tool calls with asyncio.run(), which needs
+    # a thread with no running loop; this test is async, so park off-loop.
+    runtime, deps = await asyncio.to_thread(_parked_execution, store, backend)
 
     app, mock_session = app_with_db
     execution = Execution(
@@ -173,7 +176,7 @@ async def test_pending_endpoint_returns_the_brief_before_a_decision(app_with_db)
     """A reviewer must be able to read the brief *before* deciding (FR-17)."""
     store = MemoryGraphAuditStore()
     backend = FakeServiceNow()
-    _parked_execution(store, backend)
+    await asyncio.to_thread(_parked_execution, store, backend)
 
     app, _ = app_with_db
     with patch.object(approvals_router, "get_audit_store", return_value=store):
@@ -211,7 +214,7 @@ async def test_second_decision_on_one_execution_is_refused(app_with_db) -> None:
     """
     store = MemoryGraphAuditStore()
     backend = FakeServiceNow()
-    runtime, _ = _parked_execution(store, backend)
+    runtime, _ = await asyncio.to_thread(_parked_execution, store, backend)
 
     app, mock_session = app_with_db
     execution = Execution(
