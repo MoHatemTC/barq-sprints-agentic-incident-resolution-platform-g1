@@ -163,12 +163,23 @@ async def decide_approval(
     execution_id_str = str(id)
 
     # 1. Immutability check, then the execution this decision belongs to.
+    #
+    #    The path id is either an approval's primary key (the Sprint 2.1 contract)
+    #    or the execution_id of a paused thread (Sprint 3.4), so a decision is
+    #    refused if *either* one has already been decided. Checking only the
+    #    primary key let a second, contradictory decision through on the
+    #    execution path.
     try:
         existing = await db.get(Approval, id)
+        if existing is None:
+            existing = (
+                await db.execute(select(Approval).where(Approval.execution_id == id).limit(1))
+            ).scalar_one_or_none()
         if existing:
             logger.warning(
                 "approval_already_decided",
                 approval_id=str(id),
+                execution_id=str(existing.execution_id),
                 decision=existing.decision,
             )
             raise ConflictError(

@@ -18,7 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from app.db.models import ExecutionNodeState
+from app.db.models import Execution, ExecutionNodeState
 from app.workers.sync_engine import SyncSessionFactory
 
 HITL_NODE = "hitl.interrupt"
@@ -91,6 +91,17 @@ class PostgresGraphAuditStore:
         now = datetime.now(UTC)
         eid = UUID(execution_id)
         with self._session_factory() as session, session.begin():
+            # Sequence numbers come from ``max(sequence_number)``, and LangGraph
+            # overlaps a running node with the previous nodes' checkpoint writes.
+            # ``WorkflowStateSaver.put`` locks the execution row before it reads
+            # that maximum; taking the same lock first is what keeps the two
+            # writers off the same sequence number (they otherwise deadlock, or
+            # one loses on ``uq_workflow_state_execution_sequence``).
+            session.execute(
+                select(Execution.execution_id)
+                .where(Execution.execution_id == eid)
+                .with_for_update()
+            )
             sequence = _next_sequence(session, eid)
             stmt = insert(ExecutionNodeState).values(
                 execution_id=eid,

@@ -158,6 +158,18 @@ class WorkflowStateSaver(BaseCheckpointSaver[str]):
         )
         return [row for row in session.scalars(stmt) if row.state_snapshot]
 
+    @staticmethod
+    def _checkpoint_rows(rows: list[ExecutionNodeState]) -> list[ExecutionNodeState]:
+        """Only the rows ``put`` wrote carry a serialized checkpoint.
+
+        The S3.4 audit store shares this table (``hitl.interrupt``,
+        ``servicenow.write``) and writes ``{"kind", "lifecycle"}`` there, so a
+        reader that takes the newest row as a checkpoint raises
+        ``KeyError('checkpoint')`` — which is exactly what a paused execution
+        does the moment the audit row lands.
+        """
+        return [row for row in rows if "checkpoint" in (row.state_snapshot or {})]
+
     def _tuple(
         self, thread_id: str, row: ExecutionNodeState, rows: list[ExecutionNodeState]
     ) -> CheckpointTuple:
@@ -205,7 +217,7 @@ class WorkflowStateSaver(BaseCheckpointSaver[str]):
         thread_id = str(config["configurable"]["thread_id"])
         wanted = get_checkpoint_id(config)
         with self._session() as session:
-            rows = self._rows(session, UUID(thread_id))
+            rows = self._checkpoint_rows(self._rows(session, UUID(thread_id)))
             if not rows:
                 return None
             if wanted is None:
@@ -228,7 +240,7 @@ class WorkflowStateSaver(BaseCheckpointSaver[str]):
         thread_id = str(config["configurable"]["thread_id"])
         before_id = get_checkpoint_id(before) if before else None
         with self._session() as session:
-            rows = self._rows(session, UUID(thread_id))
+            rows = self._checkpoint_rows(self._rows(session, UUID(thread_id)))
             tuples = [self._tuple(thread_id, row, rows) for row in reversed(rows)]
         count = 0
         for item in tuples:
@@ -360,15 +372,17 @@ class WorkflowStateSaver(BaseCheckpointSaver[str]):
                 .where(Execution.execution_id == execution_id)
                 .with_for_update()
             )
-            rows = [
-                row
-                for row in session.scalars(
-                    select(ExecutionNodeState)
-                    .where(ExecutionNodeState.execution_id == execution_id)
-                    .order_by(ExecutionNodeState.sequence_number)
-                )
-                if row.state_snapshot
-            ]
+            rows = self._checkpoint_rows(
+                [
+                    row
+                    for row in session.scalars(
+                        select(ExecutionNodeState)
+                        .where(ExecutionNodeState.execution_id == execution_id)
+                        .order_by(ExecutionNodeState.sequence_number)
+                    )
+                    if row.state_snapshot
+                ]
+            )
             if not rows:
                 return
             last = rows[-1]

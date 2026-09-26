@@ -46,6 +46,10 @@ def app_with_db():
     mock_session.refresh = AsyncMock()
     mock_session.rollback = AsyncMock()
     mock_session.add = MagicMock()
+    default_result = MagicMock()
+    default_result.scalar_one_or_none.return_value = None
+    default_result.scalars.return_value.all.return_value = []
+    mock_session.execute.return_value = default_result
 
     class MockAsyncSessionContext:
         async def __aenter__(self):
@@ -186,3 +190,74 @@ async def test_pending_endpoint_returns_the_brief_before_a_decision(app_with_db)
     assert body["facts"]["outcome"] == "escalated_high_risk"
     assert body["facts"]["incident"]["number"] == ORDER_P1["number"]
     assert backend.updates == []
+
+
+class _ScalarResult:
+    """Just enough of a SQLAlchemy Result for the approval lookup."""
+
+    def __init__(self, value: object) -> None:
+        self._value = value
+
+    def scalar_one_or_none(self) -> object:
+        return self._value
+
+
+@pytest.mark.asyncio
+async def test_second_decision_on_one_execution_is_refused(app_with_db) -> None:
+    """The path id is an execution_id, so the primary-key lookup alone is not enough.
+
+    Found by running the real stack: two contradictory rows were stored for one
+    execution because the immutability check only asked for ``Approval(id)``.
+    """
+    store = MemoryGraphAuditStore()
+    backend = FakeServiceNow()
+    runtime, _ = _parked_execution(store, backend)
+
+    app, mock_session = app_with_db
+    execution = Execution(
+        execution_id=UUID(EXECUTION_ID),
+        event_record_id=uuid4(),
+        incident_sys_id=ORDER_P1["sys_id"],
+        status="awaiting_approval",
+    )
+
+    async def get(model, pk):
+        return execution if model is Execution and pk == UUID(EXECUTION_ID) else None
+
+    mock_session.get.side_effect = get
+
+    with (
+        patch.object(approvals_router, "get_audit_store", return_value=store),
+        patch.object(
+            approvals_router,
+            "resume_incident_graph",
+            side_effect=lambda **kw: resume_incident_graph(**kw, runtime=runtime),
+        ),
+    ):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            first = await client.post(
+                f"/api/v1/approvals/{EXECUTION_ID}/decide",
+                json={"decision": "approved", "decided_by": "ali.ezz", "reason": "ok"},
+                headers=AUTH_HEADERS,
+            )
+            assert first.status_code == 200, first.text
+            assert mock_session.add.call_count == 1
+            recorded = mock_session.add.call_args[0][0]
+
+            async def execute(stmt, *args, **kwargs):
+                descriptions = getattr(stmt, "column_descriptions", None)
+                if descriptions and descriptions[0].get("entity") is Approval:
+                    return _ScalarResult(recorded)
+                return _ScalarResult(None)
+
+            mock_session.execute.side_effect = execute
+            second = await client.post(
+                f"/api/v1/approvals/{EXECUTION_ID}/decide",
+                json={"decision": "rejected", "decided_by": "ali.ezz", "reason": "changed my mind"},
+                headers=AUTH_HEADERS,
+            )
+
+    assert second.status_code == 409, second.text
+    assert "already been decided" in second.json()["error"]["message"]
+    assert mock_session.add.call_count == 1
+    assert mock_session.commit.await_count == 1

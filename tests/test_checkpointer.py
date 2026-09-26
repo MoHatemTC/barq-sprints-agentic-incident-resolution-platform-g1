@@ -290,6 +290,57 @@ class TestWorkflowStateTable:
         assert final[-1].status == "blocked"
         assert final[-1].decision["outcome"] == "escalated_high_risk"
 
+    def test_audit_rows_are_not_read_as_checkpoints(self, pg_engine, saver) -> None:
+        """S3.4's audit store shares ``workflow_state``; its rows are not checkpoints.
+
+        ``act`` saves the interrupt *before* it parks, so on a paused thread the
+        audit row is the newest row — reading it as a checkpoint raised
+        ``KeyError('checkpoint')`` and failed the run instead of pausing it.
+        Every unit test uses the in-memory audit store, so only this pairing of
+        the Postgres audit store with the Postgres checkpointer sees it.
+        """
+        from agent.audit_store import PostgresGraphAuditStore
+        from app.workers.sync_engine import create_sync_session_factory
+
+        execution_id = seed_execution(pg_engine, ORDER_P1)
+        answers = vpn_answers() | {
+            "classify": ClassifyOutput(label="software", rationale="r", confidence=0.9)
+        }
+        backend = FakeServiceNow()
+        deps = make_deps(llm=FakeLLM(answers), servicenow=backend)
+        deps.audit = PostgresGraphAuditStore(create_sync_session_factory(pg_engine))
+
+        paused = run(ORDER_P1, deps, saver, execution_id, attempt=1)
+        assert paused["paused"] is True
+        assert backend.updates == []
+
+        stored = rows(pg_engine, execution_id)
+        assert "hitl.interrupt" in [r.node_name for r in stored]
+
+        # Whether the audit row lands before or after the graph's own rows depends
+        # on LangGraph's write timing, so force the case that broke: the audit row
+        # re-upserted last, then a plain read of the thread.
+        interrupt = deps.audit.get_interrupt(str(execution_id))
+        assert interrupt is not None
+        deps.audit.save_interrupt(str(execution_id), interrupt)
+        assert rows(pg_engine, execution_id)[-1].node_name == "hitl.interrupt"
+        config = {"configurable": {"thread_id": str(execution_id), "attempt": 1}}
+        assert saver.get_tuple(config) is not None
+        assert saver.get_tuple(config).checkpoint["id"] is not None  # type: ignore[union-attr]
+
+        resumed = run(
+            ORDER_P1,
+            deps,
+            saver,
+            execution_id,
+            1,
+            resume={"decision": "approved", "decided_by": "lead_ops", "reason": "change window"},
+        )
+        assert resumed["paused"] is False
+        assert resumed["resumed"] is True
+        assert len(backend.updates) == 1
+        assert deps.audit.get_interrupt(str(execution_id)) is not None
+
     def test_same_node_same_attempt_replaces_the_row(self, pg_engine, saver) -> None:
         execution_id = seed_execution(pg_engine, VPN)
         graph = build_graph(make_deps(), checkpointer=saver)
