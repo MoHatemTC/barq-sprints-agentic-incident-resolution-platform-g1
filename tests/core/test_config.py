@@ -162,7 +162,7 @@ def test_rerank_candidate_limit_must_cover_top_k(monkeypatch) -> None:
 
 
 def test_default_retrieval_mode_is_hybrid() -> None:
-    """hybrid_reranked costs ~12x p50 latency for no accuracy gain (#150)."""
+    """hybrid_reranked costs ~16x p50 latency for no accuracy gain (#150)."""
     from app.core.config import RetrievalMode
 
     assert get_retrieval_settings().retrieval_mode == RetrievalMode.HYBRID
