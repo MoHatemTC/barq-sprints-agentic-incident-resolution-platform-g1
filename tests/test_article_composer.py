@@ -15,7 +15,6 @@ from agent.article_composer import check_faithfulness, compose_article
 from agent.prompts import (
     ARTICLE_COMPOSER_SYSTEM,
     ComposedArticle,
-    compose_article_prompt,
 )
 from agent.state import IncidentSnapshot
 from app.models.knowledge import SecurityLevel, WorkflowState
@@ -38,10 +37,7 @@ FAITHFUL_ANSWER = ComposedArticle(
     title="Resolving Intermittent Corporate VPN Drops",
     short_description="Set MTU 1400 and restart the tunnel interface.",
     category="network",
-    body=(
-        "1. Set MTU 1400 on the tunnel.\n"
-        "2. Fixed by restarting the interface."
-    ),
+    body=("1. Set MTU 1400 on the tunnel.\n2. Fixed by restarting the interface."),
 )
 
 
@@ -164,7 +160,9 @@ class TestCheckFaithfulness:
     def test_numbers_are_treated_as_facts(self) -> None:
         answer = FAITHFUL_ANSWER.model_copy(update={"body": "Set MTU 2048 on the tunnel."})
         article = compose_article(
-            INCIDENT, "was the MTU mismatch, set MTU 1400", deps=_deps(answer),
+            INCIDENT,
+            "was the MTU mismatch, set MTU 1400",
+            deps=_deps(answer),
             article_number="KB1001",
         )
         assert "2048" in check_faithfulness(article, "was the MTU mismatch, set MTU 1400")
@@ -180,14 +178,9 @@ class TestCheckFaithfulness:
             title="Service Restart",
             short_description="Restart the service.",
             category="software",
-            body=(
-                "1. Restart the service.\n"
-                "2. Root cause was a memory leak in the worker pool."
-            ),
+            body=("1. Restart the service.\n2. Root cause was a memory leak in the worker pool."),
         )
-        article = compose_article(
-            INCIDENT, solution, deps=_deps(answer), article_number="KB1002"
-        )
+        article = compose_article(INCIDENT, solution, deps=_deps(answer), article_number="KB1002")
         issues = check_faithfulness(article, solution)
         assert {"memory", "leak", "worker", "pool"} & set(issues), (
             "invented diagnostic details were not flagged"
@@ -200,7 +193,9 @@ class TestCheckFaithfulness:
         article = compose_article(
             INCIDENT, "flaky wifi", deps=_deps(answer), article_number="KB1001"
         )
-        issues = check_faithfulness(article, "flaky wifi", incident_context="vpn drops every few minutes")
+        issues = check_faithfulness(
+            article, "flaky wifi", incident_context="vpn drops every few minutes"
+        )
         assert issues == []
 
 

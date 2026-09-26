@@ -21,7 +21,6 @@ import sys
 import structlog
 
 from app.core.config import get_settings, kb_publisher_settings
-from app.publishing.servicenow_kb import ServiceNowKBClient
 
 logger = structlog.get_logger("probe_sn_workflow_field")
 

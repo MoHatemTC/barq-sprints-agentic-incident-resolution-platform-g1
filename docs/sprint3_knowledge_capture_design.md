@@ -133,11 +133,13 @@ S3.4's resume path (after `Command(resume=decision)`) calls, when
 ```python
 next_number = make_next_article_number(kb_client, settings.servicenow_kb_id)
 await capture_human_resolution(
-    execution_id=execution_id,            # the shared Approval/Execution UUID
+    execution_id=execution_id,  # the shared Approval/Execution UUID
     incident=IncidentSnapshot.model_validate(checkpoint_state["incident"]),
-    solution_text=decision["solution"],   # already redacted at persistence
-    deps=deps, next_number=next_number,
-    qdrant_client=..., kb_sys_id=settings.servicenow_kb_id,
+    solution_text=decision["solution"],  # already redacted at persistence
+    deps=deps,
+    next_number=next_number,
+    qdrant_client=...,
+    kb_sys_id=settings.servicenow_kb_id,
 )
 ```
 

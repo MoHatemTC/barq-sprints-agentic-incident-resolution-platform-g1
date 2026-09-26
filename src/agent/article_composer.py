@@ -23,19 +23,61 @@ from agent.prompts import (
     compose_article_prompt,
 )
 from agent.state import IncidentSnapshot
-from app.models.knowledge import SecurityLevel, WorkflowState
+from app.models.knowledge import Article, SecurityLevel, WorkflowState
 
 #: Tokens below this length carry too little content to judge faithfulness on.
 MIN_TOKEN_LENGTH = 4
 
 _FAITHFULNESS_STOPWORDS = frozenset(
     {
-        "also", "after", "before", "been", "being", "both", "done", "each", "every",
-        "from", "have", "having", "into", "just", "must", "only", "onto", "over",
-        "same", "should", "since", "some", "such", "than", "that", "their", "them",
-        "then", "there", "these", "they", "this", "those", "through", "under",
-        "until", "very", "was", "were", "what", "when", "which", "while", "will",
-        "with", "would", "your", "yours",
+        "also",
+        "after",
+        "before",
+        "been",
+        "being",
+        "both",
+        "done",
+        "each",
+        "every",
+        "from",
+        "have",
+        "having",
+        "into",
+        "just",
+        "must",
+        "only",
+        "onto",
+        "over",
+        "same",
+        "should",
+        "since",
+        "some",
+        "such",
+        "than",
+        "that",
+        "their",
+        "them",
+        "then",
+        "there",
+        "these",
+        "they",
+        "this",
+        "those",
+        "through",
+        "under",
+        "until",
+        "very",
+        "was",
+        "were",
+        "what",
+        "when",
+        "which",
+        "while",
+        "will",
+        "with",
+        "would",
+        "your",
+        "yours",
     }
 )
 
@@ -79,7 +121,7 @@ def compose_article(
     *,
     deps: AgentDependencies,
     article_number: str,
-) -> "object":
+) -> Article:
     """Compose one human-resolved KB article from a terse human solution.
 
     Raises ``ValueError`` for input the composer refuses before any model call
@@ -112,8 +154,6 @@ def compose_article(
     short_description = answer.short_description.strip() or title
     category = _slugify(answer.category) or _slugify(incident.category) or "other"
     service = _slugify(incident.service) or "general"
-
-    from app.models.knowledge import Article
 
     return Article(
         article_number=article_number,

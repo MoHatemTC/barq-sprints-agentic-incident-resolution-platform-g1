@@ -9,8 +9,6 @@ audit through the registered execution-log tool. A late ingest failure is
 
 from __future__ import annotations
 
-from uuid import uuid4
-
 import pytest
 from structlog.testing import capture_logs
 
@@ -21,7 +19,7 @@ from agent.knowledge_capture import (
 from agent.prompts import ComposedArticle
 from agent.state import IncidentSnapshot
 from agent.tools.permissions import PermissionClass
-from agent.tools.registry import RegistryRefusalError, RefusalReason
+from agent.tools.registry import RefusalReason, RegistryRefusalError
 from app.models.execution_log import ExecutionAction, ExecutionStatus
 from app.models.knowledge import WorkflowState
 from app.workers.retry_policy import RetryableError, TerminalError
@@ -214,7 +212,9 @@ class TestComposeFailures:
     ) -> None:
         events: list[str] = []
         answers = [RetryableError("proxy 503"), COMPOSER_ANSWER]
-        deps, _, _ = _deps(events, llm_answers={"article_composer": answers}, monkeypatch=monkeypatch)
+        deps, _, _ = _deps(
+            events, llm_answers={"article_composer": answers}, monkeypatch=monkeypatch
+        )
         result = await capture_human_resolution(**_capture_args(deps, events))
         assert result is not None
 
@@ -242,9 +242,7 @@ class TestComposeFailures:
         assert result is None
         assert len(deps.llm.calls) == 1  # no retry on terminal errors
 
-    async def test_garbage_solution_skips_everything(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_garbage_solution_skips_everything(self, monkeypatch: pytest.MonkeyPatch) -> None:
         events: list[str] = []
         deps, registry, _ = _deps(events, monkeypatch=monkeypatch)
         args = _capture_args(deps, events)

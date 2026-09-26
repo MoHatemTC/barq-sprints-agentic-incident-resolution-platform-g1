@@ -21,8 +21,8 @@ from agent.tools import build_servicenow_tool_registry
 from agent.tools.permissions import PermissionClass
 from agent.tools.registry import (
     ApprovalCheckResult,
-    RegistryRefusalError,
     RefusalReason,
+    RegistryRefusalError,
     ToolCallContext,
     ToolRegistration,
 )
@@ -65,9 +65,7 @@ class StubApprovalChecker:
 
 
 PERMITTED = StubApprovalChecker(ApprovalCheckResult(True))
-REFUSED_MISSING = StubApprovalChecker(
-    ApprovalCheckResult(False, RefusalReason.APPROVAL_MISSING)
-)
+REFUSED_MISSING = StubApprovalChecker(ApprovalCheckResult(False, RefusalReason.APPROVAL_MISSING))
 REFUSED_SCOPE = StubApprovalChecker(
     ApprovalCheckResult(False, RefusalReason.APPROVAL_SCOPE_INVALID)
 )

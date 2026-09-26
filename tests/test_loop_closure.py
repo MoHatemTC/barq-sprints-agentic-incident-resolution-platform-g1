@@ -48,18 +48,13 @@ INCIDENT = IncidentSnapshot(
     service="corporate-vpn",
 )
 
-SOLUTION = (
-    "was a stale split tunnel route; flushed the vpn routes and reinstalled the client"
-)
+SOLUTION = "was a stale split tunnel route; flushed the vpn routes and reinstalled the client"
 
 COMPOSER_ANSWER = ComposedArticle(
     title="Resolving Stale Split-Tunnel VPN Routes",
     short_description="Flush stale vpn routes and reinstall the client.",
     category="network",
-    body=(
-        "1. Flush the stale split tunnel routes.\n"
-        "2. Reinstall the vpn client."
-    ),
+    body=("1. Flush the stale split tunnel routes.\n2. Reinstall the vpn client."),
 )
 
 SIMILAR_QUERY = "vpn disconnects on the new laptop, split tunnel seems broken"
@@ -88,9 +83,7 @@ class StubEmbeddingEngine:
         dense = [0.0] * 384
         for i in indices:
             dense[i] = 1.0
-        return EmbeddedText(
-            dense=dense, sparse_indices=indices, sparse_values=[1.0] * len(indices)
-        )
+        return EmbeddedText(dense=dense, sparse_indices=indices, sparse_values=[1.0] * len(indices))
 
 
 @dataclass

@@ -7,7 +7,7 @@ Run (Layer 2 — real ServiceNow PDI, real Qdrant, real Gemini via LiteLLM):
         --short-description "VPN drops every few minutes" \
         --description "Corporate VPN drops intermittently for the requester." \
         --service corporate-vpn \
-        --solution "was a stale split tunnel route; flushed the vpn routes and reinstalled the client" \
+        --solution "was a stale split tunnel route; flushed vpn routes and reinstalled client" \
         --similar-query "vpn disconnects on the new laptop, split tunnel seems broken"
 
 Prerequisites:
@@ -34,11 +34,12 @@ import argparse
 import asyncio
 import json
 import uuid
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import structlog
-from dataclasses import replace
 
 from agent.config import get_agent_settings
 from agent.knowledge_capture import capture_human_resolution, make_next_article_number
@@ -48,11 +49,10 @@ from agent.state import IncidentSnapshot
 from agent.tools import RefusalExplainer, build_servicenow_tool_registry
 from agent.tools.permissions import PermissionClass
 from agent.tools.registry import ApprovalCheckResult, PostgreSQLApprovalChecker, ToolRegistration
-from app.core.config import get_retrieval_settings, get_settings, kb_publisher_settings
-from app.models.knowledge import Classification
 from app.clients.qdrant import get_qdrant_client
 from app.clients.servicenow_client import ServiceNowClient
-from app.db.models import Approval
+from app.core.config import get_retrieval_settings, get_settings, kb_publisher_settings
+from app.models.knowledge import Classification
 from app.publishing.servicenow_kb import ServiceNowKBClient, make_kb_publish_handler
 from app.workers.sync_engine import (
     build_sync_database_url,
@@ -153,14 +153,11 @@ async def run(args: argparse.Namespace) -> None:
     if result is None:
         raise SystemExit("capture returned None — check the logs above")
     print(
-        f"   article {result.article_number} -> sys_id {result.sys_id}, "
-        f"points {result.point_count}"
+        f"   article {result.article_number} -> sys_id {result.sys_id}, points {result.point_count}"
     )
 
     print("== 4. verification: ServiceNow read-back and Qdrant points")
-    record = await kb_client.find_by_source_id(
-        f"{result.article_number}-v1.0", kb_sys_id=kb_sys_id
-    )
+    record = await kb_client.find_by_source_id(f"{result.article_number}-v1.0", kb_sys_id=kb_sys_id)
     if record is None:
         raise SystemExit("article missing from ServiceNow after verified publish")
     print(
@@ -193,7 +190,9 @@ async def run(args: argparse.Namespace) -> None:
     )
     for hit in retrieval.hits:
         marker = "  <-- captured knowledge" if hit.article_number == result.article_number else ""
-        print(f"   {hit.article_number} v{hit.version} score={hit.relevance:.2f} {hit.title}{marker}")
+        print(
+            f"   {hit.article_number} v{hit.version} score={hit.relevance:.2f} {hit.title}{marker}"
+        )
 
     captured = any(h.article_number == result.article_number for h in retrieval.hits)
     print("== RESULT: LOOP CLOSED" if captured else "== RESULT: NOT RETRIEVABLE — investigate")
