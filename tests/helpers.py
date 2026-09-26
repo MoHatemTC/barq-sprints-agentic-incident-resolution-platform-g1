@@ -16,7 +16,7 @@ from app.core.logging import redact_sensitive_data
 
 def mock_settings(**overrides: object) -> Settings:
     defaults = {
-        "retrieval_mode": "hybrid_reranked",
+        "retrieval_mode": "hybrid",
         "servicenow_instance_url": "https://dev00000.service-now.com",
         "servicenow_client_id": "test-cid",
         "servicenow_client_secret": "test-secret",
