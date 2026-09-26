@@ -68,7 +68,12 @@ class TestRowMapping:
         }
         status, decision, evidence = summarize("retrieve", values)
         assert status == "succeeded"
-        assert decision == {"query": "q", "sufficient": True, "best_relevance": 0.8, "hit_count": 1}
+        assert decision == {
+            "query": "q",
+            "sufficient": True,
+            "best_relevance": 0.8,
+            "hit_count": 1,
+        }
         assert evidence == [
             {
                 "article_id": "KB0001-v2.0",
@@ -161,7 +166,11 @@ def rows(engine, execution_id: UUID) -> list[Any]:
 
 
 def run(
-    record: dict[str, Any], deps: Any, saver: WorkflowStateSaver, execution_id: UUID, attempt: int
+    record: dict[str, Any],
+    deps: Any,
+    saver: WorkflowStateSaver,
+    execution_id: UUID,
+    attempt: int,
 ) -> dict[str, Any]:
     return run_graph(
         build_graph(deps, checkpointer=saver),
@@ -220,8 +229,18 @@ class TestWorkflowStateTable:
 
         assert result["resumed"] is True
         assert result["outcome"] == "suggested"
-        assert llm.purposes() == ["classify", "diagnose", "generate", "generate"]
-        assert backend.calls == ["read_incident", "write_ai_fields", "write_execution_log"]
+        assert llm.purposes() == [
+            "injection_classifier",
+            "classify",
+            "diagnose",
+            "generate",
+            "generate",
+        ]
+        assert backend.calls == [
+            "read_incident",
+            "write_ai_fields",
+            "write_execution_log",
+        ]
         stored = rows(pg_engine, execution_id)
         by_attempt = {(r.node_name, r.attempt) for r in stored}
         assert ("classify", 1) in by_attempt and ("classify", 2) not in by_attempt
