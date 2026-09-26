@@ -46,7 +46,7 @@ The four highs are instead resolved with an `overrides` block in `package.json`,
 | `tmp` | 0.0.33 | `^0.2.7` | `<=0.2.5` |
 | `undici` | 6.25.0 | `^7.29.1` | `<=6.27.0` |
 
-Result: **19 → 10 vulnerabilities, 0 high, 0 critical.** Verified that this changes nothing the instance receives — `npx now-sdk build --frozenKeys` still exits 0, `keys.ts` stays `ae0118fa`, and all 5 choice records and 13 field definitions still match the exported update set.
+Result: **19 → 10 vulnerabilities, 0 high, 0 critical.** Verified that this changes nothing the instance receives — `npx now-sdk build --frozenKeys` still exits 0, `keys.ts` is byte-identical to the committed file, and all 5 choice records and 13 field definitions still match the exported update set.
 
 ### Dependabot alerts closed on 2026-09-26
 
@@ -64,9 +64,9 @@ the table above because they are moderate/low rather than high:
 Both fixed lines carry **0 known advisories** in OSV for the resolved versions.
 
 Result after these two overrides: **19 → 7 vulnerabilities, 0 high, 0 critical.** Same
-verification as above: `npx now-sdk build --frozenKeys` exits 0, `keys.ts` stays
-`ae0118fa`, the working tree is clean after the build, and the built records still match
-the exported update set.
+verification as above: `npx now-sdk build --frozenKeys` exits 0, `keys.ts` is
+byte-identical to the committed file, the build adds nothing to `git status`, and the
+built records still match the exported update set.
 
 The remaining **7 moderates are accepted**. All are transitive dependencies of the SDK's CLI tooling, they run only at build time on developer machines and CI, and nothing from them is shipped to a ServiceNow instance — the deliverable is the exported XML. Overriding them further would mean major bumps deeper inside a vendor CLI for no change to what we ship. The real fix is a future SDK release that reproduces the export; that is Sprint 2 work, gated by `.github/workflows/servicenow-sdk.yml`.
 
