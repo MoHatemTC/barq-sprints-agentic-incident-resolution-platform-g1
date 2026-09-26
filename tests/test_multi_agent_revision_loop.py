@@ -338,6 +338,7 @@ class TestScenarioDStateAuditabilityAndResilience:
 
         # Verify LLM calls count
         assert llm.purposes() == [
+            "injection_classifier",
             "classify",
             "diagnose",
             "generate",
@@ -391,7 +392,10 @@ class TestScenarioDStateAuditabilityAndResilience:
 
         answers_attempt1 = vpn_answers()
         # Attempt 1: First generate succeeds, first verify rejects, second generate fails
-        answers_attempt1["generate"] = [bad_draft, RetryableError("LLM rate limit on revision")]
+        answers_attempt1["generate"] = [
+            bad_draft,
+            RetryableError("LLM rate limit on revision"),
+        ]
         answers_attempt1["verify_evidence"] = [critic_reject]
         llm1 = FakeLLM(answers_attempt1)
         deps1 = make_deps(llm=llm1, servicenow=backend)
@@ -401,6 +405,7 @@ class TestScenarioDStateAuditabilityAndResilience:
 
         # Confirm nodes completed before failure
         assert llm1.purposes() == [
+            "injection_classifier",
             "classify",
             "diagnose",
             "generate",

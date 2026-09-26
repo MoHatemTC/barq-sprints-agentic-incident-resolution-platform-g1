@@ -72,7 +72,9 @@ class TestRoutes:
         assert result["write_back"] == "written"
         assert len(backend.updates) == 1
 
-    def test_high_risk_escalates_at_determine_risk_without_retrieval_or_generation(self) -> None:
+    def test_high_risk_escalates_at_determine_risk_without_retrieval_or_generation(
+        self,
+    ) -> None:
         llm = FakeLLM(vpn_answers() | label("software"))
         retriever = FakeRetriever()
         backend = FakeServiceNow()
@@ -80,10 +82,19 @@ class TestRoutes:
 
         result = run(ORDER_P1, deps)
 
-        assert result["path"] == ["load", "validate", "classify", "determine_risk", "act"]
+        assert result["path"] == [
+            "load",
+            "validate",
+            "classify",
+            "determine_risk",
+            "act",
+        ]
         assert result["outcome"] == "escalated_high_risk"
         assert retriever.calls == []
-        assert llm.purposes() == ["classify"]  # no diagnose, no generate
+        assert llm.purposes() == [
+            "injection_classifier",
+            "classify",
+        ]  # no diagnose, no generate
         body = backend.updates[0][1].to_table_api_body()
         assert "x_2215032_ai_inc_0_ai_suggestion" not in body
         assert body["x_2215032_ai_inc_0_ai_human_review_required"] == "true"
@@ -101,7 +112,7 @@ class TestRoutes:
             "act",
         ]
         assert result["outcome"] == "escalated_no_evidence"
-        assert llm.purposes() == ["classify"]
+        assert llm.purposes() == ["injection_classifier", "classify"]
 
     def test_w03_leave_request_is_escalated(self) -> None:
         # Task 0 test set: "no knowledge-base article covers this — it must go to a human".
@@ -143,7 +154,7 @@ class TestRoutes:
         result = run(VPN, make_deps(llm=llm, servicenow=backend))
         assert result["path"] == ["load", "validate", "act"]
         assert result["outcome"] == "skipped_ineligible"
-        assert llm.calls == []
+        assert llm.purposes() == ["injection_classifier"]
         assert backend.updates == []
 
     def test_elevated_risk_drafts_and_awaits_approval(self) -> None:
@@ -201,7 +212,12 @@ class TestEdgeConditions:
 
     @pytest.mark.parametrize(
         ("level", "expected"),
-        [("low", "retrieve"), ("elevated", "retrieve"), ("high", "act"), ("bogus", "act")],
+        [
+            ("low", "retrieve"),
+            ("elevated", "retrieve"),
+            ("high", "act"),
+            ("bogus", "act"),
+        ],
     )
     def test_after_determine_risk(self, level: str, expected: str) -> None:
         state = {"risk": {"level": level, "reasons": [], "approval_required": False}}
@@ -293,7 +309,12 @@ class TestCheckpointing:
 
         with pytest.raises(RetryableError):
             run(VPN, deps, checkpointer=saver, attempt=1)
-        assert llm.purposes() == ["classify", "diagnose", "generate"]
+        assert llm.purposes() == [
+            "injection_classifier",
+            "classify",
+            "diagnose",
+            "generate",
+        ]
         assert backend.calls == ["read_incident"]
 
         answers["generate"] = good_generate
@@ -302,7 +323,14 @@ class TestCheckpointing:
         assert result["resumed"] is True
         assert result["outcome"] == "suggested"
         # classify and diagnose were not paid for twice; load did not re-read.
-        assert llm.purposes() == ["classify", "diagnose", "generate", "generate", "verify_evidence"]
+        assert llm.purposes() == [
+            "injection_classifier",
+            "classify",
+            "diagnose",
+            "generate",
+            "generate",
+            "verify_evidence",
+        ]
         assert backend.calls == [
             "read_incident",
             "write_ai_fields",
@@ -325,7 +353,10 @@ class TestCheckpointing:
         deps = make_deps()
         run(VPN, deps, checkpointer=saver, execution_id=EXECUTION_ID)
         other = run(
-            VPN, deps, checkpointer=saver, execution_id="11111111-1111-1111-1111-111111111111"
+            VPN,
+            deps,
+            checkpointer=saver,
+            execution_id="11111111-1111-1111-1111-111111111111",
         )
         assert other["resumed"] is False
 

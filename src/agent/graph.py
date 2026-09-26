@@ -91,13 +91,15 @@ def build_graph(
         builder.add_node(name, cast(Any, instrument(name, table[name], deps)))
 
     builder.add_edge(START, "load")
-    builder.add_edge("load", "validate")
+    builder.add_conditional_edges("load", edges.after_load, {"validate": "validate", "act": "act"})
     builder.add_conditional_edges(
         "validate", edges.after_validate, {"classify": "classify", "act": "act"}
     )
     builder.add_edge("classify", "determine_risk")
     builder.add_conditional_edges(
-        "determine_risk", edges.after_determine_risk, {"retrieve": "retrieve", "act": "act"}
+        "determine_risk",
+        edges.after_determine_risk,
+        {"retrieve": "retrieve", "act": "act"},
     )
     builder.add_conditional_edges(
         "retrieve", edges.after_retrieve, {"diagnose": "diagnose", "act": "act"}
