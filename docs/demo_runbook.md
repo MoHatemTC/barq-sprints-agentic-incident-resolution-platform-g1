@@ -35,42 +35,27 @@ points, and seven Postgres tables (`events`, `executions`, `idempotency_keys`,
 
 ## 1 · Point the run at the instance you want
 
-`.env` in the repo is the **shared** instance (`dev407364`). The verified clean
-test bed is your own PDI, `dev434590`, whose credentials live in section 6 of
-`.secrets/barq-g1.env`. Build a throwaway env file that overrides the ServiceNow
-identity — env vars beat `.env` in pydantic-settings, so nothing in the repo
-changes:
+Use the test PDI (`dev434590`). Its non-admin integration identity and the
+local service settings are in `../.secrets/barq-g1.env`. Source the helper in
+**each** terminal; it reads the actual PostgreSQL and Redis passwords from the
+running containers and does not print or save credentials:
 
 ```bash
-set -a; . ../.secrets/barq-g1.env; set +a
-umask 077
-{ cat .env
-  echo "SERVICENOW_INSTANCE_URL='$PDI_INSTANCE_URL'"
-  echo "SERVICENOW_CLIENT_ID='$PDI_SERVICENOW_CLIENT_ID'"
-  echo "SERVICENOW_CLIENT_SECRET='$PDI_SERVICENOW_CLIENT_SECRET'"
-  echo "SERVICENOW_USERNAME='$PDI_SERVICENOW_USERNAME'"
-  echo "SERVICENOW_PASSWORD='$PDI_SERVICENOW_PASSWORD'"
-  echo "POSTGRES_PORT=5432"
-  echo "REDIS_PORT=6379"
-} > /tmp/demo.env
-set -a; . /tmp/demo.env; set +a
+. scripts/load_local_demo_env.sh
 ```
 
-> Two gotchas that cost time on 2026-09-26. The local-stack block in
-> `.secrets/barq-g1.env` currently says `POSTGRES_PORT=5434` and a 17-character
-> password, but the running containers are on **5432** and use the 24-character
-> password from the repo `.env`. Nothing listens on 5434. Take the passwords
-> from the repo `.env` and the ports from `docker port`, not the other way round.
+The helper uses the ports exposed by the current local Docker stack. It avoids
+depending on a repo `.env` file, which may not exist in a fresh checkout.
 
 ## 2 · Start the API and a Celery worker, in two terminals
 
 ```bash
-set -a; . /tmp/demo.env; set +a
+. scripts/load_local_demo_env.sh
 uv run uvicorn app.main:app --host 127.0.0.1 --port 8099
 ```
 
 ```bash
-set -a; . /tmp/demo.env; set +a
+. scripts/load_local_demo_env.sh
 uv run celery -A app.workers.celery_app worker \
   --queues=barq:incident:events --loglevel=INFO --pool=threads --concurrency=1
 ```
@@ -94,7 +79,7 @@ curl -s http://127.0.0.1:8099/ready     # {"status":"ready","database":"connecte
 Both paths, ~2 minutes:
 
 ```bash
-set -a; . /tmp/demo.env; set +a
+. scripts/load_local_demo_env.sh
 uv run python scripts/demo_s34_hitl_live.py --all
 ```
 
@@ -171,7 +156,6 @@ uv run pytest tests/test_crash_recovery.py tests/test_interrupt_resume.py \
 ```bash
 pkill -f "uvicorn app.main:app"
 pkill -f "celery -A app.workers.celery_app"
-rm -f /tmp/demo.env
 ```
 
 Kill the worker before running `pytest -m integration`. A live worker shares the
