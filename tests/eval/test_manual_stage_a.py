@@ -107,6 +107,51 @@ def test_forbidden_section_is_a_violation_not_a_score() -> None:
     assert any("S01-T1" in v and "9.2" in v for v in violations)
 
 
+def test_compound_forbidden_label_and_refusal_matching() -> None:
+    runner = _load_runner()
+    rows = [
+        _row("S05-T1", must_not=["6.13 KB0010 v1"]),
+        _row("S01-T5", must_not=["2.1", "2.3"]),
+    ]
+
+    # 1. Retired KB0010-v1.0 hit flags a violation
+    records_bad = [
+        {
+            "turn_id": "S05-T1",
+            "section_labels": [],
+            "source_ids": ["KB0010-v1.0"],
+            "contexts": ["retired text"],
+        },
+        {
+            "turn_id": "S01-T5",
+            "section_labels": ["2.1"],
+            "source_ids": ["KB2002-v1.0"],
+            "contexts": ["section 2.1 text"],
+        },
+    ]
+    violations = runner.apply_integrity(rows, records_bad)
+    assert any("S05-T1" in v and "6.13 KB0010 v1" in v for v in violations)
+    assert any("S01-T5" in v and "2.1" in v for v in violations)
+
+    # 2. Active KB0010-v2.0 with section 6.13 does NOT trigger a violation for v1
+    records_good = [
+        {
+            "turn_id": "S05-T1",
+            "section_labels": ["6.13"],
+            "source_ids": ["KB0010-v2.0"],
+            "contexts": ["active text"],
+        },
+        {
+            "turn_id": "S01-T5",
+            "section_labels": ["5.1"],
+            "source_ids": ["KB2005-v1.0"],
+            "contexts": ["unrelated text"],
+        },
+    ]
+    violations_good = runner.apply_integrity(rows, records_good)
+    assert len(violations_good) == 0
+
+
 def test_missing_turn_is_reported() -> None:
     runner = _load_runner()
     rows = [_row("S01-T1"), _row("S01-T2")]

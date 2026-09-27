@@ -215,22 +215,64 @@ def collect_contexts(
     return records
 
 
+def is_forbidden_match(forbidden_label: str, record: dict) -> bool:
+    """Check if a forbidden section/article is retrieved in record."""
+    forbidden = forbidden_label.strip()
+    norm = forbidden.lower()
+
+    # 1. Exact match against section labels or source IDs
+    if any(norm == s.lower() for s in record.get("section_labels", [])):
+        return True
+    if any(norm == s.lower() for s in record.get("source_ids", [])):
+        return True
+
+    # 2. Section number match: e.g. forbidden is "2.1", "6.7", or starts with section number
+    parts = norm.split()
+    section_candidate = parts[0]
+    if section_candidate in [s.lower() for s in record.get("section_labels", [])]:
+        if len(parts) > 1:
+            article_constraints = [p for p in parts[1:] if p.startswith("kb") or p.startswith("v")]
+            if article_constraints:
+                for sid in [s.lower() for s in record.get("source_ids", [])]:
+                    if all(c in sid for c in article_constraints):
+                        return True
+            else:
+                return True
+        else:
+            return True
+
+    # 3. Article and version match in source_ids: e.g. "6.13 KB0010 v1" matching "KB0010-v1.0"
+    article_parts = [p for p in parts if p.startswith("kb") or p.startswith("v")]
+    if len(article_parts) >= 2:
+        for sid in [s.lower() for s in record.get("source_ids", [])]:
+            if all(c in sid for c in article_parts):
+                return True
+
+    # 4. Context substring match for special tokens like "header_footer_noise"
+    if norm in ("header_footer_noise",):
+        for text in record.get("contexts", []):
+            if "CONFIDENTIAL" in text or "Page 1 of" in text:
+                return True
+
+    return False
+
+
 def apply_integrity(rows: list[dict], records: list[dict]) -> list[str]:
     """Zero-tolerance checks; returns violation descriptions."""
     by_id = {r["turn_id"]: r for r in records}
     violations = []
-    forbidden = {r["turn_id"]: set(r["must_not_retrieve"]) for r in rows if r["must_not_retrieve"]}
+    forbidden = {r["turn_id"]: r["must_not_retrieve"] for r in rows if r.get("must_not_retrieve")}
     for turn_id, labels in forbidden.items():
         record = by_id.get(turn_id)
         if record is None:
             violations.append(f"{turn_id}: row missing from the run entirely")
             continue
-        hit = labels & set(record["section_labels"])
-        if hit:
-            violations.append(
-                f"{turn_id}: forbidden section(s) {sorted(hit)} retrieved "
-                f"via {record['source_ids']}"
-            )
+        for label in labels:
+            if is_forbidden_match(label, record):
+                violations.append(
+                    f"{turn_id}: forbidden section/article {label!r} retrieved "
+                    f"via {record['source_ids']} (sections: {record['section_labels']})"
+                )
     missing = [r["turn_id"] for r in rows if r["turn_id"] not in by_id]
     if missing:
         violations.append(f"turns missing from the run: {missing}")
@@ -297,10 +339,11 @@ def run(
     )
 
     manifest = load_manifest_for(manifest_path)
+    reverse_map = section_reverse_map(manifest)
     records = collect_contexts(
         rows,
         retriever,
-        section_reverse_map(manifest),
+        reverse_map,
         top_k=top_k,
         threshold=threshold,
         limit=limit,
@@ -316,7 +359,36 @@ def run(
         else:
             record["scores"] = None
 
-    violations = apply_integrity(rows, records)
+    # Evaluate refusal/clarification turns that carry safety constraints (must_not_retrieve)
+    safety_negative_turns = [
+        {
+            "turn_id": t["turn_id"],
+            "user_input": t.get("standalone_input") or t.get("input", ""),
+            "reference": t.get("reference", ""),
+            "reference_contexts": t.get("reference_contexts") or None,
+            "expected_sections": t.get("expected_sections", []),
+            "must_not_retrieve": t.get("must_not_retrieve", []),
+            "requires": t.get("requires", []),
+            "applicability": adapters.stage_a_applicability(t),
+        }
+        for t in adapters.turns()
+        if t.get("expected_behaviour") in ("refuse", "clarify") and t.get("must_not_retrieve")
+    ]
+    if limit is None and safety_negative_turns:
+        safety_records = collect_contexts(
+            safety_negative_turns,
+            retriever,
+            reverse_map,
+            top_k=top_k,
+            threshold=threshold,
+        )
+        integrity_rows = (rows[:limit] if limit else rows) + safety_negative_turns
+        integrity_records = records + safety_records
+    else:
+        integrity_rows = rows[:limit] if limit else rows
+        integrity_records = records
+
+    violations = apply_integrity(integrity_rows, integrity_records)
     agreed = policy["status"] == "agreed" and all(
         m.get("floor") is not None for m in policy["metrics"].values()
     )
