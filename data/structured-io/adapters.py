@@ -211,6 +211,155 @@ def slice_report(results: list[dict]):
     }
 
 
+# ───────────────────────────────── Stage A contract (manual-KB integration)
+# The 100-turn dataset is the sole Stage A gate; the legacy 33-case suite is
+# retired. This section validates the dataset, declares per-turn layer
+# applicability, and provides a retrieval-only loader for RAGAS: it never
+# generates answers — the runner attaches real retrieved contexts.
+
+DATASET_CONTRACT = {"sessions": 20, "turns": 100}
+BEHAVIOUR_CONTRACT = {"answer": 87, "refuse": 12, "clarify": 1}
+RUBRIC_BEARING_TURNS = 35
+CONVERSATION_BEHAVIOURS = frozenset({"refuse", "clarify"})
+REPO_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_POLICY_PATH = REPO_ROOT / "eval" / "manual_stage_a_policy.json"
+_POLICY_REQUIRED_KEYS = (
+    "framework",
+    "judge_model",
+    "context_budget",
+    "metrics",
+    "aggregation",
+    "status",
+)
+
+
+class DatasetContractError(ValueError):
+    """Raised when the dataset or the metric policy violates the Stage A contract."""
+
+
+def _all_turns(data: dict | None = None) -> list[dict]:
+    data = data if data is not None else DATA
+    return [turn for session in data["sessions"] for turn in session["turns"]]
+
+
+def validate_dataset(data: dict | None = None) -> dict:
+    """Fail loudly on contract violations; return the account summary otherwise."""
+    data = data if data is not None else DATA
+    sessions = data.get("sessions", [])
+    turns = _all_turns(data)
+    problems: list[str] = []
+
+    ids = [turn.get("turn_id") for turn in turns]
+    duplicates = sorted({i for i in ids if ids.count(i) > 1})
+    if duplicates:
+        problems.append(f"duplicate turn ids: {duplicates[:5]}")
+    if len(sessions) != DATASET_CONTRACT["sessions"]:
+        problems.append(f"expected {DATASET_CONTRACT['sessions']} sessions, found {len(sessions)}")
+    if len(turns) != DATASET_CONTRACT["turns"]:
+        problems.append(f"expected {DATASET_CONTRACT['turns']} turns, found {len(turns)}")
+
+    behaviours = collections.Counter(turn.get("expected_behaviour") for turn in turns)
+    for behaviour, expected in BEHAVIOUR_CONTRACT.items():
+        if behaviours.get(behaviour, 0) != expected:
+            found = behaviours.get(behaviour, 0)
+            problems.append(f"expected {expected} {behaviour!r} turns, found {found}")
+
+    rubrics = sum(1 for turn in turns if turn.get("geval_criteria"))
+    if rubrics != RUBRIC_BEARING_TURNS:
+        problems.append(f"expected {RUBRIC_BEARING_TURNS} rubric-bearing turns, found {rubrics}")
+
+    for turn in turns:
+        if turn.get("expected_behaviour") == "answer":
+            for field in ("reference", "expected_sections", "standalone_input"):
+                if not turn.get(field):
+                    problems.append(f"{turn.get('turn_id')}: answer turn missing {field}")
+
+    if problems:
+        raise DatasetContractError("dataset contract violated: " + "; ".join(problems))
+
+    return {
+        "sessions": len(sessions),
+        "turns": len(turns),
+        "behaviours": dict(behaviours),
+        "retrieval_applicable": behaviours["answer"],
+        "pending_stage_b": behaviours["refuse"] + behaviours["clarify"],
+        "rubric_bearing_turns": rubrics,
+    }
+
+
+def stage_a_applicability(turn: dict) -> dict[str, bool]:
+    """Declare per-turn layer applicability exactly once.
+
+    Retrieval: the 87 answerable standalone queries. Conversation: the 12
+    refusal and one clarification turns, pending Stage B. Safety: every turn
+    keeps its applicable checks. Generation: answer turns carry rubrics, but
+    they only run when an actual application output exists (Step 9 decides).
+    """
+    behaviour = turn.get("expected_behaviour")
+    return {
+        "retrieval": behaviour == "answer",
+        "safety": True,
+        "generation": behaviour == "answer",
+        "conversation": behaviour in CONVERSATION_BEHAVIOURS,
+    }
+
+
+def stage_a_applicability_summary(data: dict | None = None) -> dict[str, int]:
+    totals = {"retrieval": 0, "safety": 0, "generation": 0, "conversation": 0}
+    for turn in _all_turns(data):
+        flags = stage_a_applicability(turn)
+        for layer, applies in flags.items():
+            if applies:
+                totals[layer] += 1
+    return totals
+
+
+def retrieval_only_rows(data: dict | None = None) -> list[dict]:
+    """One row per answerable turn for reference-based context metrics.
+
+    No ``run`` callback, no generated answer: the caller evaluates the
+    standalone question through real retrieval and attaches the actual
+    contexts before the framework sees the row. ``must_not_retrieve`` and
+    ``expected_sections`` ride along for the deterministic integrity checks.
+    """
+    rows: list[dict] = []
+    for turn in _all_turns(data):
+        if turn.get("expected_behaviour") != "answer":
+            continue
+        rows.append(
+            {
+                "turn_id": turn["turn_id"],
+                "user_input": turn["standalone_input"],
+                "reference": turn["reference"],
+                "reference_contexts": turn.get("reference_contexts") or None,
+                "expected_sections": turn["expected_sections"],
+                "must_not_retrieve": turn.get("must_not_retrieve", []),
+                "requires": turn.get("requires", []),
+                "applicability": stage_a_applicability(turn),
+            }
+        )
+    return rows
+
+
+def load_metric_policy(path: str | Path | None = None) -> dict:
+    """Load the Stage A metric policy; a missing or thin policy is never a pass."""
+    policy_path = Path(path) if path else DEFAULT_POLICY_PATH
+    if not policy_path.exists():
+        raise FileNotFoundError(
+            f"metric policy not found at {policy_path}: Stage A acceptance stays "
+            "report-only, never a pass, until the policy exists and is signed"
+        )
+    policy = json.loads(policy_path.read_text(encoding="utf-8"))
+    missing = [key for key in _POLICY_REQUIRED_KEYS if key not in policy]
+    if missing:
+        raise DatasetContractError(f"metric policy missing required keys: {missing}")
+    if policy["status"] not in {"report_only", "agreed"}:
+        raise DatasetContractError(
+            f"metric policy status {policy['status']!r} is not one of report_only/agreed"
+        )
+    return policy
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--list-capabilities", action="store_true")
