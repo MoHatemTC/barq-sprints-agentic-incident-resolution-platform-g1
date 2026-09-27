@@ -389,10 +389,44 @@ def run(
         integrity_records = records
 
     violations = apply_integrity(integrity_rows, integrity_records)
-    agreed = policy["status"] == "agreed" and all(
-        m.get("floor") is not None for m in policy["metrics"].values()
+    capability_means = aggregate_by_capability(rows, records)
+
+    floor_failures: list[str] = []
+    for metric_name, m_spec in policy.get("metrics", {}).items():
+        floor = m_spec.get("floor")
+        if floor is not None:
+            for cap, scores in capability_means.items():
+                score = scores.get(metric_name)
+                if score is not None and score < floor:
+                    floor_failures.append(
+                        f"metric {metric_name!r} in capability {cap!r}: "
+                        f"{score:.4f} < floor {floor:.4f}"
+                    )
+
+    expected_eval = limit if limit is not None else len(rows)
+    evaluated_count = sum(1 for r in records if r.get("scores"))
+    retrieval_errors_count = sum(1 for r in records if r.get("error"))
+    judge_errors_count = sum(1 for r in records if r.get("judge_error"))
+
+    has_failures = (
+        bool(violations)
+        or bool(floor_failures)
+        or retrieval_errors_count > 0
+        or judge_errors_count > 0
+        or (evaluated_count < expected_eval)
     )
-    acceptance = "agreed" if agreed and judge.name == "ragas" else "pending"
+
+    agreed = policy["status"] == "agreed" and all(
+        m.get("floor") is not None for m in policy.get("metrics", {}).values()
+    )
+
+    if has_failures:
+        acceptance = "failed"
+    elif agreed and judge.name == "ragas":
+        acceptance = "agreed"
+    else:
+        acceptance = "pending"
+
     report = {
         "acceptance": acceptance,
         "judge": judge.name,
@@ -407,13 +441,14 @@ def run(
         "accounting": {
             "dataset_turns": 100,
             "answerable_retrieval_rows": len(rows),
-            "evaluated": sum(1 for r in records if r["scores"]),
-            "retrieval_errors": sum(1 for r in records if r["error"]),
-            "judge_errors": sum(1 for r in records if r.get("judge_error")),
+            "evaluated": evaluated_count,
+            "retrieval_errors": retrieval_errors_count,
+            "judge_errors": judge_errors_count,
             "conversation_pending": 100 - len(rows),
         },
         "integrity_violations": violations,
-        "capability_means": aggregate_by_capability(rows, records),
+        "floor_failures": floor_failures,
+        "capability_means": capability_means,
         "rows": records,
     }
     return report
@@ -488,11 +523,28 @@ def main() -> int:
         f"Stage A ({judge.name}, acceptance={report['acceptance']}): "
         f"{acc['evaluated']}/{acc['answerable_retrieval_rows']} evaluated, "
         f"{acc['conversation_pending']} pending Stage B, "
-        f"{len(report['integrity_violations'])} integrity violations"
+        f"{len(report['integrity_violations'])} integrity violations, "
+        f"{acc['retrieval_errors']} retrieval errors, "
+        f"{acc['judge_errors']} judge errors"
     )
     for violation in report["integrity_violations"]:
         print(f"  VIOLATION: {violation}", file=sys.stderr)
-    if report["integrity_violations"]:
+    for floor_fail in report.get("floor_failures", []):
+        print(f"  FLOOR FAILURE: {floor_fail}", file=sys.stderr)
+
+    has_errors = (
+        bool(report["integrity_violations"])
+        or bool(report.get("floor_failures"))
+        or acc["retrieval_errors"] > 0
+        or acc["judge_errors"] > 0
+        or (
+            args.limit is None
+            and acc["evaluated"] < acc["answerable_retrieval_rows"]
+        )
+        or (args.limit is not None and acc["evaluated"] < args.limit)
+        or report.get("acceptance") == "failed"
+    )
+    if has_errors:
         return 1
     return 0
 

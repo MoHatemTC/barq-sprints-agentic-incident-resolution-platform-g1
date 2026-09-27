@@ -8,6 +8,7 @@ without ragas, credentials, or a Qdrant server.
 
 import importlib.util
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 from qdrant_client import QdrantClient
@@ -169,8 +170,6 @@ def test_missing_turn_is_reported() -> None:
 
 
 def _mock_engine():
-    from unittest.mock import MagicMock
-
     from app.retrieval.embedding import EmbeddedText
 
     engine = MagicMock()
@@ -186,8 +185,6 @@ def _mock_engine():
 
 
 def test_run_with_fake_judge_is_pending_and_accounts_for_every_turn() -> None:
-    from qdrant_client import QdrantClient
-
     runner = _load_runner()
     judge = runner.FakeJudge()
 
@@ -234,3 +231,52 @@ def test_judge_failure_is_recorded_not_passed() -> None:
     assert by_id["S01-T2"]["scores"] is None
     assert "judge exploded" in by_id["S01-T2"]["judge_error"]
     assert report["accounting"]["judge_errors"] == 1
+    assert report["acceptance"] == "failed"
+
+
+def test_retrieval_failure_fails_acceptance() -> None:
+    runner = _load_runner()
+    failing_engine = MagicMock()
+    failing_engine.embed_query.side_effect = RuntimeError("embedding service down")
+
+    report = runner.run(
+        qdrant_url="http://localhost:16333",
+        collection="scratch_eval",
+        judge=runner.FakeJudge(),
+        client_factory=lambda: QdrantClient(":memory:"),
+        engine_factory=lambda: failing_engine,
+        limit=2,
+    )
+    assert report["acceptance"] == "failed"
+    assert report["accounting"]["retrieval_errors"] == 2
+
+
+def test_metric_floor_failure_marks_run_failed(monkeypatch) -> None:
+    runner = _load_runner()
+    # Inject a policy with a floor of 0.80, while FakeJudge returns 0.50
+    strict_policy = {
+        "description": "Strict policy with signed floor",
+        "framework": "ragas",
+        "framework_version": "1.0",
+        "judge_model": "test-judge",
+        "metrics": {
+            "context_recall": {"floor": 0.80, "aggregation": "per capability slice"},
+            "context_precision": {"floor": 0.80, "aggregation": "per capability slice"},
+        },
+        "status": "agreed",
+        "thresholds_agreed": True,
+        "safety": {"zero_tolerance": []},
+    }
+    monkeypatch.setattr(runner.adapters, "load_metric_policy", lambda: strict_policy)
+
+    report = runner.run(
+        qdrant_url="http://localhost:16333",
+        collection="scratch_eval",
+        judge=runner.FakeJudge(),
+        client_factory=lambda: QdrantClient(":memory:"),
+        engine_factory=_mock_engine,
+        limit=2,
+    )
+    assert report["acceptance"] == "failed"
+    assert len(report["floor_failures"]) > 0
+    assert any("context_recall" in f for f in report["floor_failures"])
