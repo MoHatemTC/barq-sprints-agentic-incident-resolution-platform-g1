@@ -182,6 +182,10 @@ class TestRunWholePageOcr:
 
         with (
             patch(
+                "app.retrieval.manual.manual_parser.shutil.which",
+                return_value="/usr/bin/tesseract",
+            ),
+            patch(
                 "app.retrieval.manual.manual_parser.extract_ocr_text",
                 return_value=[fake_result],
             ),
