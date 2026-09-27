@@ -14,6 +14,7 @@ from typing import Any
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph.state import CompiledStateGraph
+from opentelemetry import context as otel_context
 from pydantic import ValidationError
 
 from agent.checkpointer import build_checkpointer
@@ -87,15 +88,35 @@ def resume_incident_graph(
         number=str(incident.get("number") or "INC0"),
         event_type="incident.created",
     )
-    return run_graph(
-        runtime.graph,
-        event,
-        execution_id=execution_id,
-        correlation_id=str(stored.get("correlation_id") or correlation_id),
-        attempt=attempt,
-        deps=runtime.deps,
-        resume=decision,
-    )
+    correlation_id = str(stored.get("correlation_id") or correlation_id)
+    # A decision arrives in a different request from the original webhook.
+    # Detach that request's context before rejoining the persisted execution trace.
+    token = otel_context.attach(otel_context.Context())
+    try:
+        with (
+            runtime.deps.tracer.span(
+                "approval.resume",
+                correlation_id=correlation_id,
+                as_type="chain",
+                metadata={"execution_id": execution_id},
+            ),
+            runtime.deps.tracer.trace_attributes(
+                correlation_id=correlation_id,
+                incident_number=event.number,
+                execution_id=execution_id,
+            ),
+        ):
+            return run_graph(
+                runtime.graph,
+                event,
+                execution_id=execution_id,
+                correlation_id=correlation_id,
+                attempt=attempt,
+                deps=runtime.deps,
+                resume=decision,
+            )
+    finally:
+        otel_context.detach(token)
 
 
 __all__ = [

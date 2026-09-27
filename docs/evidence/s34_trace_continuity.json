@@ -1,21 +1,23 @@
 {
-  "generated_at": "2026-09-26T20:37:23.094113+00:00",
+  "generated_at": "2026-09-27T16:56:21.038727+00:00",
   "source_transcript": "docs/evidence/s34_hitl_demo.json",
   "method": "trace_id_for(correlation_id) is the same derivation production uses; observations are read from GET /api/public/v2/observations?traceId=... because the legacy /api/public/traces/{id} endpoint returns 410 on this org.",
   "runs": [
     {
       "run": "run1",
       "incident": "INC0010023",
-      "execution_id": "dc3d73e5-235e-4747-b30b-afb08d40d6c9",
-      "correlation_id": "378d4f54-a694-4ede-a925-954ab1c2de19",
-      "derived_trace_id": "8b7ff1537c83aa94dbbbd926a2e46950",
+      "execution_id": "a15445a3-5e10-40ac-8c9d-6ffb37a703a9",
+      "correlation_id": "99185e56-e204-4431-8a54-669ab668ed98",
+      "derived_trace_id": "4a0e501125c8c5458755b918367db0c4",
       "distinct_trace_ids_in_observations": [
-        "8b7ff1537c83aa94dbbbd926a2e46950"
+        "4a0e501125c8c5458755b918367db0c4"
       ],
-      "observation_count": 11,
+      "observation_count": 16,
       "observation_names": [
-        "llm.approval_brief",
+        "approval.resume",
+        "guardrail.input_screening",
         "llm.classify",
+        "llm.injection_classifier",
         "node.act",
         "node.classify",
         "node.determine_risk",
@@ -23,37 +25,45 @@
         "node.validate",
         "queue.enqueue",
         "servicenow.read_incident",
+        "servicenow.write_ai_fields",
+        "servicenow.write_execution_log",
         "webhook.receipt",
         "worker.pickup"
       ],
       "observation_types": [
         "AGENT",
+        "CHAIN",
         "GENERATION",
+        "GUARDRAIL",
         "SPAN",
         "TOOL"
       ],
       "window": {
-        "start": "2026-09-26T19:44:27.044Z",
-        "end": "2026-09-26T19:44:35.887Z"
-      }
+        "start": "2026-09-27T16:54:47.649Z",
+        "end": "2026-09-27T16:55:08.954Z"
+      },
+      "resume_spans_present": true
     },
     {
       "run": "run2",
       "incident": "INC0010025",
-      "execution_id": "0f3eab67-e1ca-41ac-9863-8af1d732a3cb",
-      "correlation_id": "9d37f5be-2fc9-46d9-9308-938eeae99a54",
-      "derived_trace_id": "ab42eee955e4549a53001969cba2a80f",
+      "execution_id": "60340a96-2a8f-408a-accd-0a7c1a99f8da",
+      "correlation_id": "11234ff5-52c0-43b2-83a0-a7f57a59346b",
+      "derived_trace_id": "782108a8d467e401413434ec5af7b974",
       "distinct_trace_ids_in_observations": [
-        "ab42eee955e4549a53001969cba2a80f"
+        "782108a8d467e401413434ec5af7b974"
       ],
-      "observation_count": 24,
+      "observation_count": 27,
       "observation_names": [
         "agent.critic",
         "agent.diagnostic",
         "agent.resolution",
+        "guardrail.input_screening",
+        "guardrail.safety_check",
         "llm.classify",
         "llm.diagnose",
         "llm.generate",
+        "llm.injection_classifier",
         "llm.verify_evidence",
         "node.act",
         "node.classify",
@@ -82,13 +92,11 @@
         "TOOL"
       ],
       "window": {
-        "start": "2026-09-26T19:44:53.934Z",
-        "end": "2026-09-26T19:45:19.899Z"
+        "start": "2026-09-27T16:55:15.919Z",
+        "end": "2026-09-27T16:55:39.509Z"
       }
     }
   ],
-  "failures": [
-    "run1: the resume wrote to ServiceNow but the trace has no ['servicenow.write_ai_fields', 'servicenow.write_execution_log'] span"
-  ],
-  "verdict": "NOT continuous"
+  "failures": [],
+  "verdict": "one trace id per execution"
 }
