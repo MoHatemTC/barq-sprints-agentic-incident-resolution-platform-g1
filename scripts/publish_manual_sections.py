@@ -23,6 +23,7 @@ import argparse
 import asyncio
 import hashlib
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -172,6 +173,8 @@ async def async_main(args: argparse.Namespace) -> int:
                         "error": str(err),
                     }
                 )
+            finally:
+                _write_report(args.report, report)
     finally:
         await client.aclose()
 
@@ -188,7 +191,17 @@ async def async_main(args: argparse.Namespace) -> int:
 
 
 def _write_report(path: Path, data: dict) -> None:
-    path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = path.with_suffix(f"{path.suffix}.tmp.{os.getpid()}")
+    try:
+        temp_path.write_text(
+            json.dumps(data, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        temp_path.replace(path)
+    finally:
+        if temp_path.exists():
+            temp_path.unlink(missing_ok=True)
 
 
 def main() -> int:
