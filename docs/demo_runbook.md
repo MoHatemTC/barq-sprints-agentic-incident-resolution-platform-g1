@@ -6,6 +6,9 @@ ServiceNow PDI, PostgreSQL, Redis, Celery, Qdrant and Gemini services. The
 2026-09-27 trace evidence for earlier runs is in `docs/evidence/`.
 Creating an incident in ServiceNow alone does not send it to the local API;
 the demo script sends the authenticated webhook event itself.
+Do not point this script at the shared `dev407364` instance: its Business Rule
+sends the event automatically, and the script's reset would create a second
+execution and replace the first suggestion. The script refuses that instance.
 
 The shared EC2 API at `http://51.21.182.56:8000` is a separate deployment from
 this local demo. It follows `main`, so Sprint 3.4's pending-approval endpoint and

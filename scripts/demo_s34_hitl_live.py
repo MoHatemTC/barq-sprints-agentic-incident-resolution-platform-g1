@@ -631,9 +631,18 @@ async def run_one(
 
 async def main_async(args: argparse.Namespace) -> int:
     base = args.base.rstrip("/")
+    settings = get_settings()
+    if "dev407364.service-now.com" in str(settings.servicenow_instance_url).lower():
+        say(
+            "This reset-and-replay harness is for the local PDI only. The shared "
+            "ServiceNow Business Rule sends its own event; resetting an incident "
+            "here would create a second live execution. Create a fresh incident "
+            "on the shared instance and let its Business Rule deliver the event."
+        )
+        return 2
     say("=" * 68)
     say("BARQ S3.4 — live HITL demo: interrupt -> brief -> decide -> resume")
-    say(f"API {base}   instance {get_settings().servicenow_instance_url}")
+    say(f"API {base}   instance {settings.servicenow_instance_url}")
     say("=" * 68)
 
     ready = httpx.get(f"{base}/ready", timeout=10.0)
