@@ -1,10 +1,13 @@
 """CLI script to seed the Qdrant knowledge base with article chunks.
 
 Single idempotent command: ensures the collection exists, chunks the
-corpus (baseline + stressor articles, when present),
-embeds all chunks in one dual-vector pass, upserts with
-deterministic point IDs, and verifies the stored point count matches the
-upserted count — exiting non-zero on any mismatch.
+corpus (baseline + stressor articles, when present), embeds all chunks in
+one dual-vector pass, and upserts with deterministic point IDs. Seeding
+never deletes records it was not given: articles outside the corpus (for
+example human-captured KB articles) and non-article records in the
+collection are left untouched. Completion is verified per expected point
+ID and chunk content — not by whole-collection counts — exiting non-zero
+on any mismatch.
 """
 
 import argparse
@@ -22,6 +25,7 @@ from app.retrieval.ingest import ingest_articles
 from app.retrieval.manual.manual_ingest import ingest_manual_sections
 from app.retrieval.manual.manual_sources import ManualCorpusJSONSource
 from app.retrieval.sources import LocalJSONSource
+from app.retrieval.verification import SeedVerificationError, verify_seeded_articles
 
 settings = Settings()
 configure_logging(environment=settings.environment, log_level=settings.log_level)
@@ -100,12 +104,11 @@ def main() -> int:
             )
 
     engine = FastEmbedEngine()
-    total_points = ingest_articles(
+    ingest_articles(
         articles=all_articles,
         client=client,
         collection_name=collection_name,
         embedding_engine=engine,
-        purge_unknown_articles=True,
     )
 
     manual_path = Path("data/corpus/manual_sections.json")
@@ -115,32 +118,29 @@ def main() -> int:
         sections, relationships = manual_source.load_sections_and_relationships()
         logger.info("manual_sections_loaded", count=len(sections))
 
-        manual_points = ingest_manual_sections(
+        ingest_manual_sections(
             sections=sections,
             relationships=relationships,
             client=client,
             collection_name=collection_name,
             embedding_engine=engine,
-            purge_unknown_sections=True,
         )
-        total_points += manual_points
 
-    stored = client.get_collection(collection_name=collection_name).points_count
-    if stored != total_points:
+    try:
+        verify_seeded_articles(client, collection_name, all_articles)
+    except SeedVerificationError as err:
         logger.error(
             "seeding_verification_failed",
             collection=collection_name,
-            stored=stored,
-            upserted=total_points,
-            remedy="rebuild with: uv run python scripts/setup_qdrant.py --force-recreate",
+            error=str(err),
+            remedy="inspect the collection; do NOT force-recreate — it would delete live knowledge",
         )
         return 1
 
     logger.info(
         "seeding_complete",
         collection=collection_name,
-        points=stored,
-        upserted=total_points,
+        articles=len(all_articles),
     )
     return 0
 
