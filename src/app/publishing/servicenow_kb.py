@@ -485,6 +485,16 @@ def _verify_stored(
             f"the provenance Source marker (sys_id={stored.get('sys_id')})."
         )
 
+    # Semantic body check: the stored content must equal what was sent after
+    # the same benign entity/whitespace canonicalisation the diff trusts —
+    # surviving the Source marker alone would let silent truncation through.
+    if _normalise_html(body) != _normalise_html(sent["text"]):
+        raise ServiceNowWriteRejectedError(
+            f"Read-back mismatch for {article_id!r}: stored body differs from the "
+            f"sent content beyond benign entity/whitespace normalisation "
+            f"(sys_id={stored.get('sys_id')}). Content was truncated or altered."
+        )
+
 
 def make_kb_publish_handler(
     client: ServiceNowKBClient,
