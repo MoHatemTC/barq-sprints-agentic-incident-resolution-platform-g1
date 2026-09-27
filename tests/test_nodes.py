@@ -575,13 +575,13 @@ class TestGenerate:
 # -- the Sprint 4 gates ---------------------------------------------------------------------
 
 
-def test_safety_check_is_explicit_pass_through() -> None:
+def test_safety_check_passes_valid_draft() -> None:
     update = safety_check(reasoned_state(), make_deps())
     assert update == {
         "safety": {
             "gate": "safety_check",
             "passed": True,
-            "implemented": False,
+            "implemented": True,
             "checks": [],
             "reason": None,
         }

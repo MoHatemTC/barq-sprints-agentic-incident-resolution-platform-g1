@@ -169,14 +169,12 @@ class CriticFeedback(_Section):
 
 
 class GateResult(_Section):
-    """Result of a Sprint 4 gate (``verify_evidence`` / ``safety_check``).
-
-    Sprint 2 ships the gates as pass-through nodes: ``implemented`` is False and
-    ``passed`` is True. Sprint 4 fills ``checks`` without changing the shape, the
-    node signatures or the edge conditions.
+    """Result of a gate: ``input_guardrail``, ``verify_evidence`` or
+    ``safety_check`` (S3.3 replaces the ``verify_evidence``/``safety_check``
+    pass-through nodes shipped in Sprint 2 with ``implemented=False``).
     """
 
-    gate: Literal["verify_evidence", "safety_check"]
+    gate: Literal["input_guardrail", "verify_evidence", "safety_check"]
     passed: bool
     implemented: bool
     checks: list[dict[str, Any]] = Field(default_factory=list)
@@ -211,6 +209,8 @@ class AgentState(TypedDict, total=False):
     event: dict[str, Any]
     incident: dict[str, Any]
     eligibility: dict[str, Any]
+    # result of pattern screening + semantic classification on the incident
+    input_guardrail: dict[str, Any]
     # reasoning
     classification: dict[str, Any]
     risk: dict[str, Any]
