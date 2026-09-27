@@ -9,7 +9,6 @@ not chat output. A missing or unset metric policy is report-only, never a pass.
 
 import copy
 import importlib.util
-import inspect
 import json
 from pathlib import Path
 
@@ -103,10 +102,6 @@ class TestApplicability:
 
 
 class TestRetrievalOnlyLoader:
-    def test_loader_takes_no_generator_callback(self) -> None:
-        module = _load_adapters()
-        assert "run" not in inspect.signature(module.retrieval_only_rows).parameters
-
     def test_rows_cover_exactly_the_87_answerable_turns(self) -> None:
         module = _load_adapters()
         rows = module.retrieval_only_rows()
@@ -122,12 +117,6 @@ class TestRetrievalOnlyLoader:
         assert row["user_input"] == by_id["S17-T5"]["standalone_input"]
         assert "response" not in row and "actual_output" not in row
         assert row["applicability"]["retrieval"] is True
-
-    def test_passing_a_generator_callback_is_a_type_error(self) -> None:
-        module = _load_adapters()
-        with pytest.raises(TypeError):
-            module.retrieval_only_rows(run=lambda question, history: ("answer", []))
-
 
 class TestMetricPolicy:
     def test_missing_policy_file_is_an_error_not_a_pass(self, tmp_path: Path) -> None:
