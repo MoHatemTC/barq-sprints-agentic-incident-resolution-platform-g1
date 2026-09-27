@@ -250,6 +250,10 @@ class KnowledgePayload(BaseModel):
     warning: str | None = None
     source_sections: list[str] | None = None
     unit_id: str | None = None
+    source_document_id: str | None = None
+    pages: list[int] | None = None
+    extraction_reliability: str | None = None
+    ocr_confidence: float | None = None
 
     @property
     def article_id(self) -> str:
@@ -272,6 +276,12 @@ class KnowledgePayload(BaseModel):
                 "warning": provenance.warning,
                 "source_sections": list(provenance.source_sections),
                 "unit_id": provenance.unit_id,
+                "source_document_id": provenance.source_document_id,
+                "pages": list(provenance.pages),
+                "extraction_reliability": (
+                    provenance.reliability_note or provenance.extraction_method
+                ),
+                "ocr_confidence": provenance.ocr_confidence,
             }
         )
         return cls(

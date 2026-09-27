@@ -71,6 +71,8 @@ def test_publication_units_ingest_with_provenance_payloads() -> None:
     assert alias["content_purpose"] == "current_procedure"
     assert alias["source_sections"] == ["6.4"]
     assert alias["unit_id"] == "section-6.4"
+    assert alias["source_document_id"] == "barq-manual-v4.0"
+    assert isinstance(alias["pages"], list)
 
 
 def test_provenance_free_ingest_keeps_legacy_payload_shape() -> None:
@@ -79,7 +81,16 @@ def test_provenance_free_ingest_keeps_legacy_payload_shape() -> None:
     article = corpus[0]
     chunk = next(iter(chunk_article(article)))
     payload = KnowledgePayload.from_chunk(article, chunk).to_qdrant_payload()
-    for field in ("content_purpose", "warning", "source_sections", "unit_id"):
+    for field in (
+        "content_purpose",
+        "warning",
+        "source_sections",
+        "unit_id",
+        "source_document_id",
+        "pages",
+        "extraction_reliability",
+        "ocr_confidence",
+    ):
         assert field not in payload, f"legacy payload grew {field}"
 
 
