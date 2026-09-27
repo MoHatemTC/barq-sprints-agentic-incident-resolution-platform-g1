@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -161,10 +160,6 @@ def _run_whole_page_ocr(
     if not candidates:
         return {}
 
-    if shutil.which("tesseract") is None:
-        report.warnings.append("tesseract is not installed; whole-page OCR skipped")
-        return {}
-
     report.ocr_pages.extend(candidates)
     results_by_page = {r.page_number: r for r in extract_ocr_text(pdf_path, candidates)}
 
@@ -278,9 +273,6 @@ def _overlay_embedded_image_ocr(
     pdf_path: Path, pages: dict[int, PageInfo], report: ParseReport
 ) -> None:
     """OCR embedded images and append the result to each page's text."""
-    if shutil.which("tesseract") is None:
-        report.warnings.append("tesseract is not installed; embedded image OCR skipped")
-        return
     for page_number, page_info in list(pages.items()):
         if page_info.content_type == ManualSectionType.OCR:
             continue  # already OCR'd whole-page

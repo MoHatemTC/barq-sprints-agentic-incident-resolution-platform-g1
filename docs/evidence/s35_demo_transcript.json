@@ -1,13 +1,13 @@
 {
-  "when": "2026-09-27T08:31:06.665467+00:00",
+  "when": "2026-09-25T23:53:14.939200+00:00",
   "incident": {
-    "number": "INC0010047",
-    "sys_id": "69c8707147df8b10c148497f316d43e2"
+    "number": "INC0010120",
+    "sys_id": "6af4843547afcb90c148497f316d4374"
   },
-  "solution": "opened tray 2, cleared jammed roller gear and replaced paper feed pickup roller",
+  "solution": "Redis memory was saturated by untracked session keys. Flushed db 2 keys and increased maxmemory from 2gb to 8gb in redis.conf, then restarted redis-server.",
   "capture": {
-    "article_number": "KB1006",
-    "sys_id": "f357c38e472bcf90c148497f316d43f0",
+    "article_number": "KB1005",
+    "sys_id": "c547487947afcb90c148497f316d43ab",
     "point_count": 1,
     "published": true,
     "ingested": true
@@ -18,57 +18,57 @@
   },
   "qdrant_points": [
     {
-      "article_number": "KB1006",
+      "article_number": "KB1005",
       "version": "1.0",
-      "title": "Clearing Tray 2 Roller Jam and Replacing Pickup Roller",
-      "sys_id": "f357c38e472bcf90c148497f316d43f0",
-      "category": "print-services",
-      "service": "print-services",
+      "title": "Resolving Redis Memory Saturation in checkout-service",
+      "sys_id": "c547487947afcb90c148497f316d43ab",
+      "category": "software",
+      "service": "checkout-service",
       "workflow_state": "human_resolved",
       "security_level": "internal",
       "section": "General",
       "chunk_index": 0,
       "total_chunks": 1,
-      "chunk_text": "1. Open tray 2.\n2. Clear the jammed roller gear.\n3. Replace the paper feed pickup roller.",
+      "chunk_text": "Redis memory was saturated by untracked session keys. To resolve the issue, perform the following steps:  \n1. Flush db 2 keys.\n2. Increase maxmemory from 2gb to 8gb in redis.conf.\n3. Restart redis-server.",
       "related_records": [],
-      "article_id": "KB1006-v1.0"
+      "article_id": "KB1005-v1.0"
     }
   ],
-  "similar_query": "printer paper feed grinding sound in meeting room",
+  "similar_query": "redis out of memory eviction in checkout service",
   "retrieval_hits": [
     {
-      "article_number": "KB1006",
+      "article_number": "KB1005",
       "version": "1.0",
-      "title": "Clearing Tray 2 Roller Jam and Replacing Pickup Roller",
-      "relevance": 0.6521253,
+      "title": "Resolving Redis Memory Saturation in checkout-service",
+      "relevance": 0.71149457,
       "captured": true
     },
     {
-      "article_number": "KB2064",
-      "version": "1.0",
-      "title": "Identifier index",
-      "relevance": 0.56111443,
+      "article_number": "KB0005",
+      "version": "4.0",
+      "title": "ACCOUNT IS LOCKED AFTER REPEATED FAILED SIGN-INS",
+      "relevance": 0.6533369,
       "captured": false
     },
     {
-      "article_number": "KB0009",
+      "article_number": "KB0003",
       "version": "2.0",
-      "title": "WI-FI DROPS REPEATEDLY ON THE 5 GHZ CORPORATE NETWORK",
-      "relevance": 0.5832693,
+      "title": "MAPPED SHARED DRIVE IS MISSING AFTER SIGN-IN",
+      "relevance": 0.6363181,
       "captured": false
     },
     {
-      "article_number": "KB0009",
+      "article_number": "KB0003",
       "version": "2.0",
-      "title": "WI-FI DROPS REPEATEDLY ON THE 5 GHZ CORPORATE NETWORK",
-      "relevance": 0.5641261,
+      "title": "MAPPED SHARED DRIVE IS MISSING AFTER SIGN-IN",
+      "relevance": 0.63033557,
       "captured": false
     },
     {
-      "article_number": "KB2031",
-      "version": "1.0",
-      "title": "Known error register",
-      "relevance": 0.5928541,
+      "article_number": "KB0002",
+      "version": "3.0",
+      "title": "OUTLOOK SHOWS DISCONNECTED AND NO MAIL IS DELIVERED",
+      "relevance": 0.61158824,
       "captured": false
     }
   ],

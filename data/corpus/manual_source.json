@@ -1,5 +1,0 @@
-{
-  "pdf_path": "data/barq-system-kb.pdf",
-  "pdf_sha256": "c535243f00547211c2a7076bc5dc91c80d19a4960b94dc7932bbca546db7d9d4",
-  "extractor": "scripts/manual/extract_manual.py"
-}

@@ -14,7 +14,7 @@ contract.
 from __future__ import annotations
 
 import uuid
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 
 import structlog
 from qdrant_client import QdrantClient
@@ -29,7 +29,6 @@ from qdrant_client.models import (
 
 from app.clients.qdrant import ensure_collection
 from app.models.knowledge import Article, KnowledgePayload
-from app.models.knowledge_provenance import KnowledgeProvenance
 from app.retrieval.chunking import chunk_article
 from app.retrieval.embedding import EmbeddedText, EmbeddingEngine, FastEmbedEngine
 
@@ -150,7 +149,6 @@ def ingest_articles(
     chunk_overlap: int = 120,
     force_recreate: bool = False,
     purge_unknown_articles: bool = False,
-    article_provenance: Mapping[str, KnowledgeProvenance] | None = None,
 ) -> int:
     """Chunk, embed, and upsert articles into the Qdrant collection.
 
@@ -208,10 +206,7 @@ def ingest_articles(
     points: list[PointStruct] = []
     for (article, chk), emb in zip(chunk_records, embeddings, strict=True):
         point_id = build_point_id(article.article_id, chk.chunk_index)
-        provenance = article_provenance.get(article.article_id) if article_provenance else None
-        payload = KnowledgePayload.from_chunk(
-            article, chk, provenance=provenance
-        ).to_qdrant_payload()
+        payload = KnowledgePayload.from_chunk(article, chk).to_qdrant_payload()
 
         points.append(
             PointStruct(

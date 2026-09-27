@@ -35,49 +35,6 @@ COMPOSE_ATTEMPTS = 2
 
 MIN_SOLUTION_CHARS = 3
 
-#: Reserved human-captured namespace (manual sections live in KB2001–KB2999;
-#: KB2000 stays unallocated as a tripwire between the two namespaces).
-HUMAN_CAPTURE_RANGE = range(1001, 2000)
-
-
-class HumanCaptureRangeExhausted(RuntimeError):
-    """Raised when every KB1001–KB1999 article number is already taken."""
-
-
-def make_next_article_number(client: Any, kb_sys_id: str) -> Callable[[], Awaitable[str]]:
-    """Allocator for the reserved KB1001–KB1999 human-captured range.
-
-    Queries ``u_source_id`` with the ``KB1`` prefix (not ``KB10`` — KB11xx rows
-    must count) and returns max+1 over the numbers actually inside the range,
-    so gaps are harmless and stray rows outside the namespace can never push
-    the allocation across the KB1999/KB2000 boundary. At KB1999 the allocator
-    raises :class:`HumanCaptureRangeExhausted` instead of producing KB2000.
-    Concurrent captures can race; accepted at demo scale and documented in the
-    design doc.
-    """
-
-    async def next_number() -> str:
-        source_ids = await client.find_source_ids_by_prefix("KB1", kb_sys_id=kb_sys_id)
-        numbers = [
-            int(source_id.split("-")[0][2:])
-            for source_id in source_ids
-            if source_id.split("-")[0][2:].isdigit()
-        ]
-        in_range = [n for n in numbers if n in HUMAN_CAPTURE_RANGE]
-        if not in_range:
-            return "KB1001"
-        nxt = max(in_range) + 1
-        if nxt not in HUMAN_CAPTURE_RANGE:
-            raise HumanCaptureRangeExhausted(
-                "human-capture range exhausted: KB1001–KB1999 is full "
-                f"(highest allocated KB{max(in_range)}). KB2000+ belongs to the "
-                "manual namespace — extend the reserved range by decision, "
-                "not by overflow."
-            )
-        return f"KB{nxt}"
-
-    return next_number
-
 
 @dataclass(frozen=True)
 class KnowledgeCaptureResult:
@@ -89,6 +46,26 @@ class KnowledgeCaptureResult:
     point_count: int
     published: bool = True
     ingested: bool = True
+
+
+def make_next_article_number(client: Any, kb_sys_id: str) -> Callable[[], Awaitable[str]]:
+    """Allocator for the reserved KB1001–KB1999 human-captured range.
+
+    Queries ``u_source_id`` with the ``KB1`` prefix (not ``KB10`` — KB11xx rows
+    must count) and returns max+1, so gaps in the range are harmless. Concurrent
+    captures can race; accepted at demo scale and documented in the design doc.
+    """
+
+    async def next_number() -> str:
+        source_ids = await client.find_source_ids_by_prefix("KB1", kb_sys_id=kb_sys_id)
+        numbers = [
+            int(source_id.split("-")[0][2:])
+            for source_id in source_ids
+            if source_id.split("-")[0][2:].isdigit()
+        ]
+        return f"KB{max(numbers, default=1000) + 1}"
+
+    return next_number
 
 
 async def capture_human_resolution(
@@ -116,23 +93,7 @@ async def capture_human_resolution(
 
     # 1. Compose. The endpoint already redacted the persisted solution; redact
     #    again defensively so the model never sees raw credentials either.
-    #    Allocation happens first: an exhausted human-capture range must fail
-    #    before any publish or ingest, without touching the resolution itself.
-    try:
-        article_number = await next_number()
-    except HumanCaptureRangeExhausted as exc:
-        logger.error(
-            "knowledge_capture_range_exhausted",
-            execution_id=execution_id,
-            error=str(exc),
-        )
-        await _audit_blocked(
-            deps=deps,
-            execution_id=execution_id,
-            incident=incident,
-            reason=str(exc),
-        )
-        return None
+    article_number = await next_number()
     article = await _compose_with_retry(
         execution_id=execution_id,
         incident=incident,
@@ -255,32 +216,6 @@ async def _compose_with_retry(
     return None
 
 
-async def _audit_blocked(
-    *,
-    deps: AgentDependencies,
-    execution_id: str,
-    incident: IncidentSnapshot,
-    reason: str,
-) -> None:
-    """Audit a capture that never produced an article (e.g. range exhaustion)."""
-    payload = ExecutionLogCreatePayload(
-        incident_sys_id=incident.sys_id,
-        execution_id=execution_id,
-        agent="knowledge_capture",
-        action=ExecutionAction.EXECUTE,
-        status=ExecutionStatus.BLOCKED,
-        result=f"knowledge capture blocked before publish/ingest: {reason}",
-    )
-    try:
-        await deps.tools.invoke(
-            "write_execution_log",
-            context=ToolCallContext(execution_id=execution_id),
-            arguments={"sys_id": incident.sys_id, "payload": payload},
-        )
-    except Exception as exc:
-        logger.error("knowledge_capture_audit_failed", execution_id=execution_id, error=str(exc))
-
-
 async def _audit(
     *,
     deps: AgentDependencies,
@@ -315,7 +250,6 @@ async def _audit(
 
 
 __all__ = [
-    "HumanCaptureRangeExhausted",
     "KnowledgeCaptureResult",
     "capture_human_resolution",
     "make_next_article_number",
