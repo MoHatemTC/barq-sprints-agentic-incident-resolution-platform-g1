@@ -125,7 +125,7 @@ def generate(state: AgentState, deps: AgentDependencies) -> dict[str, Any]:
         allowed = {
             item.article_id
             for item in evidence
-            if item.content_purpose not in ("historical", "archival", "warning")
+            if item.content_purpose not in ("historical", "archival", "warning", "reference")
             and not item.warning
         }
         steps = [

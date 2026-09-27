@@ -204,7 +204,7 @@ Rules:
    - make approval decisions
    - invent unsupported remediation steps
    - execute or cite evidence marked with WARNING or content purpose
-     'historical', 'archival', or 'warning' as an active resolution step
+     'historical', 'archival', 'warning', or 'reference' as an active resolution step
 
 8. When revision feedback is provided by the Critic/Verifier:
    - Preserve valid steps that were not identified as problematic.
@@ -255,7 +255,12 @@ def evidence_block(evidence: list[EvidenceItem]) -> str:
         body_lines = []
         if item.warning:
             body_lines.append(f"WARNING: {item.warning}")
-        if item.content_purpose and item.content_purpose in ("historical", "archival", "warning"):
+        if item.content_purpose and item.content_purpose in (
+            "historical",
+            "archival",
+            "warning",
+            "reference",
+        ):
             body_lines.append(
                 f"NOTE: Content purpose is '{item.content_purpose}'. "
                 "Do not execute or cite as active procedure."
