@@ -68,7 +68,12 @@ class TestRowMapping:
         }
         status, decision, evidence = summarize("retrieve", values)
         assert status == "succeeded"
-        assert decision == {"query": "q", "sufficient": True, "best_relevance": 0.8, "hit_count": 1}
+        assert decision == {
+            "query": "q",
+            "sufficient": True,
+            "best_relevance": 0.8,
+            "hit_count": 1,
+        }
         assert evidence == [
             {
                 "article_id": "KB0001-v2.0",
@@ -161,7 +166,11 @@ def rows(engine, execution_id: UUID) -> list[Any]:
 
 
 def run(
-    record: dict[str, Any], deps: Any, saver: WorkflowStateSaver, execution_id: UUID, attempt: int
+    record: dict[str, Any],
+    deps: Any,
+    saver: WorkflowStateSaver,
+    execution_id: UUID,
+    attempt: int,
 ) -> dict[str, Any]:
     return run_graph(
         build_graph(deps, checkpointer=saver),
@@ -222,7 +231,14 @@ class TestWorkflowStateTable:
         assert result["outcome"] == "suggested"
         # generate ran twice (the failed attempt and the resume); verify_evidence
         # runs once, after the draft the resume produced.
-        assert llm.purposes() == ["classify", "diagnose", "generate", "generate", "verify_evidence"]
+        assert llm.purposes() == [
+            "injection_classifier",
+            "classify",
+            "diagnose",
+            "generate",
+            "generate",
+            "verify_evidence",
+        ]
         # write_execution_log is S3.1's multi-agent audit write-back (#156).
         assert backend.calls == [
             "read_incident",

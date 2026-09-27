@@ -52,7 +52,10 @@ _CREDENTIAL_RULES: tuple[tuple[re.Pattern[str], str], ...] = (
     # Authorization: Bearer <token> / Basic <b64>
     (re.compile(r"(?i)\b(bearer|basic)\s+[A-Za-z0-9\-._~+/]{8,}=*"), rf"\1 {REDACTED}"),
     # JSON Web Tokens
-    (re.compile(r"\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}"), REDACTED),
+    (
+        re.compile(r"\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}"),
+        REDACTED,
+    ),
     # Provider keys: Anthropic, sk-/pk- style (LiteLLM, Langfuse, OpenAI), GitHub, AWS, Slack
     (re.compile(r"\bsk-ant-[A-Za-z0-9_-]{8,}"), REDACTED),
     (re.compile(r"\b(?:sk|pk)-(?:lf-)?[A-Za-z0-9_-]{16,}"), REDACTED),
@@ -105,6 +108,28 @@ def redact_text(text: str) -> str:
     return _PHONE.sub(_redact_phone, text)
 
 
+def redact_text_with_count(text: str) -> tuple[str, int]:
+    """
+    Used for observability: return text + the number of redactions applied. The count is used to
+    determine whether to log a redaction event, and to report the number of redactions in the
+    observability event.
+    """
+    if not text:
+        return text, 0
+    total = 0
+    for pattern, replacement in _CREDENTIAL_RULES:
+        text, count = pattern.subn(replacement, text)
+        total += count
+    text, count = _EMAIL.subn(REDACTED_EMAIL, text)
+    total += count
+
+    before_phone_markers = text.count(REDACTED_PHONE)
+    text = _PHONE.sub(_redact_phone, text)
+    after_phone_markers = text.count(REDACTED_PHONE)
+    total += after_phone_markers - before_phone_markers
+    return text, total
+
+
 def redact_value(value: Any) -> Any:
     """Recursively redact a JSON-like value (dict / list / tuple / str)."""
     if isinstance(value, str):
@@ -134,5 +159,6 @@ __all__ = [
     "SENSITIVE_KEYS",
     "langfuse_mask",
     "redact_text",
+    "redact_text_with_count",
     "redact_value",
 ]
