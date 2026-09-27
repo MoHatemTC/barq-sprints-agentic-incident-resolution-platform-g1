@@ -2,7 +2,7 @@
   "description": "Stage A metric policy for the 100-turn BARQ dataset. Thresholds are deliberately unset: they are recorded here only after the first measured run, then signed. An unset policy is report-only / acceptance pending, never a pass.",
   "framework": "ragas",
   "framework_version": "pinned in the pyproject evaluation dependency group (Step 9)",
-  "judge_model": null,
+  "judge_model": "gemini/gemini-3.8-flash",
   "context_budget": null,
   "metrics": {
     "context_recall": {"floor": null, "aggregation": "per capability slice"},

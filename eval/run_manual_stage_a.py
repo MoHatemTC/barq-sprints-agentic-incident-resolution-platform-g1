@@ -88,13 +88,38 @@ class RagasJudge:
 
     def __init__(self, policy: dict) -> None:
         try:
+            import sys
+            import types
+
+            import langchain_community.llms
+
+            class VertexAI:
+                pass
+
+            langchain_community.llms.VertexAI = VertexAI
+
+            import langchain_community.chat_models
+
+            cv = types.ModuleType("langchain_community.chat_models.vertexai")
+
+            class ChatVertexAI:
+                pass
+
+            cv.ChatVertexAI = ChatVertexAI
+            sys.modules["langchain_community.chat_models.vertexai"] = cv
+            langchain_community.chat_models.vertexai = cv
+
             from langchain_openai import ChatOpenAI
-            from ragas.evaluate import evaluate
+            from ragas import evaluate
             from ragas.llms import LangchainLLMWrapper
             from ragas.metrics import ContextPrecision, ContextRecall
         except ImportError as exc:  # pragma: no cover - environment guard
             raise JudgeError("ragas is not installed; run `uv sync --group eval` first") from exc
         import os
+
+        from dotenv import load_dotenv
+
+        load_dotenv()
 
         base_url = os.environ.get("LITELLM_BASE_URL")
         api_key = os.environ.get("LITELLM_API_KEY")
@@ -103,6 +128,9 @@ class RagasJudge:
                 "live judging needs LITELLM_BASE_URL, LITELLM_API_KEY and a "
                 "policy judge_model; refusing to fall back to any default judge"
             )
+        if not base_url.endswith("/v1"):
+            base_url = f"{base_url.rstrip('/')}/v1"
+
         self._evaluate = evaluate
         self._metrics = [ContextPrecision(), ContextRecall()]
         self._llm = LangchainLLMWrapper(
@@ -119,7 +147,7 @@ class RagasJudge:
                 "reference": [row["reference"]],
             }
         )
-        result = self._evaluate(ds, metrics=self._metrics, llm=self._llm, raise_errors=True)
+        result = self._evaluate(ds, metrics=self._metrics, llm=self._llm, raise_exceptions=True)
         row_result = result.to_pandas().iloc[0]
         return {
             "context_precision": _as_score(row_result.get("context_precision")),
@@ -240,6 +268,7 @@ def run(
     manifest_path: Path | None = None,
     corpus_path: Path | None = None,
     sections_path: Path | None = None,
+    skip_ingest: bool = False,
 ) -> dict:
     """One Stage A run; pure-ish so tests can inject fakes end to end."""
     policy = adapters.load_metric_policy()
@@ -253,13 +282,14 @@ def run(
     baseline = LocalJSONSource(corpus_path).load_articles()
     publication = load_manual_publication(manifest_path, sections_path, corpus_path)
     engine_factory = engine_factory or FastEmbedEngine
-    ingest_articles(
-        articles=[*baseline, *publication.articles],
-        client=client,
-        collection_name=collection,
-        embedding_engine=engine_factory(),
-        article_provenance=publication.provenance,
-    )
+    if not skip_ingest:
+        ingest_articles(
+            articles=[*baseline, *publication.articles],
+            client=client,
+            collection_name=collection,
+            embedding_engine=engine_factory(),
+            article_provenance=publication.provenance,
+        )
     retriever = QdrantRetriever(
         lambda: client,
         engine_factory,
@@ -345,6 +375,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--top-k", type=int, default=DEFAULT_TOP_K)
     parser.add_argument("--threshold", type=float, default=DEFAULT_THRESHOLD)
     parser.add_argument("--limit", type=int, default=None, help="Smoke-run the first N rows.")
+    parser.add_argument(
+        "--skip-ingest",
+        action="store_true",
+        help="Skip chunking and upserting articles if the scratch collection is already populated.",
+    )
     parser.add_argument("--report", type=Path, default=REPO_ROOT / "eval" / "stage_a_report.json")
     return parser
 
@@ -369,6 +404,7 @@ def main() -> int:
         limit=args.limit,
         top_k=args.top_k,
         threshold=args.threshold,
+        skip_ingest=args.skip_ingest,
     )
     report["policy"] = policy
     args.report.write_text(
