@@ -193,8 +193,8 @@ async def test_client_sends_bearer_auth_header() -> None:
         servicenow_kb_id=KB_SYS_ID,
         servicenow_client_id="test_cid",
         servicenow_client_secret="test_secret",
-        servicenow_username="svc_user",
-        servicenow_password="svc_password",
+        servicenow_username="example_user",
+        servicenow_password="example-only-not-a-credential",
     )
     http_client = httpx.AsyncClient(base_url=INSTANCE, transport=httpx.MockTransport(spy))
     client = ServiceNowKBClient(settings, http_client=http_client)
@@ -428,7 +428,11 @@ def _paging_transport(rows: list[str], *, fail_on_offset: bool = False) -> httpx
         if request.url.path == "/oauth_token.do":
             return httpx.Response(
                 200,
-                json={"access_token": "fake_oauth_bearer_token", "token_type": "Bearer", "expires_in": 1800},
+                json={
+                    "access_token": "fake_oauth_bearer_token",
+                    "token_type": "Bearer",
+                    "expires_in": 1800,
+                },
             )
         if request.method == "GET" and request.url.path == f"/api/now/table/{KB_TABLE}":
             offset = int(request.url.params.get("sysparm_offset", "0"))
@@ -446,10 +450,10 @@ def _paging_client(rows: list[str], *, fail_on_offset: bool = False) -> ServiceN
     settings = mock_settings(
         servicenow_instance_url=INSTANCE,
         servicenow_kb_id=KB_SYS_ID,
-        servicenow_username="svc_user",
-        servicenow_password="svc_password",
+        servicenow_username="example_user",
+        servicenow_password="example-only-not-a-credential",
         servicenow_client_id="barq_oauth_client",
-        servicenow_client_secret="BarqOAuthSecret2026Token",
+        servicenow_client_secret="example-only-not-a-secret",
     )
     http_client = httpx.AsyncClient(
         base_url=INSTANCE,
@@ -483,7 +487,14 @@ class TestPrefixLookupPaging:
 
     @pytest.mark.asyncio
     async def test_prefix_lookup_returns_only_valid_versioned_ids(self) -> None:
-        rows = ["KB1002-v1.0", "KB1007", "KBjunk-v1.0", "KB1003-v2.0", "kb1004-v1.0", "KB1005-v1.0^x"]
+        rows = [
+            "KB1002-v1.0",
+            "KB1007",
+            "KBjunk-v1.0",
+            "KB1003-v2.0",
+            "kb1004-v1.0",
+            "KB1005-v1.0^x",
+        ]
         client = _paging_client(rows)
         try:
             result = await client.find_source_ids_by_prefix("KB1", kb_sys_id=KB_SYS_ID)
