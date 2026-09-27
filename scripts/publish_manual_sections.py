@@ -105,6 +105,27 @@ async def async_main(args: argparse.Namespace) -> int:
         manifest_sha256=manifest_sha256,
     )
 
+    prior_report: dict | None = None
+    if args.report.is_file():
+        try:
+            prior_report = json.loads(args.report.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001
+            prior_report = None
+
+    history = []
+    if prior_report:
+        if "history" in prior_report and isinstance(prior_report["history"], list):
+            history.extend(prior_report["history"])
+        if prior_report.get("results") or prior_report.get("failed"):
+            history.append(
+                {
+                    "manifest_sha256": prior_report.get("manifest_sha256"),
+                    "results": prior_report.get("results", []),
+                    "failed": prior_report.get("failed", []),
+                    "dry_run": prior_report.get("dry_run", False),
+                }
+            )
+
     report: dict = {
         "manifest": str(args.manifest),
         "manifest_sha256": manifest_sha256,
@@ -112,6 +133,7 @@ async def async_main(args: argparse.Namespace) -> int:
         "results": [],
         "skipped": skipped,
         "failed": [],
+        "history": history,
     }
 
     if args.dry_run:

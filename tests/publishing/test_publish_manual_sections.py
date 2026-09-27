@@ -77,6 +77,8 @@ def test_publish_run_is_idempotent_and_reports_sys_ids(
     assert data2["manifest_sha256"] == data["manifest_sha256"]
     assert all(r["outcome"] == "unchanged" for r in data2["results"])
     assert len(fake.rows) == 64, "re-running must not create duplicate rows"
+    assert len(data2.get("history", [])) == 1
+    assert data2["history"][0]["results"], "previous run results preserved in history"
 
 
 def test_verify_stored_rejects_truncated_body() -> None:
