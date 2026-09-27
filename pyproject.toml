@@ -70,7 +70,7 @@ dev = [
 # client RAGAS wraps.
 eval = [
     "ragas==0.2.15",
-    "langchain-openai>=0.2.14,<1.0",
+    "langchain-openai>=0.2.14,<2.0",
 ]
 
 [build-system]
