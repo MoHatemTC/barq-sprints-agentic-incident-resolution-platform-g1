@@ -50,8 +50,7 @@ following the same `docs/sprint-N/sN.M-name/` layout.
 
 ## Manual-KB integration runbooks
 
-The full-manual KB integration (plan: [manual_kb_integration_plan.md](manual_kb_integration_plan.md),
-manifest review: [manual_kb_manifest_review.md](manual_kb_manifest_review.md)) ships
+The full-manual KB integration (manifest review: [manual_kb_manifest_review.md](manual_kb_manifest_review.md)) ships
 with three operator runbooks:
 
 - [Local validation](runbooks/manual_kb_local_validation.md) — reproduce the
