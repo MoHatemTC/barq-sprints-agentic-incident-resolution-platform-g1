@@ -6,13 +6,14 @@ from dataclasses import dataclass
 FORM_FEED = "\f"
 _PAGE_SEPARATOR = f"\n{FORM_FEED}\n"
 
-# Number component: dotted numeric ("3.4", "10.1.2")
-_NUMBER_PATTERN = r"(?:(?:\d{1,2}\.)+\d{1,2}|\d{1,2}|[A-Z](?:\.\d+)*)"
+# Number component: dotted numeric ("3.4", "10.1.2", rejecting ".0" software versions),
+# top-level chapter numbers with optional trailing dot ("2.", "10"), or Appendix letters ("A", "B.1").
+_NUMBER_PATTERN = r"(?:(?:\d{1,2}\.)+[1-9]\d*|\d{1,2}\.?|[A-Z](?:\.\d+)*)"
 # ≤2 digits per component: the manual numbers sections 1–20.x. Three-digit
 # numbers ("202") are printed page numbers / marginalia, not sections.
 
 SECTION_HEADING_RE = re.compile(
-    r"^[ \t]*"  # leading whitespace on the line
+    r"^[ \t]{0,3}"  # headings appear at the left margin; indented lines are list items or table cells
     rf"({_NUMBER_PATTERN})"  # group 1: section number
     r"[ \t]{1,}"  # >=1 spaces distinguishes a heading from prose/lists
     r"([A-Z][^\n]{2,})"  # group 2: title, starts uppercase, >=3 chars
@@ -34,12 +35,20 @@ _MAX_HEADING_WORDS = 10
 _MAX_HEADING_CHARS = 80
 
 
-def _looks_like_prose_sentence(title: str) -> bool:
+def _looks_like_prose_sentence(title: str, section_number: str = "") -> bool:
     if len(title) > _MAX_HEADING_CHARS:
         return True
     if title.rstrip().endswith((".", ",", ";")):
         return True
-    if len(title.split()) > _MAX_HEADING_WORDS:
+    # Table rows often carry decimal metrics (e.g. "0.694") or internal sentence breaks ("lockout. A")
+    if re.search(r"\b\d+\.\d{2,}\b", title) or re.search(r"\.\s+[A-Z]", title):
+        return True
+    # Version/edition numbers from change tables (e.g. "3.0") are not manual sections
+    if section_number.endswith(".0"):
+        return True
+    words = [w for w in title.split() if w not in ("—", "-", "–")]
+    max_words = 14 if "." in section_number else _MAX_HEADING_WORDS
+    if len(words) > max_words:
         return True
     return False
 
@@ -102,7 +111,7 @@ def find_section_headings(
         if _FOOTER_FRAGMENT_RE.match(title):
             continue
 
-        if _looks_like_prose_sentence(title):
+        if _looks_like_prose_sentence(title, section_number):
             continue
         headings.append(DetectedHeading(section_number, title, start, end))
 
