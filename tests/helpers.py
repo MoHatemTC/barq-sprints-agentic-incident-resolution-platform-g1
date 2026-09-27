@@ -36,6 +36,8 @@ def mock_settings(**overrides: object) -> Settings:
         "webhook_oauth_client_id": "barq-servicenow-test",
         "webhook_oauth_client_secret": "client-secret-for-tests",
         "webhook_oauth_signing_key": "test-signing-key-that-is-at-least-32-characters",
+        "servicenow_kb_username": "",
+        "servicenow_kb_password": None,
         "langfuse_public_key": None,
         "langfuse_secret_key": None,
     }

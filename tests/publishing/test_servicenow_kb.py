@@ -13,6 +13,7 @@ import pytest
 from app.models.knowledge import Article
 from app.publishing.payload import U_SOURCE_ID_FIELD, build_kb_payload
 from app.publishing.servicenow_kb import (
+    KB_TABLE,
     ServiceNowAuthError,
     ServiceNowKBClient,
     ServiceNowKBError,
@@ -192,8 +193,8 @@ async def test_client_sends_bearer_auth_header() -> None:
         servicenow_kb_id=KB_SYS_ID,
         servicenow_client_id="test_cid",
         servicenow_client_secret="test_secret",
-        servicenow_username="svc_user",
-        servicenow_password="svc_password",
+        servicenow_username="example_user",
+        servicenow_password="example-only-not-a-credential",
     )
     http_client = httpx.AsyncClient(base_url=INSTANCE, transport=httpx.MockTransport(spy))
     client = ServiceNowKBClient(settings, http_client=http_client)
@@ -418,3 +419,94 @@ async def test_no_state_update_when_the_create_already_has_the_target_state(
         assert fake.patches == []
     finally:
         await client.aclose()
+
+
+def _paging_transport(rows: list[str], *, fail_on_offset: bool = False) -> httpx.MockTransport:
+    """Fake ServiceNow table GET honoring sysparm_limit/sysparm_offset."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/oauth_token.do":
+            return httpx.Response(
+                200,
+                json={
+                    "access_token": "fake_oauth_bearer_token",
+                    "token_type": "Bearer",
+                    "expires_in": 1800,
+                },
+            )
+        if request.method == "GET" and request.url.path == f"/api/now/table/{KB_TABLE}":
+            offset = int(request.url.params.get("sysparm_offset", "0"))
+            limit = int(request.url.params.get("sysparm_limit", "1000"))
+            if offset > 0 and fail_on_offset:
+                raise httpx.ConnectError("page two exploded")
+            page = rows[offset : offset + limit]
+            return httpx.Response(200, json={"result": [{U_SOURCE_ID_FIELD: row} for row in page]})
+        return httpx.Response(404, json={})
+
+    return httpx.MockTransport(handler)
+
+
+def _paging_client(rows: list[str], *, fail_on_offset: bool = False) -> ServiceNowKBClient:
+    settings = mock_settings(
+        servicenow_instance_url=INSTANCE,
+        servicenow_kb_id=KB_SYS_ID,
+        servicenow_username="example_user",
+        servicenow_password="example-only-not-a-credential",
+        servicenow_client_id="barq_oauth_client",
+        servicenow_client_secret="example-only-not-a-secret",
+    )
+    http_client = httpx.AsyncClient(
+        base_url=INSTANCE,
+        transport=_paging_transport(rows, fail_on_offset=fail_on_offset),
+    )
+    return ServiceNowKBClient(settings, http_client=http_client)
+
+
+class TestPrefixLookupPaging:
+    """The allocation lookup must see the whole KB, not its first 1,000 rows."""
+
+    @pytest.mark.asyncio
+    async def test_prefix_lookup_paginates_past_the_first_thousand_rows(self) -> None:
+        rows = [f"FILLER-{i}" for i in range(1000)] + ["KB1002-v1.0"]
+        client = _paging_client(rows)
+        try:
+            result = await client.find_source_ids_by_prefix("KB1", kb_sys_id=KB_SYS_ID)
+        finally:
+            await client.aclose()
+        assert result == ["KB1002-v1.0"]
+
+    @pytest.mark.asyncio
+    async def test_prefix_lookup_page_failure_raises_not_partial(self) -> None:
+        rows = ["KB1002-v1.0"] * 1000 + ["KB1003-v1.0"]
+        client = _paging_client(rows, fail_on_offset=True)
+        try:
+            with pytest.raises(Exception, match="page two exploded"):
+                await client.find_source_ids_by_prefix("KB1", kb_sys_id=KB_SYS_ID)
+        finally:
+            await client.aclose()
+
+    @pytest.mark.asyncio
+    async def test_prefix_lookup_returns_only_valid_versioned_ids(self) -> None:
+        rows = [
+            "KB1002-v1.0",
+            "KB1007",
+            "KBjunk-v1.0",
+            "KB1003-v2.0",
+            "kb1004-v1.0",
+            "KB1005-v1.0^x",
+        ]
+        client = _paging_client(rows)
+        try:
+            result = await client.find_source_ids_by_prefix("KB1", kb_sys_id=KB_SYS_ID)
+        finally:
+            await client.aclose()
+        assert result == ["KB1002-v1.0", "KB1003-v2.0"]
+
+    @pytest.mark.asyncio
+    async def test_prefix_lookup_still_rejects_injection_prefixes(self) -> None:
+        client = _paging_client([])
+        try:
+            with pytest.raises(ServiceNowKBError, match="Refusing to query"):
+                await client.find_source_ids_by_prefix("KB1^NQ", kb_sys_id=KB_SYS_ID)
+        finally:
+            await client.aclose()

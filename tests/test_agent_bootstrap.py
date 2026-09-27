@@ -576,20 +576,27 @@ class TestQdrantRetriever:
         assert search_categories(label, incident_category) == expected
 
     @pytest.mark.parametrize("label", [Classification.OTHER, Classification.SECURITY])
-    def test_labels_without_corpus_coverage_have_no_evidence(
+    def test_labels_without_corpus_coverage_still_search_wide(
         self, corpus_qdrant: QdrantClient, label: Classification
     ) -> None:
+        """security/other skip the category pass but run the authorized wide pass.
+
+        The manual corpus is only reachable there. An unrelated query may still
+        return hits, but the out-of-category margin over the calibrated threshold
+        keeps it from counting as sufficient evidence.
+        """
         client = MagicMock(wraps=corpus_qdrant)
         result = self._retriever(client).search(
             "request annual leave approval next week holiday",
             classification=label,
             top_k=5,
-            threshold=0.0,
+            threshold=0.55,
         )
         assert result.category_filter is None
-        assert result.hits == []
-        assert result.sufficient is False
-        client.query_points.assert_not_called()
+        client.query_points.assert_called()
+        assert result.sufficient is False, (
+            f"unrelated query must not count as evidence (best {result.best_relevance})"
+        )
 
     def test_unrelated_query_scores_low(self, corpus_qdrant: QdrantClient) -> None:
         result = self._retriever(corpus_qdrant).search(

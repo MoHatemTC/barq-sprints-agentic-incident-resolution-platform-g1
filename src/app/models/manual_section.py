@@ -83,6 +83,7 @@ class ManualSectionChunk(BaseModel):
     section_title: str
     pages: tuple[int, ...]
     content_type: ManualSectionType
+    ocr_confidence: float | None = None
 
     # Appendix-E-derived relationships.
     related_article_ids: tuple[str, ...] = Field(default_factory=tuple)
@@ -143,6 +144,7 @@ class ManualSectionPayload(BaseModel):
             chunk_text=chunk.text,
             content_type=chunk.content_type,
             pages=list(chunk.pages),
+            ocr_confidence=chunk.ocr_confidence,
             related_article_ids=list(chunk.related_article_ids),
             related_incident_ids=list(chunk.related_incident_ids),
             related_problem_ids=list(chunk.related_problem_ids),

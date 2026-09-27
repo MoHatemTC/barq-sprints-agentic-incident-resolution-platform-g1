@@ -310,3 +310,46 @@ class TestNumberAllocation:
                 return ["KB1001-v1.0", "KB1100-v1.0"]
 
         assert await make_next_article_number(Client(), "kb-sys-1")() == "KB1101"
+
+
+class TestHumanCaptureRange:
+    """The allocator stays inside the reserved KB1001–KB1999 namespace."""
+
+    async def test_allocator_refuses_to_leave_the_human_range(self) -> None:
+        from agent.knowledge_capture import HumanCaptureRangeExhausted
+
+        class Client:
+            async def find_source_ids_by_prefix(self, prefix, *, kb_sys_id=None):
+                return ["KB1998-v1.0", "KB1999-v1.0"]
+
+        with pytest.raises(HumanCaptureRangeExhausted, match="KB1001"):
+            await make_next_article_number(Client(), "kb-sys-1")()
+
+    async def test_allocator_ignores_ids_outside_the_human_range(self) -> None:
+        """A stray KB2xxx/KB3xxx/KB0xxx row must never push the next number up."""
+
+        class Client:
+            async def find_source_ids_by_prefix(self, prefix, *, kb_sys_id=None):
+                return ["KB0999-v1.0", "KB1003-v1.0", "KB2001-v1.0", "KB3001-v1.0"]
+
+        assert await make_next_article_number(Client(), "kb-sys-1")() == "KB1004"
+
+    async def test_exhausted_range_preserves_resolution_and_audits_blocked(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from agent.knowledge_capture import HumanCaptureRangeExhausted
+
+        async def exhausted() -> str:
+            raise HumanCaptureRangeExhausted("human-capture range exhausted")
+
+        events: list[str] = []
+        deps, registry, _ = _deps(events, monkeypatch=monkeypatch)
+        args = _capture_args(deps, events)
+        args["next_number"] = exhausted
+
+        result = await capture_human_resolution(**args)
+
+        assert result is None, "the resolution itself must not fail"
+        assert "publish_kb_article" not in events, "nothing may publish after exhaustion"
+        assert registry.audit_payloads, "the failure must be audited"
+        assert registry.audit_payloads[0].status is ExecutionStatus.BLOCKED
