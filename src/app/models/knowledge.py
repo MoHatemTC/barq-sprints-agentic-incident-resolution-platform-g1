@@ -25,6 +25,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.models.knowledge_provenance import KnowledgeProvenance
+
 SLUG_PATTERN = re.compile(r"^[a-z0-9]+(?:[-_][a-z0-9]+)*$")
 VERSION_PATTERN = re.compile(r"^\d+\.\d+$")
 ARTICLE_NUMBER_PATTERN = re.compile(r"^KB\d{4}$")
@@ -241,14 +243,37 @@ class KnowledgePayload(BaseModel):
     related_records: list[str] = Field(default_factory=list)
     article_url: str | None = None
 
+    # Optional provenance (manual-KB integration): set only for records adapted
+    # from the reviewed manifest. Old records carry none, and to_qdrant_payload
+    # excludes None, so legacy payloads stay byte-identical.
+    content_purpose: str | None = None
+    warning: str | None = None
+    source_sections: list[str] | None = None
+    unit_id: str | None = None
+
     @property
     def article_id(self) -> str:
         """Composed unique identifier, e.g. KB0010-v2.0."""
         return f"{self.article_number}-v{self.version}"
 
     @classmethod
-    def from_chunk(cls, article: Article, chunk: ArticleChunk) -> "KnowledgePayload":
+    def from_chunk(
+        cls,
+        article: Article,
+        chunk: ArticleChunk,
+        provenance: KnowledgeProvenance | None = None,
+    ) -> "KnowledgePayload":
         """Build the payload for one chunk of an article."""
+        provenance_fields: dict[str, Any] = (
+            {}
+            if provenance is None
+            else {
+                "content_purpose": provenance.content_purpose.value,
+                "warning": provenance.warning,
+                "source_sections": list(provenance.source_sections),
+                "unit_id": provenance.unit_id,
+            }
+        )
         return cls(
             article_number=article.article_number,
             version=article.version,
@@ -266,6 +291,7 @@ class KnowledgePayload(BaseModel):
             author=article.author,
             reviewed_on=article.reviewed_on,
             related_records=list(article.related_records),
+            **provenance_fields,
         )
 
     def to_qdrant_payload(self) -> dict[str, Any]:

@@ -230,3 +230,27 @@ def test_seed_manual_uses_chunked_sections_api(
     assert kwargs["chunks"] == [chunk]
     assert kwargs["collection_name"] == "manual_scratch"
     assert "sections" not in kwargs and "relationships" not in kwargs
+
+
+def test_seed_with_manual_kb_ingests_publication_units(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """--with-manual-kb adapts the committed manifest into the article collection."""
+    client = QdrantClient(":memory:")
+    corpus = Path(__file__).resolve().parents[2] / "data" / "corpus" / "barq_articles.json"
+
+    exit_code = _run_seed(monkeypatch, client, corpus, extra_args=["--with-manual-kb"])
+
+    assert exit_code == 0
+    points, _ = client.scroll(collection_name=COLLECTION, with_payload=True, limit=1000)
+    payloads = {p.payload["article_id"]: p.payload for p in points}
+    # 11 baseline identities (incl. retired KB0010-v1.0) + 65 new units; the 10
+    # aliases collapse onto the baseline identities they mirror.
+    assert len(payloads) == 76
+    assert payloads["KB2065-v1.0"]["content_purpose"] == "warning"
+    assert payloads["KB0001-v2.0"]["source_sections"] == ["6.4"]
+    # Deterministic re-run: ingesting again changes nothing.
+    exit_code = _run_seed(monkeypatch, client, corpus, extra_args=["--with-manual-kb"])
+    assert exit_code == 0
+    points_again, _ = client.scroll(collection_name=COLLECTION, with_payload=True, limit=1000)
+    assert len(points_again) == len(points), "re-seeding must be idempotent"

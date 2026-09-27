@@ -1,7 +1,8 @@
 """CLI script to seed the Qdrant knowledge base with article chunks.
 
 Single idempotent command: ensures the collection exists, chunks the
-corpus (baseline + stressor articles, when present), embeds all chunks in
+corpus (baseline, plus the manifest-adapted manual with ``--with-manual-kb``,
+plus legacy stressor articles when present), embeds all chunks in
 one dual-vector pass, and upserts with deterministic point IDs. Seeding
 never deletes records it was not given: articles outside the corpus (for
 example human-captured KB articles) and non-article records in the
@@ -27,6 +28,7 @@ from app.core.config import Settings, get_retrieval_settings
 from app.core.logging import configure_logging
 from app.retrieval.embedding import FastEmbedEngine
 from app.retrieval.ingest import ingest_articles
+from app.retrieval.manual.integration import load_manual_publication
 from app.retrieval.manual.manual_chunking import chunk_sections
 from app.retrieval.manual.manual_ingest import ingest_manual_sections
 from app.retrieval.manual.manual_sources import ManualCorpusJSONSource
@@ -43,6 +45,8 @@ logger = structlog.get_logger("seed_qdrant")
 
 DEFAULT_CORPUS = Path("data/corpus/barq_articles.json")
 DEFAULT_STRESSORS = Path("data/corpus/stressors/stressor_articles.json")
+MANIFEST_PATH = Path("data/corpus/manual_kb_manifest.json")
+MANUAL_SECTIONS_PATH = Path("data/corpus/manual_sections.json")
 
 
 def main() -> int:
@@ -68,6 +72,14 @@ def main() -> int:
         "--no-stressors",
         action="store_true",
         help="Seed only the baseline corpus, ignoring --stressors entirely.",
+    )
+    parser.add_argument(
+        "--with-manual-kb",
+        action="store_true",
+        help=(
+            "Adapt the manual through the reviewed manifest and ingest the KB2xxx "
+            "publication units into the article collection alongside the corpus."
+        ),
     )
     parser.add_argument(
         "--manual-corpus",
@@ -145,15 +157,31 @@ def main() -> int:
                 "stressor_articles_skipped",
                 reason="file not found",
                 path=str(args.stressors),
-                remedy="run scripts/extract_stressors.py first",
+                remedy=(
+                    "legacy stressor records are retired via the reconciliation plan; "
+                    "do not re-extract"
+                ),
             )
 
     engine = FastEmbedEngine()
+    article_provenance = None
+    if args.with_manual_kb:
+        logger.info("adapting_manual_kb", manifest=str(MANIFEST_PATH))
+        publication = load_manual_publication(
+            manifest_path=MANIFEST_PATH,
+            sections_path=MANUAL_SECTIONS_PATH,
+            corpus_path=args.corpus,
+        )
+        logger.info("manual_kb_adapted", publication_units=len(publication.articles))
+        all_articles.extend(publication.articles)
+        article_provenance = publication.provenance
+
     ingest_articles(
         articles=all_articles,
         client=client,
         collection_name=collection_name,
         embedding_engine=engine,
+        article_provenance=article_provenance,
     )
 
     if args.manual_corpus is not None:
