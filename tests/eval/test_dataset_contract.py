@@ -118,6 +118,7 @@ class TestRetrievalOnlyLoader:
         assert "response" not in row and "actual_output" not in row
         assert row["applicability"]["retrieval"] is True
 
+
 class TestMetricPolicy:
     def test_missing_policy_file_is_an_error_not_a_pass(self, tmp_path: Path) -> None:
         module = _load_adapters()

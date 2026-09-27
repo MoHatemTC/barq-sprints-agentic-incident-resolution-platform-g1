@@ -6,14 +6,15 @@ from dataclasses import dataclass
 FORM_FEED = "\f"
 _PAGE_SEPARATOR = f"\n{FORM_FEED}\n"
 
-# Number component: dotted numeric ("3.4", "10.1.2", rejecting ".0" software versions),
-# top-level chapter numbers with optional trailing dot ("2.", "10"), or Appendix letters ("A", "B.1").
+# Number component: dotted numeric ("3.4", "10.1.2", rejecting ".0" software
+# versions), top-level chapter numbers with optional trailing dot ("2.", "10"),
+# or Appendix letters ("A", "B.1").
 _NUMBER_PATTERN = r"(?:(?:\d{1,2}\.)+[1-9]\d*|\d{1,2}\.?|[A-Z](?:\.\d+)*)"
 # ≤2 digits per component: the manual numbers sections 1–20.x. Three-digit
 # numbers ("202") are printed page numbers / marginalia, not sections.
 
 SECTION_HEADING_RE = re.compile(
-    r"^[ \t]{0,3}"  # headings appear at the left margin; indented lines are list items or table cells
+    r"^[ \t]{0,3}"  # headings sit at the left margin; indented lines are list items/cells
     rf"({_NUMBER_PATTERN})"  # group 1: section number
     r"[ \t]{1,}"  # >=1 spaces distinguishes a heading from prose/lists
     r"([A-Z][^\n]{2,})"  # group 2: title, starts uppercase, >=3 chars
@@ -40,7 +41,7 @@ def _looks_like_prose_sentence(title: str, section_number: str = "") -> bool:
         return True
     if title.rstrip().endswith((".", ",", ";")):
         return True
-    # Table rows often carry decimal metrics (e.g. "0.694") or internal sentence breaks ("lockout. A")
+    # Table rows often carry decimal metrics ("0.694") or sentence breaks ("lockout. A")
     if re.search(r"\b\d+\.\d{2,}\b", title) or re.search(r"\.\s+[A-Z]", title):
         return True
     # Version/edition numbers from change tables (e.g. "3.0") are not manual sections

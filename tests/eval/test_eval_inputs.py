@@ -17,6 +17,7 @@ EVAL_DIR = REPO_ROOT / "data" / "structured-io"
 DATASET = EVAL_DIR / "barq_rag_eval_dataset.json"
 ADAPTERS = EVAL_DIR / "adapters.py"
 
+
 def _git(*args: str) -> str:
     return subprocess.run(
         ["git", *args], cwd=REPO_ROOT, check=True, capture_output=True, text=True
