@@ -29,7 +29,11 @@ def test_deploy_script_fails_closed_and_deploys_the_triggering_commit() -> None:
     # the deploy exits 0 having never restarted the app.
     assert "docker compose run --rm --no-deps -T api alembic upgrade head < /dev/null" in workflow
     assert "docker compose run --rm --no-deps -T" in workflow
-    assert "api python scripts/seed_qdrant.py < /dev/null" in workflow
+    # Corpus changes are explicit maintenance, never a side effect of a code
+    # deploy: a reseed here purges live human-captured KB articles on every
+    # release. Initial provisioning for a new environment is a documented
+    # runbook step instead.
+    assert "seed_qdrant" not in workflow
     # The image installs dependencies system-wide, so the remote steps must not
     # re-resolve the project with `uv run` (it rebuilds the package on the box).
     assert "uv run alembic" not in workflow
