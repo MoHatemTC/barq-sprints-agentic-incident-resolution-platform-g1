@@ -38,6 +38,7 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import structlog
 
@@ -85,6 +86,17 @@ async def resolve_incident_sys_id(number: str) -> str:
 
 
 async def run(args: argparse.Namespace) -> None:
+    servicenow_host = urlsplit(str(get_settings().servicenow_instance_url)).hostname
+    qdrant_host = urlsplit(get_retrieval_settings().qdrant_url).hostname
+    if servicenow_host == "dev407364.service-now.com" and qdrant_host in {
+        "localhost",
+        "127.0.0.1",
+        "::1",
+    }:
+        raise SystemExit(
+            "Shared ServiceNow with local Qdrant cannot prove the shared KB loop. "
+            "Run this on the shared backend with its Qdrant collection."
+        )
     settings = kb_publisher_settings(get_settings())
     kb_sys_id = settings.servicenow_kb_id
     kb_client = ServiceNowKBClient(settings)
@@ -232,6 +244,8 @@ async def run(args: argparse.Namespace) -> None:
     print(f"== transcript written to {out}")
 
     await kb_client.aclose()
+    get_qdrant_client().close()
+    engine.dispose()
 
 
 def _base_deps(llm):
