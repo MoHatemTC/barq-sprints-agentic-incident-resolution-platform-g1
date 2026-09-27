@@ -42,6 +42,7 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -632,7 +633,7 @@ async def run_one(
 async def main_async(args: argparse.Namespace) -> int:
     base = args.base.rstrip("/")
     settings = get_settings()
-    if "dev407364.service-now.com" in str(settings.servicenow_instance_url).lower():
+    if urlsplit(str(settings.servicenow_instance_url)).hostname == "dev407364.service-now.com":
         say(
             "This reset-and-replay harness is for the local PDI only. The shared "
             "ServiceNow Business Rule sends its own event; resetting an incident "
