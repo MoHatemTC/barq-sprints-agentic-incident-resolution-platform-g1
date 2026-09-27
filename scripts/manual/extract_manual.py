@@ -18,7 +18,7 @@ settings = Settings()
 configure_logging(environment=settings.environment, log_level=settings.log_level)
 logger = structlog.get_logger("extract_manual")
 
-DEFAULT_MANUAL_PDF = Path("data/barq-system-kb.pdf")
+DEFAULT_MANUAL_PDF = Path("data/barq_manual.pdf")
 DEFAULT_OUTPUT = Path("data/corpus/manual_sections.json")
 
 

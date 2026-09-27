@@ -37,14 +37,6 @@ class RetrievalHit(BaseModel):
     security_level: str  # Audience tier: "public", "internal" or "restricted"
     category: str  # Knowledge category, e.g. "database", "network"
     service: str | None = None  # Affected service name, e.g. "postgres", "redis"
-    # Optional provenance (manual-KB integration); absent on legacy records.
-    content_purpose: str | None = None
-    warning: str | None = None
-    source_sections: list[str] | None = None
-    source_document_id: str | None = None
-    pages: list[int] | None = None
-    extraction_reliability: str | None = None
-    ocr_confidence: float | None = None
 
 
 @dataclass(frozen=True)
@@ -81,15 +73,8 @@ def _validate_hit(point) -> RetrievalHit:
         chunk_text=validated.chunk_text,
         workflow_state=validated.workflow_state.value,
         security_level=validated.security_level.value,
-        content_purpose=validated.content_purpose,
-        warning=validated.warning,
-        source_sections=validated.source_sections,
         category=validated.category,
         service=validated.service,
-        source_document_id=validated.source_document_id,
-        pages=validated.pages,
-        extraction_reliability=validated.extraction_reliability,
-        ocr_confidence=validated.ocr_confidence,
     )
 
 

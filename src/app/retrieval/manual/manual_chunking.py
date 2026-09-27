@@ -57,7 +57,6 @@ def chunk_section(
             section_title=section.title,
             pages=section.pages,
             content_type=section.content_type,
-            ocr_confidence=section.ocr_confidence,
             **related,
         )
         for index, text in enumerate(texts)
