@@ -1,0 +1,1280 @@
+{
+  "sections": [
+    {
+      "section_id": "section-1.1",
+      "section_number": "1.1",
+      "title": "Purpose and audience",
+      "body": "This manual is the working reference for everyone who handles an incident at BARQ Systems: service desk analysts on\nTier 1, the resolver groups they escalate to, the service owners who accept those escalations, and the delivery managers\nwho report on the result. It states what we have agreed to do, how quickly, and who decides when the agreed answer does\nnot fit.\n\nIt is deliberately operational. It does not describe architecture, it does not justify tooling choices, and it does not replace\nvendor documentation. Where a procedure depends on a system whose behaviour we do not control, the procedure says\nso and names the team who owns the relationship.\n\n Tier 1 analysts Sections 3, 4 and 6 are your working set. Section 7 shows what a well-handled ticket looks\n like end to end.\n\n Resolver groups Sections 4, 5 and 8. Read the known error register before you accept an escalation — half of\n what reaches you is already documented.\n\n Service owners Sections 5, 9 and 10. Your acceptance criteria for a change and your obligations during a\n major incident are here.\n\n Delivery managers Sections 3, 9 and 12. The SLA definitions in 3.4 are the ones reported against in the monthly\n service review.\n\n New joiners Read Sections 1 to 4 in your first week. Do not read Section 6 end to end — it is a reference,\n and you will search it, not remember it.",
+      "content_type": "table",
+      "pages": [
+        6
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-1.2",
+      "section_number": "1.2",
+      "title": "How to find things",
+      "body": "Everything in this manual carries an identifier that is also searchable in the ticketing system. If you have the identifier,\nsearch there first — the record is live and this document is a snapshot.\n\n PREFIX RECORD TYPE WHERE IT LIVES\n\n KB · KB0001 Knowledge article Section 6 of this manual, and the published knowledge base. The\n manual carries the text as at the edition date; the knowledge base\n carries the current version.\n\n INC · INC0010023 Incident The ticketing system. Section 7 reproduces a small number of closed\n incidents as worked examples.\n\n PRB · PRB0040012 Problem The problem register. Open problems are summarised in Section 8.\n\n KE · KE0000034 Known error The known error register in Section 8.2. Every known error names\n its workaround and its permanent fix, if one is planned.\n\n CHG · CHG0030455 Change The change calendar. Section 10 covers the procedure; the calendar\n is authoritative for dates.\n\n RITM · RITM0010877 Request item The service catalogue. Requests are not incidents — see 3.2 for the\n distinction and why it matters.\n\n MIR · MIR-2026-03 Major incident report Section 9. One report per declared major incident, published within\n ten working days.\n\n\n\n\n\nTier 1 analysts Sections 3, 4 and 6 are your working set. Section 7 shows what a well-handled ticket looks like end to end. Resolver groups Sections 4, 5 and 8. Read the known error register before you accept an escalation — half of Resolver groups what reaches you is already documented. Service owners what reaches you is already documented. Delivery managers Sections 3, 9 and 12. The SLA definitions in 3.4 are the ones reported against in the monthly Delivery managers service review. New joiners service review.\n\n\n\nAppendix E lists every identifier used in this manual against the section it appears in. If someone quotes you a number and\nyou do not recognise it, start there.",
+      "content_type": "table",
+      "pages": [
+        6,
+        7
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-1.3",
+      "section_number": "1.3",
+      "title": "Conventions",
+      "body": "▪ Field labels appear in Title Case as they render on the form — Assignment group, Business service. Underlying\n column names appear in code style, as assignment_group, and only where a procedure requires you to type one.\n ▪ Times are Gulf Standard Time (UTC+04) unless a clock is named otherwise. Cairo-based staff should note that the\n service desk runs on GST, not on local time.\n ▪ Working hours means 08:00 to 18:00 GST, Sunday to Thursday. Extended hours and out of hours are defined in 2.1\n and are not interchangeable.\n ▪ Must, should and may carry their ordinary contractual weight. A step marked Must has been agreed with a service\n owner and skipping it is a deviation to be recorded, not a judgement call.",
+      "content_type": "prose",
+      "pages": [
+        7,
+        8
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-2.1",
+      "section_number": "2.1",
+      "title": "Operating model",
+      "body": "The desk runs a follow-the-sun pattern across two locations with a single queue. An analyst in either location can pick up\nany incident; the shift pattern determines who is expected to, not who is permitted to.\n\n DUBAI CAIRO\n COVERAGE\n HOURS (GST) ANALYSTS HOURS (GST) ANALYSTS\n\n Working hours 08:00 – 18:00 6 09:00 – 19:00 5\n\n Extended hours 18:00 – 22:00 2 — —\n\n Out of hours on-call 1 + escalation on-call —\n\n Friday on-call 1 10:00 – 16:00 2\n\n Saturday — — 10:00 – 16:00 2\n\n\n\n\n Cairo covers Saturday; Dubai covers Friday\n The two locations do not observe the same weekend, and the rota is built around that rather than in spite of it.\n An incident raised on a Friday morning is a Cairo incident by default, and one raised on a Saturday is a Dubai\n on-call incident only if it is P1 or P2.",
+      "content_type": "prose",
+      "pages": [
+        8
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-2.2",
+      "section_number": "2.2",
+      "title": "Channels",
+      "body": "CHANNEL HOURS CREATES NOTES\n\n Self-service portal 24/7 Incident or request Preferred. The requester chooses the category,\n which is why category is unreliable and is re-\n checked at triage.\n\n Telephone Working + Incident Analyst raises the record while on the call.\n extended Never close a phone incident without a written\n summary in the journal.\n\n Email to the desk 24/7 Incident Parsed into an incident with category inquiry.\n Always re-categorise at triage; the parser\n cannot.\n\n Teams channel Working hours Nothing Triage and chase only. A conversation is not a\n ticket. If it turns into work, raise the record and\n post the number back.\n\n Monitoring alert 24/7 Incident Raised automatically against the affected\n service with priority derived from the alert\n severity. See 3.3.",
+      "content_type": "prose",
+      "pages": [
+        8,
+        9
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-2.3",
+      "section_number": "2.3",
+      "title": "Roles",
+      "body": "Tier 1 analyst Owns the incident from creation to resolution or handover. Applies documented\n knowledge, keeps the requester informed, and escalates on the clock rather than on\n frustration. An analyst may not close an incident they escalated without confirmation\n from the resolver group.\n\nTeam lead Owns the queue, not the tickets. Runs triage twice a day, rebalances load, and is the\n first authority on a priority dispute. Approves any P3 that an analyst wants to raise to\n P2.\n\nResolver group Accepts escalations within its service scope. May reject an escalation once, with a\n written reason and a named alternative group. A second rejection goes to the service\n owner, not back to the desk.\n\nService owner Accountable for the service in Section 5. Approves emergency changes against it, joins\n the bridge for P1 and P2, and signs off the post-incident review.\n\nMajor incident manager A rostered role, not a job title. Takes command when a major incident is declared, and\n holds it until the review is published. During that period their instruction outranks this\n manual.\n\nKnowledge manager Owns Section 6. Publishes, revises and retires articles, and is the only role that may set\n an article to retired.",
+      "content_type": "prose",
+      "pages": [
+        9
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-2.4",
+      "section_number": "2.4",
+      "title": "Contact routes",
+      "body": "The full directory, including out-of-hours numbers, is in Appendix D. The routes below are the ones needed during an\nincident and are repeated there.\n\n NEED ROUTE WHEN\n\n Raise or chase an incident Portal, then phone Any time. Chasing by Teams does not update the clock.\n\n Declare a major incident Major incident bridge P1 always. P2 when two or more services are affected.\n\n Reach a resolver group out of On-call rota, Appendix D P1 and P2 only. P3 waits for working hours.\n hours\n\n Emergency change approval Change manager, then Both are required. Neither alone is sufficient — see 10.3.\n service owner\n\n Knowledge correction Catalogue item Knowledge Any time. Do not edit a published article directly.\n — content correction",
+      "content_type": "prose",
+      "pages": [
+        9,
+        10
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-3.1",
+      "section_number": "3.1",
+      "title": "The lifecycle",
+      "body": "An incident is an unplanned interruption to a service, or a reduction in its quality. It moves through six states. Only two of\nthem stop the SLA clock, and knowing which two is most of what an analyst needs to understand about the process.\n\n STATE VALUE MEANS CLOCK WHO MAY SET IT\n\n New 1 Created, not yet picked up. Running Anyone. Set automatically on\n creation.\n\n In Progress 2 An analyst or resolver group is Running The assignee.\n working it.\n\n On Hold 3 Waiting on the requester, a Paused The assignee, with a reason code.\n supplier or a scheduled window. See 3.5.\n\n Resolved 6 A fix has been applied and the Stopped The assignee.\n requester has been told.\n\n Closed 7 Resolved and either confirmed Stopped Automatic, or the requester.\n or auto-closed after five working\n days.\n\n Cancelled 8 Raised in error, duplicate, or not Stopped Team lead only.\n an incident.",
+      "content_type": "prose",
+      "pages": [
+        10
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-3.2",
+      "section_number": "3.2",
+      "title": "Incident or request",
+      "body": "Something broken is an incident. Something wanted is a request. The distinction decides the SLA, the approval path and\nthe reporting line, so it is settled at triage and not later.\n\n INCIDENT REQUEST\n\n ▪ “I cannot connect to the VPN since my ▪ “Please order me a second monitor.”\n password reset.” ▪ “I need access to the finance folder.”\n ▪ “Outlook says Disconnected and no mail has ▪ “When will my expense claim be paid?”\n arrived since 08:00.” ▪ “Can you install the design suite on my\n ▪ “The shared drive that was mapped yesterday laptop?”\n is gone.”\n ▪ “The order service is returning 500s.”\n\n Resolution targets in 3.4. No approval required to work it. Fulfilment targets are set per catalogue item. Most require an\n approval before any work begins.\n\n\n\nTwo cases cause most of the argument. Access that used to work and has stopped is an incident — something broke.\nAccess that never existed is a request, even when the person urgently needs it. And a question with no fault behind it\nis neither: answer it, log it as an inquiry, and do not let it consume an incident slot.",
+      "content_type": "prose",
+      "pages": [
+        10
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-3.3",
+      "section_number": "3.3",
+      "title": "Priority",
+      "body": "Priority is derived, not chosen. Impact and urgency are set at triage and the matrix does the rest. An analyst who wants a\ndifferent priority changes the impact or the urgency and says why in the journal; they do not overwrite the derived value.\n\n\n\n\n\n\n URGENCY\n\n 1 – HIGH 2 – MEDIUM 3 – LOW\n\n Whole service, or a\n Impact 1 – Enterprise P1 P1 P2\n site\n\n Impact 2 –\n P1 P2 P3 A team or a floor\n Department\n\n Impact 3 – Individual P2 P3 P4 One person\n\n A monitoring alert sets impact from the affected service's criticality in Section 5, and urgency from the alert severity. An analyst\n may lower a derived P1 only with the team lead's agreement, recorded in the journal.",
+      "content_type": "prose",
+      "pages": [
+        10,
+        11
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-3.4",
+      "section_number": "3.4",
+      "title": "Response and resolution targets",
+      "body": "The clock starts when the incident is created, not when it is picked up. It pauses on hold and stops on resolved. Targets are\nmeasured against working hours for P3 and P4, and against elapsed time for P1 and P2.\n\n PRIORITY RESPONSE RESOLUTION UPDATE CADENCE CLOCK BASIS\n\n P1 15 minutes 4 hours Every 30 minutes Elapsed, 24/7\n\n P2 30 minutes 8 hours Every 2 hours Elapsed, 24/7\n\n P3 4 working hours 3 working days Daily Working hours\n\n P4 1 working day 5 working days On change of state Working hours\n\n\n\n ▪ Response means a human has read the incident and written something in the journal that is specific to it. An auto-\n acknowledgement is not a response and does not stop the response clock.\n ▪ Resolution means the service is working again for the requester, confirmed by the requester where they are\n reachable. A workaround counts as a resolution if the requester can work; the underlying fault then becomes a\n problem record under Section 8.\n ▪ Breach is recorded automatically and cannot be edited. If a target was missed for a reason outside our control, that\n reason belongs in the journal and in the monthly service review, not in an adjustment to the record.",
+      "content_type": "prose",
+      "pages": [
+        11
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-3.5",
+      "section_number": "3.5",
+      "title": "Holds, chasing and the no-contact rule",
+      "body": "REASON CODE MAX HOLD WHAT MUST HAPPEN BEFORE AND AFTER\n\n awaiting_user 5 working days Two chases at least one working day apart, both recorded. After the second\n chase with no reply, resolve with the no-contact resolution code and tell the\n requester how to reopen.\n\n awaiting_supplier Per contract The supplier reference goes in the journal. A hold with no supplier reference\n is not a supplier hold.\n\n awaiting_change To the window The CHG number goes in the journal. The hold is released when the change\n closes, not when it is approved.\n\n awaiting_parts 10 working days Expected date recorded and updated weekly. Beyond ten days, raise a\n request instead and resolve the incident.\n\n scheduled_with_user To the Date and time agreed with the requester in writing. Missing an agreed\n appointment appointment is a breach even when the clock was paused.",
+      "content_type": "prose",
+      "pages": [
+        11,
+        12
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-3.6",
+      "section_number": "3.6",
+      "title": "Journalling",
+      "body": "The journal is the record. Six months from now, an auditor, a service owner or a colleague picking the ticket up will have\nnothing else. Two fields, and they are not interchangeable.\n\n WORK NOTES · INTERNAL ADDITIONAL COMMENTS · THE REQUESTER SEES THESE\n\n ▪ What you checked and what you found ▪ What you are doing, in the requester's\n ▪ Commands run and their output language\n ▪ Why you ruled a cause out ▪ What you need from them, and by when\n ▪ Which article you applied, by number ▪ What changed and whether they need to act\n ▪ Who you spoke to and what they said ▪ Never: internal names, host names, colleagues'\n opinions, or the phrase “as per the KB”\n\n\n\n\n Write the article number, every time\n “Applied KB0001, cleared the cached credential, confirmed connection” takes four seconds longer to type than\n “fixed” and is the difference between a knowledge base we can measure and one we cannot. Article usage is\n reported monthly in Section 12, and it is the only evidence we have for which articles deserve to survive the\n next review.",
+      "content_type": "prose",
+      "pages": [
+        12,
+        13
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-4.1",
+      "section_number": "4.1",
+      "title": "When to escalate",
+      "body": "Escalate on the clock, not on frustration. An incident is escalated when the analyst has exhausted the documented\nknowledge for its category and the next response target is inside the next hour — whichever comes first. Escalating earlier\nis not a failure; holding a ticket past its target because you nearly have it is.\n\n PRIORITY ESCALATE IF UNRESOLVED AFTER TO AND ALSO\n\n P1 15 minutes, or immediately if Resolver group and the major Service owner paged. Bridge stays\n the cause is unknown incident bridge open until the service is restored.\n\n P2 1 hour Resolver group Team lead informed. Service owner\n informed if two or more services are\n involved.\n\n P3 1 working day Resolver group Nothing further unless the group\n rejects the escalation.\n\n P4 3 working days Resolver group, or convert to a Check first that it is not a request in\n request disguise — see 3.2.",
+      "content_type": "prose",
+      "pages": [
+        13
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-4.2",
+      "section_number": "4.2",
+      "title": "The escalation matrix",
+      "body": "Grouped by the service area that owns the escalation. The first line is the standing route; the second is who takes it if the\nfirst does not acknowledge inside the acknowledgement window.\n\n AREA TRIGGER FIRST ROUTE IF NO ACK IN 15 MIN\n\n VPN, remote access, site links Network Operations NetOps duty lead\n\n Corporate Wi-Fi, roaming, Network Operations NetOps duty lead\n Network\n coverage\n\n Firewall or segmentation change Network Security Head of Infrastructure\n\n Lockouts, password policy, Identity & Access IAM duty lead\n directory\n\n Identity MFA reset or device re-enrolment Identity & Access IAM duty lead\n\n Suspected compromise Security Operations, CISO on-call — do not wait\n immediately 15 minutes\n\n SAP availability or connectivity SAP Basis SAP service owner\n\n Order processing and fulfilment Platform Engineering Head of Platform\n Applications\n Engineering\n\n Mail flow and collaboration Collaboration Services Collaboration duty lead\n\n Laptop, desktop, peripherals Endpoint Engineering Endpoint duty lead\n Endpoint\n Print and reprographics Print Services Facilities duty manager\n\n\n\n\n\n\n\n\n A rejected escalation comes back once, and once only\n A resolver group may return an escalation with a written reason and a named alternative group. The analyst\n routes it to that group. If the second group also rejects it, the incident goes to the service owner listed in\n Section 5 — not back to the desk, and not around the loop again. Two rejections is a routing problem, and\n routing problems are owned above the desk.",
+      "content_type": "prose",
+      "pages": [
+        13,
+        14
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-4.3",
+      "section_number": "4.3",
+      "title": "The desk card",
+      "body": "The card below is laminated at every desk position and pinned in the Cairo operations room. It is reproduced here because\nit is the version people actually follow, and because it is reissued whenever 4.1 or 4.2 changes.\n\n\n\n\n The escalation and acceptance card, issue 4. Reissued with every edition of this manual.\n\n\n\n\n\n[Image content]\nTwo columns, one figure, one footnote\n\n\n\nThe webhook returns 202 Accepted before 202 means the service has taken\nretrieval or generation has run. This is not responsibility for the event. That promise\nan optimisation; it is the contract. is only real because the idempotency key\n\nwas persisted before the reply was sent.\nServiceNow's outbound call is synchronous\n\nand holds a worker thread while it waits. Answering 202 and then failing to store\nRetrieval plus generation takes seconds to the key means the event can be replayed\ntens of seconds. A webhook that waited into a second suggestion, which is the\nwould exhaust the platform's outbound exact failure the status code was meant\ncapacity under any realistic burst, slow to rule out.\"\n\nthe instance for every user, and time out\nanyway.\n\nOrder of operations\n\n\n\nauthenticate >] validate » claim key -q ‘laimincident 4 dispatch ) return 202\n\nOnly the fourth step writes to ServiceNow on the request path.\n\n‘See KB-12 for the atomic claim statement.",
+      "content_type": "prose",
+      "pages": [
+        14,
+        15
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-5.1",
+      "section_number": "5.1",
+      "title": "How to read this catalogue",
+      "body": "Each service carries a criticality, a service owner, a support window and the resolver group that owns incidents against it.\nCriticality feeds the impact column of the priority matrix in 3.3, so changing it is a governance decision and not a desk\ndecision.\n\nSupport windows are stated in Gulf Standard Time and follow the desk pattern in 2.1 1. A service marked 24/7 is covered\nby the on-call rota out of hours for P1 and P2 only; P3 and P4 against a 24/7 service still wait for working hours 2.",
+      "content_type": "prose",
+      "pages": [
+        15
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-5.2",
+      "section_number": "5.2",
+      "title": "The catalogue",
+      "body": "SERVICE CRITICALITY OWNERSHIP AND WINDOW NOTES\n\n order-processing FIELD VALUE Revenue-bearing. Any P1 goes\n straight to the bridge.\n Owner K. Selim Remediation is change-\n Tier 1 controlled — see KB0010 and\n Group Platform Eng CHG0030455.\n\n Window 24/7\n\n\n identity FIELD VALUE Underpins every other service.\n A lockout here presents as a\n Owner N. Abdelrahman fault in three or four services at\n Tier 1 once — see 7.4.\n Group Identity & Access\n\n Window 24/7\n\n\n sap-erp FIELD VALUE Not reachable from the internet.\n Confirm VPN before\n Owner K. Selim troubleshooting anything else.\n Tier 1 KE0000034 applies.\n Group SAP Basis\n\n Window 06:00–22:00\n\n\n corporate-email FIELD VALUE Distinguish a single-user fault\n from a service event before\n Owner O. Sabry applying any per-user fix.\n Tier 2 KB0002.\n Group Collaboration\n\n Window 24/7\n\n\n corporate-vpn FIELD VALUE Highest article usage on the\n desk. KB0001 alone accounts\n Owner L. Haddad for roughly one in twenty\n Tier 2 incidents.\n Group Network Ops\n\n Window 24/7\n\n\n\n\n1Gulf Standard Time, UTC+04. Cairo staff should note that the desk runs on GST and not on local time — see 1.3.\n\n2A P3 raised against a 24/7 service at 02:00 is picked up when the desk opens. Out-of-hours cover exists for restoration, not for convenience.\n\n\n\n\n\n file-services FIELD VALUE Permission changes never\n happen from an incident. Raise\n Owner L. Haddad the access request — 3.2 and\n Tier 2 KB0003.\n Group Infrastructure\n\n Window Working\n\n\n corporate-wifi FIELD VALUE Multiple reports in one area are\n an infrastructure fault, not\n Owner L. Haddad several endpoint faults.\n Tier 3 PRB0040021.\n Group Network Ops\n\n Window Working\n\n\n endpoint FIELD VALUE Post-update degradation is\n expected for 24 hours. Do not\n Owner D. Halim act inside that window —\n Tier 3 KB0007.\n Group Endpoint Eng\n\n Window Working\n\n\n print-services FIELD VALUE Mechanical faults are a facilities\n matter and are outside the\n Owner O. Sabry knowledge base. KB0004 covers\n Tier 4 queues only.\n Group Print Services\n\n Window Working",
+      "content_type": "table",
+      "pages": [
+        15,
+        16
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-5.3",
+      "section_number": "5.3",
+      "title": "Criticality definitions",
+      "body": "TIER MEANING CONSEQUENCES\n\n Tier 1 Revenue-bearing, or underpins every Impact 1 by default. Emergency change route available.\n other service. Service owner joins every P1 and P2 bridge.\n\n Tier 2 Enterprise-wide productivity. Impact 1 when the whole service is down, Impact 2 when a\n department is affected.\n\n Tier 3 Departmental or site-level productivity. Impact 2 at most, unless a site is entirely without the service.\n\n Tier 4 Convenience. A documented manual Impact 3 unless several teams are blocked simultaneously.\n workaround exists.\n\n\n\n\n\ncolumn_0 column_1 FIELD VALUE Owner L. Haddad Group Infrastructure Window Working file-services Tier 2 Permission changes never happen from an incident. Raise the access request — 3.2 and KB0003. corporate-wifi Tier 3 Multiple reports in one area are an infrastructure fault, not several endpoint faults. PRB0040021. corporate-wifi Tier 3 Multiple reports in one area are an infrastructure fault, not several endpoint faults. PRB0040021. endpoint Tier 3 Post-update degradation is expected for 24 hours. Do not act inside that window — KB0007. print-services Tier 4 Mechanical faults are a facilities matter and are outside the knowledge base. KB0004 covers queues only.",
+      "content_type": "table",
+      "pages": [
+        16,
+        17
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-6",
+      "section_number": "6",
+      "title": "Knowledge base articles",
+      "body": "Nine published articles and one retired revision, reproduced as at edition 4.0. The knowledge base is authoritative; this\nsection is a snapshot for offline and audit use.",
+      "content_type": "prose",
+      "pages": [
+        17
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-6.1",
+      "section_number": "6.1",
+      "title": "Article index",
+      "body": "The table below crosses two pages. It is the fastest route from a reported symptom to an article number, and it is the one\npart of this section worth skimming end to end.\n\n ARTICLE REPORTED AS SERVICE CATEGORY OWNER\n\n KB0001 “VPN says authentication failed since my corporate-vpn network Network Ops\n password reset”\n\n KB0002 “Outlook is Disconnected and no mail is corporate- software Collaboration\n arriving” email\n\n KB0003 “My mapped drive has disappeared since I file-services network Infrastructure\n logged in”\n\n KB0004 “Jobs queue up and nothing comes out of print-services hardware Print Services\n the printer”\n\n KB0005 “I am locked out and nothing lets me sign identity inquiry Identity & Access\n in”\n\n KB0006 “I changed my phone and MFA no longer identity inquiry Identity & Access\n works”\n\n KB0007 “My laptop has been slow since the endpoint hardware Endpoint Eng\n update”\n\n KB0008 “SAP times out with sap-erp software SAP Basis\n RFC_ERROR_COMMUNICATION”\n\n KB0009 “Wi-Fi keeps dropping on the 5 GHz corporate-wifi network Network Ops\n network”\n\n KB0010 v2 “Order service is returning 500s under order- software Platform Eng\n load” processing\n\n KB0010 v1 Retired 02 Apr 2026 — do not apply. See order- software Platform Eng\n 6.12. processing",
+      "content_type": "prose",
+      "pages": [
+        17
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-6.2",
+      "section_number": "6.2",
+      "title": "Symptom finder",
+      "body": "Where the reported words do not match an article title, work from the pattern instead.\n\nStarted after a change Several services at once Only in one place\nA password reset, a phone Almost always identity, not the A location-bound fault is\nreplacement, a Windows update or services themselves. Go to infrastructure. KB0009 for\na new starter's first login. Check KB0005 first and confirm the wireless; otherwise raise to\nKB0001, KB0005, KB0006 and account state before Network Operations with the\nKB0007 before anything else. troubleshooting any individual location and the times.\n application.",
+      "content_type": "prose",
+      "pages": [
+        17,
+        18
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-6.3",
+      "section_number": "6.3",
+      "title": "KB0005 — the archived scan",
+      "body": "Articles predating the 2025 migration exist as scans of the printed originals, signed off by the reviewer of the day. The scan\nis retained for audit; the published text in 6.8 is what you follow.\n\n\n\n\n KB0005 as it existed before the 2025 migration. Retained for audit only — the current text is in 6.8.",
+      "content_type": "prose",
+      "pages": [
+        18
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-6.4",
+      "section_number": "6.4",
+      "title": "KB0001 — VPN authentication fails after a password change",
+      "body": "KB0001 VPN AUTHENTICATION FAILS AFTER A PASSWORD CHANGE\n\n State Published Version 2\n\n Service corporate-vpn Category network\n\n Owner Network Operations Author L. Haddad\n\n Reviewed 11 Apr 2026 Uses, 12 mo 1,284 · Related PRB0040012, INC0010023\n\n\n\n\nSymptom. The user can reach the internet but the VPN client reports an authentication failure. It began after a password\nreset. The client may report “invalid credentials” even when the new password is entered correctly.\n\nCause. The VPN client caches the previous credential in the operating system credential store. The cached entry is\npresented before the newly typed password, so the directory rejects it. Repeated attempts can lock the account (see\nKB0005).\n\nResolution.\n 1. Confirm with the user that they changed their password within the last 24 hours.\n 2. Ask the user to sign out of the VPN client completely, including the system tray icon.\n 3. Clear the cached credential for the VPN profile from the credential store.\n\n\n[Image content]\nRUNBOOK — ACCOUNT LOCKOUT\n\n\n\nKBO005 - version 4 - identity\n\nSYMPTOM The user cannot signin to.any corporate system. Errors mention a\nlocked or disabled account. ‘Often follows a password ‘change, and\noften presents as several services failing at once.\n\n‘CAUSE The lockout Policy triggers after a threshold of failed attempts. 4\ncached credential on any device can retry an old password silently\nand lock the account repeatedly,\n\nRESOLUTION 1. Verify the user's identity. This step is mandatory, 2. Unlock the account in the identity console. 3. Sign out of the corporate mail Profile on the mobile device,\n4. Clear cached credentials on the laptop, including VPN.\n5. Canfirm access to two different services before closin g.\n\nESCALATION\nRepeated lockouts with no identifiable source go to the Identity\nteam. Never disable the lockout policy for an individual user,\n\n|\n| REVIEWED BY: H. Moawad\n\n| DATE: 11/04/2026\n\n\n\n 4. Reconnect using the new password.\n 5. If authentication still fails, check whether the account is locked in the identity console before escalating.\nEscalation. If the account is not locked and the new password works elsewhere, escalate to the Network team with the\nclient log.",
+      "content_type": "prose",
+      "pages": [
+        18,
+        19
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-6.5",
+      "section_number": "6.5",
+      "title": "KB0002 — Outlook shows Disconnected and no mail is delivered",
+      "body": "KB0002 OUTLOOK SHOWS DISCONNECTED AND NO MAIL IS DELIVERED\n\n State Published Version 3\n\n Service corporate-email Category software\n\n Owner Collaboration Services Author O. Sabry\n\n Reviewed 02 Feb 2026 Uses, 12 mo 947 · Related INC0010024\n\n\n\n\nSymptom. The mail client displays Disconnected or Trying to connect. No new mail arrives. Webmail may still work, or\nmay not.\n\nCause. Two distinct causes present identically: a single-user profile or cached-mode corruption, and a service-wide mail\noutage. Distinguishing them is the first step, not an afterthought.\n\nResolution.\n 1. Ask whether colleagues are affected. If more than one user in the same area is affected, treat it as a service event and\n stop; do not apply per-user fixes to a platform outage.\n 2. Check whether webmail works for this user. If webmail works, the fault is client-side.\n 3. For a client-side fault, close the client fully and reopen it.\n 4. If it still fails, recreate the mail profile and allow the cache to rebuild.\n 5. Confirm mail flow before closing.\nEscalation. If multiple users are affected, raise a major incident against the corporate-email service. Do not resolve\nindividual incidents until the service event is closed.",
+      "content_type": "prose",
+      "pages": [
+        19
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-6.6",
+      "section_number": "6.6",
+      "title": "KB0003 — Mapped shared drive is missing after sign-in",
+      "body": "KB0003 MAPPED SHARED DRIVE IS MISSING AFTER SIGN-IN\n\n State Published Version 2\n\n Service file-services Category network\n\n Owner Infrastructure Author L. Haddad\n\n Reviewed 19 Jan 2026 Uses, 12 mo 612 · Related INC0010025\n\n\n\n\nSymptom. A previously available network drive letter is absent after signing in. Other drives may still be present.\nBrowsing to the server path directly may work.\n\nCause. The mapping script runs before the network is ready, or the user has been removed from the group that grants\naccess to the share. These require different fixes, so establish which one applies before acting.\n\nResolution.\n 1. Ask the user to browse to the server path directly. If it opens, the share and the permissions are fine and the fault is in\n the mapping.\n\n\n\n\n 2. If the path opens, re-run the mapping script, or remap the drive with reconnect-at-sign-in enabled.\n 3. If the path is refused, check the user's group membership against the share's access group.\n 4. If group membership is missing, raise an access request. Do not modify group membership from this incident.\n 5. Confirm the drive is present after a fresh sign-in before closing.\nEscalation. Permission changes go through the access request process and are never applied directly from an incident.",
+      "content_type": "prose",
+      "pages": [
+        19,
+        20
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-6.7",
+      "section_number": "6.7",
+      "title": "KB0004 — Print jobs queue but nothing prints",
+      "body": "KB0004 PRINT JOBS QUEUE BUT NOTHING PRINTS\n\n State Published Version 1\n\n Service print-services Category hardware\n\n Owner Print Services Author O. Sabry\n\n Reviewed 06 Oct 2025 Uses, 12 mo 1,530 · Related INC0010026, INC0010047\n\n\n\n\nSymptom. Documents accumulate in the print queue. The printer shows ready and reports no error. Cancelling a job\nleaves it stuck as Deleting.\n\nCause. The local print spooler service has stalled, leaving orphaned job files that block the queue.\n\nResolution.\n 1. Confirm the printer is online and shows no physical error, and that paper and toner are present.\n 2. Stop the print spooler service on the affected machine.\n 3. Delete the queued job files from the spooler directory.\n 4. Start the print spooler service again.\n 5. Print a test page and confirm it completes.\nEscalation. If the queue stalls again within an hour, or several users on the same printer are affected, escalate to Print\nServices — the fault is likely on the print server rather than the client.",
+      "content_type": "prose",
+      "pages": [
+        20
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-6.8",
+      "section_number": "6.8",
+      "title": "KB0005 — Account is locked after repeated failed sign-ins",
+      "body": "KB0005 ACCOUNT IS LOCKED AFTER REPEATED FAILED SIGN-INS\n\n State Published Version 4\n\n Service identity Category inquiry\n\n Owner Identity & Access Author H. Moawad\n\n Reviewed 11 Apr 2026 Uses, 12 mo 2,109 · Related PRB0040012, INC0010027\n\n\n\n\nSymptom. The user cannot sign in to any corporate system. Errors mention a locked or disabled account. Often follows a\npassword change, and often presents as several services failing at once.\n\nCause. The lockout policy triggers after a threshold of failed attempts. A cached credential on any device — a phone mail\nprofile, a VPN client, a mapped drive — can retry an old password silently and lock the account repeatedly, including\nimmediately after each unlock.\n\nResolution.\n 1. Verify the user's identity following the identity verification procedure. This step is mandatory and is never skipped.\n 2. Unlock the account in the identity console.\n\n\n\n 3. Ask the user to sign out of the corporate mail profile on their mobile device, which is the most common source of a\n silent retry.\n 4. Clear cached credentials on the laptop, including VPN and mapped drives.\n 5. Ask the user to sign in again and confirm access to two different services.\n 6. If the account locks again within minutes, a device is still retrying an old credential; identify it from the lockout source\n before unlocking a third time.\nEscalation. Repeated lockouts with no identifiable source go to the Identity team. Never disable the lockout policy for an\nindividual user.",
+      "content_type": "prose",
+      "pages": [
+        20,
+        21
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-6.9",
+      "section_number": "6.9",
+      "title": "KB0006 — Multi-factor authentication after a lost or replaced device",
+      "body": "KB0006 MULTI-FACTOR AUTHENTICATION AFTER A LOST OR REPLACED DEVICE\n\n State Published Version 3\n\n Service identity Category inquiry\n\n Owner Identity & Access Author H. Moawad\n\n Reviewed 11 Apr 2026 Uses, 12 mo 438 · Related RITM0010877, INC0010028\n\n\n\n\nSymptom. The user has a new phone, or has lost the previous one, and can no longer approve sign-in prompts or generate\ncodes.\n\nCause. The authenticator registration is bound to the previous device and does not transfer with a phone migration.\n\nResolution.\n 1. Verify the user's identity following the enhanced verification procedure for MFA resets. This is stricter than standard\n verification and must not be shortened.\n 2. Confirm whether the previous device is lost or simply replaced. A lost device requires the registration to be revoked,\n not just re-enrolled.\n 3. Raise the MFA reset request through the identity workflow. It requires approval; a service desk agent cannot complete\n it alone.\n 4. Once approved, guide the user through enrolling the new device.\n 5. Confirm a successful sign-in with the new factor before closing.\nEscalation. An MFA reset is a high-risk identity action. It always requires the approval step, and any suspicion of\ncompromise goes to Security immediately.",
+      "content_type": "prose",
+      "pages": [
+        21
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-6.10",
+      "section_number": "6.10",
+      "title": "KB0007 — Laptop performance degrades after a system update",
+      "body": "KB0007 LAPTOP PERFORMANCE DEGRADES AFTER A SYSTEM UPDATE\n\n State Published Version 2\n\n Service endpoint Category hardware\n\n Owner Endpoint Engineering Author D. Halim\n\n Reviewed 19 Jan 2026 Uses, 12 mo 776 · Related INC0010029\n\n\n\n\nSymptom. The machine is noticeably slower after an update. Fans run constantly, applications are slow to launch, and the\nproblem persists across restarts.\n\n\n\n\n\nCause. Post-update indexing and driver reinstallation run at high priority for a period after installation. If the degradation\npersists beyond that period, a driver mismatch is the usual cause.\n\nResolution.\n 1. Ask when the update was installed. Within 24 hours, background indexing is expected — tell the user and check back\n rather than making changes.\n 2. Check resource usage and identify the dominant process.\n 3. If indexing dominates, allow it to complete and confirm with the user the following day.\n 4. If a graphics or storage driver dominates, reinstall the vendor driver for the installed operating system build.\n 5. Restart and confirm the machine returns to normal responsiveness.\nEscalation. If performance is still degraded 48 hours after the update with no dominant process, escalate to Endpoint\nEngineering with a performance capture.",
+      "content_type": "prose",
+      "pages": [
+        21,
+        22
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-6.11",
+      "section_number": "6.11",
+      "title": "KB0008 — SAP GUI connection times out with RFC_ERROR_COMMUNICATION",
+      "body": "KB0008 SAP GUI CONNECTION TIMES OUT WITH RFC_ERROR_COMMUNICATION\n\n State Published Version 1\n\n Service sap-erp Category software\n\n Owner SAP Basis Author K. Selim\n\n Reviewed 06 Oct 2025 Uses, 12 mo 203 · Related KE0000034, INC0010031\n\n\n\n\nSymptom. The SAP GUI client fails to connect and reports RFC_ERROR_COMMUNICATION or a connection timeout. Other\napplications work normally.\n\nCause. The client cannot reach the message server on the required port. Most often the user is off the corporate network\nwithout the VPN, or the saved connection entry points at a decommissioned application server.\n\nResolution.\n 1. Confirm the user is on the corporate network or connected to the VPN. SAP is not reachable from the internet.\n 2. Check the saved connection entry against the current published connection details.\n 3. If the entry names a specific application server, change it to the message server and group so that load balancing\n applies.\n 4. Reconnect and confirm sign-in reaches the logon screen.\n 5. If the timeout persists from a known-good network, check whether the message server is reachable on its port before\n escalating.\nEscalation. A confirmed reachability failure from the corporate network goes to the SAP Basis team with the exact error\ntext and the connection entry used.",
+      "content_type": "prose",
+      "pages": [
+        22
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-6.12",
+      "section_number": "6.12",
+      "title": "KB0009 — Wi-Fi drops repeatedly on the 5 GHz corporate network",
+      "body": "KB0009 WI-FI DROPS REPEATEDLY ON THE 5 GHZ CORPORATE NETWORK\n\n State Published Version 2\n\n Service corporate-wifi Category network\n\n Owner Network Operations Author L. Haddad\n\n Reviewed 02 Feb 2026 Uses, 12 mo 1,041 · Related PRB0040021, INC0010033\n\n\n\n\n\n\nSymptom. The connection drops every few minutes and reconnects on its own. It is worse in some parts of the building\nand while moving between areas.\n\nCause. Aggressive roaming behaviour between access points, or a power-saving setting on the wireless adapter that\nsuspends the radio during idle periods.\n\nResolution.\n 1. Establish whether drops occur in one location or while moving. Drops only while moving indicate roaming; drops\n while stationary indicate the adapter.\n 2. For a stationary user, disable power saving on the wireless adapter.\n 3. Update the wireless adapter driver to the current supported version.\n 4. Ask the user to forget and rejoin the corporate network so the profile is rebuilt.\n 5. Confirm a stable connection for at least fifteen minutes before closing.\nEscalation. Drops affecting several users in the same area are an infrastructure fault. Escalate to Network with the\nlocation and the approximate times.",
+      "content_type": "prose",
+      "pages": [
+        22,
+        23
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-6.13",
+      "section_number": "6.13",
+      "title": "KB0010 — Order service connection pool exhaustion",
+      "body": "This article exists in two revisions and both are reproduced, because the retired one is still quoted from memory and its\nprocedure is now harmful.\n\nVersion 1 — retired 02 April 2026\n\n KB0010 ORDER SERVICE CONNECTION POOL EXHAUSTION · **RETIRED**\n\n State Retired Version 1\n\n Retired on 02 Apr 2026 Reason Step 1 caused a 40-minute outage on 14 Mar 2026. See\n MIR-2026-03.\n\n\n\n\nSymptom. The order service returns HTTP 500 and logs report that the database connection pool is exhausted.\n\nCause. Connections are not being returned to the pool under load.\n\nResolution.\n 1. Restart the order service application server to clear the pool.\n 2. Confirm the service returns 200 and monitor for recurrence.\nEscalation. If it recurs within the hour, escalate to Platform Engineering.\n\n Why this revision is dangerous, not merely outdated\n The restart in step 1 dropped in-flight orders and caused the outage recorded in MIR-2026-03. The procedure\n is well written and reads convincingly, which is exactly why it kept being applied after the fault it addresses\n had changed. If you find this text anywhere — a saved copy, a wiki page, a team chat pin — replace it with the\n link to version 2 and tell the knowledge manager where you found it.\n\n\n\n\nVersion 2 — published 02 April 2026\n KB0010 ORDER SERVICE CONNECTION POOL EXHAUSTION\n\n State Published Version 2\n\n Service order-processing Owner Platform Engineering · K. Selim\n\n Reviewed 02 Apr 2026 Related MIR-2026-03, PRB0040018, CHG0030455, INC0010052\n\n\n\n\n\n\n\nSymptom. The order service returns HTTP 500 under load. Application logs report that the database connection pool is\nexhausted and that connection acquisition timed out.\n\nCause. Connections are held beyond their intended lifetime by a long-running query path and are not returned to the pool,\nso new requests wait and then fail.\n\nResolution.\n 1. Do not restart the application server. A restart drops in-flight orders and caused a 40-minute outage on 14 March\n 2026.\n 2. Confirm pool saturation from the service metrics dashboard rather than from the error message alone.\n 3. Notify the Order Processing service owner. This service has a change-controlled remediation path.\n 4. Raise an emergency change against CHG0030455 for the pool drain procedure, which recycles connections without\n dropping in-flight work.\n 5. Apply the drain procedure only once the change is approved.\n 6. Monitor pool utilisation for thirty minutes after the drain.\nEscalation. Any incident on order-processing at Priority 1 goes to the service owner immediately and is never\nremediated from the service desk alone.",
+      "content_type": "table",
+      "pages": [
+        23,
+        24,
+        25
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-7",
+      "section_number": "7",
+      "title": "Worked incident records",
+      "body": "Four closed incidents, reproduced with their journals intact. They are here because they are ordinary, not because they\nare interesting — they show what a well-handled ticket looks like when nothing dramatic happens.",
+      "content_type": "table",
+      "pages": [
+        25
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-7.1",
+      "section_number": "7.1",
+      "title": "What the record looks like",
+      "body": "The form below is a live incident mid-flight. Every field an analyst is expected to maintain is visible on it, and the fields\nwritten by the AI Suggested Response pilot are grouped in the middle band — see Section 11 for what they mean and how\nfar to trust them.\n\n\n\n\n INC0010023 with a drafted suggestion awaiting review. Human Review Required is set; nothing has been sent to the requester.",
+      "content_type": "table",
+      "pages": [
+        25
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-7.2",
+      "section_number": "7.2",
+      "title": "INC0010023 — VPN authentication failure after a password reset",
+      "body": "Number INC0010023 Opened 08 Sep 2026 09:14 GST\n\n Caller Mariam Fouad, Finance Channel Self-service portal\n\n Category Network · VPN Service corporate-vpn\n\n\n Impact / Urgency 3 – Individual / 2 – Medium Priority P3 – Moderate\n\n Assignment group Service Desk Tier 1 Assignee O. Sabry\n\n Article applied KB0001 v2 Closed 08 Sep 2026 10:02 GST\n\n Resolution code Resolved by knowledge article Breach None · 48 min against a 3-day target\n\n\n\n\n TIME TYPE ENTRY\n\n 09:14 System Incident created from the portal. Category set by requester to Network.\n\n 09:14 System AI Suggested Response drafted. Confidence 0.79. Source KB0001 v2, section\n Resolution. Human Review Required set.\n\n 09:21 Work note Picked up. Read the drafted suggestion; it matches the reported symptom. Confirmed\n with the caller by phone that the password was reset this morning.\n\n\ncolumn_0 column_1 column_2 INC0010023 08 Sep 2026 09:14 GST Opened Self-service portal Caller Channel Self-service portal Caller Channel Self-service portal Caller Channel corporate-vpn Category Service corporate-vpn Category Service corporate-vpn Category Service P3 – Moderate Impact / Urgency Priority P3 – Moderate Impact / Urgency Priority P3 – Moderate Impact / Urgency Priority O. Sabry Assignment group Assignee O. Sabry Assignment group Assignee O. Sabry Assignment group Assignee 08 Sep 2026 10:02 GST Article applied Closed 08 Sep 2026 10:02 GST Article applied Closed 08 Sep 2026 10:02 GST Article applied Closed None · 48 min against a 3-day target Resolution code Breach None · 48 min against a 3-day target Resolution code Breach None · 48 min against a 3-day target\n\n[Image content]\n\n\nNumber INC0010023 Caller Category Network Subcategory\nBusiness service corporate-vpn State\nImpact 3-Low Urgency Priority 3 - Moderate Assignment group\n\nShort description\n\nCannot connect to VPN since password reset this morning\n\nAl Status Al Confidence Human Review Required\nsuggested 7: true\n\n\n\nAl Suggested Response\n\n1. Confirm with the user that they changed their password within the last 24 hours.\n2. Ask the user to sign out of the VPN client completely, including the tray icon.\n3. Clear the cached credential for the VPN profile. 4, Reconnect using the new password, Source: KB0001-VPN authentication fails after a password change (v2).\n\nMariam Fouad\n\nVPN\n\nIn Progress\n\n2- Medium\n\nService Desk Tier 1\n\n\n\n\n TIME TYPE ENTRY\n\n 09:26 Work note Applied KB0001 v2. Caller signed out of the VPN client including the tray icon, cleared\n the cached credential for the profile.\n\n 09:34 Comment Hello Mariam — please try connecting again now with your new password and let me\n know how you get on.\n\n 09:48 Work note Caller reports the connection now succeeds. Asked her to reconnect a second time to\n confirm the cached credential did not return.\n\n 09:57 Work note Second connection successful. Checked the account is not locked in the identity\n console — it is not, so no follow-on to KB0005 needed.\n\n 10:02 Comment Glad that worked. I have resolved this. If it recurs after your next password change,\n reopen this ticket and quote KB0001.\n\n\n\n\n Why this one is worth reading twice\n The analyst read the drafted suggestion, verified the premise with the caller before applying it, and then\n checked the adjacent failure mode — a locked account — before closing. The whole thing took 48 minutes\n against a three-day target, and the journal is legible to someone who was not there.",
+      "content_type": "table",
+      "pages": [
+        25,
+        26
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-7.3",
+      "section_number": "7.3",
+      "title": "INC0010047 — a fault with no article behind it",
+      "body": "Number INC0010047 Opened 08 Sep 2026 11:32 GST\n\n Caller Facilities — meeting room 4 Channel Telephone\n\n Category Hardware · Printer Service print-services\n\n\n Impact / Urgency 3 – Individual / 3 – Low Priority P4 – Low\n\n Assignment group Service Desk Tier 1 → Facilities Assignee Facilities duty manager\n\n Article applied None — no relevant article Closed 09 Sep 2026 14:20 GST\n\n Resolution code Referred to Facilities Breach None\n\n\n\n\n TIME TYPE ENTRY\n\n 11:32 System Incident created from a telephone call.\n\n 11:33 System AI Suggested Response: no matching knowledge article found. Best match KB0004\n scored 0.31 against a threshold of 0.55. No resolution drafted. Flagged for human\n review.\n\n 11:40 Work note Grinding noise on paper feed. This is a mechanical fault, not a queue fault, so KB0004\n does not apply — the pilot was right to decline.\n\n 11:44 Work note Checked with the caller that jobs are not merely queued. The device makes the noise\n with the queue empty.\n\n 11:51 Comment Thanks for reporting this. The noise you describe is a mechanical fault on the device\n itself, which Facilities handle rather than IT. I have passed it to them with your details.\n\n 11:52 Work note Referred to Facilities duty manager. Advised the room be marked out of use for\n printing until inspected.\n\n\n\n\n\ncolumn_0 column_1 INC0010047 08 Sep 2026 11:32 GST Opened Telephone Caller Channel Telephone Caller Channel print-services Category Service print-services Category Service P4 – Low Impact / Urgency Priority P4 – Low Impact / Urgency Priority Facilities duty manager Assignment group Assignee Facilities duty manager Assignment group Assignee 09 Sep 2026 14:20 GST Article applied Closed 09 Sep 2026 14:20 GST Article applied Closed None Resolution code Breach None\n\n\n\n\n TIME TYPE ENTRY\n\n 14:20 Work note Facilities confirm the feed roller has been replaced. Caller confirms normal printing.\n Closed.\n\n\n\nThis is the intended outcome when the knowledge base holds nothing relevant. The pilot declined to draft rather than\nproducing a plausible printer procedure, the analyst confirmed the distinction between a mechanical fault and a queue\nfault, and the incident left IT within twenty minutes.",
+      "content_type": "table",
+      "pages": [
+        26,
+        27
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-7.4",
+      "section_number": "7.4",
+      "title": "INC0010064 — three symptoms, one cause",
+      "body": "Number INC0010064 Opened 09 Sep 2026 08:04 GST\n\n Caller Ahmed Zaki, Procurement Channel Telephone\n\n Category Inquiry → Identity Service identity\n\n\n Impact / Urgency 3 – Individual / 1 – High Priority P2 – High\n\n Assignment group Service Desk Tier 1 Assignee O. Sabry\n\n Article applied KB0005 v4 Closed 09 Sep 2026 09:11 GST\n\n Resolution code Resolved by knowledge article Related PRB0040012\n\n\n\n\n TIME TYPE ENTRY\n\n 08:04 Work note Caller reports no email, shared drive gone, and Teams repeatedly asking him to sign\n in. Three services, one morning.\n\n 08:06 System AI Suggested Response: three distinct symptoms detected across three services, no\n single article covers all three. No resolution drafted. Flagged for human review.\n\n 08:09 Work note Simultaneous failures across email, file shares and collaboration is the KB0005\n pattern, not three separate faults. Checked the identity console: account locked at\n 07:52.\n\n 08:14 Work note Verified identity per procedure. Unlocked the account.\n\n 08:16 Work note Account locked again within two minutes. A device is retrying an old credential.\n Lockout source shows the mobile mail profile.\n\n 08:31 Work note Caller signed out of the corporate mail profile on his phone and re-entered the new\n password. Cleared cached credentials on the laptop including VPN.\n\n 08:44 Work note Unlocked a second time. No further lockouts after 15 minutes of observation.\n\n 09:05 Work note Confirmed access to email and the shared drive. Third lockout in six weeks for this\n caller — linked to PRB0040012.\n\n 09:11 Comment All three problems had the same cause: your account had locked, which blocks\n everything at once. It is unlocked and your phone is no longer retrying the old\n password.\n\n\n\n\n “Simultaneous failures across unrelated services are almost never several\n faults. They are one fault, one layer down.”\n\n\n\n\ncolumn_0 column_1 INC0010064 09 Sep 2026 08:04 GST Opened Telephone Caller Channel Telephone Caller Channel identity Category Service identity Category Service P2 – High Impact / Urgency Priority P2 – High Impact / Urgency Priority O. Sabry Assignment group Assignee O. Sabry Assignment group Assignee 09 Sep 2026 09:11 GST Article applied Closed 09 Sep 2026 09:11 GST Article applied Closed PRB0040012 Resolution code Related PRB0040012",
+      "content_type": "table",
+      "pages": [
+        27,
+        28
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-7.5",
+      "section_number": "7.5",
+      "title": "INC0010052 — escalated without being touched",
+      "body": "Number INC0010052 Opened 08 Sep 2026 15:47 GST\n\n Caller Monitoring — order-processing Channel Alert\n\n Category Software · Application Service order-processing\n\n\n Impact / Urgency 1 – Enterprise / 1 – High Priority P1 – Critical\n\n Assignment group Platform Engineering Assignee K. Selim\n\n Article applied KB0010 v2 Related PRB0040018, CHG0030455\n\n Resolution code Resolved by change Breach None · 2h 41m against a 4-hour target\n\n\n\n\n TIME TYPE ENTRY\n\n 15:47 System Incident raised from a monitoring alert. Pool saturation on order-processing. Priority\n derived P1 from Tier 1 criticality and alert severity.\n\n 15:47 System AI Suggested Response: risk assessed as high before retrieval — Priority 1 on a Tier 1\n service. No action taken. Escalated for human decision with the evidence attached.\n\n 15:49 Work note Major incident bridge opened. Service owner paged.\n\n 15:52 Work note Pool saturation confirmed on the metrics dashboard, not from the error text alone.\n Matches KB0010 v2 symptom exactly.\n\n 15:58 Work note Restart explicitly ruled out per KB0010 v2 step 1 and MIR-2026-03. Raising\n emergency change against CHG0030455 for the drain procedure.\n\n 16:24 Work note Emergency change approved by change manager and service owner. Approval record\n attached — see 10.4.\n\n 16:41 Work note Drain procedure applied. Pool utilisation falling. No orders dropped.\n\n 17:15 Work note Thirty minutes of stable utilisation observed. Bridge stood down.\n\n 18:28 Work note Resolved. Linked to PRB0040018, which remains open pending the permanent fix.\n\n\n\n\n\ncolumn_0 column_1 column_2 INC0010052 08 Sep 2026 15:47 GST Opened Alert Caller Channel Alert Caller Channel Alert Caller Channel order-processing Category Service order-processing Category Service order-processing Category Service P1 – Critical Impact / Urgency Priority P1 – Critical Impact / Urgency Priority P1 – Critical Impact / Urgency Priority K. Selim Assignment group Assignee K. Selim Assignment group Assignee K. Selim Assignment group Assignee PRB0040018, CHG0030455 Article applied Related PRB0040018, CHG0030455 Article applied Related PRB0040018, CHG0030455 Article applied Related None · 2h 41m against a 4-hour target Resolution code Breach None · 2h 41m against a 4-hour target Resolution code Breach None · 2h 41m against a 4-hour target",
+      "content_type": "table",
+      "pages": [
+        28,
+        29
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-8.1",
+      "section_number": "8.1",
+      "title": "The difference, and why it matters at the desk",
+      "body": "A problem is the underlying cause of one or more incidents. A known error is a problem whose cause is understood and\nwhose workaround is documented, but whose permanent fix has not yet shipped. The desk cares about the distinction for\none reason: a known error has a workaround you may apply today, and a problem does not.\n\n PROBLEM KNOWN ERROR\n\n\n Cause Under investigation Understood and recorded\n\n Workaround May not exist Documented, and safe to apply\n\n At the desk Link the incident and escalate normally Apply the workaround, link the incident, do\n not escalate",
+      "content_type": "prose",
+      "pages": [
+        29
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-8.2",
+      "section_number": "8.2",
+      "title": "Open problem register",
+      "body": "PROBLEM DESCRIPTION RAISED INCIDENTS OWNER AND STATUS\n\n PRB0040012 Repeat account lockouts traced to 12 Feb 2026 63 Identity & Access. Awaiting\n cached credentials on mobile mail the modern-auth rollout,\n profiles. Affects roughly forty users a Q4.\n month, concentrated after the\n quarterly password rotation.\n\n PRB0040018 Connection pool exhaustion on 15 Mar 2026 9 Platform Engineering. Fix\n order-processing under sustained in test; target Q4.\n load. Root cause is a long-running\n query path holding connections\n beyond their lifetime.\n\n PRB0040021 Wireless drops on the 5 GHz 08 Jan 2026 41 Network Operations.\n corporate SSID while roaming Controller firmware\n between access points on floors 3 scheduled, CHG0030588.\n and 4.\n\n PRB0040026 Post-update endpoint degradation 22 Jun 2026 17 Endpoint Engineering.\n persisting beyond the expected 24- Vendor case open.\n hour indexing window on a specific\n laptop model.\n\n PRB0040029 Print queues stalling on the third- 30 Jul 2026 12 Print Services. Under\n floor device within an hour of a investigation.\n spooler restart.",
+      "content_type": "prose",
+      "pages": [
+        29
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-8.3",
+      "section_number": "8.3",
+      "title": "Known error register",
+      "body": "Every entry here has a workaround you may apply without escalating. Link the incident to the known error so the count\nstays accurate — the counts are what fund the permanent fixes.\n\n\n\n\n\n\n\n\n KNOWN ERROR SYMPTOM WORKAROUND PERMANENT FIX\n\n KE0000034 SAP GUI times out with The saved connection entry names a Connection profiles\n RFC_ERROR_COMMUNICATION from decommissioned application server. republished by SAP Basis.\n a known-good network. Change it to the message server and No date.\n group. KB0008 step 3.\n\n KE0000041 Mapped drive absent at sign-in Re-run the mapping script, or remap Login script rewrite,\n although the server path opens with reconnect-at-sign-in enabled. CHG0030602.\n when browsed directly. KB0003 step 2.\n\n KE0000047 Account re-locks within minutes Identify the lockout source before Modern-auth rollout under\n of an unlock, with no user the second unlock. Sign the mobile PRB0040012.\n action. mail profile out first. KB0005 steps 3\n and 6.\n\n KE0000052 Wireless drops while walking None for roaming users. For Controller firmware,\n between floors 3 and 4. stationary users, disable adapter CHG0030588.\n power saving. KB0009 step 2.\n\n KE0000055 Print queue stalls again within Restart the queue on the print Under investigation,\n an hour of a spooler restart on server rather than the client. PRB0040029.\n the third-floor device. Escalate on the second recurrence in\n a day.",
+      "content_type": "table",
+      "pages": [
+        29,
+        30,
+        31
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-9",
+      "section_number": "9",
+      "title": "Major incident report MIR-2026-03",
+      "body": "Order processing unavailable, 14 March 2026, 40 minutes. Published 27 March 2026. This report is reproduced in full\nbecause three of its actions changed procedures that appear elsewhere in this manual.",
+      "content_type": "table",
+      "pages": [
+        31
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-9.1",
+      "section_number": "9.1",
+      "title": "Summary",
+      "body": "Report MIR-2026-03 Declared 14 Mar 2026 13:12 GST\n\n Service order-processing · Tier 1 Restored 14 Mar 2026 13:52 GST\n\n Duration 40 minutes, full unavailability Incident INC0009884\n\n Incident manager N. Abdelrahman Service owner K. Selim\n\n Orders affected 312 in flight, 47 unrecoverable Classification Self-inflicted · procedural\n\n Report author D. Halim, Problem Manager Signed off 27 Mar 2026, K. Selim",
+      "content_type": "table",
+      "pages": [
+        31
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-9.2",
+      "section_number": "9.2",
+      "title": "What happened",
+      "body": "The trigger. At 12:58 the order service began The discovery. Fulfilment noticed missing orders at\nreturning HTTP 500 under normal midday load. 13:31. The bridge was reconvened, the gap was\nConnection pool saturation was reported in the quantified at 47 unrecoverable orders, and manual\napplication log within a minute, and monitoring raised recovery began.\nINC0009884 at 13:02 as a P1.\n Restoration. The service itself was never unavailable\nThe response. The analyst on the bridge searched the after 13:04. The forty minutes recorded above is the\nknowledge base, found KB0010, and applied it. Step 1 window in which orders were being accepted and lost,\nof that article, as it stood, instructed a restart of the which is the number that matters commercially and\napplication server. the one this report uses.\n\nThe consequence. The restart cleared the pool as The article was not wrong when it was written.\ndocumented and simultaneously dropped every in- KB0010 v1 was published in 2023 against an earlier\nflight order. The service returned 200 within ninety deployment where the service drained gracefully on\nseconds, so the restart looked successful on every shutdown. That behaviour changed with the 2025\nsignal the bridge was watching. platform migration and the article was never revisited.",
+      "content_type": "table",
+      "pages": [
+        31
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-9.3",
+      "section_number": "9.3",
+      "title": "Timeline",
+      "body": "TIME ACTOR EVENT\n\n 12:58 System Order service begins returning HTTP 500 under load.\n\n 12:59 System Pool saturation logged. Alert raised.\n\n 13:02 Monitoring INC0009884 created. P1 derived from Tier 1 criticality.\n\n 13:04 Tier 1 Bridge opened. Service owner paged.\n\n 13:07 Tier 1 KB0010 located and read. Step 1 applied — application server restarted.\n\n 13:09 System Service returns 200. Pool utilisation normal. Bridge stands down.\n\n\n\ncolumn_0 column_1 column_2 MIR-2026-03 14 Mar 2026 13:12 GST Declared 14 Mar 2026 13:52 GST Service Restored 14 Mar 2026 13:52 GST Service Restored 14 Mar 2026 13:52 GST Service Restored INC0009884 Duration Incident INC0009884 Duration Incident INC0009884 Duration Incident K. Selim Incident manager Service owner K. Selim Incident manager Service owner K. Selim Incident manager Service owner Self-inflicted · procedural Orders affected Classification Self-inflicted · procedural Orders affected Classification Self-inflicted · procedural Orders affected Classification 27 Mar 2026, K. Selim Report author Signed off 27 Mar 2026, K. Selim Report author Signed off 27 Mar 2026, K. Selim\n\n\n\n\n TIME ACTOR EVENT\n\n 13:12 Incident mgr Major incident declared retrospectively for the pool event.\n\n 13:31 Fulfilment Missing orders reported. Bridge reconvened.\n\n 13:44 Platform Eng Gap quantified: 312 in flight at restart, 47 unrecoverable.\n\n 13:52 Incident mgr Manual recovery complete for the 265 recoverable orders. Service confirmed\n restored.\n\n 14:20 Knowledge KB0010 v1 set to retired pending revision.\n\n 16:00 Change CHG0030455 raised for a drain procedure that does not drop in-flight work.",
+      "content_type": "table",
+      "pages": [
+        31,
+        32
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-9.4",
+      "section_number": "9.4",
+      "title": "The bridge whiteboard",
+      "body": "The photograph below was taken in the Dubai operations room at 13:40, while the recovery was being scoped. It is\nincluded because the two boxed items on it became actions 1 and 4 below, and because it records the reasoning as it was\nat the time rather than as it was reconstructed afterwards.\n\n\n\n\n The operations room whiteboard at 13:40 on 14 March. The boxed rule at the foot became action 4.",
+      "content_type": "prose",
+      "pages": [
+        32
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-9.5",
+      "section_number": "9.5",
+      "title": "Root cause",
+      "body": "1. Immediate cause. A restart of the order service application server dropped in-flight orders.\n 2. Contributing cause. The knowledge article instructing that restart was correct for a deployment that no longer\n existed, and had not been reviewed since the 2025 migration.\n 3. Contributing cause. No review was triggered by the migration itself. Articles are reviewed on a calendar cycle, and\n the migration changed behaviour that several articles depended on.\n 4. Contributing cause. The bridge's success signals — HTTP 200 and normal pool utilisation — did not include order\n continuity, so the loss was invisible for 22 minutes.\n\n\n\n\n\n[Image content]\nWhiteboard — sprint 2 planning\n\nEVENT FLOW\n\nBR -> RESTMsg -> /events\n202 FIRST!! then work\nidem key = event_id NOT sys_id\n\nclaim: PATCH ai_status\nbefore dispatch\n\n\n\nNOTHING POLLS\n\nif there is a loop reading\nthe incident table -> FAIL\n\n\n\nOPEN Qs\n\n- async BR? previous is null\n- who owns the PDI\n- threshold: 0.55 ?? - retire v1 of KBOO10\n\nDONE = 202 in <‘s\n\n\n\n\n\n “The article was well written, correct when published, and dangerous by the\n time it was applied. That is the ordinary shape of this failure, not an unusual\n one.”",
+      "content_type": "prose",
+      "pages": [
+        32,
+        33
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-9.6",
+      "section_number": "9.6",
+      "title": "Actions",
+      "body": "# ACTION OWNER DUE STATUS\n\n 1 Revise KB0010. Version 1 retired, version 2 H. Moawad 02 Apr 2026 Closed\n published with the restart explicitly ruled out and\n a change-controlled drain path substituted.\n\n 2 Build and test the pool drain procedure that K. Selim 02 Apr 2026 Closed\n recycles connections without dropping in-flight\n work. Register it as a pre-approved emergency\n change.\n\n 3 Raise PRB0040018 for the underlying connection- D. Halim 20 Mar 2026 Closed\n lifetime defect and track the permanent fix\n separately from the workaround.\n\n 4 Add a migration-triggered review to the H. Moawad 30 Apr 2026 Closed\n knowledge lifecycle: any platform migration\n triggers a review of every article naming the\n affected service, regardless of the calendar cycle.\n\n 5 Add order continuity to the P1 restoration N. Abdelrahman 30 Apr 2026 Closed\n checklist for order-processing, so that a service\n returning 200 is not by itself treated as restored.\n\n 6 Search the estate for saved copies of KB0010 v1 O. Sabry 31 May 2026 Open\n outside the knowledge base — wikis, chat pins,\n personal notes — and replace them.\n\n\n\n\n Action 6 is still open, and it is the one that matters\n Every other action changed a system. Action 6 is about the copies people kept, and there is no reliable way to\n close it. If you find KB0010 v1 anywhere — a saved PDF, a pinned message, a page in a team wiki — replace it\n with a link to version 2 and tell the knowledge manager where it was.",
+      "content_type": "prose",
+      "pages": [
+        33,
+        34
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-10.1",
+      "section_number": "10.1",
+      "title": "What the desk needs to know",
+      "body": "Most of change management happens elsewhere. Three parts of it reach the desk: recognising when a fix requires a change\nrather than an incident action, holding an incident correctly against a change window, and knowing which changes are\npre-approved so you do not wait for an approval that is not needed.\n\n TYPE USE WHEN APPROVAL LEAD TIME\n\n Standard The change is pre-approved and None required None — proceed\n its procedure is documented and\n unchanged.\n\n Normal Planned work with an CAB, weekly 5 working days\n assessable risk and a rollback.\n\n Emergency Required to restore or protect a Change manager and Immediate\n Tier 1 or Tier 2 service now. service owner, both\n\n Latent A change already applied under Retrospective, at the next Within 2 working days\n emergency conditions, recorded CAB\n afterwards.",
+      "content_type": "prose",
+      "pages": [
+        34
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-10.2",
+      "section_number": "10.2",
+      "title": "Pre-approved standard changes",
+      "body": "CHANGE PROCEDURE WHO MAY APPLY IT RECORDS TO LINK\n\n CHG0030401 Print spooler restart and queue clear Tier 1 analyst The incident\n on a client workstation. KB0004.\n\n CHG0030418 Cached credential clear for the VPN Tier 1 analyst The incident\n profile. KB0001.\n\n CHG0030422 Account unlock following identity Tier 1 analyst, IAM The incident, PRB0040012\n verification. KB0005.\n\n CHG0030455 Order service pool drain. Recycles Platform Engineering only, The incident, PRB0040018\n connections without dropping in- after emergency approval\n flight work. KB0010 v2.\n\n CHG0030470 Wireless adapter driver update on a Endpoint Engineering The incident, PRB0040021\n single endpoint. KB0009.\n\n\n\n\n CHG0030455 is pre-approved as a procedure, not as an action\n The drain procedure itself needs no re-assessment — that is what pre-approval buys. Executing it against a\n live Tier 1 service still requires the change manager and the service owner to approve, on the record, before it\n runs. Pre-approval removes the design review, not the authorisation.",
+      "content_type": "prose",
+      "pages": [
+        34
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-10.3",
+      "section_number": "10.3",
+      "title": "Emergency approval",
+      "body": "1. The engineer proposing the action states the service, the procedure, the expected effect and the rollback, in the\n incident journal.\n\n\n\n 2. The change manager confirms the procedure matches a documented one and that the rollback is real.\n 3. The service owner confirms the business impact is acceptable now rather than at the next window.\n 4. Both approvals are recorded before the action runs. An action taken first and approved afterwards is a latent\n change and is reported as a deviation.\n 5. The approval record is attached to the incident and referenced in the change.",
+      "content_type": "prose",
+      "pages": [
+        34,
+        35
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-10.4",
+      "section_number": "10.4",
+      "title": "Approval record — CHG0030455 against INC0010052",
+      "body": "The record below is the one referenced from the journal in 7.5. It is reproduced as the form is completed and stored: the\nevidence, the risk verdict and the approval on a single sheet.\n\n\n\n\n Emergency approval for the pool drain against INC0010052. Recorded at 16:24, seventeen minutes before the procedure ran.\n\n\n\n\n\n[Image content]\nHIGH-RISK ACTION — APPROVAL RECORD\n\nIncident\nExecution ID\nRisk level\nRequested action\n\nEvidence\n\nApprover decision\n\nMI Approved\noO Approved with edits\n\noO Rejected\n\nApprover\nRale\nDate\n\nTime\n\nINC0010052\n7c1f8a02e4021bd9\nHIGH\npropose_resolution\n\nKBO0010 v2, section Resolution, score 0.88\n\nN. Abdelrahman\n\n\n\nService Delivery Manager\n\n\n\n08 / 09 / 2026\n\n\n\n09:41",
+      "content_type": "prose",
+      "pages": [
+        35,
+        36
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-11",
+      "section_number": "11",
+      "title": "The AI Suggested Response pilot",
+      "body": "A pilot service that drafts a candidate resolution on eligible incidents, cites the article it came from, and flags the\nincident for human review. It never resolves, closes or reassigns anything. This section is what the desk needs in order to\nwork alongside it.",
+      "content_type": "prose",
+      "pages": [
+        36
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-11.1",
+      "section_number": "11.1",
+      "title": "What it does, and what it may not do",
+      "body": "When an eligible incident is created, the pilot reads it, searches the published knowledge base, and — if it finds evidence\nstrong enough — writes a numbered procedure into AI Suggested Response together with the article it came from. It then\nsets Human Review Required and stops. An analyst reads the draft and applies it, edits it or discards it. Nothing reaches\nthe requester unless a person puts it there.\n\n IT MAY IT MAY NOT\n\n ▪ Read an incident and its category ▪ Resolve, close or cancel an incident\n ▪ Search published articles only ▪ Reassign it to another group\n ▪ Write a draft into AI Suggested Response ▪ Write to Additional comments, ever\n ▪ Write an internal work note ▪ Email or otherwise contact the requester\n ▪ Set Human Review Required and a confidence ▪ Read a draft or retired article\n value ▪ Act on a Priority 1 or a Tier 1 service without\n ▪ Decline to answer, and say why approval\n\n These capabilities exist in the service. These capabilities do not exist in the service. They are absent,\n not disabled — there is no setting that enables them.",
+      "content_type": "prose",
+      "pages": [
+        36,
+        37
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-11.2",
+      "section_number": "11.2",
+      "title": "How a suggestion is produced",
+      "body": "The pilot end to end. The teal path is the write-back onto the incident form; a person always stands between the draft and the requester.\n\nNothing polls the ticketing system. A business rule on the incident table emits an event when an incident becomes eligible,\nand the pilot responds to that event. If the pilot is unavailable, incidents are created and worked exactly as they were\nbefore it existed — the desk is never blocked by it.\n\n\n\n\n\n[Image content]\nThe system, end to end\n\nOne event in, one grounded suggestion out. Nothing polls; nothing auto-resolves.\n\n1+ TICKETING SYSTEM\n\nIncident raised Business Rule RESTMessageV2 Incident form\nArequester reports a Fires on insert and on Posts event_id, sys_id, Al Suggested Response\nsymptom. Category, service >T relevant update. Checks > number, event_type. >] and Human Review\n\nand text captured. eligibility. Never the record. Required render here.\n\nminimal event over HTTPS\n\n+ PILOT SERVICE — THE FRONT DOOR\n\n\n\nPOST /events Idempotency + claim 202 Accepted Dispatch Authenticate the caller, Persist the event key. Returned before any Queued to a worker. Fetback\nValidate with Pydantic. >} Areplay is discarded. +>] model runs. ServiceNow +1 The desk is never bal ia\n401 / 422 on failure. Claim the incident. is never blocked. blocked by it,\n\ndispatched to the worker\n\n- REASONING — RETRIEVE, GROUND, DECIDE\n\n\n\nRetrieve Reason Ground + check Write back\nPublished articles only, Reason over the Numbered procedure, Table API: suggestion,\nfiltered by service 1 retrieved articles. >] cited article. Score, risk = confidence, work note,\nand category. Nothing else. and confidence gates. Human Review Required.\n\n4- Evidence — every run leaves a record\n\nThe run log holds every step: what was searched, what was found, what was drafted and what was blocked.\nThe execution record holds the attempt itself — including attempts that produced nothing at all.\nAcceptance is measured monthly: drafts applied or edited, against drafts written. See Section 12.\n\n\n\n\n\n\n The event exchange. The pilot acknowledges within a second and reasons afterwards, so a slow answer never delays a form save.",
+      "content_type": "prose",
+      "pages": [
+        37,
+        38
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-11.3",
+      "section_number": "11.3",
+      "title": "Eligibility",
+      "body": "Not every incident is offered to the pilot. The checks below are applied inside the ticketing system before any event leaves\nit.\n\n LAYER CHECK WHY\n\n Incident is active Resolved and closed incidents are finished; nothing the\n pilot writes improves them.\n\n Category is in the supported set The corpus covers network, software, hardware and\n inquiry. Anything else would produce a refusal at best.\n Ticketing system\n Not already processed Prevents the write-back re-triggering the rule that\n caused it.\n\n Not an AI-field-only update Stops an unrelated field change from re-running the\n pilot.\n\n The event is authentic Signed. An unsigned event is rejected without being\n read.\n\n Pilot service\n The event has not been seen before A retried delivery produces no second suggestion.\n\n The incident is still eligible on re-read An incident an analyst has taken over is left alone.\n\n AI assistance unticked on the incident Any analyst may exclude an individual incident. That\n decision is final and is never overridden.\n Desk override\n The incident is on hold Something is deliberately waiting. The pilot does not\n add noise to it.\n\n\n\n\n\n[Image content]\nOne event, one run\n\nThe webhook answers first and reasons afterwards. A replay is answered too — and then dropped.\n\nFIRST EVENT\n\nPOST /events\n———————\n\nevent_id, sys_id, number, event_type\nput(event_id)\n\nnew key stored\n\nPATCH ai_status = in_progress\n ———\n\nthe incident is claimed\n\n202 Accepted\nEEE\n\nunder one second, no model called\ndispatch(event)\n\n——S—_—\n\nqueued to a worker\n\nPATCH suggestion + human_review\n\n—\n\nwrite-back after retrieval and generation\n\nREPLAY OF THE SAME EVENT\n\nPOST /events\neum»\n\nidentical event_id\nput(event_id) — already present\n\nOutcome of the replay\n202 Accepted is returned again — the caller must not see an error — but nothing is dispatched and no second suggestion is written.",
+      "content_type": "prose",
+      "pages": [
+        38,
+        39
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-11.4",
+      "section_number": "11.4",
+      "title": "Three gates, and what each outcome means to you",
+      "body": "The three gates. A draft is written only when all three pass; otherwise the incident is flagged and left for a person.\n\n\n OUTCOME WHAT YOU SEE ON THE FORM WHAT TO DO\n\n Suggested A numbered procedure with a Read it against the reported symptom before applying it. If it\n cited article. Confidence does not match, discard it and say so in the work note —\n between 0 and 1. that note is what improves the corpus.\n\n Escalated — no No draft. A work note naming Work the incident normally. The absence of an article is\n evidence what was searched and the best itself useful: if the fault recurs, propose one.\n score found.\n\n Escalated — high risk No draft. A work note recording Follow Sections 4 and 10. The pilot has deliberately not\n the risk verdict and the evidence acted; it has not failed.\n that was gathered.\n\n Escalated — low No draft, or a draft marked Treat as if there were no draft. Do not apply a below-floor\n confidence below the confidence floor. draft because it looks plausible.\n\n Failed AI Status shows failed, with a Nothing. Work the incident normally and, if it repeats on the\n reason. same category, raise it with the service owner.\n\n\n\n\n A declined suggestion is a correct outcome, not a fault\n The pilot declines on roughly one incident in five. That is the design working: the alternative is a confident\n printer procedure for a mechanical fault, carrying our citation format and a confidence score. INC0010047 in\n 7.3 is the reference case.\n\n\n\n\n\n[Image content]\nThe decision ladder\n\nThree gates stand between a retrieved chunk and a written suggestion. Any one of them can stop the run.\n\n\n\n\n\nGATE 1 GATE 2 GATE 3\n\nEvidence +» Risk + Confidence\nDid any chunk clear the Is this a high-risk category, Is the derived confidence\nscore threshold? service or action? above the floor?\nOUTCOMES\n@ Suggest\n\nAll three gates pass. A numbered, cited procedure is written to Al Suggested Response.\nHuman Review Required is set. A service desk agent still approves, edits or rejects it.\n\n@ Escalate to a human\n\nRisk is high, or confidence sits below the floor. No draft is written. A work note\nrecords the risk verdict and the evidence gathered, and the incident waits for a person.\n\n@ Refuse and hand off\n\nNo chunk cleared the score threshold, so no fix is drafted. An explicit note says the\nknowledge base holds nothing relevant. Silence is the correct answer here.",
+      "content_type": "prose",
+      "pages": [
+        39,
+        40
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-11.5",
+      "section_number": "11.5",
+      "title": "Where the drafts come from",
+      "body": "How the knowledge base is indexed and searched. Only published articles at their current version are ever candidates.\n\nThe retrieval console shows what the pilot found for a given incident, with the score for each candidate. It is the first place\nto look when a suggestion is wrong: nine times in ten the draft is a faithful reading of the wrong article, not an invention.\n\n\n\n\n Retrieval console output for INC0010023. KB0001 at rank 1 and rank 2, with adjacent articles below the useful line.\n\nTyped out, so the numbers can be quoted in a journal entry:\n\n RANK ARTICLE SECTION SCORE READING\n\n 1 KB0001 Resolution 0.847 Correct article, correct section. This is what a good\n run looks like.\n\n 2 KB0001 Cause 0.812 Same article, adjacent section. Expected and useful.\n\n 3 KB0005 Symptom 0.694 Account lockout. A plausible neighbour —\n password changes cause both.\n\n 4 KB0009 Resolution 0.611 Wireless. Category-adjacent noise.\n\n 5 KB0003 Symptom 0.585 Shared drive mapping. Noise.\n\n\n\n[Image content]\nThe retrieval pipeline\n\nBuild time runs once per corpus change. Query time runs once per incident.\n\nBUILD TIME - ONE COMMAND, REPEATABLE\n\n\n\nLoad Chunk Embed Index\nPull published knowledge —> | Fixed size with overlap. —» | Vectors built once per —» |] Persisted Qdrant collection\narticles from the KB. Article identity kept. corpus change. with payload metadata.\n\nQUERY TIME - ONCE PER INCIDENT\n\n\n\nQuery Filter Search Rerank Short description plus state = published, Ranked candidates, Reorder the candidates\nthe symptom text. >I] category, service, >| each witha score >] before anything reaches\nNo credentials, no PIl. current version only. against the query. the drafting step.\n\nOutput: top-k chunks, each with a similarity score and the article number it came from.\n\nOnly published articles at their current version are candidates. Draft and retired revisions are removed before ranking, not ranked low.\n\nRetrieval results — INCO0100235\n\n\n\nRANK Oe SECTI pieel bavi ley 1 KBO0001 Resolution 0.847 Correct article and section. 2 KB0001 Cause 0.812 Same article, adjacent section.\n3 KBO00S Symptom 0.694 Plausible neighbour, not wrong.\n4 KB0009 Resolution 0.611 Category-adjacent noise.\n5 KBO0003 Symptom 0.585 Noise.\n\nThreshold 0.55 + top-3 hit: yes - confidence 0.79",
+      "content_type": "prose",
+      "pages": [
+        40,
+        41
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-11.6",
+      "section_number": "11.6",
+      "title": "Safety controls",
+      "body": "Two stages of deterministic checks sit around the model. They are code, not instructions, and the model cannot route\naround them.\n\n STAGE CHECKS PERFORMED ENFORCEMENT\n\n Before ▪ Screening for instructions embedded in the Runs before the model is called. A flagged incident\n incident text is routed to a person and never reaches drafting.\n ▪ Credential and key redaction\n ▪ Personal-data redaction\n ▪ Length and encoding bounds\n\n After 1. Validate the draft against the expected shape Runs after drafting and before the write. A block is\n 2. Match every step back to a retrieved article logged and escalated — never logged and\n 3. Enforce the permitted-action list continued.",
+      "content_type": "prose",
+      "pages": [
+        41
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-4",
+      "section_number": "4",
+      "title": "Scan the text for secrets before writing",
+      "body": "Permitted actions read_incident — read Checked at call time. Resolve, close, reassign and\n search_knowledge — read contact-requester are not on the list and do not\n write_work_note — low risk\n flag_human_review — low risk exist in the service.\n write_ai_fields — low risk\n\n\n\n\nIf an incident description contains text addressed to the pilot rather than describing a fault — which has happened twice\nduring the pilot — the screening stage flags it, the incident goes to a person, and the genuine symptom underneath is still\nworked normally. Report any occurrence to Security Operations as well as to the pilot owner.",
+      "content_type": "prose",
+      "pages": [
+        41
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-11.7",
+      "section_number": "11.7",
+      "title": "Configuration",
+      "body": "The values below are the ones in effect for edition 4.0. They are held in the pilot's configuration file and are changed under\nnormal change control, one at a time, with the effect measured before the next change.\n\n GROUP VALUES WHY IT IS SET THIS WAY\n\n Indexing KEY VALUE Splitting on headings keeps Symptom, Cause and\n Resolution intact. Fixed-width splitting cuts\n chunk_size 700 procedures mid-step, and the damage only shows\n when a draft is missing its second half.\n overlap 120\n\n split_on heading\n\n\n Search KEY VALUE The threshold sits between the scores seen on\n answerable incidents and those seen on out-of-\n top_k 5 scope ones. Published-only is a hard filter — it is\n what keeps KB0010 v1 out of a live incident.\n threshold 0.55\n\n published true\n\n\n Safety KEY VALUE Below the floor the pilot escalates rather than\n drafting. Priority 1 leaves the automated path\n floor 0.45 before any search runs, so nothing is spent on an\n incident that was never eligible.\n risk_p [1]\n\n retries 1\n\n\n\n\n\n\n\n The capture beside this paragraph circulated during the pilot handover and is\n reproduced because several teams copied their values from it rather than from the\n file. Two of the numbers in it are now out of date. Read the configuration from the\n repository, not from a photograph of somebody's screen — a value nobody can diff is\n a value nobody can review, and the whole point of holding these in one file is that a\nchange to any of them shows up in the change record.",
+      "content_type": "prose",
+      "pages": [
+        41,
+        42
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-11.8",
+      "section_number": "11.8",
+      "title": "Reading the run log",
+      "body": "Every run is logged. The extract below covers one incident from acceptance to write-back and is the level of detail\navailable when a suggestion needs explaining.\n\n\n\n\n One complete run. The WARN line at 09:14:29 is the evidence check removing a drafted step that matched no article.",
+      "content_type": "prose",
+      "pages": [
+        42
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-11.9",
+      "section_number": "11.9",
+      "title": "Integration payload",
+      "body": "For reference during supplier conversations: the event the ticketing system sends carries identifiers only. No incident text,\nno requester details and no attachments leave the platform in the event itself — the pilot reads what it is authorised to\nread, with its own credentials.\n\n\n\n\n\n[Image content]\nworker. log\n\nPlchl ELC Ell ol\nyh Elle\nric. ELC\nPPh\nyl ELC\npit Pl ELC\nyl Pl ELC\n2026-09-\nPll ELC\nyi: P ALE\nPlt L ELC\nyA\nPAC ete\n\nPAPAL\n\nich}\n08\nich:\n08\n08\nic}:\n08\n08\n08\nto}: }\nich}\n(oh:\nich}\n\nce\n2\ncl\nchy\ncH\nCF\na9:\nCl\nclo\nCe\nCoH\nce\nCoH\n\nsmartops-worker-1\n\nce\ncH\nne\ncH\nce\ncH\nce\neH\na\nce\n14:\ncH\nae\nce\n\nPy\n22\nPx)\nPr\nrr\n\niia}\nINFO\nINFO\nINFO\nINFO\nINFO\nINFO\nINFO\nYs)\nINFO\nINFO\nait te s4\nINFO\nINFO\n\nwebhook\nidem\nEar]\ntia\nich a\ntia\nila\nCony\nCr\n[Tihs\nEar\nttt)\nta Cot)\n\naCe\n\nevent 9f2blcde accepted sys_id=1c741bd7 -> 202\nclaim ok event_id=9f2bl1c4e\nPATCH incident u_ai_status=in_progress (204)\ntop_k=5 filter=state: published, category: network\nhit#1 KBO001/Resolution score=0.847\nhit#2 KBQQO1/Cause ToT Snap erd hit#3 KBO005/Symptom iceg Omi Ls\nprompt_version=v3 tokens_in=1842 tokens_out=214\nstep 5 not matched to a chunk - dropped\nconfidence=0.79 threshold=0.55 gate=pass\nPATCH suggestion + human_review=true (204)\nlangfuse flush timeout after 3000ms - retrying\nflush ok trace_id=7c1f8a02e4021bd9\n\nrun complete in 11.2s\n\n‘Cong eacerpt(ehatagraphoed frum staptep screen\n\nretrienal:\ncetlections he_ertictes\n‘shunk_stiens ma\nchushoverlag: 100\nroe 5\n\ntora chreshald: 6.55\nmab inte only) true\nreid false\nworety\nconfidence fear: 8.48\nAeghrish_services: (payments, sdeatity. order-precessing!\n\n\n\n\n\n\n The event payload, as attached to a supplier ticket during integration testing and reproduced as received.\n\n\n\n\n\n[Image content]\nu@Z:PL:60 80-60-9Z0Z, :,7e pez tues, * pazeesd* uapTouT,, adA}z jUaAa, * sETOOTOOINT n :,4equnu,, ‘ ,€FPELIESPRLVSLSLOOZZECIOLPATEL> Tn uPT SAS,\n‘ 6T8PS9EZPLOPESTAISIPPSELEPITITIG» iyPT 3uana,,\n\n\n\n\n\n\n\nCPST PELPE2ZPOJOTESPROAqZIGTILeP :aunzeUuBTs-x\nMOUBITAIAS/SLUBAS/TA/Tde/ 150d\n\n39491} 8y} OU! paysed se — peojhed yuseng",
+      "content_type": "prose",
+      "pages": [
+        42,
+        43,
+        44
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-12.1",
+      "section_number": "12.1",
+      "title": "The monthly service review",
+      "body": "Held on the second Tuesday. Attended by the service delivery manager, the team leads, the problem manager and any\nservice owner with an open action. The pack is circulated two working days ahead and is not presented in the meeting —\nthe meeting is for the exceptions.\n\n MEASURE DEFINITION WHAT IT IS USED FOR\n\n Volume Incidents created in the period, by Capacity planning. A rise with no matching change is the\n priority and by service. first sign of an undiagnosed problem.\n\n First-contact resolution Resolved by Tier 1 without Knowledge coverage. This is the number that moves\n escalation, as a share of all when Section 6 improves.\n incidents.\n\n SLA attainment Incidents meeting both response The contractual measure. Reported with the breaches\n and resolution targets, by listed individually, never as a percentage alone.\n priority.\n\n Article usage Incidents naming an article in the Which articles earn their place at the next review. An\n journal, by article. article with no uses in twelve months is a candidate for\n retirement.\n\n Reopen rate Incidents reopened within five Resolution quality. A rising reopen rate alongside\n working days of resolution. improving SLA attainment means we are closing tickets,\n not fixing faults.\n\n Pilot acceptance Drafts applied or edited by an Whether the pilot is helping. A draft discarded is not a\n analyst, as a share of drafts failure; a draft nobody reads is.\n written.",
+      "content_type": "prose",
+      "pages": [
+        44
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-12.2",
+      "section_number": "12.2",
+      "title": "Reporting to service delivery managers",
+      "body": "Service delivery managers at BARQ read their operational reporting in Arabic. The layout below is the agreed one: labels\nright-aligned in Arabic, and identifiers, scores and article numbers left exactly as they appear in the platform.\n\n\n\n\n A run report as delivered. Identifiers are never translated or transliterated — they must remain resolvable in the ticketing system.\n\n\n\n\n\n[Image content]\n\n\nSmartOps + Runreport\n\nINC0010023 gall 3,\ndit) dazlyo slauil — Tide dUbJI\n0.79 dail doyo\nKB0001 (v2) ieteyall Jlaall au 11.2 aaJlao)l (30) Joall DlasMLo (8 Z1pi83! HLS oi dail\n\nG2] Glas Ay Zed all :da>aLo\nLis pcall Laboad Sli sal\n\n\n\n\n Never translate an identifier\n INC0010023, KB0001 and CHG0030455 are keys, not words. Translating or transliterating one breaks the link\n between a report and the record it describes, and that link is the only thing that makes a report auditable.",
+      "content_type": "prose",
+      "pages": [
+        44,
+        45
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-12.3",
+      "section_number": "12.3",
+      "title": "What is not reported",
+      "body": "▪ Individual analyst performance. The pack is service-level. Individual coaching happens between an analyst and their\n team lead, from data neither of them publishes.\n ▪ Raw journal text. Journals contain requester details. Extracts quoted in a review are anonymised first.\n ▪ Absolute pilot confidence values across periods. The value is derived from search scores, and those are not\n comparable if the underlying model changes. Report the distribution and the acceptance rate instead.",
+      "content_type": "prose",
+      "pages": [
+        45,
+        46
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-A",
+      "section_number": "A",
+      "title": "Glossary",
+      "body": "TERM MEANING AT BARQ\n\n Bridge The conference line opened for a P1 or a multi-service P2. Attendance is the incident manager,\n the affected service owners and one representative per resolver group. It stays open until the\n service is restored, not until the cause is understood.\n\n Breach A response or resolution target missed. Recorded automatically and not editable. A breach\n with a good reason is still a breach; the reason belongs in the journal.\n\n Clock The elapsed or working-hours measure against a target. Starts at creation, pauses on hold,\n stops at resolved.\n\n Criticality The tier assigned to a service in Section 5. Feeds the impact column of the priority matrix and\n is changed only through governance.\n\n Deviation A departure from a Must step in this manual. Recorded in the journal at the time, and reviewed\n at the monthly service review.\n\n First-contact resolution Resolved by Tier 1 with no escalation. Not the same as resolved on the first call.\n\n Known error A problem whose cause is understood and whose workaround is documented. See 8.3.\n\n Latent change A change applied under emergency conditions and recorded afterwards. Reported as a\n deviation.\n\n Major incident A declared state, not a priority. Declared by the incident manager; it may accompany a P1 or a\n multi-service P2.\n\n No-contact rule Resolution after two recorded chases at least one working day apart with no requester\n response. See 3.5.\n\n Problem The underlying cause of one or more incidents. Not necessarily understood yet. See 8.1.\n\n Reopen A resolved incident returned to In Progress within five working days. Counted in Section 12.\n\n Resolver group A team that accepts escalations within its service scope. Listed in 4.2 and in the service\n catalogue.\n\n Service owner Accountable for a service in Section 5. Approves emergency changes against it and signs post-\n incident reviews.\n\n Standard change A pre-approved change whose procedure is documented and unchanged. Listed in 10.2.\n\n Suggested response A draft written by the pilot in Section 11. A candidate, never an action.\n\n Workaround A documented way to restore service without fixing the cause. Applying one resolves the\n incident and leaves the problem open.",
+      "content_type": "table",
+      "pages": [
+        46,
+        47
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-B.1",
+      "section_number": "B.1",
+      "title": "Escalation handover",
+      "body": "Paste into the work note when escalating. A resolver group may reject an escalation that does not carry these five things.\n\n ESCALATION — <group>\n\n Symptom : what the requester reports, in their words\n Scope : one user / a team / a floor / the whole service\n Started : when, and what changed at that time\n Checked : what you tried, with the article numbers\n Ruled out : what it is not, and how you know\n Requester : name, location, contactable until\n Priority : P<n>, derived from impact <n> and urgency <n>",
+      "content_type": "table",
+      "pages": [
+        47
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-B.2",
+      "section_number": "B.2",
+      "title": "Requester update",
+      "body": "For Additional comments. Three sentences: what is happening, what you need, when they will next hear from you.\n\n Hello <name>,\n\n <What is happening, in their language. No host names, no group names.>\n <What you need from them, if anything, and by when.>\n <When they will hear from you next. Give a time, not \"shortly\".>\n\n <Your name>\n BARQ Service Desk · <incident number>",
+      "content_type": "table",
+      "pages": [
+        47
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-B.3",
+      "section_number": "B.3",
+      "title": "No-contact resolution",
+      "body": "Hello <name>,\n\n I have tried to reach you twice about this and have not been able to,\n so I am closing it for now. Nothing is lost — reply to this message or\n quote <incident number> and it will reopen with its history intact.\n\n <Your name>\n BARQ Service Desk · <incident number>",
+      "content_type": "table",
+      "pages": [
+        47
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-B.4",
+      "section_number": "B.4",
+      "title": "Knowledge article proposal",
+      "body": "Raise against the Knowledge — new article catalogue item. The knowledge manager will not publish a proposal that omits\nthe cause; a procedure with no cause behind it is a habit, not knowledge.\n\n Title The symptom as a requester would report it, not the fix\n\n Service and category From the catalogue in Section 5\n\n Symptom What the requester sees. Include the exact error text if there is one\n\n Cause Why it happens. Required — a proposal without this is returned\n\n Resolution Numbered steps, each a single action a Tier 1 analyst can perform\n\n\nTitle The symptom as a requester would report it, not the fix Service and category From the catalogue in Section 5 Service and category From the catalogue in Section 5 Symptom From the catalogue in Section 5 Cause Why it happens. Required — a proposal without this is returned Cause Why it happens. Required — a proposal without this is returned Cause Why it happens. Required — a proposal without this is returned\n\n\n\n\n Escalation When to stop and who to send it to\n\n Evidence At least two incident numbers where this pattern occurred",
+      "content_type": "table",
+      "pages": [
+        47,
+        48,
+        49
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-C",
+      "section_number": "C",
+      "title": "Impact and urgency worksheet",
+      "body": "Use this when the priority is disputed. Answer both columns, then read the priority off the matrix in 3.3.\n\n IMPACT — HOW MANY, AND HOW BADLY URGENCY — HOW FAST IT DEGRADES\n\n ▪ 1 – Enterprise. A whole service is unavailable, ▪ 1 – High. Work stops now, or a deadline inside\n or an entire site is affected. four hours is at risk.\n ▪ 2 – Department. A team, a floor or a business ▪ 2 – Medium. Work is degraded but continuing,\n function cannot work. or a deadline today is at risk.\n ▪ 3 – Individual. One person is affected, or a ▪ 3 – Low. Inconvenient. A workaround exists\n small number with a workaround. and is acceptable for now.\n\n Count people who cannot work, not people who noticed. Urgency is about the rate of harm, not about who is asking.\n\n\n\n\n The two questions that settle most disputes\n Is there a workaround the requester can use today? If yes, urgency is rarely 1, whatever the pressure on\n the call.\n Would a second person report this independently? If yes, impact is rarely 3, even though only one person\n has called.",
+      "content_type": "prose",
+      "pages": [
+        49,
+        50
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-D",
+      "section_number": "D",
+      "title": "Directory",
+      "body": "Names and roles as at the edition date. Extension numbers and the on-call rota are maintained in the ticketing system and\nare authoritative there; this table is for routing, not for dialling.\n\n OUT OF\n GROUP ROLE NAME COVERS\n HOURS\n\n Service Delivery Manager N. Abdelrahman All services On-call rota\n\n Service Desk Team Lead O. Sabry Tier 1, both sites Extended\n hours\n\n Problem Manager D. Halim Problem and known Working\n Service management error registers hours\n\n Knowledge Manager H. Moawad Section 6, article Working\n lifecycle hours\n\n Change Manager Y. Naguib CAB, emergency On-call rota\n approvals\n\n Head of Platform Engineering K. Selim order-processing, sap- On-call rota\n erp\n\n Network Operations Lead L. Haddad corporate-vpn, On-call rota\n corporate-wifi, file-\n services\n\n Service owners Identity & Access Lead N. Abdelrahman identity On-call rota\n\n Collaboration Services Lead O. Sabry corporate-email Extended\n hours\n\n Endpoint Engineering Lead D. Halim endpoint, print- Working\n services hours",
+      "content_type": "prose",
+      "pages": [
+        50,
+        51
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    },
+    {
+      "section_id": "section-E",
+      "section_number": "E",
+      "title": "Identifier index",
+      "body": "Every record identifier used in this manual, against the sections it appears in. Search the ticketing system for the live\nrecord; this index tells you where the context is written down.\n\n IDENTIFIER WHAT IT IS SECTIONS\n\n KB0001 VPN authentication fails after a password change 5.2, 6.1, 6.4, 7.2, 10.2, 11.5\n\n KB0002 Outlook shows Disconnected and no mail is delivered 3.2, 5.2, 6.1, 6.5\n\n KB0003 Mapped shared drive is missing after sign-in 5.2, 6.1, 6.6, 8.3\n\n KB0004 Print jobs queue but nothing prints 5.2, 6.1, 6.7, 7.3, 10.2\n\n KB0005 Account is locked after repeated failed sign-ins 5.2, 6.1, 6.3, 6.8, 7.4, 8.3, 10.2\n\n KB0006 Multi-factor authentication after a lost or replaced device 6.1, 6.9\n\n KB0007 Laptop performance degrades after a system update 5.2, 6.1, 6.10\n\n KB0008 SAP GUI connection times out 5.2, 6.1, 6.11, 8.3\n\n KB0009 Wi-Fi drops on the 5 GHz corporate network 5.2, 6.1, 6.12, 8.3, 10.2\n\n KB0010 v1 Order service pool exhaustion — retired, do not apply 6.1, 6.13, 9.2, 9.5, 9.6\n\n KB0010 v2 Order service pool exhaustion — current 5.2, 6.1, 6.13, 7.5, 10.2\n\n INC0009884 The 14 March order-processing incident 9.1, 9.3\n\n INC0010023 VPN authentication failure, 08 Sep 2026 7.1, 7.2, 11.5\n\n INC0010047 Meeting room 4 printer, mechanical fault 7.3, 11.4\n\n INC0010052 Order service pool saturation, 08 Sep 2026 7.5, 10.4\n\n INC0010064 Three symptoms, one lockout 7.4\n\n PRB0040012 Repeat lockouts from cached mobile credentials 7.4, 8.2, 8.3, 10.2\n\n PRB0040018 Connection lifetime defect on order-processing 7.5, 8.2, 9.6\n\n PRB0040021 5 GHz roaming drops, floors 3 and 4 5.2, 8.2, 10.2\n\n PRB0040026 Post-update endpoint degradation on one model 8.2\n\n PRB0040029 Third-floor print queue stalls 8.2, 8.3\n\n KE0000034 SAP connection profile names a decommissioned server 5.2, 8.3\n\n KE0000041 Drive mapping absent although the path is reachable 8.3\n\n KE0000047 Account re-locks within minutes of an unlock 8.3\n\n KE0000052 Wireless drops while roaming 8.3\n\n KE0000055 Print queue stalls after a spooler restart 8.3\n\n CHG0030401 Spooler restart and queue clear — standard 10.2\n\n\n\n\n\n\n\n IDENTIFIER WHAT IT IS SECTIONS\n\n CHG0030418 Cached credential clear — standard 10.2\n\n CHG0030422 Account unlock after verification — standard 10.2\n\n CHG0030455 Order service pool drain — standard procedure, 6.13, 7.5, 9.3, 9.6, 10.2, 10.4\n emergency authorisation\n\n CHG0030470 Wireless driver update on one endpoint — standard 10.2\n\n CHG0030588 Wireless controller firmware 8.2, 8.3\n\n CHG0030602 Login script rewrite 8.3\n\n RITM0010877 MFA reset request 1.2, 6.9\n\n MIR-2026-03 Order processing unavailable, 14 March 2026 6.13, 7.5, 9, 10.2\n\n\n\n\n End of manual. Edition 4.0, published 11 August 2026. Next scheduled review 10 August 2027.",
+      "content_type": "prose",
+      "pages": [
+        51,
+        52
+      ],
+      "ocr_confidence": null,
+      "reliability_note": null
+    }
+  ],
+  "relationships": {
+    "forward": {
+      "KB0001": [
+        "5.2",
+        "6.1",
+        "6.4",
+        "7.2",
+        "10.2",
+        "11.5"
+      ],
+      "KB0002": [
+        "3.2",
+        "5.2",
+        "6.1",
+        "6.5"
+      ],
+      "KB0003": [
+        "5.2",
+        "6.1",
+        "6.6",
+        "8.3"
+      ],
+      "KB0004": [
+        "5.2",
+        "6.1",
+        "6.7",
+        "7.3",
+        "10.2"
+      ],
+      "KB0005": [
+        "5.2",
+        "6.1",
+        "6.3",
+        "6.8",
+        "7.4",
+        "8.3",
+        "10.2"
+      ],
+      "KB0006": [
+        "6.1",
+        "6.9"
+      ],
+      "KB0007": [
+        "5.2",
+        "6.1",
+        "6.10"
+      ],
+      "KB0008": [
+        "5.2",
+        "6.1",
+        "6.11",
+        "8.3"
+      ],
+      "KB0009": [
+        "5.2",
+        "6.1",
+        "6.12",
+        "8.3",
+        "10.2"
+      ],
+      "KB0010": [
+        "6.1",
+        "6.13",
+        "9.2",
+        "9.5",
+        "9.6",
+        "5.2",
+        "7.5",
+        "10.2"
+      ],
+      "INC0009884": [
+        "9.1",
+        "9.3"
+      ],
+      "INC0010023": [
+        "7.1",
+        "7.2",
+        "11.5"
+      ],
+      "INC0010047": [
+        "7.3",
+        "11.4"
+      ],
+      "INC0010052": [
+        "7.5",
+        "10.4"
+      ],
+      "INC0010064": [
+        "7.4"
+      ],
+      "PRB0040012": [
+        "7.4",
+        "8.2",
+        "8.3",
+        "10.2"
+      ],
+      "PRB0040018": [
+        "7.5",
+        "8.2",
+        "9.6"
+      ],
+      "PRB0040021": [
+        "5.2",
+        "8.2",
+        "10.2"
+      ],
+      "PRB0040026": [
+        "8.2"
+      ],
+      "PRB0040029": [
+        "8.2",
+        "8.3"
+      ],
+      "KE0000034": [
+        "5.2",
+        "8.3"
+      ],
+      "KE0000041": [
+        "8.3"
+      ],
+      "KE0000047": [
+        "8.3"
+      ],
+      "KE0000052": [
+        "8.3"
+      ],
+      "KE0000055": [
+        "8.3"
+      ],
+      "CHG0030401": [
+        "10.2"
+      ],
+      "CHG0030418": [
+        "10.2"
+      ],
+      "CHG0030422": [
+        "10.2"
+      ],
+      "CHG0030455": [
+        "6.13",
+        "7.5",
+        "9.3",
+        "9.6",
+        "10.2",
+        "10.4"
+      ],
+      "CHG0030470": [
+        "10.2"
+      ],
+      "CHG0030588": [
+        "8.2",
+        "8.3"
+      ],
+      "CHG0030602": [
+        "8.3"
+      ],
+      "RITM0010877": [
+        "1.2",
+        "6.9"
+      ],
+      "MIR-2026-03": [
+        "6.13",
+        "7.5",
+        "9",
+        "10.2"
+      ]
+    },
+    "reverse": {
+      "5.2": [
+        "KB0001",
+        "KB0002",
+        "KB0003",
+        "KB0004",
+        "KB0005",
+        "KB0007",
+        "KB0008",
+        "KB0009",
+        "KB0010",
+        "PRB0040021",
+        "KE0000034"
+      ],
+      "6.1": [
+        "KB0001",
+        "KB0002",
+        "KB0003",
+        "KB0004",
+        "KB0005",
+        "KB0006",
+        "KB0007",
+        "KB0008",
+        "KB0009",
+        "KB0010"
+      ],
+      "6.4": [
+        "KB0001"
+      ],
+      "7.2": [
+        "KB0001",
+        "INC0010023"
+      ],
+      "10.2": [
+        "KB0001",
+        "KB0004",
+        "KB0005",
+        "KB0009",
+        "KB0010",
+        "PRB0040012",
+        "PRB0040021",
+        "CHG0030401",
+        "CHG0030418",
+        "CHG0030422",
+        "CHG0030455",
+        "CHG0030470",
+        "MIR-2026-03"
+      ],
+      "11.5": [
+        "KB0001",
+        "INC0010023"
+      ],
+      "3.2": [
+        "KB0002"
+      ],
+      "6.5": [
+        "KB0002"
+      ],
+      "6.6": [
+        "KB0003"
+      ],
+      "8.3": [
+        "KB0003",
+        "KB0005",
+        "KB0008",
+        "KB0009",
+        "PRB0040012",
+        "PRB0040029",
+        "KE0000034",
+        "KE0000041",
+        "KE0000047",
+        "KE0000052",
+        "KE0000055",
+        "CHG0030588",
+        "CHG0030602"
+      ],
+      "6.7": [
+        "KB0004"
+      ],
+      "7.3": [
+        "KB0004",
+        "INC0010047"
+      ],
+      "6.3": [
+        "KB0005"
+      ],
+      "6.8": [
+        "KB0005"
+      ],
+      "7.4": [
+        "KB0005",
+        "INC0010064",
+        "PRB0040012"
+      ],
+      "6.9": [
+        "KB0006",
+        "RITM0010877"
+      ],
+      "6.10": [
+        "KB0007"
+      ],
+      "6.11": [
+        "KB0008"
+      ],
+      "6.12": [
+        "KB0009"
+      ],
+      "6.13": [
+        "KB0010",
+        "CHG0030455",
+        "MIR-2026-03"
+      ],
+      "9.2": [
+        "KB0010"
+      ],
+      "9.5": [
+        "KB0010"
+      ],
+      "9.6": [
+        "KB0010",
+        "PRB0040018",
+        "CHG0030455"
+      ],
+      "7.5": [
+        "KB0010",
+        "INC0010052",
+        "PRB0040018",
+        "CHG0030455",
+        "MIR-2026-03"
+      ],
+      "9.1": [
+        "INC0009884"
+      ],
+      "9.3": [
+        "INC0009884",
+        "CHG0030455"
+      ],
+      "7.1": [
+        "INC0010023"
+      ],
+      "11.4": [
+        "INC0010047"
+      ],
+      "10.4": [
+        "INC0010052",
+        "CHG0030455"
+      ],
+      "8.2": [
+        "PRB0040012",
+        "PRB0040018",
+        "PRB0040021",
+        "PRB0040026",
+        "PRB0040029",
+        "CHG0030588"
+      ],
+      "1.2": [
+        "RITM0010877"
+      ],
+      "9": [
+        "MIR-2026-03"
+      ]
+    }
+  }
+}

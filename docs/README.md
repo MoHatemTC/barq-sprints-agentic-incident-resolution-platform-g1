@@ -48,6 +48,18 @@ following the same `docs/sprint-N/sN.M-name/` layout.
 > table above is authoritative for sprint assignment and the roadmap remains the
 > reference for overall PRD scope.
 
+## Manual-KB integration runbooks
+
+The full-manual KB integration (manifest review: [manual_kb_manifest_review.md](manual_kb_manifest_review.md)) ships
+with three operator runbooks:
+
+- [Local validation](runbooks/manual_kb_local_validation.md) — reproduce the
+  release candidate on a scratch collection and record the release fingerprint.
+- [Publish and re-ingest](runbooks/manual_kb_publish_reingest.md) — the
+  controlled production procedure (authorized operator action only).
+- [Recovery and retry](runbooks/manual_kb_recovery.md) — partial publishes,
+  seed failures, snapshot restore, and the never-discard-live-knowledge rule.
+
 ## Conventions
 
 - Scope prefix for every Incident column: `x_2215032_ai_inc_0_ai_`

@@ -434,8 +434,11 @@ def test_replay_of_exhausted_event_resets_budget_and_preserves_history(
     execution_id = _seed_event_with_execution(sync_engine, payload)
     send_incident_event(payload, execution_id)
     _wait_until(
-        lambda: (repo.get_retry_state(execution_id) or {}).get("state") == "exhausted",
-        description="first exhaustion",
+        lambda: (
+            (repo.get_retry_state(execution_id) or {}).get("state") == "exhausted"
+            and len(_dlq_records_for(redis_client, payload["event_id"])) == 1
+        ),
+        description="first exhaustion and DLQ record write",
     )
     assert repo.count_failures(execution_id) == WORKER_MAX_RETRIES
     assert len(_dlq_records_for(redis_client, payload["event_id"])) == 1
@@ -448,8 +451,11 @@ def test_replay_of_exhausted_event_resets_budget_and_preserves_history(
     # The reset is proven by the re-run: the event burns a FRESH budget and the
     # failure history stays (Postgres is the durable truth, the DLQ record goes).
     _wait_until(
-        lambda: (repo.get_retry_state(execution_id) or {}).get("state") == "exhausted",
-        description="second exhaustion after replay",
+        lambda: (
+            (repo.get_retry_state(execution_id) or {}).get("state") == "exhausted"
+            and len(_dlq_records_for(redis_client, payload["event_id"])) == 1
+        ),
+        description="second exhaustion after replay and DLQ record write",
     )
     assert repo.count_failures(execution_id) == 2 * WORKER_MAX_RETRIES
     assert len(_dlq_records_for(redis_client, payload["event_id"])) == 1
