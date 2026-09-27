@@ -1,0 +1,1192 @@
+{
+  "manifest_version": "1.0-draft",
+  "review_status": "draft - pending KB owner sign-off (see docs/manual_kb_manifest_review.md)",
+  "source": {
+    "document_id": "barq-manual-v4.0",
+    "pdf_path": "data/barq-system-kb.pdf",
+    "pdf_sha256": "c535243f00547211c2a7076bc5dc91c80d19a4960b94dc7932bbca546db7d9d4",
+    "sections_artifact": "data/corpus/manual_sections.json"
+  },
+  "identity_policy": {
+    "new_range_min": 2001,
+    "new_range_max": 2999,
+    "never_allocated": [
+      "KB2000"
+    ],
+    "rule": "Append-only: a number is allocated once (in manifest order at draft time), never derived from list position or content hash, and never recycled after removal. KB2000 stays unallocated."
+  },
+  "vocabulary": {
+    "categories": {
+      "documentation": "Material about the manual itself: purpose, navigation, conventions",
+      "service-desk": "Service desk operating process: model, channels, lifecycle, escalation",
+      "reference": "Catalogues, registers, records, templates and lookup material",
+      "knowledge-management": "Knowledge base lifecycle, capture and audit",
+      "automation": "The AI Suggested Response pilot",
+      "change-management": "Standard and emergency change process",
+      "reporting": "Service review and major incident reporting"
+    },
+    "services": {
+      "operations-manual": "The BARQ Operations Manual itself",
+      "service-operations": "Service desk operating model and channels",
+      "incident-management": "Incident lifecycle, priority and journalling",
+      "escalation": "Escalation routes and the desk card",
+      "incident-catalogue": "The symptom catalogue and criticality definitions",
+      "knowledge-base": "The KB article corpus and its history",
+      "incident-records": "Worked incident records",
+      "problem-management": "Problem and known error registers",
+      "major-incidents": "Major incident reports",
+      "change-control": "Pre-approved and emergency changes",
+      "ai-assist": "AI Suggested Response pilot",
+      "service-review": "Monthly service review and reporting",
+      "templates": "Communication templates",
+      "knowledge-capture": "Knowledge article proposal and capture",
+      "glossary": "Glossary of terms",
+      "impact-urgency": "Impact and urgency worksheet",
+      "directory": "Contact directory",
+      "identifier-index": "Identifier index"
+    }
+  },
+  "units": [
+    {
+      "unit_id": "section-1.1",
+      "source_sections": [
+        "1.1"
+      ],
+      "kind": "new",
+      "article_number": "KB2001",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "5f177bb7d504ec13ebfa210b5adb535d8e9e728e84f16dfc0a3bd6abe548e4ce",
+      "category": "documentation",
+      "service": "operations-manual",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-1.2",
+      "source_sections": [
+        "1.2"
+      ],
+      "kind": "new",
+      "article_number": "KB2002",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "027fd5543e40115878ec339648b45b1addd0748c7fe43b3c931f06d4b8c67c18",
+      "category": "documentation",
+      "service": "operations-manual",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-1.3",
+      "source_sections": [
+        "1.3"
+      ],
+      "kind": "new",
+      "article_number": "KB2003",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "1c3b120850fac0964c12c2cdb0af407d5852bfb52638e3db936f714decb9cc7d",
+      "category": "documentation",
+      "service": "operations-manual",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-2.1",
+      "source_sections": [
+        "2.1"
+      ],
+      "kind": "new",
+      "article_number": "KB2004",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "a19ba094ad5df08f8f37a56dc32a9c0cdf0218b39ad90566d66d02ebec0c38f9",
+      "category": "service-desk",
+      "service": "service-operations",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-2.2",
+      "source_sections": [
+        "2.2"
+      ],
+      "kind": "new",
+      "article_number": "KB2005",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "0acecc7b1bb41a3a48eb554b91c6e553142fec4f2ac8a5abfbec3fad9db47248",
+      "category": "service-desk",
+      "service": "service-operations",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-2.3",
+      "source_sections": [
+        "2.3"
+      ],
+      "kind": "new",
+      "article_number": "KB2006",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "f17998fec3ad3b1e233cb91ff7fb551fbadb5eb5ec60ce307c427bc6cbc1fcbb",
+      "category": "service-desk",
+      "service": "service-operations",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-2.4",
+      "source_sections": [
+        "2.4"
+      ],
+      "kind": "new",
+      "article_number": "KB2007",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "f91035216f616f0b7f7c01891f58b2f1e7bf40c05cf6b2100baaca015f0ff9aa",
+      "category": "service-desk",
+      "service": "service-operations",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-3.1",
+      "source_sections": [
+        "3.1"
+      ],
+      "kind": "new",
+      "article_number": "KB2008",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "a9994c7f4607528bea060e401847d324b15955073f3e28b56e3d34956a02901a",
+      "category": "service-desk",
+      "service": "incident-management",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-3.2",
+      "source_sections": [
+        "3.2"
+      ],
+      "kind": "new",
+      "article_number": "KB2009",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "33468accd899528454c693b82caea0a108a9cb82e14d5cfe91e41c59415cf4ac",
+      "category": "service-desk",
+      "service": "incident-management",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-3.3",
+      "source_sections": [
+        "3.3"
+      ],
+      "kind": "new",
+      "article_number": "KB2010",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "358942b8ceb322612edda5cac4c8ed19a94473d0c6bd795f831e4ffb187e718e",
+      "category": "service-desk",
+      "service": "incident-management",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-3.4",
+      "source_sections": [
+        "3.4"
+      ],
+      "kind": "new",
+      "article_number": "KB2011",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "4895a75e76b7a3eddd3db196feaa8f3f2cf71f13edd28520250d9e0b8980617d",
+      "category": "service-desk",
+      "service": "incident-management",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-3.5",
+      "source_sections": [
+        "3.5"
+      ],
+      "kind": "new",
+      "article_number": "KB2012",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "501647c790bfae716b98487274e2a0141137e6fd374eba73654f994e72353092",
+      "category": "service-desk",
+      "service": "incident-management",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-3.6",
+      "source_sections": [
+        "3.6"
+      ],
+      "kind": "new",
+      "article_number": "KB2013",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "66b841f59d5e8dff9b3fd2f3b8a93e15191248dbcebeb3769cbd3a5c2c444588",
+      "category": "service-desk",
+      "service": "incident-management",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-4.1",
+      "source_sections": [
+        "4.1"
+      ],
+      "kind": "new",
+      "article_number": "KB2014",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "aec70ef259c59eace18f31c656f3c35b92eb368a4455a7668c1f731e616bfdd8",
+      "category": "service-desk",
+      "service": "escalation",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-4.2",
+      "source_sections": [
+        "4.2"
+      ],
+      "kind": "new",
+      "article_number": "KB2015",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "319b325690a59e7213b90d5bfa2115bf2792fb88422ff64782c9fedcbca82a0c",
+      "category": "service-desk",
+      "service": "escalation",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-4.3",
+      "source_sections": [
+        "4.3"
+      ],
+      "kind": "new",
+      "article_number": "KB2016",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "bbc21b8a0506ee119819fac72fa2accd523afffdb973d8aa1fc25fadac28185d",
+      "category": "service-desk",
+      "service": "escalation",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-5.1",
+      "source_sections": [
+        "5.1"
+      ],
+      "kind": "new",
+      "article_number": "KB2017",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "5e38eb5849ea8091c2b1efcd25f57529ae0d4e1ec1a142af16b1653bb28cdb39",
+      "category": "reference",
+      "service": "incident-catalogue",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-5.2",
+      "source_sections": [
+        "5.2"
+      ],
+      "kind": "new",
+      "article_number": "KB2018",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "cf2765c491b01f4e003d8c726a025a1a04288709873b93e3854688bae234be0c",
+      "category": "reference",
+      "service": "incident-catalogue",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-5.3",
+      "source_sections": [
+        "5.3"
+      ],
+      "kind": "new",
+      "article_number": "KB2019",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "5071d8a215acd27d2914e77fa4e33371f9a7e3ae929da1da9518bd4a0b78cb47",
+      "category": "reference",
+      "service": "incident-catalogue",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-6",
+      "source_sections": [
+        "6"
+      ],
+      "kind": "new",
+      "article_number": "KB2020",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "7937d9b30e29e337a7f2e1fc747f58a6ac0b2ca6381042b2faf1e63e0b5cc36a",
+      "category": "knowledge-management",
+      "service": "knowledge-base",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-6.1",
+      "source_sections": [
+        "6.1"
+      ],
+      "kind": "index_alias",
+      "alias_targets": [
+        "KB0001",
+        "KB0002",
+        "KB0003",
+        "KB0004",
+        "KB0005",
+        "KB0006",
+        "KB0007",
+        "KB0008",
+        "KB0009",
+        "KB0010"
+      ],
+      "content_purpose": "reference",
+      "content_sha256": "97b0580497d5c72cbcf64a48a09030f4c814bc065f250a9de45a357ab426d6be"
+    },
+    {
+      "unit_id": "section-6.2",
+      "source_sections": [
+        "6.2"
+      ],
+      "kind": "new",
+      "article_number": "KB2021",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "dbfc1cb9c99fc056577b14814f787cd4cf51c16c413e39daa1bd67354cc3a7f0",
+      "category": "reference",
+      "service": "knowledge-base",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-6.3",
+      "source_sections": [
+        "6.3"
+      ],
+      "kind": "new",
+      "article_number": "KB2022",
+      "version": "1.0",
+      "content_purpose": "archival",
+      "content_sha256": "3936d2565452284c3364563eac38857c708a4f07419ea25b27c1685978edd87e",
+      "category": "knowledge-management",
+      "service": "knowledge-base",
+      "workflow_state": "retired",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-6.4",
+      "source_sections": [
+        "6.4"
+      ],
+      "kind": "alias",
+      "article_number": "KB0001",
+      "version": "2.0",
+      "content_purpose": "current_procedure",
+      "content_sha256": "0cf1ce163cd0b3e62b34bf08900ce770273723ce987a45729ee582849b15e3a7"
+    },
+    {
+      "unit_id": "section-6.5",
+      "source_sections": [
+        "6.5"
+      ],
+      "kind": "alias",
+      "article_number": "KB0002",
+      "version": "3.0",
+      "content_purpose": "current_procedure",
+      "content_sha256": "b5404d7abee32d9e4828e82b3f84ef9231c2be2b865a702c4c7794e38ed5783b"
+    },
+    {
+      "unit_id": "section-6.6",
+      "source_sections": [
+        "6.6"
+      ],
+      "kind": "alias",
+      "article_number": "KB0003",
+      "version": "2.0",
+      "content_purpose": "current_procedure",
+      "content_sha256": "17ca01405ed3feec081a7a9706337b44b44f98c493ab68b4bc4b9e6d6056941d"
+    },
+    {
+      "unit_id": "section-6.7",
+      "source_sections": [
+        "6.7"
+      ],
+      "kind": "alias",
+      "article_number": "KB0004",
+      "version": "1.0",
+      "content_purpose": "current_procedure",
+      "content_sha256": "438e669da7da2a7934055b3dc148cda6785da2fe6feafcd8d97547f502877472"
+    },
+    {
+      "unit_id": "section-6.8",
+      "source_sections": [
+        "6.8"
+      ],
+      "kind": "alias",
+      "article_number": "KB0005",
+      "version": "4.0",
+      "content_purpose": "current_procedure",
+      "content_sha256": "a59a30f0223ebe994ebf6c0472717bdbeda28f822d16db9fbf32dc238c486355"
+    },
+    {
+      "unit_id": "section-6.9",
+      "source_sections": [
+        "6.9"
+      ],
+      "kind": "alias",
+      "article_number": "KB0006",
+      "version": "3.0",
+      "content_purpose": "current_procedure",
+      "content_sha256": "51e466a9a103fa5e189802697be84c3f1489a8e39550fcdf3ef2c71a44967c91"
+    },
+    {
+      "unit_id": "section-6.10",
+      "source_sections": [
+        "6.10"
+      ],
+      "kind": "alias",
+      "article_number": "KB0007",
+      "version": "2.0",
+      "content_purpose": "current_procedure",
+      "content_sha256": "8de9e420db8e02141d617cc25ed6fed4d92c69499fea5c488bdb77fc7b9cfc3b"
+    },
+    {
+      "unit_id": "section-6.11",
+      "source_sections": [
+        "6.11"
+      ],
+      "kind": "alias",
+      "article_number": "KB0008",
+      "version": "1.0",
+      "content_purpose": "current_procedure",
+      "content_sha256": "ca8dd679ee90c8d8bb76ef74246d47737a2f0ecd6055b0aaf9468f39c5f3b485"
+    },
+    {
+      "unit_id": "section-6.12",
+      "source_sections": [
+        "6.12"
+      ],
+      "kind": "alias",
+      "article_number": "KB0009",
+      "version": "2.0",
+      "content_purpose": "current_procedure",
+      "content_sha256": "5972ea8ff62ffbd2c45fc47c365d3e9f2c7bdc0501f64b10defdc61d8de8beb4"
+    },
+    {
+      "unit_id": "section-6.13",
+      "source_sections": [
+        "6.13"
+      ],
+      "kind": "alias",
+      "article_number": "KB0010",
+      "version": "2.0",
+      "content_purpose": "current_procedure",
+      "content_sha256": "1aa203e2b8e6e22218e0d0ea4e267ee95427c9da0dd769a85a48a1e63f908089"
+    },
+    {
+      "unit_id": "section-7",
+      "source_sections": [
+        "7"
+      ],
+      "kind": "new",
+      "article_number": "KB2023",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "db3f9448ae55f23807712d03437ec18ff951b2b3a7465b8599bdf291df0beeb2",
+      "category": "reference",
+      "service": "incident-records",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-7.1",
+      "source_sections": [
+        "7.1"
+      ],
+      "kind": "new",
+      "article_number": "KB2024",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "31d5b59c60ee5e73076f7e67078a7e41ed3fd9895b9d2c8f6ef3ce5ae7c82686",
+      "category": "reference",
+      "service": "incident-records",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-7.2",
+      "source_sections": [
+        "7.2"
+      ],
+      "kind": "new",
+      "article_number": "KB2025",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "fca62996bb0ee122867663f6e659c0e0d0eddd139cf31b34d0a55ad42310696c",
+      "category": "reference",
+      "service": "incident-records",
+      "workflow_state": "published",
+      "security_level": "internal",
+      "derives_from_articles": [
+        "KB0001"
+      ]
+    },
+    {
+      "unit_id": "section-7.3",
+      "source_sections": [
+        "7.3"
+      ],
+      "kind": "new",
+      "article_number": "KB2026",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "216a9bb7a6148ca8c625256bb5924cc5cf8ff3817861ecd8949bb8c9b4d672a1",
+      "category": "reference",
+      "service": "incident-records",
+      "workflow_state": "published",
+      "security_level": "restricted",
+      "derives_from_articles": [
+        "KB0004"
+      ]
+    },
+    {
+      "unit_id": "section-7.4",
+      "source_sections": [
+        "7.4"
+      ],
+      "kind": "new",
+      "article_number": "KB2027",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "c33df05c4f9e6e10d7f44904ccf9d20b0f1a76d592843bbffe0016163375922c",
+      "category": "reference",
+      "service": "incident-records",
+      "workflow_state": "published",
+      "security_level": "internal",
+      "derives_from_articles": [
+        "KB0005"
+      ]
+    },
+    {
+      "unit_id": "section-7.5",
+      "source_sections": [
+        "7.5"
+      ],
+      "kind": "new",
+      "article_number": "KB2028",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "ec6bc0cdf71ebc1bfa25316e490ccdd56e9877fe88893c7516a066820a0d18be",
+      "category": "reference",
+      "service": "incident-records",
+      "workflow_state": "published",
+      "security_level": "restricted",
+      "derives_from_articles": [
+        "KB0010-v2.0"
+      ]
+    },
+    {
+      "unit_id": "section-8.1",
+      "source_sections": [
+        "8.1"
+      ],
+      "kind": "new",
+      "article_number": "KB2029",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "f28b71b61d3116cd271cd61b470de3e33283ded0d390fd5c1831aca1f446770b",
+      "category": "reference",
+      "service": "problem-management",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-8.2",
+      "source_sections": [
+        "8.2"
+      ],
+      "kind": "new",
+      "article_number": "KB2030",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "89166fae491dd30fd24dd92a234c3c942595e770e95c8ee161af3506fa0ec31a",
+      "category": "reference",
+      "service": "problem-management",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-8.3",
+      "source_sections": [
+        "8.3"
+      ],
+      "kind": "new",
+      "article_number": "KB2031",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "0f5c20fee1260625078caaa6cb56ce941f4f385024e1be146b82c912278f6fad",
+      "category": "reference",
+      "service": "problem-management",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-9",
+      "source_sections": [
+        "9"
+      ],
+      "kind": "new",
+      "article_number": "KB2032",
+      "version": "1.0",
+      "content_purpose": "historical",
+      "content_sha256": "a77ba9a0af66af70be58e350c731b6a571ed988ccca13db2aca09e71a63ae6ff",
+      "category": "reporting",
+      "service": "major-incidents",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-9.1",
+      "source_sections": [
+        "9.1"
+      ],
+      "kind": "new",
+      "article_number": "KB2033",
+      "version": "1.0",
+      "content_purpose": "historical",
+      "content_sha256": "bc1462c137ff77465a0017b8e721dfa8aa8a45f42e82d76957bc6f364ee03d82",
+      "category": "reporting",
+      "service": "major-incidents",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-9.2",
+      "source_sections": [
+        "9.2"
+      ],
+      "kind": "new",
+      "article_number": "KB2034",
+      "version": "1.0",
+      "content_purpose": "historical",
+      "content_sha256": "0d2c81f423ad85e41e7bc9f080fee7452d60134b90916ac52c9c4191b811ec98",
+      "category": "reporting",
+      "service": "major-incidents",
+      "workflow_state": "published",
+      "security_level": "restricted",
+      "derives_from_articles": [
+        "KB0010"
+      ],
+      "warning": "Repeats the story of KB0010 version 1.0, whose application-server restart instruction caused order loss during MIR-2026-03; version 2.0 rules the restart out. Reference only - not an executable procedure."
+    },
+    {
+      "unit_id": "section-9.3",
+      "source_sections": [
+        "9.3"
+      ],
+      "kind": "new",
+      "article_number": "KB2035",
+      "version": "1.0",
+      "content_purpose": "historical",
+      "content_sha256": "1fe0cbe423578461048cf15bbd17b981e8571d5f6e79ed196cac94c9eb82b0e3",
+      "category": "reporting",
+      "service": "major-incidents",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-9.4",
+      "source_sections": [
+        "9.4"
+      ],
+      "kind": "new",
+      "article_number": "KB2036",
+      "version": "1.0",
+      "content_purpose": "historical",
+      "content_sha256": "a10e9301cf68f29cd9d1a2aff48a526768c83f1ea27a6a0c67aa64d73d98e435",
+      "category": "reporting",
+      "service": "major-incidents",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-9.5",
+      "source_sections": [
+        "9.5"
+      ],
+      "kind": "new",
+      "article_number": "KB2037",
+      "version": "1.0",
+      "content_purpose": "historical",
+      "content_sha256": "e0cb2e73b98f31a74e3a058af53c5b6c92b8d76e1982367c28ffac7122f5d2c4",
+      "category": "reporting",
+      "service": "major-incidents",
+      "workflow_state": "published",
+      "security_level": "restricted",
+      "derives_from_articles": [
+        "KB0010"
+      ],
+      "warning": "Explains the failure caused by following KB0010 version 1.0's restart instruction; the restart is ruled out in version 2.0. Reference only - not an executable procedure."
+    },
+    {
+      "unit_id": "section-9.6",
+      "source_sections": [
+        "9.6"
+      ],
+      "kind": "new",
+      "article_number": "KB2038",
+      "version": "1.0",
+      "content_purpose": "historical",
+      "content_sha256": "8fea1533f8304e80196b455bb20099d8c9f883f97da8102ef831aecb54902bc4",
+      "category": "reporting",
+      "service": "major-incidents",
+      "workflow_state": "published",
+      "security_level": "restricted",
+      "derives_from_articles": [
+        "KB0010"
+      ],
+      "warning": "Records the retirement of KB0010 version 1.0 and its replacement by version 2.0 with a change-controlled drain path. Reference only - not an executable procedure."
+    },
+    {
+      "unit_id": "section-10.1",
+      "source_sections": [
+        "10.1"
+      ],
+      "kind": "new",
+      "article_number": "KB2039",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "d7797ce3e43da7f215560f631b462a0b3f6d23da6c942bc025a268f8cfe91035",
+      "category": "change-management",
+      "service": "change-control",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-10.2",
+      "source_sections": [
+        "10.2"
+      ],
+      "kind": "new",
+      "article_number": "KB2040",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "c98227ee68a3b1176d42870d7d10d0d311aec3fc1aeb89bc3277abf1f44a19da",
+      "category": "change-management",
+      "service": "change-control",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-10.3",
+      "source_sections": [
+        "10.3"
+      ],
+      "kind": "new",
+      "article_number": "KB2041",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "b1ab3eba93278f14b175daf930fb35e561aeb0be5adcee288cb6e196401f9754",
+      "category": "change-management",
+      "service": "change-control",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-10.4",
+      "source_sections": [
+        "10.4"
+      ],
+      "kind": "new",
+      "article_number": "KB2042",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "4d80464f4e44dc6f37dcbc0a55bdbbf7468a3d16d1cd886edd9b23457865f002",
+      "category": "change-management",
+      "service": "change-control",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-11",
+      "source_sections": [
+        "11"
+      ],
+      "kind": "new",
+      "article_number": "KB2043",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "37a701c909dd5d497aad0991d617e3409117b224067ecf800e68c6ee64dade40",
+      "category": "automation",
+      "service": "ai-assist",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-11.1",
+      "source_sections": [
+        "11.1"
+      ],
+      "kind": "new",
+      "article_number": "KB2044",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "b7564a6da8ea52b76e2936f1a5deebaad43b4c00654d0be1ad2f9d7b1aa3143c",
+      "category": "automation",
+      "service": "ai-assist",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-11.2",
+      "source_sections": [
+        "11.2"
+      ],
+      "kind": "new",
+      "article_number": "KB2045",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "f296d00a5bba95613f04fe26b6d3550f4b10189014a3b21cf46107893a36ec76",
+      "category": "automation",
+      "service": "ai-assist",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-11.3",
+      "source_sections": [
+        "11.3"
+      ],
+      "kind": "new",
+      "article_number": "KB2046",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "475a9051bd43ef730bd14d20796d1977f06569f40012917d6daceca7fd2e4586",
+      "category": "automation",
+      "service": "ai-assist",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-11.4",
+      "source_sections": [
+        "11.4"
+      ],
+      "kind": "new",
+      "article_number": "KB2047",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "6087db95571f10d64b9df3d3579583545a3d53fb22d7d794d51392d72a9705b6",
+      "category": "automation",
+      "service": "ai-assist",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-11.5",
+      "source_sections": [
+        "11.5"
+      ],
+      "kind": "new",
+      "article_number": "KB2048",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "7c60de4660d2ecb1491987d3dfb02d1f412add569c555ca5038f0107bb38341c",
+      "category": "automation",
+      "service": "ai-assist",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-11.6",
+      "source_sections": [
+        "11.6"
+      ],
+      "kind": "new",
+      "article_number": "KB2049",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "53dcf229ba247161b3b8fd730b94d58da3fd74d2a7f95de63ad075d407274ad7",
+      "category": "automation",
+      "service": "ai-assist",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-4",
+      "source_sections": [
+        "4"
+      ],
+      "kind": "new",
+      "article_number": "KB2050",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "24d274dfa32adbb7b26ebf6af8cb67643049036f5d70b22b304242731c12ad1f",
+      "category": "automation",
+      "service": "ai-assist",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-11.7",
+      "source_sections": [
+        "11.7"
+      ],
+      "kind": "new",
+      "article_number": "KB2051",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "bc2138e768d472ee8b0890ce5c17f524e798561b564981930d1d47014c89a843",
+      "category": "automation",
+      "service": "ai-assist",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-11.8",
+      "source_sections": [
+        "11.8"
+      ],
+      "kind": "new",
+      "article_number": "KB2052",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "59837a6ae497acd9b1f892ffecfc0edce9b0ecb7fe7f9134ff7a7a26c8a39bba",
+      "category": "automation",
+      "service": "ai-assist",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-11.9",
+      "source_sections": [
+        "11.9"
+      ],
+      "kind": "new",
+      "article_number": "KB2053",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "1f79e6060b1ff4224787c76944c524a538d803069f30b23a1aeddacf2c134fde",
+      "category": "automation",
+      "service": "ai-assist",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-12.1",
+      "source_sections": [
+        "12.1"
+      ],
+      "kind": "new",
+      "article_number": "KB2054",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "fe60ac091826616b069e484a2ef10b57ea9be9792b0380fc167f7cb38209f20f",
+      "category": "reporting",
+      "service": "service-review",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-12.2",
+      "source_sections": [
+        "12.2"
+      ],
+      "kind": "new",
+      "article_number": "KB2055",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "8c6e6897e071ee0428ca470ac96cd158d7ef85d2796b34f1642f79c6e2d8364f",
+      "category": "reporting",
+      "service": "service-review",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-12.3",
+      "source_sections": [
+        "12.3"
+      ],
+      "kind": "new",
+      "article_number": "KB2056",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "cff38395679a53fff3bc903637a7a3e90f3802849bb77f5cbe53d214210bebb5",
+      "category": "reporting",
+      "service": "service-review",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-A",
+      "source_sections": [
+        "A"
+      ],
+      "kind": "new",
+      "article_number": "KB2057",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "1ec0b09292870cbfc9d233e3749cebcc388fce301a58866d0735dbae0a681fc4",
+      "category": "reference",
+      "service": "glossary",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-B.1",
+      "source_sections": [
+        "B.1"
+      ],
+      "kind": "new",
+      "article_number": "KB2058",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "1d9890c24933e65c6fa90a46592f28c9a484f09f64048314373b5f9dbd66f221",
+      "category": "reference",
+      "service": "templates",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-B.2",
+      "source_sections": [
+        "B.2"
+      ],
+      "kind": "new",
+      "article_number": "KB2059",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "1869d3b45d2cc3ca2dd3b94d350e0151b28b2ece8bc86f8884060bd75d724c46",
+      "category": "reference",
+      "service": "templates",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-B.3",
+      "source_sections": [
+        "B.3"
+      ],
+      "kind": "new",
+      "article_number": "KB2060",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "57ac73e3a80ca9e8f7e2eb868e8579fbf7fad303fe7d3a635d8b96ab013d6c9c",
+      "category": "reference",
+      "service": "templates",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-B.4",
+      "source_sections": [
+        "B.4"
+      ],
+      "kind": "new",
+      "article_number": "KB2061",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "1ad2a470361e97cb47a4d96722bdf90199c8fa9dcaf7aa4f4751ded5e18cbc6a",
+      "category": "knowledge-management",
+      "service": "knowledge-capture",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-C",
+      "source_sections": [
+        "C"
+      ],
+      "kind": "new",
+      "article_number": "KB2062",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "2bed90329468304d3313d4f674c2b3ab6bd4ec08bb42f33c3b6d4e2b674c9613",
+      "category": "reference",
+      "service": "impact-urgency",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-D",
+      "source_sections": [
+        "D"
+      ],
+      "kind": "new",
+      "article_number": "KB2063",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "bb3801ca4031179d34ca1743bed79554fcc42dbf0791696c0dfc889902b1714b",
+      "category": "reference",
+      "service": "directory",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "section-E",
+      "source_sections": [
+        "E"
+      ],
+      "kind": "new",
+      "article_number": "KB2064",
+      "version": "1.0",
+      "content_purpose": "reference",
+      "content_sha256": "a9e5cb4c5fe0f816a859eba9ea73ae62e0b548377699b144c01d363254b83484",
+      "category": "reference",
+      "service": "identifier-index",
+      "workflow_state": "published",
+      "security_level": "internal"
+    },
+    {
+      "unit_id": "warning-kb0010-v1-retirement",
+      "source_sections": [],
+      "grounded_in_sections": [
+        "9.2",
+        "9.5",
+        "9.6"
+      ],
+      "kind": "new",
+      "article_number": "KB2065",
+      "version": "1.0",
+      "content_purpose": "warning",
+      "platform_authored": true,
+      "category": "knowledge-management",
+      "service": "knowledge-base",
+      "workflow_state": "published",
+      "security_level": "restricted",
+      "derives_from_articles": [
+        "KB0010"
+      ],
+      "title": "KB0010 version 1.0 is retired - use version 2.0",
+      "short_description": "Why KB0010 version 1.0 was retired and where its replacement lives.",
+      "content_sha256": "d29bdeafd37e1b9bc3c088fb940fd4f14428ac702fb9902cfcfa506d5c087a55",
+      "warning": "This article exists to explain a retirement. It is not a procedure and must never carry the retired restart steps.",
+      "body": "KB0010 version 1.0 is retired. Its first step instructed a restart of the order service application server; during major incident MIR-2026-03 that restart dropped in-flight orders and 47 orders were unrecoverable (see the incident report, section 9.2 of the BARQ Operations Manual).\n\nThe article was correct when published and dangerous by the time it was applied: the 2025 migration changed the deployment it described, and no review was triggered (section 9.5). Version 1 was retired and version 2.0 was published with the restart explicitly ruled out and a change-controlled drain path substituted (MIR-2026-03 action 1).\n\nCopies of version 1 outside the knowledge base - saved PDFs, pinned messages, wiki pages - must be replaced with a link to version 2.0 and reported to the knowledge manager (action 6 of the report, still open at the time of writing)."
+    }
+  ]
+}

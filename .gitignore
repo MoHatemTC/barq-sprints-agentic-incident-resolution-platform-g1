@@ -123,6 +123,18 @@ data/corpus/*
 !data/corpus/barq_ingestion_report.md
 !data/corpus/barq_articles.json
 !data/adversarial/
+# Evaluation inputs of record (P0): only these two files are versioned;
+# raw parse artifacts in the same directory stay ignored.
+!data/structured-io/
+data/structured-io/*
+!data/structured-io/barq_rag_eval_dataset.json
+!data/structured-io/adapters.py
+# Manual extraction artifacts + the committed source PDF (hash-pinned in manual_source.json)
+!data/corpus/manual_sections.json
+!data/corpus/manual_coverage.json
+!data/corpus/manual_source.json
+!data/corpus/manual_kb_manifest.json
+!data/barq-system-kb.pdf
 
 src/app/ignored_folder
 .zcode/

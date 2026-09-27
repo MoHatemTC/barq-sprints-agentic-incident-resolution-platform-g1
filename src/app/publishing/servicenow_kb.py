@@ -51,6 +51,9 @@ KB_TABLE = "kb_knowledge"
 #: Article model: find_by_source_id takes a bare str, and an unvalidated caller would
 #: otherwise be able to inject encoded-query clauses with `^` — the same defect as #43.
 _ARTICLE_ID_PATTERN = re.compile(r"^KB\d{4}-v\d+\.\d+$")
+#: Same shape as _ARTICLE_ID_PATTERN, used to validate rows returned by
+#: find_source_ids_by_prefix before their numbers feed the allocator.
+_SOURCE_ID_ROW_PATTERN = re.compile(r"^KB\d{4}-v\d+\.\d+$")
 
 # Fields requested on find_by_source_id
 _LIST_FIELDS: tuple[str, ...] = (
@@ -288,26 +291,43 @@ class ServiceNowKBClient:
 
         The prefix is validated strictly (``KB`` plus digits only) because it is
         interpolated into an encoded query — the same injection guard
-        ``find_by_source_id`` applies to whole article IDs.
+        ``find_by_source_id`` applies to whole article IDs. The lookup pages
+        through the whole scoped result set (deterministic ``sysparm_offset``
+        stepping) instead of trusting the first 1,000 rows, and returns only
+        well-formed versioned source IDs so a malformed row can never leak
+        into allocation arithmetic. A failed page raises — a partial list is
+        never mistaken for a complete one.
         """
         if not re.fullmatch(r"KB\d{0,3}", prefix):
             raise ServiceNowKBError(
                 f"Refusing to query with prefix={prefix!r}: only 'KB' plus up to "
                 "three digits is allowed (e.g. 'KB1' for the human-captured range)."
             )
-        params = {
-            "sysparm_fields": U_SOURCE_ID_FIELD,
-            "sysparm_limit": "1000",
-        }
-        if kb_sys_id:
-            params["sysparm_query"] = f"kb_knowledge_base={kb_sys_id}"
-        res = await self.request("GET", f"/api/now/table/{KB_TABLE}", params=params)
-        records = res.json().get("result", [])
-        return [
-            str(r.get(U_SOURCE_ID_FIELD))
-            for r in records
-            if r.get(U_SOURCE_ID_FIELD) and str(r.get(U_SOURCE_ID_FIELD)).startswith(prefix)
-        ]
+        query = f"kb_knowledge_base={kb_sys_id}" if kb_sys_id else ""
+
+        found: list[str] = []
+        offset = 0
+        while True:
+            params: dict[str, str] = {
+                "sysparm_fields": f"sys_id,{U_SOURCE_ID_FIELD}",
+                "sysparm_limit": "1000",
+                "sysparm_offset": str(offset),
+            }
+            if query:
+                params["sysparm_query"] = query
+
+            res = await self.request("GET", f"/api/now/table/{KB_TABLE}", params=params)
+            records = res.json().get("result", [])
+            found.extend(
+                str(r.get(U_SOURCE_ID_FIELD))
+                for r in records
+                if r.get(U_SOURCE_ID_FIELD)
+                and str(r.get(U_SOURCE_ID_FIELD)).startswith(prefix)
+                and _SOURCE_ID_ROW_PATTERN.fullmatch(str(r.get(U_SOURCE_ID_FIELD)))
+            )
+            if len(records) < 1000:
+                return found
+            offset += 1000
 
     async def create(self, payload: dict[str, Any]) -> str:
         """POST a new kb_knowledge record; returns its sys_id."""
@@ -464,6 +484,16 @@ def _verify_stored(
         raise ServiceNowWriteRejectedError(
             f"Read-back mismatch for {article_id!r}: stored body no longer contains "
             f"the provenance Source marker (sys_id={stored.get('sys_id')})."
+        )
+
+    # Semantic body check: the stored content must equal what was sent after
+    # the same benign entity/whitespace canonicalisation the diff trusts —
+    # surviving the Source marker alone would let silent truncation through.
+    if _normalise_html(body) != _normalise_html(sent["text"]):
+        raise ServiceNowWriteRejectedError(
+            f"Read-back mismatch for {article_id!r}: stored body differs from the "
+            f"sent content beyond benign entity/whitespace normalisation "
+            f"(sys_id={stored.get('sys_id')}). Content was truncated or altered."
         )
 
 

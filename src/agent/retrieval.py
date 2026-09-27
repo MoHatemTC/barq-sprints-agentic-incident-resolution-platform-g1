@@ -116,13 +116,13 @@ class Retriever(Protocol):
 
 
 def search_categories(classification: Classification, incident_category: str | None) -> list[str]:
-    """Corpus categories to search.
+    """Corpus categories to search for the category-scoped pass.
 
-    The model's label decides whether there can be evidence at all: ``security`` and
-    ``other`` have no corpus article. Otherwise the incident's own ServiceNow category
-    (already checked against the supported set) is searched too — a VPN failure that
-    the model calls ``access`` is still filed under ``network``, where KB0001 lives
-    (observed with Gemini on 2026-09-17).
+    ``security`` and ``other`` have no legacy corpus category, so the scoped
+    pass is skipped for them — but the wide pass still runs (the manual corpus
+    is only reachable there). The incident's own ServiceNow category is
+    searched too — a VPN failure that the model calls ``access`` is still filed
+    under ``network``, where KB0001 lives (observed with Gemini on 2026-09-17).
     """
     mapped = CLASSIFICATION_TO_CORPUS_CATEGORY.get(classification)
     if mapped is None:
@@ -204,10 +204,20 @@ class QdrantRetriever:
             )
 
         if not categories:
-            # No corpus category covers this label (security, other). An unfiltered
-            # search would still return the "nearest" article — measured at 0.58 for
-            # a leave request — so there is, by definition, no evidence.
-            return result(None, [], sufficient=False)
+            # No corpus category covers this label (security, other) — but the
+            # manual corpus does (policies, escalation, callouts), and it is only
+            # reachable through the authorized wide pass. The graph has already
+            # gated eligibility and risk before retrieval, so run the wide search;
+            # every hit is out-of-category and pays the margin before it counts
+            # as sufficient.
+            wide, _ = self._one_pass(query, None, top_k=top_k, engine=engine)
+            return result(
+                None,
+                wide,
+                sufficient=any(
+                    item.relevance >= threshold + OUT_OF_CATEGORY_EVIDENCE_MARGIN for item in wide
+                ),
+            )
 
         # Two searches, always, and the union of what they return.
         #
@@ -229,9 +239,13 @@ class QdrantRetriever:
         for item in [*scoped, *wide]:
             key = (item.article_id, item.chunk_index)
             kept = merged.get(key)
-            if kept is None or item.relevance > kept.relevance:
+            if kept is None or item.fused_score > kept.fused_score:
                 merged[key] = item
-        items = sorted(merged.values(), key=lambda item: item.relevance, reverse=True)[:top_k]
+        # Order by the hybrid ranker's fused score — the ranking the search stage
+        # decided. Dense cosine (relevance) is calibration for the sufficiency gate
+        # below, not an ordering: re-sorting by it would discard the fusion/rerank
+        # order this module exists to preserve.
+        items = sorted(merged.values(), key=lambda item: item.fused_score, reverse=True)[:top_k]
 
         sufficient = any(
             item.relevance
@@ -282,6 +296,13 @@ class QdrantRetriever:
                 text=hit.chunk_text,
                 fused_score=hit.score,
                 relevance=relevance.get(_evidence_key(hit.article_id, hit.chunk_index), 0.0),
+                content_purpose=hit.content_purpose,
+                warning=hit.warning,
+                source_sections=hit.source_sections,
+                source_document_id=hit.source_document_id,
+                pages=hit.pages,
+                extraction_reliability=hit.extraction_reliability,
+                ocr_confidence=hit.ocr_confidence,
             )
             for hit in hits
         ]
