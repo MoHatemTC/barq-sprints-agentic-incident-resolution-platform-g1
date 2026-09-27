@@ -80,6 +80,8 @@ def test_provenance_flows_into_evidence_items() -> None:
     with_purpose = [h for h in result.hits if h.content_purpose]
     assert with_purpose, "manual hits must carry content_purpose"
     assert any(h.source_sections for h in with_purpose)
+    assert any(h.source_document_id for h in with_purpose)
+    assert any(h.pages for h in with_purpose)
     warning_hit = next((h for h in result.hits if h.article_number == "KB2065"), None)
     if warning_hit is not None:
         assert warning_hit.content_purpose == "warning"

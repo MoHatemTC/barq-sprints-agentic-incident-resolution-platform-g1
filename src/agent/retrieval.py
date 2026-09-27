@@ -285,6 +285,10 @@ class QdrantRetriever:
                 content_purpose=hit.content_purpose,
                 warning=hit.warning,
                 source_sections=hit.source_sections,
+                source_document_id=hit.source_document_id,
+                pages=hit.pages,
+                extraction_reliability=hit.extraction_reliability,
+                ocr_confidence=hit.ocr_confidence,
             )
             for hit in hits
         ]

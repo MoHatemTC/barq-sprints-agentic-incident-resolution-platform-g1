@@ -110,6 +110,10 @@ class EvidenceItem(_Section):
     content_purpose: str | None = None
     warning: str | None = None
     source_sections: list[str] | None = None
+    source_document_id: str | None = None
+    pages: list[int] | None = None
+    extraction_reliability: str | None = None
+    ocr_confidence: float | None = None
 
     @property
     def citation(self) -> str:

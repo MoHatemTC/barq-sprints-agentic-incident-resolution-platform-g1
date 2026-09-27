@@ -41,6 +41,10 @@ class RetrievalHit(BaseModel):
     content_purpose: str | None = None
     warning: str | None = None
     source_sections: list[str] | None = None
+    source_document_id: str | None = None
+    pages: list[int] | None = None
+    extraction_reliability: str | None = None
+    ocr_confidence: float | None = None
 
 
 @dataclass(frozen=True)
@@ -82,6 +86,10 @@ def _validate_hit(point) -> RetrievalHit:
         source_sections=validated.source_sections,
         category=validated.category,
         service=validated.service,
+        source_document_id=validated.source_document_id,
+        pages=validated.pages,
+        extraction_reliability=validated.extraction_reliability,
+        ocr_confidence=validated.ocr_confidence,
     )
 
 
