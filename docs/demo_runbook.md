@@ -1,8 +1,18 @@
-# Running the BARQ demo yourself
+# Running the BARQ local PDI demo yourself
 
-Everything below was run on this machine on 2026-09-26 and passed. It uses the
-real stack: the real ServiceNow instance, real PostgreSQL, Redis and Celery,
-real Qdrant retrieval, real Gemini through the LiteLLM proxy, real Langfuse.
+This runbook targets the `dev434590` PDI and the API and worker on your Mac.
+The seeded Outlook run was repeated on 2026-09-27 and passed against the real
+ServiceNow PDI, PostgreSQL, Redis, Celery, Qdrant and Gemini services. The
+2026-09-27 trace evidence for earlier runs is in `docs/evidence/`.
+Creating an incident in ServiceNow alone does not send it to the local API;
+the demo script sends the authenticated webhook event itself.
+
+The shared EC2 API at `http://51.21.182.56:8000` is a separate deployment from
+this local demo. It follows `main`, so Sprint 3.4's pending-approval endpoint and
+the combined changes in PR #158 are unavailable there until that PR receives a
+current approval, merges, and deploys. A `/ready` response from EC2 does not
+prove those routes or the full workflow work. Do not present this local run as
+a successful shared EC2 demo.
 
 The demo script is `scripts/demo_s34_hitl_live.py`. It exercises both halves of
 the platform and prints `PASS`/`FAIL` per phase, exiting non-zero if anything

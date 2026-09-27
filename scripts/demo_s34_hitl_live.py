@@ -126,9 +126,7 @@ def written_fields(before: dict[str, Any], after: dict[str, Any]) -> dict[str, A
     return changed
 
 
-async def reset_incident(
-    client: ServiceNowClient, sys_id: str, priority: str, solution: str | None
-) -> None:
+async def reset_incident(client: ServiceNowClient, sys_id: str, priority: str) -> None:
     """Return the incident to a pre-run state so the graph is eligible.
 
     Clears the previous run's AI output and puts the processing state back to
@@ -154,8 +152,41 @@ async def reset_incident(
         f"{P}_ai_failure_reason": "",
     }
     await client._request("PATCH", f"/api/now/table/incident/{sys_id}", json=body)
-    if solution is not None:
-        await client.add_work_note(sys_id, solution)
+
+    # ServiceNow answers 200 and silently drops a field the caller's ACL forbids,
+    # so the PATCH alone proves nothing. Read every field back.
+    desired = {f"{P}_ai_enabled": "true", f"{P}_ai_human_lock": "false"}
+    desired.update(
+        {
+            f"{P}_ai_{k}": v
+            for k, v in (
+                ("processing_state", "pending"),
+                ("suggestion", ""),
+                ("resolution", ""),
+                ("confidence", ""),
+                ("classification", ""),
+                ("processing_start", ""),
+                ("processing_end", ""),
+                ("failure_reason", ""),
+            )
+        }
+    )
+    rows = await client._request(
+        "GET",
+        f"/api/now/table/incident/{sys_id}",
+        params={"sysparm_display_value": "false", "sysparm_fields": ",".join(desired)},
+    )
+    record = rows[0] if isinstance(rows, list) else rows
+    actual = {k: (v if isinstance(v, str) else str(v)) for k, v in record.items()}
+
+    unwritable = sorted(f for f, want in desired.items() if actual.get(f, "") != want)
+    if unwritable:
+        raise RuntimeError(
+            "incident was not returned to a pre-run state: "
+            + ", ".join(f"{f.split('_0_')[-1]}={actual.get(f, '')!r}" for f in unwritable)
+            + ". On an instance where AI Enabled and Human Lock are admin-only write "
+            "fields, tick AI Enabled on the incident in the ServiceNow UI first."
+        )
 
 
 async def wait_for_execution(
@@ -280,7 +311,7 @@ async def run_one(
         check(f"{number} exists on ServiceNow", True, sys_id)
 
         phase(1, "Reset the incident so the graph is eligible")
-        await reset_incident(client, sys_id, priority, solution)
+        await reset_incident(client, sys_id, priority)
         before = await snapshot(client, sys_id)
         check(
             "AI Enabled set and processing state reset to pending",
@@ -681,7 +712,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--priority", default="1", help="priority to set on a --incident run")
     parser.add_argument(
         "--solution",
-        default="Applied the KB resolution after human approval.",
+        default="Confirmed the proposed resolution after reviewing the incident evidence.",
         help="human solution folded into the resume",
     )
     parser.add_argument(
