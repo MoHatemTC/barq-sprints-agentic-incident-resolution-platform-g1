@@ -110,8 +110,10 @@ jobs:
             echo "==> Running database migrations from the new image..."
             docker compose run --rm --no-deps -T api alembic upgrade head < /dev/null
 
-            echo "==> Seeding Qdrant knowledge base with baseline and manual articles..."
-            docker compose run --rm --no-deps -T api python scripts/seed_qdrant.py --with-manual-kb < /dev/null
+            # NOTE: the knowledge corpus is NOT reseeded here. Reseeding on
+            # deploy would purge live human-captured KB articles; corpus
+            # updates are an explicit maintenance operation (see the
+            # runbooks). New environments get one-time provisioning.
 
             echo "==> Starting the API and worker from the verified image..."
             docker compose up -d --no-build api celery-worker
