@@ -34,9 +34,9 @@ def build_reconciliation_plan(
     manifest: ManualKBManifest,
 ) -> ReconciliationPlan:
     """List removal candidates from the live collection; write nothing."""
-    superseded_numbers = {
-        ref.split("-v", 1)[0] for unit in manifest.units for ref in unit.supersedes
-    }
+    superseded_refs = {ref for unit in manifest.units for ref in unit.supersedes}
+    superseded_exact_ids = {ref for ref in superseded_refs if "-v" in ref}
+    superseded_numbers = {ref for ref in superseded_refs if "-v" not in ref}
 
     raw_section_point_ids: list[str] = []
     superseded_article_ids: list[str] = []
@@ -52,15 +52,27 @@ def build_reconciliation_plan(
             payload = point.payload or {}
             if payload.get("doc_type") == RAW_SECTION_DOC_TYPE:
                 raw_section_point_ids.append(str(point.id))
-            elif payload.get("article_number") in superseded_numbers:
-                superseded_article_ids.append(str(payload.get("article_id") or point.id))
+            else:
+                art_id = payload.get("article_id")
+                art_num = payload.get("article_number")
+                version = payload.get("version")
+                full_id = art_id or (f"{art_num}-v{version}" if art_num and version else None)
+
+                is_superseded = False
+                if full_id and full_id in superseded_exact_ids:
+                    is_superseded = True
+                elif art_num and art_num in superseded_numbers:
+                    is_superseded = True
+
+                if is_superseded:
+                    superseded_article_ids.append(str(art_id or point.id))
         if offset is None:
             break
 
     notes = []
-    if superseded_numbers:
+    if superseded_refs:
         notes.append(
-            f"manifest supersedes {len(superseded_numbers)} article identities; "
+            f"manifest supersedes {len(superseded_refs)} article identities; "
             "verify each replacement is live and evaluated before removal"
         )
     else:

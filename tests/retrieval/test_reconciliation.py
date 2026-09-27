@@ -44,13 +44,12 @@ def test_plan_lists_only_raw_sections_and_superseded_articles() -> None:
     assert any("2 raw manual-section points" in note for note in plan.notes)
 
 
-def test_superseded_articles_are_matched_by_number() -> None:
+def test_superseded_articles_distinguish_versions() -> None:
     points = [
-        _Point("art-1", {"article_number": "KB0005", "article_id": "KB0005-v4.0"}),
+        _Point("art-v1", {"article_number": "KB0005", "article_id": "KB0005-v1.0"}),
+        _Point("art-v4", {"article_number": "KB0005", "article_id": "KB0005-v4.0"}),
         _Point("human-1", {"article_number": "KB1002", "workflow_state": "human_resolved"}),
     ]
-    # Simulate the reviewed supersession step 6a will add, without touching the
-    # committed draft: parse the same manifest and inject one supersession.
     from app.retrieval.manual.manifest import parse_manifest
 
     raw = {
@@ -89,6 +88,52 @@ def test_superseded_articles_are_matched_by_number() -> None:
     }
     plan = build_reconciliation_plan(_client_with(points), "col", parse_manifest(raw))
 
-    assert plan.superseded_article_ids == ("KB0005-v4.0",)
+    assert plan.superseded_article_ids == ("KB0005-v1.0",)
     assert plan.raw_section_point_ids == ()
     assert any("supersedes 1" in note for note in plan.notes)
+
+
+def test_superseded_articles_matched_by_unversioned_number() -> None:
+    points = [
+        _Point("art-v1", {"article_number": "KB0005", "article_id": "KB0005-v1.0"}),
+        _Point("art-v4", {"article_number": "KB0005", "article_id": "KB0005-v4.0"}),
+    ]
+    from app.retrieval.manual.manifest import parse_manifest
+
+    raw = {
+        "manifest_version": "test",
+        "source": {
+            "document_id": "barq-manual-v4.0",
+            "pdf_path": "data/barq-system-kb.pdf",
+            "pdf_sha256": "0" * 64,
+            "sections_artifact": "data/corpus/manual_sections.json",
+        },
+        "identity_policy": {
+            "new_range_min": 2001,
+            "new_range_max": 2999,
+            "never_allocated": ["KB2000"],
+            "rule": "append-only",
+        },
+        "vocabulary": {
+            "categories": {"reference": "Reference"},
+            "services": {"knowledge-base": "KB"},
+        },
+        "units": [
+            {
+                "unit_id": "section-1.1",
+                "source_sections": ["1.1"],
+                "kind": "new",
+                "article_number": "KB2001",
+                "version": "1.0",
+                "content_purpose": "reference",
+                "workflow_state": "published",
+                "security_level": "internal",
+                "category": "reference",
+                "service": "knowledge-base",
+                "supersedes": ["KB0005"],
+            }
+        ],
+    }
+    plan = build_reconciliation_plan(_client_with(points), "col", parse_manifest(raw))
+
+    assert set(plan.superseded_article_ids) == {"KB0005-v1.0", "KB0005-v4.0"}
