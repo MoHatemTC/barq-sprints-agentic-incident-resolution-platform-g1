@@ -236,7 +236,7 @@ def test_judge_failure_is_recorded_not_passed() -> None:
 
 def test_retrieval_failure_fails_acceptance() -> None:
     runner = _load_runner()
-    failing_engine = MagicMock()
+    failing_engine = _mock_engine()
     failing_engine.embed_query.side_effect = RuntimeError("embedding service down")
 
     report = runner.run(
@@ -280,3 +280,110 @@ def test_metric_floor_failure_marks_run_failed(monkeypatch) -> None:
     assert report["acceptance"] == "failed"
     assert len(report["floor_failures"]) > 0
     assert any("context_recall" in f for f in report["floor_failures"])
+
+
+def test_nan_or_none_metric_scores_fail_acceptance(monkeypatch) -> None:
+    runner = _load_runner()
+    agreed_policy = {
+        "description": "Agreed policy",
+        "framework": "ragas",
+        "framework_version": "1.0",
+        "judge_model": "test-judge",
+        "metrics": {
+            "context_recall": {"floor": 0.50, "aggregation": "per capability slice"},
+            "context_precision": {"floor": 0.50, "aggregation": "per capability slice"},
+        },
+        "status": "agreed",
+        "thresholds_agreed": True,
+        "safety": {"zero_tolerance": []},
+    }
+    monkeypatch.setattr(runner.adapters, "load_metric_policy", lambda: agreed_policy)
+
+    class _NanJudge:
+        name = "ragas"
+
+        def score(self, row, contexts):
+            return {"context_recall": float("nan"), "context_precision": None}
+
+    report = runner.run(
+        qdrant_url="http://localhost:16333",
+        collection="scratch_eval",
+        judge=_NanJudge(),
+        client_factory=lambda: QdrantClient(":memory:"),
+        engine_factory=_mock_engine,
+        limit=2,
+    )
+    assert report["accounting"]["evaluated"] == 0
+    assert report["acceptance"] == "failed"
+
+
+def test_partial_smoke_run_is_incomplete_not_agreed(monkeypatch) -> None:
+    runner = _load_runner()
+    agreed_policy = {
+        "description": "Agreed policy",
+        "framework": "ragas",
+        "framework_version": "1.0",
+        "judge_model": "test-judge",
+        "metrics": {
+            "context_recall": {"floor": 0.50, "aggregation": "per capability slice"},
+            "context_precision": {"floor": 0.50, "aggregation": "per capability slice"},
+        },
+        "status": "agreed",
+        "thresholds_agreed": True,
+        "safety": {"zero_tolerance": []},
+    }
+    monkeypatch.setattr(runner.adapters, "load_metric_policy", lambda: agreed_policy)
+
+    class _RagasJudge:
+        name = "ragas"
+
+        def score(self, row, contexts):
+            return {"context_recall": 1.0, "context_precision": 1.0}
+
+    report = runner.run(
+        qdrant_url="http://localhost:16333",
+        collection="scratch_eval",
+        judge=_RagasJudge(),
+        client_factory=lambda: QdrantClient(":memory:"),
+        engine_factory=_mock_engine,
+        limit=1,
+    )
+    assert report["accounting"]["evaluated"] == 1
+    assert report["acceptance"] == "incomplete", "partial smoke run must be incomplete, not agreed"
+
+
+def test_negative_safety_retrieval_error_fails_acceptance() -> None:
+    runner = _load_runner()
+    failing_engine = _mock_engine()
+    orig_embed = failing_engine.embed_query
+
+    # Fail embedding only when querying safety negative queries
+    safety_negative_turns = [
+        t
+        for t in runner.adapters.turns()
+        if t.get("expected_behaviour") in ("refuse", "clarify") and t.get("must_not_retrieve")
+    ]
+    target_inputs = {t.get("standalone_input") or t.get("input", "") for t in safety_negative_turns}
+
+    def _conditional_embed(text: str) -> list[float]:
+        if text in target_inputs:
+            raise RuntimeError("embedding backend down on safety negative query")
+        return orig_embed(text)
+
+    failing_engine.embed_query.side_effect = _conditional_embed
+
+    report = runner.run(
+        qdrant_url="http://localhost:16333",
+        collection="scratch_eval",
+        judge=runner.FakeJudge(),
+        client_factory=lambda: QdrantClient(":memory:"),
+        engine_factory=lambda: failing_engine,
+        limit=None,
+    )
+    assert report["accounting"]["retrieval_errors"] > 0
+    assert report["accounting"]["safety_negative_rows"] > 0
+    assert report["acceptance"] == "failed"
+    # Ensure safety records are preserved in report["rows"]
+    row_ids = {r["turn_id"] for r in report["rows"]}
+    for t in safety_negative_turns:
+        assert t["turn_id"] in row_ids

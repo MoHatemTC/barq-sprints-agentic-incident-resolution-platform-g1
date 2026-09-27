@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 import time
 from collections import defaultdict
@@ -162,6 +163,27 @@ def _as_score(value: Any) -> float | None:
         return None
 
 
+def is_valid_score(val: Any) -> bool:
+    """Return True if val is a finite float between 0.0 and 1.0 (excluding booleans)."""
+    return (
+        val is not None
+        and isinstance(val, (int, float))
+        and not isinstance(val, bool)
+        and math.isfinite(val)
+        and 0.0 <= float(val) <= 1.0
+    )
+
+
+def has_valid_scores(scores: Any, expected_metrics: list[str]) -> bool:
+    """Validate that scores is a dict containing valid numeric scores for all expected metrics."""
+    if not isinstance(scores, dict):
+        return False
+    metrics_to_check = expected_metrics if expected_metrics else list(scores.keys())
+    if not metrics_to_check:
+        return False
+    return all(is_valid_score(scores.get(m)) for m in metrics_to_check)
+
+
 def section_reverse_map(manifest) -> dict[str, list[str]]:
     """KB article_id → dataset section labels, from the reviewed manifest."""
     mapping: dict[str, list[str]] = {}
@@ -285,14 +307,14 @@ def aggregate_by_capability(rows: list[dict], records: list[dict]) -> dict:
     by_id = {r["turn_id"]: r for r in records}
     for row in rows:
         record = by_id.get(row["turn_id"])
-        if not record or record.get("scores") is None:
+        if not record or not isinstance(record.get("scores"), dict):
             continue
         for cap in row["requires"] or ["uncapability"]:
             for metric, value in record["scores"].items():
-                if value is not None:
-                    scores[cap][metric].append(value)
+                if is_valid_score(value):
+                    scores[cap][metric].append(float(value))
     return {
-        cap: {m: round(sum(v) / len(v), 4) for m, v in metrics.items()}
+        cap: {m: round(sum(v) / len(v), 4) for m, v in metrics.items() if v}
         for cap, metrics in sorted(scores.items())
     }
 
@@ -385,6 +407,7 @@ def run(
         integrity_rows = (rows[:limit] if limit else rows) + safety_negative_turns
         integrity_records = records + safety_records
     else:
+        safety_records = []
         integrity_rows = rows[:limit] if limit else rows
         integrity_records = records
 
@@ -404,8 +427,9 @@ def run(
                     )
 
     expected_eval = limit if limit is not None else len(rows)
-    evaluated_count = sum(1 for r in records if r.get("scores"))
-    retrieval_errors_count = sum(1 for r in records if r.get("error"))
+    expected_metrics = list(policy.get("metrics", {}).keys())
+    evaluated_count = sum(1 for r in records if has_valid_scores(r.get("scores"), expected_metrics))
+    retrieval_errors_count = sum(1 for r in integrity_records if r.get("error"))
     judge_errors_count = sum(1 for r in records if r.get("judge_error"))
 
     has_failures = (
@@ -422,6 +446,8 @@ def run(
 
     if has_failures:
         acceptance = "failed"
+    elif limit is not None:
+        acceptance = "incomplete" if (agreed and judge.name == "ragas") else "pending"
     elif agreed and judge.name == "ragas":
         acceptance = "agreed"
     else:
@@ -441,6 +467,7 @@ def run(
         "accounting": {
             "dataset_turns": 100,
             "answerable_retrieval_rows": len(rows),
+            "safety_negative_rows": len(safety_negative_turns) if limit is None else 0,
             "evaluated": evaluated_count,
             "retrieval_errors": retrieval_errors_count,
             "judge_errors": judge_errors_count,
@@ -449,7 +476,7 @@ def run(
         "integrity_violations": violations,
         "floor_failures": floor_failures,
         "capability_means": capability_means,
-        "rows": records,
+        "rows": integrity_records,
     }
     return report
 
@@ -537,12 +564,9 @@ def main() -> int:
         or bool(report.get("floor_failures"))
         or acc["retrieval_errors"] > 0
         or acc["judge_errors"] > 0
-        or (
-            args.limit is None
-            and acc["evaluated"] < acc["answerable_retrieval_rows"]
-        )
+        or (args.limit is None and acc["evaluated"] < acc["answerable_retrieval_rows"])
         or (args.limit is not None and acc["evaluated"] < args.limit)
-        or report.get("acceptance") == "failed"
+        or report.get("acceptance") in ("failed", "incomplete")
     )
     if has_errors:
         return 1
