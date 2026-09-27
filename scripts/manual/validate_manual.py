@@ -16,7 +16,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import re
 import sys
 from pathlib import Path
 
@@ -101,8 +100,13 @@ def build_coverage() -> dict:
     covered: list[str] = []
     quarantined: list[dict[str, str]] = []
     for label in sorted(eval_labels(dataset)):
-        key = label.split(" ")[0]
-        if re.match(r"^\d", key) and key in numbers:
+        candidate = label.split(" ")[0]
+        if candidate.startswith("Appendix"):
+            # Dataset labels name appendices as "Appendix B.1"; the extraction
+            # stores them as section numbers "B.1".
+            rest = label.split(" ", 1)[1] if " " in label else ""
+            candidate = rest.split(" ")[0]
+        if candidate in numbers:
             covered.append(label)
             continue
         quarantined.append({"label": label, "blocker": _blocker_for(label)})

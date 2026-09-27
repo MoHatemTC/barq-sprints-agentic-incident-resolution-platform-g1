@@ -60,7 +60,19 @@ def test_every_numbered_eval_label_is_covered() -> None:
 def test_gaps_are_quarantined_with_blockers_not_silent() -> None:
     coverage = json.loads(COVERAGE.read_text())
     quarantined = {q["label"]: q["blocker"] for q in coverage["quarantined"]}
-    for label in ("Appendix B.1", "Document control"):
+    covered = set(coverage["covered"])
+    # Appendix sections exist in the extraction, so their labels count as covered.
+    extracted_appendix = (
+        "Appendix A",
+        "Appendix B.1",
+        "Appendix B.4",
+        "Appendix C",
+        "Appendix D",
+        "Appendix E",
+    )
+    for label in extracted_appendix:
+        assert label in covered, f"{label} is extracted but not reported covered"
+    for label in ("Appendix B", "Document control"):  # genuinely absent from the extraction
         assert label in quarantined, f"{label} is neither covered nor quarantined"
         assert quarantined[label].strip()
     turns_affected = coverage["quarantined_turns_affected"]

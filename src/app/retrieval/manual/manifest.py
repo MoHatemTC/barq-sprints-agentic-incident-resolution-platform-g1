@@ -82,6 +82,10 @@ class IdentityPolicy(BaseModel):
     new_range_min: int = Field(..., ge=0, le=9999)
     new_range_max: int = Field(..., ge=0, le=9999)
     never_allocated: list[str] = Field(default_factory=list)
+    deallocated: list[str] = Field(
+        default_factory=list,
+        description="Numbers burned by removed units; never reissued by the allocator",
+    )
     rule: str
 
     def check_new_number(self, article_number: str) -> None:
@@ -90,6 +94,10 @@ class IdentityPolicy(BaseModel):
             raise ValueError(f"{article_number!r} is not a KB article number")
         if article_number in self.never_allocated:
             raise ValueError(f"{article_number} is never allocatable (explicitly unallocated)")
+        if article_number in self.deallocated:
+            raise ValueError(
+                f"{article_number} was deallocated and can never be reissued (append-only identity)"
+            )
         serial = int(article_number[2:])
         if not self.new_range_min <= serial <= self.new_range_max:
             raise ValueError(
@@ -371,6 +379,15 @@ def validate_manifest(
     corpus_by_number: dict[str, list[Article]] = {}
     for article in corpus:
         corpus_by_number.setdefault(article.article_number, []).append(article)
+
+    for unit in manifest.units:
+        if unit.kind is UnitKind.NEW and unit.article_number in corpus_by_number:
+            existing = corpus_by_number[unit.article_number][0].unique_key
+            errors.append(
+                f"{unit.unit_id}: new unit claims {unit.article_number} but the supplied corpus "
+                f"already holds {existing}; collision with an existing identity is rejected"
+            )
+
     for unit in manifest.units:
         if unit.kind is UnitKind.ALIAS and unit.article_number and unit.version:
             target = corpus_by_key.get(unit.unique_key)
@@ -440,11 +457,14 @@ def assign_article_numbers(manifest: ManualKBManifest) -> ManualKBManifest:
 
     Numbers append after the highest allocated number, so a unit inserted
     anywhere in the list gets the next free number and every prior identity
-    stays put. Deleted numbers are never recycled (max+1 skips over gaps).
+    stays put. Numbers recorded in ``identity_policy.deallocated`` (burned by
+    removed units) are skipped forever — deleting the highest allocation never
+    reissues it.
     """
     policy = manifest.identity_policy
     errors: list[str] = []
     allocated: set[str] = set()
+    burned = set(policy.deallocated)
     highest = policy.new_range_min - 1
     for unit in manifest.units:
         if unit.kind is UnitKind.NEW and unit.article_number:
@@ -464,15 +484,19 @@ def assign_article_numbers(manifest: ManualKBManifest) -> ManualKBManifest:
     units: list[ManifestUnit] = []
     for unit in manifest.units:
         if unit.kind is UnitKind.NEW and unit.article_number is None:
-            if highest >= policy.new_range_max:
-                raise ManifestPreflightError(
-                    [
-                        f"KB{policy.new_range_min:04d}-KB{policy.new_range_max:04d} "
-                        "range exhausted; no number available for new units"
-                    ]
-                )
-            highest += 1
-            number = f"KB{highest:04d}"
+            number = None
+            while number is None:
+                highest += 1
+                if highest > policy.new_range_max:
+                    raise ManifestPreflightError(
+                        [
+                            f"KB{policy.new_range_min:04d}-KB{policy.new_range_max:04d} "
+                            "range exhausted; no number available for new units"
+                        ]
+                    )
+                candidate = f"KB{highest:04d}"
+                if candidate not in burned:
+                    number = candidate
             if number in allocated:
                 raise ManifestPreflightError(
                     [f"{number} already allocated; allocation must never collide"]

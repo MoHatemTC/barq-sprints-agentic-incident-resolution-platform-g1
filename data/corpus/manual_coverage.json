@@ -1,6 +1,6 @@
 {
   "sections_extracted": 75,
-  "covered_labels": 46,
+  "covered_labels": 52,
   "covered_section_numbers": [
     "1.1",
     "1.2",
@@ -124,35 +124,17 @@
     "8.3",
     "9.2",
     "9.5",
-    "9.6"
+    "9.6",
+    "Appendix A",
+    "Appendix B.1",
+    "Appendix B.4",
+    "Appendix C",
+    "Appendix D",
+    "Appendix E"
   ],
   "quarantined": [
     {
-      "label": "Appendix A",
-      "blocker": "appendix sections are consumed for Appendix E relationship parsing but not emitted as retrieval sections; emitting them is a follow-up parser extension"
-    },
-    {
       "label": "Appendix B",
-      "blocker": "appendix sections are consumed for Appendix E relationship parsing but not emitted as retrieval sections; emitting them is a follow-up parser extension"
-    },
-    {
-      "label": "Appendix B.1",
-      "blocker": "appendix sections are consumed for Appendix E relationship parsing but not emitted as retrieval sections; emitting them is a follow-up parser extension"
-    },
-    {
-      "label": "Appendix B.4",
-      "blocker": "appendix sections are consumed for Appendix E relationship parsing but not emitted as retrieval sections; emitting them is a follow-up parser extension"
-    },
-    {
-      "label": "Appendix C",
-      "blocker": "appendix sections are consumed for Appendix E relationship parsing but not emitted as retrieval sections; emitting them is a follow-up parser extension"
-    },
-    {
-      "label": "Appendix D",
-      "blocker": "appendix sections are consumed for Appendix E relationship parsing but not emitted as retrieval sections; emitting them is a follow-up parser extension"
-    },
-    {
-      "label": "Appendix E",
       "blocker": "appendix sections are consumed for Appendix E relationship parsing but not emitted as retrieval sections; emitting them is a follow-up parser extension"
     },
     {
@@ -164,6 +146,6 @@
       "blocker": "running headers/footers are stripped as noise by design; the eval label describes a must-NOT-retrieve marker, so this is recorded, not a gap"
     }
   ],
-  "quarantined_turns_affected": 13,
+  "quarantined_turns_affected": 7,
   "source_pdf_sha256": "c535243f00547211c2a7076bc5dc91c80d19a4960b94dc7932bbca546db7d9d4"
 }

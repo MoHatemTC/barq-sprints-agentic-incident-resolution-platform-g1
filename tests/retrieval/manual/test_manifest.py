@@ -321,6 +321,33 @@ def test_new_numbers_stay_in_range_and_kb2000_is_never_allocated() -> None:
         validate_manifest(reserved, [section], [])
 
 
+def test_new_unit_cannot_collide_with_an_existing_corpus_identity() -> None:
+    section = _section("1.1")
+    manifest = parse_manifest(_raw_manifest([_with_hash(_new_unit("1.1", "KB2001"), section)]))
+    with pytest.raises(ManifestPreflightError, match="collision"):
+        validate_manifest(manifest, [section], [_article("KB2001", "1.0")])
+
+
+def test_deallocated_numbers_are_never_reissued() -> None:
+    first, second, added = _section("3.1"), _section("3.2"), _section("2.9")
+    raw = _raw_manifest(
+        [
+            _with_hash(_new_unit("3.1", "KB2001"), first),
+            _with_hash(_new_unit("3.2", "KB2002"), second),
+            _with_hash(_new_unit("2.9", None), added),
+        ]
+    )
+    raw["identity_policy"]["deallocated"] = ["KB2003"]
+    allocated = assign_article_numbers(parse_manifest(raw))
+    numbers = {u.unit_id: u.article_number for u in allocated.units}
+    assert numbers["section-2.9"] == "KB2004", "a burned number must not come back"
+
+    reclaim_raw = _raw_manifest([_with_hash(_new_unit("2.9", "KB2003"), added)])
+    reclaim_raw["identity_policy"]["deallocated"] = ["KB2003"]
+    with pytest.raises(ManifestPreflightError, match="deallocated"):
+        validate_manifest(parse_manifest(reclaim_raw), [added], [])
+
+
 def test_allocation_is_append_only_and_idempotent() -> None:
     first, second, added = _section("3.1"), _section("3.2"), _section("2.9")
     units = [
