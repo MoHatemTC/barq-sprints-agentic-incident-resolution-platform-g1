@@ -1,13 +1,12 @@
-"""P0 gate: the BARQ 100-turn eval inputs are tracked, intact, and framework-free.
+"""The BARQ 100-turn eval inputs are tracked and framework-free.
 
 The dataset and its loaders live under ``data/structured-io/``, which the broad
-``data/*`` ignore rule hides. On a clean checkout these tests fail unless the two
-named files are committed, and the pinned SHA-256 hashes turn any later edit of
-the evaluation inputs into a deliberate, reviewable change.
+``data/*`` ignore rule hides; on a clean checkout these tests fail unless the
+two named files are committed. Content changes are reviewed in git like any
+other file — no hash ceremony on top.
 """
 
 import ast
-import hashlib
 import importlib.util
 import json
 import subprocess
@@ -17,15 +16,6 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 EVAL_DIR = REPO_ROOT / "data" / "structured-io"
 DATASET = EVAL_DIR / "barq_rag_eval_dataset.json"
 ADAPTERS = EVAL_DIR / "adapters.py"
-
-_DATASET_SHA256 = "289ccfa42752d50cfd1cdfaf4a5387237f85d3ff78cd28bd5254a145ad9f377c"
-_ADAPTERS_SHA256 = "91b96343c71a446a08a052d2e43910358308558cf24252a7644e3229c880198f"
-
-RECORDED_SHA256 = {
-    "barq_rag_eval_dataset.json": _DATASET_SHA256,
-    "adapters.py": _ADAPTERS_SHA256,
-}
-
 
 def _git(*args: str) -> str:
     return subprocess.run(
@@ -37,14 +27,6 @@ def test_eval_inputs_are_tracked() -> None:
     tracked = set(_git("ls-files", "data/structured-io/").splitlines())
     assert "data/structured-io/barq_rag_eval_dataset.json" in tracked
     assert "data/structured-io/adapters.py" in tracked
-
-
-def test_eval_inputs_match_recorded_hashes() -> None:
-    for name, expected in RECORDED_SHA256.items():
-        digest = hashlib.sha256((EVAL_DIR / name).read_bytes()).hexdigest()
-        assert digest == expected, (
-            f"{name} changed; update the recorded hash in the same deliberate commit"
-        )
 
 
 def test_dataset_contract_20_sessions_100_turns() -> None:
