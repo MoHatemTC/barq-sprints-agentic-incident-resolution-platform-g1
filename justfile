@@ -86,8 +86,3 @@ test-integration:
 walkthrough:
     bash scripts/s2_3_cli_walkthrough.sh
 
-
-# ── Manual-KB Stage A eval (plan step 9; scratch collection only) ──────────
-# Report-only until eval/manual_stage_a_policy.json is agreed and signed.
-eval-stage-a URL COLLECTION:
-    uv run --group eval python eval/run_manual_stage_a.py --qdrant-url {{URL}} --collection {{COLLECTION}} --judge litellm

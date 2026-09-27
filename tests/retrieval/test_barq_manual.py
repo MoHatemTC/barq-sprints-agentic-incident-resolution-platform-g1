@@ -1,6 +1,5 @@
 """Unit and regression tests for the BARQ Operations Manual PDF extraction pipeline."""
 
-import shutil
 from pathlib import Path
 from textwrap import dedent
 
@@ -234,10 +233,6 @@ def test_kb0010_v2_grid_separates_owner_and_author() -> None:
 
 
 @pytest.mark.skipif(not PDF_PATH.exists(), reason="Real PDF not present on disk")
-@pytest.mark.skipif(
-    shutil.which("pdftotext") is None,
-    reason="pdftotext (poppler-utils) not installed",
-)
 def test_extract_barq_manual_from_real_pdf() -> None:
     articles, report = extract_barq_manual_articles(PDF_PATH)
 

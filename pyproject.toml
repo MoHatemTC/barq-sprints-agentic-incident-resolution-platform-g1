@@ -64,15 +64,6 @@ dev = [
     "ruff>=0.16.6",
 ]
 
-# Stage A evaluation (plan step 9). Deliberately NOT installed by default:
-# `uv sync --group eval` opts in. The live judge runs through the LiteLLM
-# proxy with an OpenAI-compatible client, so langchain-openai supplies the
-# client RAGAS wraps.
-eval = [
-    "ragas==0.2.15",
-    "langchain-openai>=0.2.14,<1.0",
-]
-
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
