@@ -106,6 +106,10 @@ class EvidenceItem(_Section):
     text: str
     fused_score: float
     relevance: float = Field(description="Dense cosine similarity to the query (0-1).")
+    # Optional provenance (manual-KB integration): absent on legacy corpus hits.
+    content_purpose: str | None = None
+    warning: str | None = None
+    source_sections: list[str] | None = None
 
     @property
     def citation(self) -> str:
