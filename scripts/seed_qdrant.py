@@ -8,6 +8,11 @@ example human-captured KB articles) and non-article records in the
 collection are left untouched. Completion is verified per expected point
 ID and chunk content — not by whole-collection counts — exiting non-zero
 on any mismatch.
+
+Raw manual sections (``--manual-corpus``) are an opt-in scratch path: they
+are chunked and ingested only into the separate ``--manual-collection``
+target given alongside, never into the article collection and never as a
+silent side effect.
 """
 
 import argparse
@@ -22,6 +27,7 @@ from app.core.config import Settings, get_retrieval_settings
 from app.core.logging import configure_logging
 from app.retrieval.embedding import FastEmbedEngine
 from app.retrieval.ingest import ingest_articles
+from app.retrieval.manual.manual_chunking import chunk_sections
 from app.retrieval.manual.manual_ingest import ingest_manual_sections
 from app.retrieval.manual.manual_sources import ManualCorpusJSONSource
 from app.retrieval.sources import LocalJSONSource
@@ -63,6 +69,23 @@ def main() -> int:
         action="store_true",
         help="Seed only the baseline corpus, ignoring --stressors entirely.",
     )
+    parser.add_argument(
+        "--manual-corpus",
+        type=Path,
+        default=None,
+        help=(
+            "Opt-in path to a raw manual sections JSON (scratch format). "
+            "Requires --manual-collection; never ingested by default."
+        ),
+    )
+    parser.add_argument(
+        "--manual-collection",
+        default=None,
+        help=(
+            "Separate scratch target collection for --manual-corpus. Must "
+            "differ from the article collection: co-location is rejected."
+        ),
+    )
     parser.add_argument("--url", default=settings.qdrant_url, help="Qdrant endpoint URL")
     parser.add_argument(
         "--collection",
@@ -70,6 +93,28 @@ def main() -> int:
         help="Collection name to seed",
     )
     args = parser.parse_args()
+
+    if (args.manual_corpus is None) != (args.manual_collection is None):
+        print(
+            "Error: --manual-corpus and --manual-collection must be given together.",
+            file=sys.stderr,
+        )
+        return 1
+    if args.manual_corpus is not None:
+        if args.manual_collection == args.collection:
+            logger.error(
+                "manual_collection_rejected",
+                reason="co-location with the article collection is not allowed",
+                article_collection=args.collection,
+                manual_collection=args.manual_collection,
+            )
+            return 1
+        if not args.manual_corpus.exists():
+            print(
+                f"Error: manual corpus file not found at {args.manual_corpus}.",
+                file=sys.stderr,
+            )
+            return 1
 
     if not args.corpus.exists():
         print(
@@ -111,19 +156,25 @@ def main() -> int:
         embedding_engine=engine,
     )
 
-    manual_path = Path("data/corpus/manual_sections.json")
-    if manual_path.exists():
-        logger.info("loading_manual_sections", corpus=str(manual_path))
-        manual_source = ManualCorpusJSONSource(manual_path)
-        sections, relationships = manual_source.load_sections_and_relationships()
+    if args.manual_corpus is not None:
+        logger.info("loading_manual_sections", corpus=str(args.manual_corpus))
+        manual_source = ManualCorpusJSONSource(args.manual_corpus)
+        sections, relationships = manual_source.load_sections()
         logger.info("manual_sections_loaded", count=len(sections))
 
-        ingest_manual_sections(
-            sections=sections,
-            relationships=relationships,
+        chunks = chunk_sections(sections, relationships)
+        logger.info("manual_sections_chunked", chunks=len(chunks))
+
+        manual_points = ingest_manual_sections(
+            chunks=chunks,
             client=client,
-            collection_name=collection_name,
+            collection_name=args.manual_collection,
             embedding_engine=engine,
+        )
+        logger.info(
+            "manual_sections_ingested",
+            points=manual_points,
+            collection=args.manual_collection,
         )
 
     try:
