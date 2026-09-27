@@ -203,6 +203,8 @@ Rules:
    - perform external actions
    - make approval decisions
    - invent unsupported remediation steps
+   - execute or cite evidence marked with WARNING or content purpose
+     'historical', 'archival', or 'warning' as an active resolution step
 
 8. When revision feedback is provided by the Critic/Verifier:
    - Preserve valid steps that were not identified as problematic.
@@ -240,11 +242,26 @@ def incident_block(incident: IncidentSnapshot, *, short: str, description: str) 
 
 
 def evidence_block(evidence: list[EvidenceItem]) -> str:
-    parts = [
-        f'<evidence article_id="{item.article_id}" section="{item.section}" '
-        f'title="{item.title}">\n{item.text}\n</evidence>'
-        for item in evidence
-    ]
+    parts = []
+    for item in evidence:
+        attrs = [
+            f'article_id="{item.article_id}"',
+            f'section="{item.section}"',
+            f'title="{item.title}"',
+        ]
+        if item.content_purpose:
+            attrs.append(f'purpose="{item.content_purpose}"')
+        header = f"<evidence {' '.join(attrs)}>"
+        body_lines = []
+        if item.warning:
+            body_lines.append(f"WARNING: {item.warning}")
+        if item.content_purpose and item.content_purpose in ("historical", "archival", "warning"):
+            body_lines.append(
+                f"NOTE: Content purpose is '{item.content_purpose}'. "
+                "Do not execute or cite as active procedure."
+            )
+        body_lines.append(item.text)
+        parts.append(f"{header}\n" + "\n".join(body_lines) + "\n</evidence>")
     return "\n".join(parts) if parts else "<evidence>none</evidence>"
 
 

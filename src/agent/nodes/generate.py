@@ -122,7 +122,12 @@ def generate(state: AgentState, deps: AgentDependencies) -> dict[str, Any]:
             prompt=prompt,
             schema=GenerateOutput,
         )
-        allowed = {item.article_id for item in evidence}
+        allowed = {
+            item.article_id
+            for item in evidence
+            if item.content_purpose not in ("historical", "archival", "warning")
+            and not item.warning
+        }
         steps = [
             DraftStep(text=s.text, article_id=s.article_id, section=s.section)
             for s in answer.steps
