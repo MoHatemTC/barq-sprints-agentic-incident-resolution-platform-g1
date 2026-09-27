@@ -86,13 +86,21 @@ def _blocked_gate(state: AgentState) -> GateResult | None:
 
 def _search_finding(retrieval: RetrievalResult, classification: str | None) -> str:
     """What was searched and what was found, in the manual's run-log wording."""
+    best = max(retrieval.hits, key=lambda h: h.relevance, default=None)
     if retrieval.category_filter is None:
+        if best is not None:
+            found = (
+                f"Searched published manual articles. Best match {best.article_number} "
+                f"v{best.version} ({best.title}) scored {best.relevance:.2f}"
+            )
+            if retrieval.sufficient:
+                return f"{found}, but none of the retrieved articles describes this fault."
+            return f"{found} against a threshold of {retrieval.threshold:.2f}."
         return (
             f"The classification '{classification or 'unknown'}' has no knowledge-base "
             "category, so no search was run."
         )
     scope = retrieval.category_filter.replace(",", ", ")
-    best = max(retrieval.hits, key=lambda h: h.relevance, default=None)
     if best is None:
         return f"Searched published {scope} articles: nothing matched."
     found = (

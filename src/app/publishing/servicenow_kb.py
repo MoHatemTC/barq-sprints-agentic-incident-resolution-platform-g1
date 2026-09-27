@@ -303,25 +303,26 @@ class ServiceNowKBClient:
                 f"Refusing to query with prefix={prefix!r}: only 'KB' plus up to "
                 "three digits is allowed (e.g. 'KB1' for the human-captured range)."
             )
-        query = f"{U_SOURCE_ID_FIELD}STARTSWITH{prefix}"
-        if kb_sys_id:
-            query = f"kb_knowledge_base={kb_sys_id}^{query}"
+        query = f"kb_knowledge_base={kb_sys_id}" if kb_sys_id else ""
 
         found: list[str] = []
         offset = 0
         while True:
-            params = {
-                "sysparm_fields": U_SOURCE_ID_FIELD,
+            params: dict[str, str] = {
+                "sysparm_fields": f"sys_id,{U_SOURCE_ID_FIELD}",
                 "sysparm_limit": "1000",
                 "sysparm_offset": str(offset),
-                "sysparm_query": query,
             }
+            if query:
+                params["sysparm_query"] = query
+
             res = await self.request("GET", f"/api/now/table/{KB_TABLE}", params=params)
             records = res.json().get("result", [])
             found.extend(
                 str(r.get(U_SOURCE_ID_FIELD))
                 for r in records
                 if r.get(U_SOURCE_ID_FIELD)
+                and str(r.get(U_SOURCE_ID_FIELD)).startswith(prefix)
                 and _SOURCE_ID_ROW_PATTERN.fullmatch(str(r.get(U_SOURCE_ID_FIELD)))
             )
             if len(records) < 1000:
