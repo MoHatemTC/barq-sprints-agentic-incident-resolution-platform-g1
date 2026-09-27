@@ -138,7 +138,9 @@ def test_kb_publisher_username_without_password_is_an_error() -> None:
     from tests.helpers import mock_settings
 
     with pytest.raises(ValueError, match="SERVICENOW_KB_PASSWORD"):
-        kb_publisher_settings(mock_settings(servicenow_kb_username="kb_publisher"))
+        kb_publisher_settings(
+            mock_settings(servicenow_kb_username="kb_publisher", servicenow_kb_password=None)
+        )
     with pytest.raises(ValueError, match="SERVICENOW_KB_PASSWORD"):
         kb_publisher_settings(
             mock_settings(servicenow_kb_username="kb_publisher", servicenow_kb_password="")
