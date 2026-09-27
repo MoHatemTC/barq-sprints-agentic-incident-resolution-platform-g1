@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 PDF = REPO_ROOT / "data" / "barq-system-kb.pdf"
 SECTIONS = REPO_ROOT / "data" / "corpus" / "manual_sections.json"
 COVERAGE = REPO_ROOT / "data" / "corpus" / "manual_coverage.json"
@@ -42,7 +42,9 @@ def _eval_labels() -> set[str]:
 def test_pdf_source_hash_is_recorded_and_current() -> None:
     source = json.loads(SOURCE.read_text())
     assert source["pdf_path"] == "data/barq-system-kb.pdf"
-    assert source["pdf_sha256"] == pytest.importorskip("hashlib").sha256(PDF.read_bytes()).hexdigest()
+    assert (
+        source["pdf_sha256"] == pytest.importorskip("hashlib").sha256(PDF.read_bytes()).hexdigest()
+    )
 
 
 def test_every_numbered_eval_label_is_covered() -> None:
@@ -50,11 +52,7 @@ def test_every_numbered_eval_label_is_covered() -> None:
 
     coverage = json.loads(COVERAGE.read_text())
     covered = set(coverage["covered_section_numbers"])
-    numbered = {
-        label
-        for label in _eval_labels()
-        if re.match(r"^\d+(\.\d+)?", label)
-    }
+    numbered = {label for label in _eval_labels() if re.match(r"^\d+(\.\d+)?", label)}
     missing = {label for label in numbered if label.split(" ")[0] not in covered}
     assert not missing, f"eval-referenced sections missing from extraction: {sorted(missing)}"
 
@@ -80,7 +78,11 @@ def test_no_duplicate_section_ids(tmp_path: Path) -> None:
 
 
 def test_ocr_confidence_survives_chunk_serialization() -> None:
-    from app.models.manual_section import ManualSectionChunk, ManualSectionPayload, ManualSectionType
+    from app.models.manual_section import (
+        ManualSectionChunk,
+        ManualSectionPayload,
+        ManualSectionType,
+    )
 
     chunk = ManualSectionChunk(
         chunk_id="section-2.1#c0",

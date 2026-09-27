@@ -7,7 +7,9 @@ FORM_FEED = "\f"
 _PAGE_SEPARATOR = f"\n{FORM_FEED}\n"
 
 # Number component: dotted numeric ("3.4", "10.1.2")
-_NUMBER_PATTERN = r"(?:(?:\d+\.)+\d*|\d+|[A-Z](?:\.\d+)*)"
+_NUMBER_PATTERN = r"(?:(?:\d{1,2}\.)+\d{1,2}|\d{1,2}|[A-Z](?:\.\d+)*)"
+# ≤2 digits per component: the manual numbers sections 1–20.x. Three-digit
+# numbers ("202") are printed page numbers / marginalia, not sections.
 
 SECTION_HEADING_RE = re.compile(
     r"^[ \t]*"  # leading whitespace on the line
