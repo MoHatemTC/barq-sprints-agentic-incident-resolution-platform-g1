@@ -132,6 +132,7 @@ data/structured-io/*
 !data/corpus/manual_sections.json
 !data/corpus/manual_coverage.json
 !data/corpus/manual_source.json
+!data/corpus/manual_kb_manifest.json
 !data/barq-system-kb.pdf
 
 src/app/ignored_folder
