@@ -110,6 +110,20 @@ def _search_finding(retrieval: RetrievalResult, classification: str | None) -> s
     scope = retrieval.category_filter.replace(",", ", ")
     best = max(retrieval.hits, key=lambda h: h.relevance, default=None)
     if best is None:
+        # "Nothing matched" and "nothing was allowed to match" are different
+        # facts. A clearance ceiling below the corpus hides articles that do
+        # describe the fault, and reporting that as an empty search tells the
+        # operator to go write a new article for a fault the KB already covers.
+        from agent.config import get_agent_settings
+
+        ceiling = get_agent_settings().agent_max_security_level
+        if ceiling != "restricted":
+            return (
+                f"Searched published {scope} articles up to the '{ceiling}' clearance "
+                "ceiling: nothing in scope matched. Articles above that ceiling are "
+                "excluded from this search, so an empty result does not mean the "
+                "knowledge base lacks an answer."
+            )
         return f"Searched published {scope} articles: nothing matched."
     found = (
         f"Searched published {scope} articles. Best match {best.article_number} "
