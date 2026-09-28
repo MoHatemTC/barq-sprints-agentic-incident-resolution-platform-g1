@@ -11,11 +11,12 @@ sends the event automatically, and the script's reset would create a second
 execution and replace the first suggestion. The script refuses that instance.
 
 The shared EC2 API at `http://51.21.182.56:8000` is a separate deployment from
-this local demo. It follows `main`, so Sprint 3.4's pending-approval endpoint and
-the combined changes in PR #158 are unavailable there until that PR receives a
-current approval, merges, and deploys. A `/ready` response from EC2 does not
-prove those routes or the full workflow work. Do not present this local run as
-a successful shared EC2 demo.
+this local demo. PRs #158 and #174 merged on 2026-09-28. On that date the shared
+API returned `/ready` and exposed 18 OpenAPI paths, including the pending
+approval and suggestion-decision routes. Those checks prove route availability,
+not an end-to-end shared run. Before presenting EC2, run the shared incident
+flow and read back the ServiceNow fields, approval row, knowledge article and
+Qdrant hit. The local PDI script below is evidence for the local stack only.
 
 The demo script is `scripts/demo_s34_hitl_live.py`. It exercises both halves of
 the platform and prints `PASS`/`FAIL` per phase, exiting non-zero if anything
@@ -70,10 +71,13 @@ uv run uvicorn app.main:app --host 127.0.0.1 --port 8099
 ```bash
 . scripts/load_local_demo_env.sh
 uv run celery -A app.workers.celery_app worker \
-  --queues=barq:incident:events --loglevel=INFO --pool=threads --concurrency=1
+  --beat --queues=barq:incident:events,barq:incident:maintenance \
+  --loglevel=INFO --pool=threads --concurrency=1
 ```
 
-**`--pool=threads` is required on macOS.** With the default prefork pool every
+**`--pool=threads` is required on macOS.** `--beat` starts the scheduled crash
+reaper, and the worker must consume its maintenance queue. With the default
+prefork pool every
 task dies instantly with
 `ValueError: not enough values to unpack (expected 3, got 0)`. That is not an
 application bug: `celery/app/trace.py` populates a module-level `_localized`

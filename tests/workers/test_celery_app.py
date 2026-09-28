@@ -9,6 +9,9 @@ metatest enforces that mechanically.
 from __future__ import annotations
 
 import inspect
+from pathlib import Path
+
+import yaml
 
 from app.workers.celery_app import build_broker_url, create_celery_app
 from tests.helpers import mock_settings
@@ -32,6 +35,23 @@ class TestBrokerUrl:
 
 
 class TestCeleryTopology:
+    def test_compose_starts_scheduler_and_consumes_its_queue(self) -> None:
+        """The scheduled reaper must actually run in the deployed worker.
+
+        A beat_schedule entry alone did not run after #174: Compose started only
+        a worker, and it consumed only the incident queue. Check the deployed
+        command and the registered schedule together so that failure recurs in CI.
+        """
+        compose = yaml.safe_load(Path("docker-compose.yml").read_text())
+        command = compose["services"]["celery-worker"]["command"]
+        app = create_celery_app(mock_settings())
+        schedule = app.conf.beat_schedule["reap-stale-executions"]
+
+        assert "--beat" in command.split()
+        assert "barq:incident:maintenance" in command
+        assert schedule["task"] == "app.workers.tasks.reap_stale_executions"
+        assert app.conf.task_routes[schedule["task"]]["queue"] == "barq:incident:maintenance"
+
     def test_topology_values_come_from_settings(self) -> None:
         settings = mock_settings(
             worker_prefetch=1,
