@@ -57,8 +57,12 @@ temporarily show `pending` and empty AI fields.
   and `mypy src` passed.
 - Default pytest: 1,320 passed, 30 skipped, 20 integration tests deselected.
   The separate live-service integration run passed 20/20, and the isolated DB
-  suite passed 26/26. Crash recovery, interrupt/resume, guardrails, and tool
-  permissions passed 163/163 in a focused run.
+  suite passed 26/26. The 30 default skips were then run explicitly: 18
+  database cases passed with the isolated DB URL, 11 ServiceNow integration
+  cases passed against the local `dev434590` PDI, and the real-PDF extraction
+  case passed using the reference manual at its expected test path. Crash
+  recovery, interrupt/resume, guardrails, and tool permissions passed 163/163
+  in a focused run.
 - A real Qdrant scratch collection held 45 corpus points plus a simulated
   `KB1001` human-captured point. Running `seed_qdrant.py` again left all 46
   points and the captured point's text intact.
