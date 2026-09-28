@@ -59,10 +59,11 @@ and capture of a human resolution back into the knowledge base and the vector st
 Requirements: FR-16 → FR-18, plus FR-12 · A-12, A-13, A-14
 
 Status checked on 2026-09-28: Airtable marks all five Sprint 3 tasks `Done`.
-S3.1, S3.2, S3.3 and S3.5 are merged on `main`; S3.4 is implemented and live-tested
-in [PR #158](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pull/158),
-which still needs a current approval and merge. S3.3 includes input screening,
-redaction and a real `safety_check`; it is no longer a pass-through.
+All five have merged code on `main`, including S3.4 in
+[PR #158](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pull/158).
+S3.3 includes input screening, redaction and a real `safety_check`; it is no
+longer a pass-through. The merged code and Airtable status do not by themselves
+prove every shared demo path has passed live verification.
 
 Definition of done: a live incident runs the full graph to a cited draft; a high-risk
 incident stops at the risk node; killing the process mid-run and retrying resumes from
@@ -82,7 +83,7 @@ GitHub Actions building a deployable image on every pull request.
 
 Implemented ahead of Sprint 4: the tool registry with permission classes and
 server-side allowlist (S3.2), LangGraph interrupt and resume for high-risk actions and
-below-threshold confidence (S3.4, pending merge in #158), input and output guardrails
+below-threshold confidence (S3.4, merged in #158), input and output guardrails
 (S3.3), and Langfuse tracing with per-node spans, retrieval, tool calls, generations,
 token usage, latency and cost (S2.5, S3.1).
 

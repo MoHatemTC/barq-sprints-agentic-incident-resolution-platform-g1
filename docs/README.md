@@ -52,10 +52,9 @@ is in `sprint-2/s2.4-hybrid-retrieval/`; S2.1's is in `sprint-2/sprint-2.1/`, wh
 does not follow the `sN.M-name/` convention. The remaining Sprint 2 design records
 are the flat `docs/sprint2_*.md` files listed above.
 
-> Note: [ROADMAP.md](ROADMAP.md) places hybrid retrieval and the state machine in
-> Sprint 3. Both were pulled forward into Sprint 2 as S2.4 and S2.5, so the task
-> table above is authoritative for sprint assignment and the roadmap remains the
-> reference for overall PRD scope.
+> Note: The PRD originally placed hybrid retrieval and the state machine in
+> Sprint 3. Both were pulled forward into Sprint 2 as S2.4 and S2.5. The
+> [roadmap](ROADMAP.md) records that change; Airtable holds task status.
 
 ## Sprint 3 — Retrieval & Reasoning
 
