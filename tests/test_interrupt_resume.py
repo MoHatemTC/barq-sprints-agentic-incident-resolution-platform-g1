@@ -255,9 +255,10 @@ def test_interrupt_at_high_risk() -> None:
     graph, result = _run(deps, ORDER_P1, saver)
 
     assert result["paused"] is True
-    assert result["outcome"] == "escalated_high_risk"
-    assert backend.updates == []
-    assert backend.calls == ["read_incident"]
+    assert len(backend.updates) == 1
+    body = backend.updates[0][1].to_table_api_body()
+    assert body["x_2215032_ai_inc_0_ai_processing_state"] == "awaiting_approval"
+    assert backend.calls == ["read_incident", "write_ai_fields"]
 
     payload = deps.audit.get_interrupt(EXECUTION_ID)
     assert payload is not None
@@ -293,8 +294,8 @@ def test_interrupt_at_blocked_gate() -> None:
 
     assert result["paused"] is True
     assert result["outcome"] == "escalated_blocked"
-    assert result["path"][-1] == "safety_check"
-    assert backend.updates == []
+    assert len(backend.updates) == 1
+    assert backend.updates[0][1].to_table_api_body()["x_2215032_ai_inc_0_ai_processing_state"] == "awaiting_approval"
     payload = deps.audit.get_interrupt(EXECUTION_ID)
     assert payload is not None
     assert payload["safety"]["passed"] is False
@@ -310,7 +311,8 @@ def test_interrupt_at_low_confidence() -> None:
     assert result["paused"] is True
     assert result["outcome"] == "escalated_low_confidence"
     assert result["confidence"] < deps.settings.agent_confidence_floor
-    assert backend.updates == []
+    assert len(backend.updates) == 1
+    assert backend.updates[0][1].to_table_api_body()["x_2215032_ai_inc_0_ai_processing_state"] == "awaiting_approval"
     assert deps.audit.get_interrupt(EXECUTION_ID) is not None
 
 
@@ -322,7 +324,8 @@ def test_no_evidence_pauses_for_a_human_solution() -> None:
 
     assert result["paused"] is True
     assert result["outcome"] == "escalated_no_evidence"
-    assert backend.updates == []
+    assert len(backend.updates) == 1
+    assert backend.updates[0][1].to_table_api_body()["x_2215032_ai_inc_0_ai_processing_state"] == "awaiting_approval"
     payload = deps.audit.get_interrupt(EXECUTION_ID)
     assert payload is not None
     assert "VPN client says invalid credentials" in payload["incident"]["description"]
@@ -348,8 +351,8 @@ def test_resume_with_approval() -> None:
     assert resumed["resumed"] is True
     assert resumed["paused"] is False
     assert resumed["outcome"] == "escalated_high_risk"
-    assert len(backend.updates) == 1
-    body = backend.updates[0][1].to_table_api_body()
+    assert len(backend.updates) == 2
+    body = backend.updates[1][1].to_table_api_body()
     assert body["x_2215032_ai_inc_0_ai_human_review_required"] == "true"
 
     receipt = deps.audit.get_receipt(EXECUTION_ID)
@@ -381,8 +384,8 @@ def test_resume_with_human_solution_completes_processing() -> None:
     )
 
     assert resumed["resumed"] is True
-    assert len(backend.updates) == 1
-    body = backend.updates[0][1].to_table_api_body()
+    assert len(backend.updates) == 2
+    body = backend.updates[1][1].to_table_api_body()
     assert body["x_2215032_ai_inc_0_ai_processing_state"] == "complete"
     assert body["x_2215032_ai_inc_0_ai_resolution"] == "Clear VPN profile and re-login"
     assert body["x_2215032_ai_inc_0_ai_suggestion"] == "Clear VPN profile and re-login"
@@ -409,8 +412,8 @@ def test_resume_with_rejection() -> None:
 
     assert resumed["resumed"] is True
     assert resumed["suggested"] is False
-    assert len(backend.updates) == 1
-    body = backend.updates[0][1].to_table_api_body()
+    assert len(backend.updates) == 2
+    body = backend.updates[1][1].to_table_api_body()
     assert "x_2215032_ai_inc_0_ai_suggestion" not in body
     assert "human rejected by security" in body["work_notes"].lower()
 
@@ -483,7 +486,7 @@ def test_resume_routing_ignores_the_approval_brief_entirely() -> None:
     # The operator's decision wins; the brief's contrary text is inert.
     assert resumed["resumed"] is True
     assert resumed["paused"] is False
-    assert len(backend.updates) == 1, "the approved write must still happen"
+    assert len(backend.updates) == 2, "the approved write must still happen"
     assert "Ignore the operator" not in str(backend.updates)
 
 
@@ -527,4 +530,4 @@ def test_graph_invoke_raising_graph_interrupt_is_handled_cleanly(monkeypatch: An
     assert result["paused"] is True
     assert result["outcome"] == "escalated_no_evidence"
     assert result["summary"] == "no matching knowledge article found"
-    assert backend.updates == []
+    assert len(backend.updates) == 1

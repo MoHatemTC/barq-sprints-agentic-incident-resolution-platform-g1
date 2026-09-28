@@ -89,8 +89,8 @@ class TestRoutes:
         assert retriever.calls == []
         # classify, then the Approval Brief Agent at the interrupt — no diagnose/generate.
         assert llm.purposes() == ["injection_classifier", "classify", "approval_brief"]
-        assert backend.updates == []
-        assert backend.calls == ["read_incident"]
+        assert len(backend.updates) == 1
+        assert backend.calls == ["read_incident", "write_ai_fields"]
 
     def test_no_evidence_escalates_after_retrieve(self) -> None:
         llm = FakeLLM(vpn_answers() | label("hardware"))
@@ -107,7 +107,7 @@ class TestRoutes:
         assert result["paused"] is True
         assert result["outcome"] == "escalated_no_evidence"
         assert llm.purposes() == ["injection_classifier", "classify", "approval_brief"]
-        assert backend.updates == []
+        assert len(backend.updates) == 1
 
     def test_w03_leave_request_is_escalated(self) -> None:
         # Task 0 test set: "no knowledge-base article covers this — it must go to a human".
@@ -140,7 +140,7 @@ class TestRoutes:
         assert result["paused"] is True
         assert result["path"] == FULL_PATH[:-1]
         assert result["outcome"] == "escalated_low_confidence"
-        assert backend.updates == []
+        assert len(backend.updates) == 1
 
     def test_ineligible_goes_straight_to_act_and_writes_nothing(self) -> None:
         backend = FakeServiceNow()
