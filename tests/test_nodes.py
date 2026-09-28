@@ -7,8 +7,9 @@ no graph, no model, no network, no database.
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -971,6 +972,55 @@ class TestAct:
         }
         output = act(state, make_deps())["output"]
         assert expected in output["work_note"]
+
+    def test_empty_search_names_the_clearance_ceiling(self) -> None:
+        """An empty result under a lowered ceiling must not read as an empty KB.
+
+        5 of the 11 corpus articles are ``restricted``. With the ceiling at
+        ``internal`` the article that answers the incident is filtered out
+        before the agent sees it, and a plain "nothing matched" tells the
+        operator to go write an article the knowledge base already has.
+        """
+        state = base_state(incident=snapshot(LEAVE), classification=classification("other"))
+        state["eligibility"] = {"eligible": True, "reasons": []}
+        state |= determine_risk(state, make_deps())
+        state["retrieval"] = {
+            "query": "q",
+            "best_relevance": 0.0,
+            "threshold": 0.55,
+            "sufficient": False,
+            "latency_ms": 0.0,
+            "category_filter": "hardware",
+            "hits": [],
+        }
+        with patch(
+            "agent.config.get_agent_settings",
+            return_value=SimpleNamespace(agent_max_security_level="internal"),
+        ):
+            note = act(state, make_deps())["output"]["work_note"]
+        assert "'internal' clearance ceiling" in note
+        assert "does not mean the knowledge base lacks an answer" in note
+
+    def test_empty_search_at_full_clearance_stays_plain(self) -> None:
+        state = base_state(incident=snapshot(LEAVE), classification=classification("other"))
+        state["eligibility"] = {"eligible": True, "reasons": []}
+        state |= determine_risk(state, make_deps())
+        state["retrieval"] = {
+            "query": "q",
+            "best_relevance": 0.0,
+            "threshold": 0.55,
+            "sufficient": False,
+            "latency_ms": 0.0,
+            "category_filter": "hardware",
+            "hits": [],
+        }
+        with patch(
+            "agent.config.get_agent_settings",
+            return_value=SimpleNamespace(agent_max_security_level="restricted"),
+        ):
+            note = act(state, make_deps())["output"]["work_note"]
+        assert "Searched published hardware articles: nothing matched." in note
+        assert "clearance ceiling" not in note
 
     def test_elevated_risk_suggestion_awaits_approval(self) -> None:
         state = reasoned_state(incident=snapshot(MFA), classification=classification("access"))

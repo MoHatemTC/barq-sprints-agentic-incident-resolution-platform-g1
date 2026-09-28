@@ -80,7 +80,7 @@ class TestSettings:
         assert settings.agent_confidence_floor == 0.45
         assert settings.agent_risk_priorities == [1]
         assert settings.agent_supported_categories == ["network", "software", "hardware", "inquiry"]
-        assert settings.agent_max_security_level == "internal"
+        assert settings.agent_max_security_level == "restricted"
         assert settings.agent_llm_model == "gemini/gemini-3.5-flash"
         assert settings.litellm_base_url == "https://management.sprints.ai/litellm"
         assert settings.agent_graph_backend == "langgraph"

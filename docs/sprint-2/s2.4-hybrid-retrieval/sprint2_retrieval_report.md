@@ -8,7 +8,7 @@ Generated from `eval/ablation_results.json` -- seed `42`, collection `incident_k
 > the `internal` default is now `DEFAULT_MAX_SECURITY_LEVEL` in
 > `src/app/retrieval/filters.py`. Read `hybrid_retrieval_spec.md` for current behaviour.
 
-**Security levels, both reported on purpose:** this ablation ran at `restricted`, the level the eval set needs so restricted articles (KB0010, MIR-2026-03) are reachable at all. The application itself defaults to `internal` (`AGENT_MAX_SECURITY_LEVEL` in `.env.example`, enforced by `retrieve_knowledge`). The two differ by design: widen the app's level only per-incident, never to make this table's numbers look better.
+**Security levels, both reported on purpose:** this ablation ran at `restricted`, the level the eval set needs so restricted articles (KB0010, MIR-2026-03) are reachable at all. The application defaulted to `internal` (`AGENT_MAX_SECURITY_LEVEL` in `.env.example`, enforced by `retrieve_knowledge`), so this table described a configuration the app did not run: at `internal` the expected article was found for 14 of 23 answerable cases, against 22 of 23 at `restricted`. The application default is now `restricted`, which makes these numbers describe the running system. Set it back to `internal` to restore the S1.4 #45 confidentiality posture and accept the extra escalations.
 
 ## Summary
 

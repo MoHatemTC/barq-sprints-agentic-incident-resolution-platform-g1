@@ -104,10 +104,15 @@ class AgentSettings(BaseSettings):
     )
 
     agent_max_security_level: Literal["public", "internal", "restricted"] = Field(
-        default="internal",
-        description="Highest article audience the agent may quote. The draft lands in a "
-        "field every support user can read, so restricted articles are excluded unless "
-        "this is raised deliberately (S1.4 #45 default).",
+        default="restricted",
+        description="Highest article audience the agent may quote. This was 'internal' "
+        "(S1.4 #45) on the grounds that the draft lands in a field every support user "
+        "can read. That default hid 5 of the 11 corpus articles: the correct article "
+        "was retrieved and scored 0.80-0.91, then filtered out before the agent saw "
+        "it, and the incident escalated as 'no evidence' when evidence existed. "
+        "Measured on the eval set, 'internal' found the expected article for 14 of 23 "
+        "answerable cases and 'restricted' for 22 of 23. Lower this to 'internal' to "
+        "restore the confidentiality posture and accept those escalations.",
     )
 
     # -- manual §11.7: safety ------------------------------------------------------
