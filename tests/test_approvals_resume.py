@@ -78,7 +78,7 @@ def _parked_execution(store: MemoryGraphAuditStore, backend: FakeServiceNow):
         attempt=1,
     )
     assert result["paused"] is True
-    assert backend.updates == []
+    assert len(backend.updates) == 1
     return runtime, deps
 
 
@@ -131,7 +131,7 @@ async def test_decide_resumes_the_parked_execution(app_with_db) -> None:
     assert resume.call_count == 1
     assert resume.call_args.kwargs["execution_id"] == EXECUTION_ID
     assert resume.call_args.kwargs["decision"]["decision"] == "approved"
-    assert len(backend.updates) == 1
+    assert len(backend.updates) == 2
 
     # The approval row is recorded against that execution.
     mock_session.add.assert_called_once()
@@ -196,7 +196,7 @@ async def test_pending_endpoint_returns_the_brief_before_a_decision(app_with_db)
     assert body["brief"]["judgment_required"]
     assert body["facts"]["outcome"] == "escalated_high_risk"
     assert body["facts"]["incident"]["number"] == ORDER_P1["number"]
-    assert backend.updates == []
+    assert len(backend.updates) == 1
 
 
 class _ScalarResult:

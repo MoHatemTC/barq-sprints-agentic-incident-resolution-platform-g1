@@ -13,6 +13,7 @@ import asyncio
 from datetime import UTC, datetime
 from typing import Any
 
+import structlog
 from langgraph.types import interrupt
 
 from agent.approval_brief import render_brief
@@ -42,6 +43,7 @@ from app.models.execution_log import (
 from app.models.incident import AIProcessingState, IncidentUpdatePayload
 
 PREFIX = "AI Suggested Response"
+logger = structlog.getLogger(__name__)
 
 #: S1.1 field model: ``complete`` means an accepted resolution was applied and needs
 #: ``ai_resolution`` in the same write; ``awaiting_approval`` "pauses automation".
@@ -341,6 +343,54 @@ def _apply_human_decision(output: FinalOutput, decision: dict[str, Any]) -> Fina
     )
 
 
+def _safe_async_run(coro: Any) -> Any:
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop and loop.is_running():
+        import concurrent.futures
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            return pool.submit(asyncio.run, coro).result()
+    return asyncio.run(coro)
+
+
+def _write_escalation_to_servicenow(
+    state: AgentState,
+    deps: AgentDependencies,
+    output: FinalOutput,
+) -> None:
+    """Publish the escalation state and note to ServiceNow before pausing for human approval."""
+    if not deps.settings.agent_write_back_enabled:
+        return
+    incident = IncidentSnapshot.model_validate(state["incident"])
+    started = _parse_ts(state.get("started_at"))
+    fields: dict[str, Any] = {
+        "work_notes": output.work_note,
+        "ai_processing_state": AIProcessingState.AWAITING_APPROVAL,
+        "ai_classification": output.classification,
+        "ai_confidence": output.confidence,
+        "ai_model_name": deps.llm.model_name if state.get("classification") else None,
+        "ai_agent_version": deps.settings.agent_version,
+        "ai_human_review_required": True,
+    }
+    if started is not None:
+        fields["ai_processing_start"] = started
+    payload = IncidentUpdatePayload(**fields)
+    try:
+        _safe_async_run(
+            deps.tools.invoke(
+                "write_ai_fields",
+                context=_tool_context(state),
+                arguments={"sys_id": incident.sys_id, "payload": payload},
+            )
+        )
+    except Exception as exc:
+        logger.warning("pre_interrupt_servicenow_write_failed", error=str(exc))
+
+
 def act(state: AgentState, deps: AgentDependencies) -> dict[str, Any]:
     execution_id = str(state.get("execution_id") or "")
     receipt = deps.audit.get_receipt(execution_id) if execution_id else None
@@ -379,6 +429,8 @@ def act(state: AgentState, deps: AgentDependencies) -> dict[str, Any]:
     if outcome in INTERRUPT_OUTCOMES:
         payload = interrupt_payload(state, output, outcome)
         payload["brief"] = render_brief(payload, deps)
+        if not deps.audit.get_interrupt(execution_id):
+            _write_escalation_to_servicenow(state, deps, output)
         deps.audit.save_interrupt(execution_id, payload)
         decision = _request_human_decision(payload)
         output = _apply_human_decision(output, decision)
