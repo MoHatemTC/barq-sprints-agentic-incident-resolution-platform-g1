@@ -247,11 +247,19 @@ to ELEVATED, because a tier that cannot be read cannot be ruled Tier 1 (§11.1).
   `sprint2_tracing_and_agent.md` §4).
 - **"Ask" outcome:** the W0.3 set expects vague reports to be answered with a request
   for detail. Today they escalate as low confidence.
-- **Failed executions on the incident:** when the worker dead-letters an event
-  (retries exhausted or a terminal error), nothing is written back, so the incident stays
-  `pending`. Manual §11.4 expects "AI Status shows failed, with a reason". The fix is a
-  failure write-back (`ai_processing_state=failed` + `ai_failure_reason`) in the worker's
-  failure path. That path is S2.3's code, so the change needs its owner.
+- **Failed executions on the incident:** the final Celery failure hook now writes
+  `ai_processing_state=failed`, `ai_failure_reason`, and `ai_processing_end`
+  together through the non-admin ServiceNow integration identity. Intermediate
+  retries leave the incident eligible. A completed, paused, or Human Locked
+  incident is never overwritten. A DLQ replay clears the failed state, reason,
+  and timestamps before re-enqueueing; if ServiceNow refuses that reset, the
+  PostgreSQL execution and DLQ record remain parked. A ServiceNow outage can
+  still prevent the visible failure write; the hook logs that error while
+  preserving the PostgreSQL failure and DLQ record. S1.3 may emit a new
+  `incident.updated` event on a failed transition while its retry count is 1
+  or 2; the worker clears that failed state before running the graph's pending
+  eligibility gate. This cross-service retry interaction has unit coverage but
+  still needs a live shared-instance run before demo sign-off.
 - **Service tiers:** `load` reads the service from `business_service`, and only the
   display value names the tier. Reading with `sysparm_display_value` is a small S1.5
   client change. Without it, the Tier 1 rule relies on priority alone.

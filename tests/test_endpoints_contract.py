@@ -105,6 +105,7 @@ def app():
     mock_repo = MagicMock(spec=WorkerRepo)
     mock_repo.get_event_payload.return_value = {"event_id": "test"}
     mock_repo.find_execution_id.return_value = uuid4()
+    mock_repo.get_retry_state.return_value = {"state": "exhausted"}
     mock_repo.reset_for_replay.return_value = True
     application.state.sync_worker_repo = mock_repo
     application.state.sync_redis = MagicMock()

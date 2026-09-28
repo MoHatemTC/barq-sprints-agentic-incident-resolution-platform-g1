@@ -53,6 +53,7 @@ class Incident(BaseModel):
     )
     ai_human_lock: bool | None = Field(default=None, alias=f"{_SCOPE}_ai_human_lock")
     ai_failure_reason: str | None = Field(default=None, alias=f"{_SCOPE}_ai_failure_reason")
+    ai_retry_count: int | None = Field(default=0, ge=0, alias=f"{_SCOPE}_ai_retry_count")
 
     @model_validator(mode="before")
     @classmethod

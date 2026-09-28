@@ -44,6 +44,10 @@ from app.core.correlation import clear_correlation_id, set_correlation_id
 from app.db.redis.keys import INCIDENT_DLQ_QUEUE
 from app.workers.celery_app import celery_app
 from app.workers.db import WorkerRepo, build_worker_repo
+from app.workers.incident_state import (
+    prepare_servicenow_retry_sync,
+    write_final_failure_best_effort,
+)
 from app.workers.producer import CORRELATION_HEADER
 from app.workers.reaper import reap_stale_executions as reap_stale
 from app.workers.retry_policy import (
@@ -182,6 +186,7 @@ class IncidentTask(Task):
         execution_id = str((args or (None, None))[1] or "")
         attempt = int(getattr(self.request, "retries", 0)) + 1
         record_dead_letter(self.repo, self.dlq_redis, payload, execution_id, exc, attempt)
+        write_final_failure_best_effort(self.settings, payload, execution_id, exc, attempt)
 
 
 def _failure_type(exc: BaseException) -> str:
@@ -199,6 +204,7 @@ def _run_incident(
     soft_time_limit_seconds: int = 120,
     correlation_id: str | None = None,
     graph_backend: str = "stub",
+    settings: Settings | None = None,
 ) -> dict[str, Any]:
     """One delivery attempt. ``task`` is the bound Celery task (or a fake in
     tests) providing ``request.retries`` and ``retry()``."""
@@ -223,6 +229,16 @@ def _run_incident(
     repo.ensure_retry_state(execution_uuid, max_attempts=cfg.max_retries)
 
     try:
+        if graph_backend == "langgraph" and settings is not None:
+            # S1.3 emits a fresh event on a failed transition. Its incident is
+            # still marked failed; clear that state before the graph's pending
+            # eligibility gate runs. Celery's own retry attempts do not do this.
+            try:
+                prepare_servicenow_retry_sync(settings, payload)
+            except Exception as exc:
+                from agent.servicenow import translate_error
+
+                raise translate_error(exc) from exc
         result = invoke_graph(
             payload,
             backend=graph_backend,
@@ -410,6 +426,7 @@ def build_incident_task(
                     soft_time_limit_seconds=settings.worker_soft_time_limit,
                     correlation_id=correlation_id,
                     graph_backend=graph_backend,
+                    settings=settings,
                 )
                 span.update(output=result)
                 return result
