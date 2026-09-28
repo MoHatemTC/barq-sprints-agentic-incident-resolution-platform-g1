@@ -151,9 +151,22 @@ services:
     # SIGTERM → warm shutdown finishes the in-flight task; grace period must
     # exceed the worst-case remaining task time (see worker_soft_time_limit).
     stop_grace_period: 30s
+    # --beat is required, not optional: `beat_schedule` on its own schedules
+    # nothing, because beat is a separate process from the worker. Without the
+    # flag the crash reaper was registered and never ran — merged as part of
+    # #174 and caught by watching the deployed worker, not by any test, because
+    # the tests exercise the sweep function directly rather than the scheduler.
+    #
+    # The worker must also *consume* the maintenance queue: beat only publishes
+    # the sweep there, and an unconsumed queue would leave it to expire unheard.
+    #
+    # Embedded beat is the right shape here because there is exactly one worker
+    # container. If this is ever scaled to more than one replica, beat must move
+    # to its own single-instance service, or every replica runs its own sweep.
     command: >
       celery -A app.workers.celery_app worker
-      --queues=${BARQ_EVENTS_QUEUE:-barq:incident:events}
+      --beat
+      --queues=${BARQ_EVENTS_QUEUE:-barq:incident:events},${BARQ_MAINTENANCE_QUEUE:-barq:incident:maintenance}
       --concurrency=${WORKER_CONCURRENCY:-4}
       --loglevel=INFO
     env_file:
