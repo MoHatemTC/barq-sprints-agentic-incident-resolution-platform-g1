@@ -25,6 +25,12 @@ from agent.prompts import (
 from agent.state import IncidentSnapshot
 from app.models.knowledge import Article, SecurityLevel, WorkflowState
 
+#: The categories the seeded corpus and the retriever's category filter actually
+#: use. A captured article outside this set is reachable only via the wide
+#: unfiltered pass, so the category is worth grounding in a real field rather than
+#: in a model guess.
+CORPUS_CATEGORIES = frozenset({"hardware", "inquiry", "network", "software"})
+
 #: Tokens below this length carry too little content to judge faithfulness on.
 MIN_TOKEN_LENGTH = 4
 
@@ -152,7 +158,23 @@ def compose_article(
         title = f"Resolution for {incident.number}"
 
     short_description = answer.short_description.strip() or title
-    category = _slugify(answer.category) or _slugify(incident.category) or "other"
+    # Ground the category in the incident's own ServiceNow field when that field
+    # names a category the corpus actually uses, and only fall back to the model's
+    # guess otherwise.
+    #
+    # The model was trusted unconditionally, and it guessed: a staff-directory
+    # title correction was captured as "software" because the fix was performed
+    # with a console (dev407364, 2026-09-28, KB1011). The incident's category was
+    # "inquiry". Retrieval only found the article afterwards because the wide pass
+    # ignores category, so the wrong label was invisible until it was inspected —
+    # and an article the retriever cannot reach by category is one the category
+    # filter can never promote.
+    incident_category = _slugify(incident.category)
+    category = (
+        incident_category
+        if incident_category in CORPUS_CATEGORIES
+        else _slugify(answer.category) or incident_category or "other"
+    )
     service = _slugify(incident.service) or "general"
 
     return Article(
