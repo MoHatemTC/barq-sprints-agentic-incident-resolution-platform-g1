@@ -652,3 +652,28 @@ async def test_a_capture_failure_does_not_undo_a_recorded_decision(app_with_db) 
     assert body["decision"] == "approved"
     assert body["ai_resolution_written"] is True
     assert body["knowledge_capture"] == {"status": "failed"}
+
+
+def test_snapshot_survives_a_real_incident_without_service() -> None:
+    """Regression: the live suggestions path crashed knowledge capture.
+
+    The route's ServiceNow read does not fetch ``service`` (and the client
+    ``Incident`` model does not declare it), so ``snapshot_from_incident``
+    raised ``AttributeError: 'Incident' object has no attribute 'service'``
+    after a suggestion was accepted on the shared stack (INC0010173,
+    2026-09-28): the decision was recorded and the resolution written, but
+    ``knowledge_capture`` came back ``{"status": "failed"}`` and the human fix
+    never reached the KB. The route stubs use SimpleNamespace with
+    ``service=None`` and so could never catch this; this test uses the real
+    model exactly as the route holds it.
+    """
+    from agent.approval_capture import snapshot_from_incident
+    from app.models.incident import Incident
+
+    incident = Incident(sys_id="c" * 32, number="INC0010173")
+    assert not hasattr(incident, "service")
+
+    snapshot = snapshot_from_incident(incident)
+
+    assert snapshot.number == "INC0010173"
+    assert snapshot.service is None

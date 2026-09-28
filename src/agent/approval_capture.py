@@ -11,6 +11,7 @@ from agent.knowledge_capture import (
     capture_human_resolution,
     make_next_article_number,
 )
+from agent.policy import _as_int
 from agent.servicenow import IncidentGateway, build_servicenow_backend
 from agent.state import IncidentSnapshot
 from agent.tools import RefusalExplainer, build_servicenow_tool_registry
@@ -81,17 +82,25 @@ def snapshot_from_incident(incident: Any) -> IncidentSnapshot:
     Both decision routes hold a real ``Incident``; capture only needs the fields the
     article is composed from, so this is the one place that mapping lives instead of
     each route hand-rolling it.
+
+    The client ``Incident`` model declares neither ``impact``, ``urgency`` nor
+    ``service``: each is present only when the read that produced it fetched that
+    field. Missing or blank numeric fields coerce to ``None`` with the same
+    convention the graph's load path uses, so an accepted suggestion can always
+    be captured.
     """
     return IncidentSnapshot(
         sys_id=incident.sys_id,
         number=incident.number,
         short_description=incident.short_description or "",
         description=incident.description or "",
-        priority=incident.priority,
-        impact=incident.impact,
-        urgency=incident.urgency,
+        priority=_as_int(getattr(incident, "priority", None)),
+        impact=_as_int(getattr(incident, "impact", None)),
+        urgency=_as_int(getattr(incident, "urgency", None)),
         category=incident.category or "",
-        service=incident.service,
+        # None means "no service was set", which the composer already maps to
+        # "general".
+        service=getattr(incident, "service", None),
         ai_enabled=bool(incident.ai_enabled),
         ai_human_lock=incident.ai_human_lock,
     )
