@@ -572,6 +572,22 @@ class TestGenerate:
         assert "<previous_resolution_steps>" not in prompt
         assert "<critic_feedback>" not in prompt
 
+    def test_empty_model_steps_retry_instead_of_an_empty_draft(self) -> None:
+        """An empty step list must not become an empty draft.
+
+        A model answer with zero steps is schema-valid, so without this guard
+        the node built ``steps=[], rendered=""``, verification passed
+        vacuously, and safety_check parked a solvable incident as
+        escalated_blocked (shared INC0010175, 2026-09-28 — the same Outlook
+        query drafted fine as INC0010173 minutes earlier). Zero steps with
+        supporting evidence is always a model failure, and the transient kind,
+        so the node raises retryable and the worker retries it.
+        """
+        answers = vpn_answers()
+        answers["generate"] = GenerateOutput(steps=[])
+        with pytest.raises(RetryableError, match="no usable steps"):
+            generate(self._state(), make_deps(llm=FakeLLM(answers)))
+
 
 # -- the Sprint 4 gates ---------------------------------------------------------------------
 

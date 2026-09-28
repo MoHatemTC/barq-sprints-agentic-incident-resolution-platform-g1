@@ -28,6 +28,7 @@ from agent.state import (
     IncidentSnapshot,
     RetrievalResult,
 )
+from app.workers.retry_policy import RetryableError
 
 #: ``ai_suggestion`` is a String(4000) (S1.1 field model).
 MAX_SUGGESTION_CHARS = 4000
@@ -128,6 +129,20 @@ def generate(state: AgentState, deps: AgentDependencies) -> dict[str, Any]:
             for s in answer.steps
             if s.article_id in allowed and s.text.strip()
         ]
+        if not steps:
+            # An empty step list is schema-valid, so without this the node
+            # builds an empty draft, verification passes vacuously (zero
+            # citations to check), and safety_check kills it downstream as
+            # escalated_blocked — stranding a solvable incident (shared
+            # INC0010175, 2026-09-28: the same Outlook query drafted fine as
+            # INC0010173 minutes earlier). By this point diagnosis has matched
+            # supporting evidence, so zero steps is always a model failure,
+            # and the transient kind: retry the node rather than escalate.
+            raise RetryableError(
+                "generate returned no usable steps for incident "
+                f"'{incident.number}' despite {len(evidence)} supporting "
+                f"evidence items ({len(answer.steps)} raw steps, all dropped)"
+            )
         rendered, sources = render(steps, evidence)
         while len(rendered) > MAX_SUGGESTION_CHARS and steps:
             steps = steps[:-1]
