@@ -30,6 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.approval_capture import capture_approved_solution, snapshot_from_incident
 from api.auth import require_role, verify_bearer_token
+from api.decision_lock import lock_execution_decision
 from api.schemas.approvals import fold_solution_into_evidence
 from api.schemas.errors import ErrorResponse
 from api.schemas.suggestions import (
@@ -154,6 +155,9 @@ async def decide_suggestion(
     execution = await db.get(Execution, execution_id)
     if execution is None:
         raise ResourceNotFoundError(f"No execution '{execution_id}' found")
+    # The approval index protects PostgreSQL, but without a decision lock two
+    # requests can both PATCH ServiceNow before one loses the insert race.
+    await lock_execution_decision(db, execution_id)
     if execution.termination_cause != _DRAFTED:
         raise ConflictError(
             f"Execution '{execution_id}' finished as '{execution.termination_cause}', "

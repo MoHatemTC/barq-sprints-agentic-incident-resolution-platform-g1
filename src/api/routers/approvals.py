@@ -19,6 +19,7 @@ from agent.audit_store import GraphAuditStore, build_audit_store
 from agent.runtime import resume_incident_graph
 from agent.state import IncidentSnapshot
 from api.auth import require_role, verify_bearer_token
+from api.decision_lock import lock_execution_decision
 from api.schemas.approvals import (
     ApprovalDecisionRequest,
     ApprovalResponse,
@@ -222,6 +223,17 @@ async def decide_approval(
         execution = await db.get(Execution, id)
         if execution is None:
             raise ResourceNotFoundError(f"No approval request or execution '{id}' found")
+        # Serialize the decision through graph resume and immutable commit.
+        # Locking the execution row would block the graph's own checkpoint writes.
+        await lock_execution_decision(db, execution.execution_id)
+        existing = (
+            await db.execute(select(Approval).where(Approval.execution_id == id).limit(1))
+        ).scalar_one_or_none()
+        if existing is not None:
+            raise ConflictError(
+                f"Execution '{id}' has already been decided "
+                f"('{existing.decision}') and approvals are immutable."
+            )
         # Only a paused thread can be decided. Without this the route recorded an
         # immutable Approval against an execution in *any* state — including one
         # that already succeeded and was written back to ServiceNow — and the

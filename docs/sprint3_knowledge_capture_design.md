@@ -105,11 +105,12 @@ Strict order: compose → publish (verified) → ingest → audit.
 | Compose `TerminalError`/short body | fail fast | nothing written |
 | Publish refused (`APPROVAL_MISSING`, `APPROVAL_SCOPE_INVALID`) | `None`; **zero Qdrant writes** | nothing written |
 | Publish HTTP failure | `None`; zero Qdrant writes | nothing written |
-| Ingest failure **after verified publish** | `knowledge_capture_drift` event; result `published=True, ingested=False`; audit logs `BLOCKED` | **drift**: SN has it, Qdrant doesn't — re-run repairs (idempotent point IDs) |
+| Ingest failure **after verified publish** | `knowledge_capture_drift` event with article ID; result `published=True, ingested=False`; audit logs `BLOCKED` | **drift**: SN has it, Qdrant doesn't. Re-ingest the same article ID; repeating capture allocates a different number. Automated repair is not implemented. |
 | Audit failure | logged, never raised | capture complete |
 
-Capture failures never affect the human's incident resolution: the loop is
-best-effort by design, with every outcome on the record.
+Capture failures never affect the human's incident resolution. The response
+reports the outcome, but a failure before the audit write may have only the
+structured log. The existing capture path does not offer an automatic retry.
 
 ### D8 — Reuse, not parallel paths
 Publishing goes through the existing least-privilege `kb_publisher` identity and
