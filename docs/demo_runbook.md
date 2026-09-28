@@ -127,6 +127,24 @@ uv run python scripts/demo_s34_hitl_live.py --incident INC0010023 --keep-parked
 
 The script prints the exact `curl` for the decide call when it stops.
 
+### The approval screen
+
+The decide call is also a page, so a demo does not need a terminal. With the API
+up, open:
+
+```
+http://127.0.0.1:8099/review?execution_id=<the parked execution id>
+```
+
+Paste a short-lived operator token (mint one with
+`POST /api/v1/oauth/token`, `grant_type=client_credentials`, using
+`OPERATOR_CLIENT_ID` and the `WEBHOOK_AUTH_TOKEN` value as the secret), press
+**Load approval brief**, read the gate, the planned action and the raw interrupt
+facts, then approve or reject. The token is held in the page's memory only: the
+page never writes to `localStorage`, `sessionStorage` or a cookie, and it is
+served with `no-store`, a restrictive `Content-Security-Policy` and
+`frame-ancestors 'none'`. The page is deliberately absent from `openapi.json`.
+
 To show the normal draft reaching `complete` after an operator accepts it,
 run `uv run python scripts/demo_s34_hitl_live.py --incident INC0010025
 --priority 3 --accept-draft`. The script verifies the resolution, processing

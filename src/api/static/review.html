@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BARQ incident review</title>
+  <link rel="stylesheet" href="/review.css">
+  <script defer src="/review.js"></script>
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">BARQ · AI Incident Orchestrator</p>
+      <h1>Incident approval</h1>
+      <p>Review the paused agent run before applying its planned action.</p>
+    </header>
+
+    <section class="card" aria-labelledby="lookup-heading">
+      <h2 id="lookup-heading">Find a paused run</h2>
+      <label for="execution-id">Execution ID</label>
+      <input id="execution-id" type="text" inputmode="text" autocomplete="off" spellcheck="false" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
+      <label for="operator-token">Operator bearer token</label>
+      <input id="operator-token" type="password" autocomplete="off" spellcheck="false" placeholder="Paste your short-lived token">
+      <p class="hint">The token stays in this page’s memory and is not saved in the browser.</p>
+      <button id="load-button" type="button">Load approval brief</button>
+    </section>
+
+    <p id="message" class="message" role="status" aria-live="polite"></p>
+
+    <section id="review-panel" class="card" aria-labelledby="brief-heading" hidden>
+      <div class="heading-row">
+        <h2 id="brief-heading">Approval brief</h2>
+        <span id="approval-status" class="badge"></span>
+      </div>
+      <dl id="brief-details"></dl>
+      <details>
+        <summary>Raw interrupt facts</summary>
+        <pre id="raw-facts"></pre>
+      </details>
+      <div id="decision-panel">
+        <h2>Decision</h2>
+        <label for="decision-reason">Reason</label>
+        <textarea id="decision-reason" rows="3" placeholder="Why are you approving or rejecting this run?"></textarea>
+        <label for="human-solution">Human solution (optional)</label>
+        <textarea id="human-solution" rows="3" placeholder="The fix that was actually confirmed"></textarea>
+        <div class="actions">
+          <button id="approve-button" type="button">Approve and resume</button>
+          <button id="reject-button" class="secondary" type="button">Reject and resume</button>
+        </div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
