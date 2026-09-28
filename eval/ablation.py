@@ -25,7 +25,7 @@ from agent.config import AgentSettings
 from app.core.config import RetrievalMode, get_retrieval_settings
 from app.models.knowledge import SecurityLevel
 from app.retrieval.embedding import FastEmbedEngine
-from app.retrieval.filters import MetadataFilterBuilder
+from app.retrieval.filters import DEFAULT_WORKFLOW_STATES, MetadataFilterBuilder
 from app.retrieval.hybrid_search import timed_hybrid_search
 
 EVAL_SET_PATH = Path("eval/evaluation_set.json")
@@ -170,15 +170,20 @@ def run_mode(
             mode=mode,
         )
 
-        # P3 safety-net: fail loudly if a non-published article is EVER
-        # returned, independent of whether the eval set's forbidden_article_ids
-        # happens to enumerate it.
+        # P3 safety-net: fail loudly if an article in a non-retrievable state is
+        # EVER returned, independent of whether the eval set's
+        # forbidden_article_ids happens to enumerate it. The retrievable set is
+        # the application's own DEFAULT_WORKFLOW_STATES — published plus the
+        # human_resolved state S3.5's knowledge capture writes — so this check
+        # cannot drift away from what a default search actually allows.
+        retrievable = {state.value for state in DEFAULT_WORKFLOW_STATES}
         for hit in result.hits:
-            if hit.workflow_state != "published":
+            if hit.workflow_state not in retrievable:
                 raise RuntimeError(
-                    f"P3 SAFETY VIOLATION: non-published article {hit.article_id} "
+                    f"P3 SAFETY VIOLATION: non-retrievable article {hit.article_id} "
                     f"(workflow_state={hit.workflow_state!r}) returned for incident "
-                    f"{incident['incident_id']} in mode {mode.value}"
+                    f"{incident['incident_id']} in mode {mode.value}; "
+                    f"retrievable states are {sorted(retrievable)}"
                 )
 
         hit_ids = [h.article_id for h in result.hits]
@@ -267,6 +272,38 @@ def compute_rerank_movement(
     return movements
 
 
+def partition_evaluation_records(records: list[dict]) -> tuple[list[dict], list[str]]:
+    """Separate S2.4 article-ID cases from S2.6 manual-section stressors.
+
+    The manual rows use section identifiers such as ``1.1`` and ``C`` for
+    ``expected_article_id``. They are not Qdrant article IDs and the manual
+    corpus is not part of the baseline collection. Treating those section IDs
+    as article IDs would score six artificial misses and contaminate every
+    ablation metric. They need a separate section-to-article mapping and the
+    manual corpus before they can be evaluated.
+    """
+    incidents: list[dict] = []
+    excluded: list[str] = []
+    required = {
+        "incident_id",
+        "query",
+        "primary_article_ids",
+        "acceptable_article_ids",
+        "forbidden_article_ids",
+        "is_answerable",
+    }
+    for record in records:
+        if required <= record.keys():
+            incidents.append(record)
+        elif record.get("type") == "manual" and "expected_article_id" in record:
+            excluded.append(str(record["id"]))
+        else:
+            raise ValueError(f"Unknown evaluation record shape: {record.get('id', record)}")
+    if not incidents:
+        raise ValueError("No article-ID incidents in the evaluation set")
+    return incidents, excluded
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--collection", default=None, help="Override QDRANT_COLLECTION_NAME")
@@ -296,7 +333,12 @@ def main() -> None:
     engine = FastEmbedEngine()
 
     eval_set = json.loads(EVAL_SET_PATH.read_text())
-    incidents = eval_set["incidents"]
+    incidents, excluded_manual_stressors = partition_evaluation_records(eval_set["incidents"])
+    if excluded_manual_stressors:
+        print(
+            "[ablation] excluded manual-section stressors without article-ID mapping: "
+            + ", ".join(excluded_manual_stressors)
+        )
     max_sec = SecurityLevel(args.max_security_level)
     filter_builder = MetadataFilterBuilder(max_security_level=max_sec)
 
@@ -331,6 +373,7 @@ def main() -> None:
     )
 
     report = {
+        "excluded_manual_section_stressors": excluded_manual_stressors,
         "seed": args.seed,
         "collection": collection_name,
         "limit": args.limit,
