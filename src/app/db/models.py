@@ -119,6 +119,8 @@ class Execution(Base):
         ),
         Index("ix_executions_status", "status"),
         Index("ix_executions_incident_started", "incident_sys_id", "started_at"),
+        # The reaper's only query: running rows, oldest heartbeat first.
+        Index("ix_executions_running_heartbeat", "status", "heartbeat_at"),
     )
 
     execution_id: Mapped[UUID] = mapped_column(
@@ -155,6 +157,25 @@ class Execution(Base):
         onupdate=func.now(),
     )
     # Phase 3: add a DB-side updated_at trigger so direct SQL updates are covered too.
+
+    # Lease for the crash reaper, declared *after* updated_at to match the physical
+    # column order: 0003_execution_lease adds them with ALTER TABLE ADD COLUMN, which
+    # appends, and tests/db/test_migrations_postgresql.py compares the migrated
+    # schema against this model as an ordered tuple. Order is cosmetic to SQLAlchemy.
+    #
+    # A worker claims a run by stamping heartbeat_at; anything still 'running' with a
+    # heartbeat older than the staleness window was orphaned by a crash and is
+    # reclaimed. Without these two columns nothing could tell a live run from a dead
+    # one, and the row stayed 'running' forever: a SIGKILL mid-validate on dev407364
+    # left 96 such rows accumulated.
+    heartbeat_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        comment="Last progress stamp from the owning worker; the reaper's staleness clock.",
+    )
+    worker_id: Mapped[str | None] = mapped_column(
+        String(128),
+        comment="Hostname:pid of the worker holding the lease, for the crash report.",
+    )
 
     event: Mapped[Event] = relationship(back_populates="execution")
     node_states: Mapped[list[ExecutionNodeState]] = relationship(

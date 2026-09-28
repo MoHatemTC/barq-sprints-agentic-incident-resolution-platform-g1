@@ -35,6 +35,9 @@ TIMESTAMP_COLUMNS = {
     ("executions", "started_at"),
     ("executions", "ended_at"),
     ("executions", "updated_at"),
+    # Lease column for the crash reaper (0003_execution_lease): timestamptz, like
+    # every other timestamp here, so the reaper's cutoff comparison is offset-aware.
+    ("executions", "heartbeat_at"),
     ("workflow_state", "started_at"),
     ("workflow_state", "ended_at"),
     ("approvals", "decided_at"),
