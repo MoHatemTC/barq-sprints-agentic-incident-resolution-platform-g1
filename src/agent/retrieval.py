@@ -191,10 +191,17 @@ class QdrantRetriever:
             )
 
         if not categories:
-            # No corpus category covers this label (security, other). An unfiltered
-            # search would still return the "nearest" article — measured at 0.58 for
-            # a leave request — so there is, by definition, no evidence.
-            return result(None, [], sufficient=False)
+            # No corpus category covers this label (security, other), so there is no
+            # precise pass to run. The wide pass still has to run: S3.5 captures a
+            # human solution out of exactly this population (the capture trigger is
+            # the no-evidence interrupt), so returning early made every article the
+            # platform learned unreachable to the incidents that produced it.
+            wide, _ = self._one_pass(query, None, top_k=top_k, engine=engine)
+            items = sorted(wide, key=lambda item: item.relevance, reverse=True)[:top_k]
+            sufficient = any(
+                item.relevance >= threshold + OUT_OF_CATEGORY_EVIDENCE_MARGIN for item in items
+            )
+            return result(None, items, sufficient=sufficient)
 
         # Two searches, always, and the union of what they return.
         #
