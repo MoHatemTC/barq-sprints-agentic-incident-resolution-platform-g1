@@ -176,20 +176,19 @@ async def decide_suggestion(
     incident = await _get_incident(settings, execution.incident_sys_id)
     now = datetime.now(UTC)
     written: dict[str, Any] = {}
+    # What the operator actually did, if they said. This is the S3.5 input: the
+    # human's own words are what gets composed into a knowledge article, and they
+    # also make the incident genuinely resolved.
+    resolution = (payload.solution or "").strip()
 
-    if payload.decision == "approved":
-        # The operator's own words are the resolution when they gave any; otherwise
-        # the draft is accepted as-is. Either way ai_resolution is non-empty, which
-        # is what the field model demands before 'complete' is legal.
-        resolution = (payload.solution or "").strip() or (incident.ai_suggestion or "").strip()
-        if not resolution:
-            raise ConflictError(
-                "Cannot accept: the incident carries no AI suggestion to accept and "
-                "the request supplied no solution. Nothing would be written."
-            )
+    if resolution or (payload.decision == "approved" and (incident.ai_suggestion or "").strip()):
+        # Accepted with no operator solution: the drafted suggestion is applied as
+        # written. Either way ``ai_resolution`` ends up non-empty, which is what the
+        # field model demands before ``complete`` is legal.
+        applied = resolution or (incident.ai_suggestion or "").strip()
         update = IncidentUpdatePayload(
             ai_processing_state=AIProcessingState.COMPLETE,
-            ai_resolution=resolution,
+            ai_resolution=applied,
             ai_processing_end=now,
             ai_human_review_required=False,
             work_notes=(
@@ -220,8 +219,16 @@ async def decide_suggestion(
             decided_by=decided_by,
             confidence=incident.ai_confidence,
         )
+    elif payload.decision == "approved":
+        # Accepted with nothing to apply: no operator solution and no drafted
+        # suggestion. Refuse rather than write a blank resolution — the field model
+        # would reject it anyway, and claiming one would be a fabrication.
+        raise ConflictError(
+            "Cannot accept: the incident carries no AI suggestion to accept and the "
+            "request supplied no solution. Nothing would be written."
+        )
     else:
-        # Rejected: the draft is wrong or inapplicable. Record it and stop. The
+        # Declined with no resolution offered. Record the decision and stop. The
         # incident is deliberately not marked complete — there is no resolution to
         # record, and claiming one would be a fabrication. The human closes it in
         # ServiceNow, which is the correct outcome for a rejected suggestion.
