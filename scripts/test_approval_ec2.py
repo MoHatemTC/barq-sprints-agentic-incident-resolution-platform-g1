@@ -79,11 +79,11 @@ def list_pending_approvals(base_url: str, headers: dict) -> None:
 
     env = dotenv_values(Path(__file__).resolve().parents[1] / ".env")
     conn_str = (
-        f"postgresql://{env.get('POSTGRES_USER','postgres')}:"
-        f"{env.get('POSTGRES_PASSWORD','postgres')}@"
-        f"{env.get('POSTGRES_HOST','localhost')}:"
-        f"{env.get('POSTGRES_PORT','5432')}/"
-        f"{env.get('POSTGRES_DB','barq_incident_dev')}"
+        f"postgresql://{env.get('POSTGRES_USER', 'postgres')}:"
+        f"{env.get('POSTGRES_PASSWORD', 'postgres')}@"
+        f"{env.get('POSTGRES_HOST', 'localhost')}:"
+        f"{env.get('POSTGRES_PORT', '5432')}/"
+        f"{env.get('POSTGRES_DB', 'barq_incident_dev')}"
     )
 
     try:

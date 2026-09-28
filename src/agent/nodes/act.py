@@ -314,10 +314,7 @@ def _apply_human_decision(output: FinalOutput, decision: dict[str, Any]) -> Fina
     solution = str(decision.get("solution") or "").strip() or None
     if verdict == "approved":
         if solution:
-            note = (
-                f"{PREFIX}: human resolution approved by {who}. {why}. "
-                f"Resolution: {solution}"
-            )
+            note = f"{PREFIX}: human resolution approved by {who}. {why}. Resolution: {solution}"
             return output.model_copy(
                 update={
                     "summary": note,

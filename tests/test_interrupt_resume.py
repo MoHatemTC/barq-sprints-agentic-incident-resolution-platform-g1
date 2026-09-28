@@ -528,4 +528,3 @@ def test_graph_invoke_raising_graph_interrupt_is_handled_cleanly(monkeypatch: An
     assert result["outcome"] == "escalated_no_evidence"
     assert result["summary"] == "no matching knowledge article found"
     assert backend.updates == []
-
