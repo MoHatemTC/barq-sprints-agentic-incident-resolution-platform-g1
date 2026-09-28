@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
@@ -380,6 +381,57 @@ async def test_decide_approval_creates_for_existing_execution(app_with_db) -> No
     assert created_approval.decision == "rejected"
     # decided_by is the operator token's subject; the body cannot set it (#148)
     assert created_approval.decided_by == "barq-operator"
+
+
+@pytest.mark.asyncio
+async def test_approved_no_evidence_solution_captures_after_commit(
+    app_with_db, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    app, mock_session = app_with_db
+    execution_id = uuid4()
+    execution = Execution(
+        execution_id=execution_id,
+        event_record_id=uuid4(),
+        incident_sys_id=h.VALID_SYS_ID,
+        status="awaiting_approval",
+    )
+    mock_session.get.side_effect = lambda model, pk: None if model is Approval else execution
+    payload = {
+        "outcome": "escalated_no_evidence",
+        "incident": {"sys_id": h.VALID_SYS_ID, "number": "INC0010139"},
+    }
+    store = MagicMock()
+    store.get_interrupt.return_value = payload
+    monkeypatch.setattr("api.routers.approvals.get_audit_store", lambda: store)
+    monkeypatch.setattr(
+        "api.routers.approvals.resume_incident_graph",
+        lambda **kwargs: {"outcome": "escalated_no_evidence", "lifecycle": "interrupt_resume"},
+    )
+    capture = AsyncMock(
+        return_value=SimpleNamespace(ingested=True, article_number="KB1011", point_count=1)
+    )
+    monkeypatch.setattr("api.routers.approvals.capture_approved_solution", capture)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            f"/api/v1/approvals/{execution_id}/decide",
+            json={"decision": "approved", "solution": "Changed the VPN route and restarted it."},
+            headers=AUTH_HEADERS,
+        )
+
+    assert response.status_code == 200
+    assert response.json()["knowledge_capture"] == {
+        "status": "ingested",
+        "article_number": "KB1011",
+        "point_count": 1,
+    }
+    mock_session.commit.assert_awaited_once()
+    capture.assert_awaited_once_with(
+        execution_id=str(execution_id),
+        interrupt_payload=payload,
+        solution="Changed the VPN route and restarted it.",
+    )
+    assert mock_session.add.call_args.args[0].evidence["tool_name"] == "publish_kb_article"
 
 
 @pytest.mark.asyncio

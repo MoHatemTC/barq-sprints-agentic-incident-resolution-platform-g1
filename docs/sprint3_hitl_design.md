@@ -16,39 +16,25 @@ Sprint 2's `act.py` wrote `awaiting_approval` to ServiceNow and terminated the g
 
 ### Interrupt Points
 
-We interrupt at three outcomes (FR-17):
+We interrupt at four outcomes (FR-17 and S3.5):
 
 ```python
 INTERRUPT_OUTCOMES = frozenset(
     {
         Outcome.ESCALATED_HIGH_RISK,
+        Outcome.ESCALATED_NO_EVIDENCE,
         Outcome.ESCALATED_BLOCKED,
         Outcome.ESCALATED_LOW_CONFIDENCE,
     }
 )
 ```
 
-**Why `ESCALATED_NO_EVIDENCE` stays a terminal write.** The three FR-17 interrupt
-outcomes are *gate verdicts* — the graph reached a decision about an action it could
-otherwise have taken, and a person should decide that action. "No evidence" is not a
-verdict about an action; it is the absence of the material any action would rest on. There
-is nothing to approve: no draft was produced, so there is no proposed write for a human to
-authorise. Pausing would put a decision in front of an operator about an execution with
-no candidate outcome — an empty approval, which is worse than an escalation because it
-looks like a choice.
-
-So `ESCALATED_NO_EVIDENCE` keeps Sprint 2's terminal behaviour: `act` writes the
-escalation record (`ai_processing_state = awaiting_approval`, `ai_human_review_required`,
-the classification and a work note naming what was searched and the best score found) and
-returns. The incident is still parked for a person, and the work note still says the run
-was escalated rather than that it failed. What it does not do is create an `approvals` row
-or a resumable thread, because there is no checkpointed decision to resume into — the
-`interrupt()` payload would describe an action that does not exist. Manual §11.4 lists this
-as its own outcome, *"Escalated — no evidence"*, distinct from the three that carry a draft.
-
-This is a deliberate difference from the other three, and it is the reason
-`ESCALATED_NO_EVIDENCE` is absent from `INTERRUPT_OUTCOMES` in `act.py` while the other
-three are present.
+`ESCALATED_NO_EVIDENCE` has no automated draft to authorize. Its human decision
+asks for a solution to the incident instead. The graph parks without a ServiceNow
+write, presents the search result and incident facts, and resumes only when the
+operator decides. An approved solution is published through the S3.2 tool registry
+after the immutable approval is committed, then ingested into Qdrant by S3.5. A
+rejection or a decision without a solution never publishes knowledge.
 
 **Resume routing reads the decision payload only.** The Approval Brief Agent's output is
 stored in the same persisted payload as the interrupt facts, so it is worth being explicit

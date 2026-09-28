@@ -95,17 +95,19 @@ class TestRoutes:
     def test_no_evidence_escalates_after_retrieve(self) -> None:
         llm = FakeLLM(vpn_answers() | label("hardware"))
         retriever = FakeRetriever(hits=[evidence("KB0004", relevance=0.31)])
-        result = run(PRINTER, make_deps(llm=llm, retriever=retriever))
+        backend = FakeServiceNow()
+        result = run(PRINTER, make_deps(llm=llm, retriever=retriever, servicenow=backend))
         assert result["path"] == [
             "load",
             "validate",
             "classify",
             "determine_risk",
             "retrieve",
-            "act",
         ]
+        assert result["paused"] is True
         assert result["outcome"] == "escalated_no_evidence"
-        assert llm.purposes() == ["injection_classifier", "classify"]
+        assert llm.purposes() == ["injection_classifier", "classify", "approval_brief"]
+        assert backend.updates == []
 
     def test_w03_leave_request_is_escalated(self) -> None:
         # Task 0 test set: "no knowledge-base article covers this — it must go to a human".
@@ -125,7 +127,8 @@ class TestRoutes:
         )
         llm = FakeLLM(answers)
         result = run(VPN, make_deps(llm=llm))
-        assert result["path"][-2:] == ["diagnose", "act"]
+        assert result["path"][-1] == "diagnose"
+        assert result["paused"] is True
         assert result["outcome"] == "escalated_no_evidence"
         assert "generate" not in llm.purposes()
 

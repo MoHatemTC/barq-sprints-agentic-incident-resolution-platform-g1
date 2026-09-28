@@ -49,11 +49,12 @@ PREFIX = "AI Suggested Response"
 #: processing end stays blank because the state is not terminal.
 PAUSED = AIProcessingState.AWAITING_APPROVAL.value
 
-#: FR-17 interrupt points. ``ESCALATED_NO_EVIDENCE`` is intentionally absent —
-#: see ``docs/sprint3_hitl_design.md``.
+#: Every escalation that needs a human answer parks on the same approval path.
+#: In particular, a human solution to a no-evidence case is the input to S3.5.
 INTERRUPT_OUTCOMES = frozenset(
     {
         Outcome.ESCALATED_HIGH_RISK,
+        Outcome.ESCALATED_NO_EVIDENCE,
         Outcome.ESCALATED_BLOCKED,
         Outcome.ESCALATED_LOW_CONFIDENCE,
     }
@@ -247,6 +248,7 @@ def interrupt_payload(state: AgentState, output: FinalOutput, outcome: Outcome) 
             "urgency": incident.get("urgency"),
             "service": incident.get("service"),
             "short_description": incident.get("short_description"),
+            "description": incident.get("description"),
             "category": incident.get("category"),
         },
         "risk": state.get("risk"),

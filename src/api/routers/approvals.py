@@ -14,6 +14,7 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError, MissingGreenlet, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from agent.approval_capture import capture_approved_solution
 from agent.audit_store import GraphAuditStore, build_audit_store
 from agent.runtime import resume_incident_graph
 from api.auth import require_role, verify_bearer_token
@@ -332,6 +333,38 @@ async def decide_approval(
         # written from ride along so the caller never has to re-fetch them.
         response.brief = interrupt_payload.get("brief")
         response.facts = interrupt_payload
+        # Capture follows the immutable commit so the registry can verify the
+        # approved, tool-scoped row. A KB failure cannot undo a human decision.
+        if (
+            payload.decision == "approved"
+            and payload.solution
+            and interrupt_payload.get("outcome")
+            in {"escalated_no_evidence", "escalated_low_confidence"}
+        ):
+            evidence = resolved_approval.evidence or {}
+            solution = evidence.get("solution") if isinstance(evidence, dict) else None
+            try:
+                captured = await capture_approved_solution(
+                    execution_id=execution_id_str,
+                    interrupt_payload=interrupt_payload,
+                    solution=str(solution or ""),
+                )
+                response.knowledge_capture = (
+                    {
+                        "status": "ingested" if captured.ingested else "published_unindexed",
+                        "article_number": captured.article_number,
+                        "point_count": captured.point_count,
+                    }
+                    if captured is not None
+                    else {"status": "not_published"}
+                )
+            except Exception as exc:  # noqa: BLE001 — decision is already committed
+                logger.exception(
+                    "knowledge_capture_failed_after_approval",
+                    execution_id=execution_id_str,
+                    error=str(exc),
+                )
+                response.knowledge_capture = {"status": "failed"}
     return response
 
 

@@ -980,6 +980,19 @@
             ],
             "title": "Facts",
             "description": "Raw interrupt payload persisted at pause time"
+          },
+          "knowledge_capture": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Knowledge Capture",
+            "description": "Publication result for a human solution submitted with this decision"
           }
         },
         "additionalProperties": false,

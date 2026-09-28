@@ -26,14 +26,20 @@ class BriefTimeout(Exception):
 
 
 def _fallback(payload: dict[str, Any], *, reason: str) -> dict[str, Any]:
+    judgment = (
+        "No supported draft exists. Review the incident and search result; if you "
+        "resolved it, approve with your own solution for knowledge capture."
+        if payload.get("outcome") == "escalated_no_evidence"
+        else (
+            "Approve to apply the planned ServiceNow write, or reject to record "
+            "the refusal and leave the incident with a human."
+        )
+    )
     return {
         "incident_summary": str(payload.get("incident_summary") or payload.get("summary") or ""),
         "gate": str(payload.get("outcome") or payload.get("gate") or "unknown"),
         "planned_action": str(payload.get("planned_action") or payload.get("work_note") or ""),
-        "judgment_required": (
-            "Approve to apply the planned ServiceNow write, or reject to record "
-            "the refusal and leave the incident with a human."
-        ),
+        "judgment_required": judgment,
         "degraded": True,
         "degraded_reason": reason,
     }
