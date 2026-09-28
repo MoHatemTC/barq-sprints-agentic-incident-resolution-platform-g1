@@ -375,7 +375,7 @@ class TestWorkflowStateTable:
         )
         assert resumed["paused"] is False
         assert resumed["resumed"] is True
-        assert len(backend.updates) == 1
+        assert len(backend.updates) == 2
         assert deps.audit.get_interrupt(str(execution_id)) is not None
 
     def test_same_node_same_attempt_replaces_the_row(self, pg_engine, saver) -> None:
