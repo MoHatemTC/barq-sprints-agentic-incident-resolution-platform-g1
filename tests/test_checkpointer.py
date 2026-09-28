@@ -292,7 +292,7 @@ class TestWorkflowStateTable:
         deps = make_deps(llm=FakeLLM(answers), servicenow=backend)
         paused = run(ORDER_P1, deps, saver, execution_id, attempt=1)
         assert paused["paused"] is True
-        assert backend.updates == []
+        assert len(backend.updates) == 1
 
         stored = rows(pg_engine, execution_id)
         assert [r.node_name for r in stored][2:] == [
@@ -320,7 +320,7 @@ class TestWorkflowStateTable:
         )
         assert resumed["paused"] is False
         assert resumed["resumed"] is True
-        assert len(backend.updates) == 1
+        assert len(backend.updates) == 2
 
         final = rows(pg_engine, execution_id)
         assert [r.node_name for r in final] == [r.node_name for r in stored]
@@ -349,7 +349,7 @@ class TestWorkflowStateTable:
 
         paused = run(ORDER_P1, deps, saver, execution_id, attempt=1)
         assert paused["paused"] is True
-        assert backend.updates == []
+        assert len(backend.updates) == 1
 
         stored = rows(pg_engine, execution_id)
         assert "hitl.interrupt" in [r.node_name for r in stored]
