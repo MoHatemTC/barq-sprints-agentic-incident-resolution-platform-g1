@@ -73,6 +73,7 @@ def _incident(**overrides) -> SimpleNamespace:
         ai_classification="access",
         ai_processing_state=AIProcessingState.AWAITING_APPROVAL,
         ai_processing_start=datetime.now(UTC),
+        ai_processing_end=None,
         ai_human_review_required=True,
         ai_human_lock=False,
         ai_resolution=None,
@@ -271,6 +272,67 @@ async def test_operators_own_words_become_the_resolution(app_with_db) -> None:
     assert resp.status_code == 200
     payload = instance.update_incident.await_args.args[1]
     assert payload.ai_resolution == mine
+
+
+@pytest.mark.asyncio
+async def test_retry_after_servicenow_write_only_commits_missing_approval(app_with_db) -> None:
+    """A failed audit commit cannot cause a second ServiceNow work note."""
+    app, session = app_with_db
+    execution = _execution()
+    session.get = AsyncMock(return_value=execution)
+    completed_at = datetime.now(UTC)
+
+    with patch("api.routers.suggestions.ServiceNowClient") as client_cls:
+        instance = client_cls.return_value
+        instance.get_incident = AsyncMock(
+            return_value=_incident(
+                ai_processing_state=AIProcessingState.COMPLETE,
+                ai_resolution=SUGGESTION,
+                ai_processing_end=completed_at,
+            )
+        )
+        instance.update_incident = AsyncMock()
+        instance.aclose = AsyncMock()
+        async with _client(app) as http:
+            resp = await http.post(
+                f"/api/v1/suggestions/{execution.execution_id}/decide",
+                json={"decision": "approved"},
+                headers=AUTH_HEADERS,
+            )
+
+    assert resp.status_code == 200
+    assert resp.json()["ai_processing_end"] == completed_at.isoformat()
+    instance.update_incident.assert_not_awaited()
+    session.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_completed_incident_with_different_resolution_is_not_overwritten(app_with_db) -> None:
+    app, session = app_with_db
+    execution = _execution()
+    session.get = AsyncMock(return_value=execution)
+
+    with patch("api.routers.suggestions.ServiceNowClient") as client_cls:
+        instance = client_cls.return_value
+        instance.get_incident = AsyncMock(
+            return_value=_incident(
+                ai_processing_state=AIProcessingState.COMPLETE,
+                ai_resolution="Another operator resolved this incident.",
+                ai_processing_end=datetime.now(UTC),
+            )
+        )
+        instance.update_incident = AsyncMock()
+        instance.aclose = AsyncMock()
+        async with _client(app) as http:
+            resp = await http.post(
+                f"/api/v1/suggestions/{execution.execution_id}/decide",
+                json={"decision": "approved"},
+                headers=AUTH_HEADERS,
+            )
+
+    assert resp.status_code == 409
+    instance.update_incident.assert_not_awaited()
+    session.add.assert_not_called()
 
 
 @pytest.mark.asyncio

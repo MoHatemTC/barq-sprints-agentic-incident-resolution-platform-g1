@@ -187,30 +187,50 @@ async def decide_suggestion(
         # written. Either way ``ai_resolution`` ends up non-empty, which is what the
         # field model demands before ``complete`` is legal.
         applied = resolution or (incident.ai_suggestion or "").strip()
-        update = IncidentUpdatePayload(
-            ai_processing_state=AIProcessingState.COMPLETE,
-            ai_resolution=applied,
-            ai_processing_end=now,
-            ai_human_review_required=False,
-            work_notes=(
-                f"AI Suggested Response accepted by {decided_by}. "
-                f"Confidence {incident.ai_confidence}. Resolution applied."
-            ),
-        )
-        try:
-            await _update_incident(settings, execution.incident_sys_id, update)
-        except ServiceNowError as exc:
-            logger.exception(
-                "suggestion_acceptance_write_failed",
-                execution_id=str(execution_id),
-                error=str(exc),
+        processing_end = now
+        if incident.ai_processing_state == AIProcessingState.COMPLETE:
+            # The ServiceNow write may have succeeded before the immutable
+            # Approval commit failed. A retry must finish the audit without
+            # appending the work note or resolution a second time. A different
+            # resolution means another actor completed the incident; never
+            # overwrite it on the strength of this stale draft.
+            if (incident.ai_resolution or "").strip() != applied:
+                raise ConflictError(
+                    "Incident is already complete with a different resolution; "
+                    "the draft decision cannot overwrite it."
+                )
+            if incident.ai_processing_end is None:
+                raise ConflictError(
+                    "Incident is marked complete without a processing end time; "
+                    "the draft decision cannot treat it as an applied write."
+                )
+            processing_end = incident.ai_processing_end
+            logger.info("suggestion_write_already_applied", execution_id=str(execution_id))
+        else:
+            update = IncidentUpdatePayload(
+                ai_processing_state=AIProcessingState.COMPLETE,
+                ai_resolution=applied,
+                ai_processing_end=now,
+                ai_human_review_required=False,
+                work_notes=(
+                    f"AI Suggested Response accepted by {decided_by}. "
+                    f"Confidence {incident.ai_confidence}. Resolution applied."
+                ),
             )
-            raise ServiceUnavailableError(
-                f"ServiceNow refused the acceptance write: {exc}"
-            ) from exc
+            try:
+                await _update_incident(settings, execution.incident_sys_id, update)
+            except ServiceNowError as exc:
+                logger.exception(
+                    "suggestion_acceptance_write_failed",
+                    execution_id=str(execution_id),
+                    error=str(exc),
+                )
+                raise ServiceUnavailableError(
+                    f"ServiceNow refused the acceptance write: {exc}"
+                ) from exc
         written = {
             "ai_resolution_written": True,
-            "ai_processing_end": now.isoformat(),
+            "ai_processing_end": processing_end.isoformat(),
             "ai_processing_state": AIProcessingState.COMPLETE.value,
         }
         logger.info(
