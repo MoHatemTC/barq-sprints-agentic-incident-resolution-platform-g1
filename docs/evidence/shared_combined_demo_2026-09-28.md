@@ -15,8 +15,10 @@ unmerged S3.4 code is live there.
   Its current head has not been approved. PR #172 is open and approved; its
   tree equals the reverted #169 tree (`git diff --quiet 69232ce
   origin/enrich-kb-reopened` exited 0).
-- Issue #149 remains open. Its integration CI job runs and passes, but making
-  checks required in repository settings needs an administrator.
+- Issue #149 remains open. Its integration CI job runs and passes. This PR
+  extends the isolated database step to include audit reconstruction and
+  idempotency tests (40 passing cases in the local reproduction). Making that
+  job required in repository settings needs an administrator.
 
 ## Fresh shared-path scenarios
 
@@ -56,10 +58,10 @@ temporarily show `pending` and empty AI fields.
 - `uv sync --all-extras --dev --locked`, `ruff check .`, `ruff format --check .`,
   and `mypy src` passed.
 - Default pytest: 1,320 passed, 30 skipped, 20 integration tests deselected.
-  The separate live-service integration run passed 20/20, and the isolated DB
-  suite passed 26/26. The 30 default skips were then run explicitly: 18
-  database cases passed with the isolated DB URL, 11 ServiceNow integration
-  cases passed against the local `dev434590` PDI, and the real-PDF extraction
+  The separate live-service integration run passed 20/20, and the expanded
+  isolated DB suite passed 40/40. The 30 default skips were also run
+  explicitly: 18 database cases passed with the isolated DB URL, 11 ServiceNow
+  integration cases passed against the local `dev434590` PDI, and the real-PDF extraction
   case passed using the reference manual at its expected test path. Crash
   recovery, interrupt/resume, guardrails, and tool permissions passed 163/163
   in a focused run.

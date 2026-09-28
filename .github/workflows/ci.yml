@@ -120,9 +120,9 @@ jobs:
           REDIS_HOST: localhost
           REDIS_PORT: "6379"
 
-      # The migration round trip and the approval immutability tests are gated
-      # on an explicitly isolated database, and they are not marked
-      # "integration", so they need their own run and their own database.
+      # The migration, approval, audit reconstruction, and idempotency tests
+      # require an explicitly isolated database. They are not marked
+      # "integration", so the broker run above does not select them.
       - name: Create the isolated schema-test database
         run: |
           uv run python - <<'PY'
@@ -143,7 +143,7 @@ jobs:
           engine.dispose()
           PY
 
-      - name: Migration round trip and approval immutability
-        run: uv run pytest tests/db -q
+      - name: Database migrations, approvals, audit and idempotency
+        run: uv run pytest tests/db tests/test_audit_reconstruction.py tests/test_idempotency.py -q
         env:
           BARQ_TEST_DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/barq_s2_2_test
