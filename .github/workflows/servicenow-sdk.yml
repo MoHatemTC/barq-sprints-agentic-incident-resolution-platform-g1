@@ -7,20 +7,11 @@ name: ServiceNow SDK
 # each fresh build. This job makes that class of change fail loudly instead of silently.
 
 on:
+  # This check must report on every PR if it is made required on main. GitHub
+  # leaves required workflows skipped by path filters pending, blocking merge.
   pull_request:
-    paths:
-      - "servicenow/**"
-      - ".github/workflows/servicenow-sdk.yml"
-      - ".github/scripts/check_build_matches_export.py"
-      - ".gitattributes"
   push:
-    # dev is the integration branch and carries the same gate as main, matching #59.
     branches: [main, dev]
-    paths:
-      - "servicenow/**"
-      - ".github/workflows/servicenow-sdk.yml"
-      - ".github/scripts/check_build_matches_export.py"
-      - ".gitattributes"
 
 concurrency:
   group: servicenow-sdk-${{ github.ref }}
