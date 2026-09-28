@@ -118,13 +118,11 @@ Ingestion goes through the existing `ingest_articles` (same chunking, same
 payload contract, deterministic `build_point_id`). The only new write path is
 *through the registry*, which is the point.
 
-## Known drift traps (documented, out of code scope)
-- **CD re-seed:** `deploy.yml` runs `seed_qdrant.py` with
-  `purge_unknown_articles=True` — any deploy after a capture deletes the
-  captured article's points (ServiceNow keeps it). Rule: no deploys/re-seeds
-  during a capture demo window; repair by re-ingesting the article.
-- **Teammate PR #155** keeps the same purge flag in its seed merge — flagged in
-  review; same repair path.
+## Knowledge persistence after deployment
+Deployment does not seed Qdrant. Corpus provisioning is an explicit operation,
+and `seed_qdrant.py` preserves points for articles outside the supplied corpus.
+The seed verifies each expected point by ID and content instead of comparing
+whole-collection counts, which include human-captured articles.
 
 ## S3.4 integration contract
 S3.4's resume path (after `Command(resume=decision)`) calls, when
