@@ -276,6 +276,7 @@ async def decide_approval(
             "decision": payload.decision,
             "decided_by": decided_by,
             "reason": payload.reason,
+            "solution": payload.solution,
         }
         try:
             correlation_id = str(

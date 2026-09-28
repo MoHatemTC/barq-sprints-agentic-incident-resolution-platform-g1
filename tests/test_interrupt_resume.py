@@ -359,6 +359,38 @@ def test_resume_with_approval() -> None:
     assert deps.audit.get_interrupt(EXECUTION_ID) is not None
 
 
+def test_resume_with_human_solution_completes_processing() -> None:
+    """Approving with a human solution sets complete state, ai_resolution, and processing_end."""
+    backend = FakeServiceNow()
+    deps = make_deps(llm=FakeLLM(vpn_answers()), servicenow=backend)
+    saver = InMemorySaver()
+
+    _, paused = _run(deps, ORDER_P1, saver)
+    assert paused["paused"] is True
+
+    _, resumed = _run(
+        deps,
+        ORDER_P1,
+        saver,
+        resume={
+            "decision": "approved",
+            "decided_by": "ops_analyst_1",
+            "reason": "Fix confirmed",
+            "solution": "Clear VPN profile and re-login",
+        },
+    )
+
+    assert resumed["resumed"] is True
+    assert len(backend.updates) == 1
+    body = backend.updates[0][1].to_table_api_body()
+    assert body["x_2215032_ai_inc_0_ai_processing_state"] == "complete"
+    assert body["x_2215032_ai_inc_0_ai_resolution"] == "Clear VPN profile and re-login"
+    assert body["x_2215032_ai_inc_0_ai_suggestion"] == "Clear VPN profile and re-login"
+    assert body["x_2215032_ai_inc_0_ai_processing_end"] is not None
+    assert body["x_2215032_ai_inc_0_ai_human_review_required"] == "false"
+    assert backend.execution_logs[0].status.value == "succeeded"
+
+
 def test_resume_with_rejection() -> None:
     """Rejecting records the refusal instead of the planned suggestion."""
     backend = FakeServiceNow()

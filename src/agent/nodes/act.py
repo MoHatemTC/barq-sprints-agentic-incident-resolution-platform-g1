@@ -309,10 +309,27 @@ def _request_human_decision(payload: dict[str, Any]) -> dict[str, Any]:
 
 def _apply_human_decision(output: FinalOutput, decision: dict[str, Any]) -> FinalOutput:
     verdict = str(decision.get("decision") or "approved").lower()
-    if verdict == "approved":
-        return output
     who = str(decision.get("decided_by") or "operator")
     why = str(decision.get("reason") or verdict)
+    solution = str(decision.get("solution") or "").strip() or None
+    if verdict == "approved":
+        if solution:
+            note = (
+                f"{PREFIX}: human resolution approved by {who}. {why}. "
+                f"Resolution: {solution}"
+            )
+            return output.model_copy(
+                update={
+                    "summary": note,
+                    "work_note": note,
+                    "resolution": solution,
+                    "suggestion": solution,
+                    "processing_state": AIProcessingState.COMPLETE.value,
+                    "processing_end": datetime.now(UTC).isoformat(),
+                    "human_review_required": False,
+                }
+            )
+        return output
     note = (
         f"{PREFIX}: human {verdict} by {who}. {why}. "
         f"Original outcome {output.outcome.value}. No automated action applied."
@@ -390,6 +407,12 @@ def _perform_write(
         "ai_agent_version": deps.settings.agent_version,
         "ai_human_review_required": output.human_review_required,
     }
+    if output.resolution:
+        fields["ai_resolution"] = output.resolution
+    if output.processing_end:
+        fields["ai_processing_end"] = _parse_ts(output.processing_end)
+    elif output.processing_state == AIProcessingState.COMPLETE.value:
+        fields["ai_processing_end"] = datetime.now(UTC)
     started = _parse_ts(state.get("started_at"))
     if started is not None:
         # The S1.1 model rejects an explicit None timestamp, so it is omitted instead.
@@ -471,12 +494,17 @@ def _perform_write(
             execution_id,
             {**receipt_base, "phase": "fields_written", "output": in_flight},
         )
+    log_status = (
+        ExecutionStatus.SUCCEEDED
+        if output.processing_state == AIProcessingState.COMPLETE.value
+        else ExecutionStatus.AWAITING_APPROVAL
+    )
     _write_execution_log(
         state,
         deps,
         incident,
         output,
-        status=ExecutionStatus.AWAITING_APPROVAL,
+        status=log_status,
     )
     final = output.model_copy(update={"actions": actions, "write_back": "written"})
     dumped = final.model_dump(mode="json")

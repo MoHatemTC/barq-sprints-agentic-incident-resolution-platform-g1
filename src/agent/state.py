@@ -199,6 +199,8 @@ class FinalOutput(_Section):
     outcome: Outcome
     summary: str
     suggestion: str | None = None
+    resolution: str | None = None
+    processing_end: str | None = None
     confidence: float | None = None
     classification: str | None = None
     work_note: str | None = None
