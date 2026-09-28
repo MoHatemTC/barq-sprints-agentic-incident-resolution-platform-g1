@@ -295,7 +295,10 @@ def test_interrupt_at_blocked_gate() -> None:
     assert result["paused"] is True
     assert result["outcome"] == "escalated_blocked"
     assert len(backend.updates) == 1
-    assert backend.updates[0][1].to_table_api_body()["x_2215032_ai_inc_0_ai_processing_state"] == "awaiting_approval"
+    assert (
+        backend.updates[0][1].to_table_api_body()["x_2215032_ai_inc_0_ai_processing_state"]
+        == "awaiting_approval"
+    )
     payload = deps.audit.get_interrupt(EXECUTION_ID)
     assert payload is not None
     assert payload["safety"]["passed"] is False
@@ -312,7 +315,10 @@ def test_interrupt_at_low_confidence() -> None:
     assert result["outcome"] == "escalated_low_confidence"
     assert result["confidence"] < deps.settings.agent_confidence_floor
     assert len(backend.updates) == 1
-    assert backend.updates[0][1].to_table_api_body()["x_2215032_ai_inc_0_ai_processing_state"] == "awaiting_approval"
+    assert (
+        backend.updates[0][1].to_table_api_body()["x_2215032_ai_inc_0_ai_processing_state"]
+        == "awaiting_approval"
+    )
     assert deps.audit.get_interrupt(EXECUTION_ID) is not None
 
 
@@ -325,7 +331,10 @@ def test_no_evidence_pauses_for_a_human_solution() -> None:
     assert result["paused"] is True
     assert result["outcome"] == "escalated_no_evidence"
     assert len(backend.updates) == 1
-    assert backend.updates[0][1].to_table_api_body()["x_2215032_ai_inc_0_ai_processing_state"] == "awaiting_approval"
+    assert (
+        backend.updates[0][1].to_table_api_body()["x_2215032_ai_inc_0_ai_processing_state"]
+        == "awaiting_approval"
+    )
     payload = deps.audit.get_interrupt(EXECUTION_ID)
     assert payload is not None
     assert "VPN client says invalid credentials" in payload["incident"]["description"]
