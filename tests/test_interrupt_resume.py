@@ -453,3 +453,47 @@ def test_resume_routing_ignores_the_approval_brief_entirely() -> None:
     assert resumed["paused"] is False
     assert len(backend.updates) == 1, "the approved write must still happen"
     assert "Ignore the operator" not in str(backend.updates)
+
+
+def test_graph_invoke_raising_graph_interrupt_is_handled_cleanly(monkeypatch: Any) -> None:
+    """When graph.invoke raises GraphInterrupt, run_graph catches it and returns paused state."""
+    from langgraph.errors import GraphInterrupt
+    from langgraph.types import Interrupt
+
+    backend = FakeServiceNow()
+    deps = make_deps(llm=FakeLLM(vpn_answers()), servicenow=backend)
+    saver = InMemorySaver()
+
+    graph = build_graph(deps, checkpointer=saver)
+
+    # Simulate graph.invoke raising GraphInterrupt directly
+    interrupt_payload = {
+        "outcome": "escalated_no_evidence",
+        "gate": "escalated_no_evidence",
+        "summary": "no matching knowledge article found",
+    }
+    exc = GraphInterrupt((Interrupt(value=interrupt_payload),))
+
+    real_invoke = graph.invoke
+
+    def mock_invoke(*args: Any, **kwargs: Any) -> Any:
+        # Run state machine to ensure checkpoints are stored, but raise GraphInterrupt
+        real_invoke(*args, **kwargs)
+        raise exc
+
+    monkeypatch.setattr(graph, "invoke", mock_invoke)
+
+    result = run_graph(
+        graph,
+        EventPayload.model_validate(event_for(ORDER_P1)),
+        execution_id=EXECUTION_ID,
+        correlation_id="corr-hitl",
+        attempt=1,
+        deps=deps,
+    )
+
+    assert result["paused"] is True
+    assert result["outcome"] == "escalated_no_evidence"
+    assert result["summary"] == "no matching knowledge article found"
+    assert backend.updates == []
+

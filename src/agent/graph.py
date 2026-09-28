@@ -26,6 +26,7 @@ from typing import Any, cast
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.errors import GraphInterrupt
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import Command
@@ -173,6 +174,17 @@ def run_graph(
         final = graph.invoke(cast(Any, payload), config)
     except HumanLockedError as exc:  # raised by load/read paths
         raise TerminalError(str(exc)) from exc
+    except GraphInterrupt as exc:
+        parked = graph.get_state(config) if graph.checkpointer is not None else None
+        fallback = payload if isinstance(payload, dict) else {}
+        values = parked.values if parked is not None else fallback
+        raw_ints = exc.args[0] if exc.args and isinstance(exc.args[0], (list, tuple)) else exc.args
+        interrupts = raw_ints or []
+        value = getattr(interrupts[0], "value", None) if interrupts else None
+        if not isinstance(value, dict):
+            value = {}
+        _record_pause(graph, config, _parked_node(parked))
+        return _paused(value, values if isinstance(values, dict) else {})
     if isinstance(final, dict) and final.get("__interrupt__"):
         parked = graph.get_state(config) if graph.checkpointer is not None else None
         values = parked.values if parked is not None else final
