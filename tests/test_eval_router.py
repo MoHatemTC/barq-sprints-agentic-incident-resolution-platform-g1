@@ -8,7 +8,6 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 import tests.helpers as h
-from api.schemas.eval import EvalResultResponse, EvalRunResponse
 from app.main import create_app
 from tests.helpers import mock_settings
 
@@ -67,8 +66,13 @@ async def test_eval_run_rejects_extra_fields(app_instance) -> None:
 
 
 @pytest.mark.asyncio
-async def test_eval_run_succeeds(app_instance) -> None:
-    """Ensure POST /api/v1/eval/run accepts valid requests with 202 Accepted."""
+async def test_eval_run_refuses_while_the_flag_is_off(app_instance) -> None:
+    """POST /api/v1/eval/run must refuse, not accept-and-discard.
+
+    The Sprint 2 stub returned 202 with a generated run_id that never appeared in
+    /results and produced no worker activity. `eval_benchmarks` ships False, so the
+    request is refused with 501 and a reason a caller can act on.
+    """
     async with AsyncClient(
         transport=ASGITransport(app=app_instance), base_url="http://test"
     ) as client:
@@ -78,27 +82,24 @@ async def test_eval_run_succeeds(app_instance) -> None:
             headers=AUTH_HEADERS,
         )
 
-    assert resp.status_code == 202
-    data = resp.json()
-    validated = EvalRunResponse.model_validate(data)
-    assert validated.status == "started"
-    assert validated.run_id.startswith("eval-")
+    assert resp.status_code == 501
+    assert resp.json()["error"]["code"] == "NOT_IMPLEMENTED"
 
 
 @pytest.mark.asyncio
-async def test_eval_results_returns_metrics(app_instance) -> None:
-    """Ensure GET /api/v1/eval/results returns 200 with schema-valid metrics."""
+async def test_eval_results_are_empty_and_stable(app_instance) -> None:
+    """GET /api/v1/eval/results returns an empty list, identically on every read.
+
+    The stub returned a fixed 0.92 / 0.94 / 342.5 ms with `completed_at` taken from
+    now(), so consecutive reads disagreed on when one unchanging score completed.
+    An empty list is the truthful answer and is stable by construction.
+    """
     async with AsyncClient(
         transport=ASGITransport(app=app_instance), base_url="http://test"
     ) as client:
-        resp = await client.get("/api/v1/eval/results?run_id=eval-run-456", headers=AUTH_HEADERS)
+        first = await client.get("/api/v1/eval/results?run_id=eval-run-456", headers=AUTH_HEADERS)
+        second = await client.get("/api/v1/eval/results?run_id=eval-run-456", headers=AUTH_HEADERS)
 
-    assert resp.status_code == 200
-    data = resp.json()
-    assert isinstance(data, list)
-    assert len(data) >= 1
-    validated = EvalResultResponse.model_validate(data[0])
-    assert validated.run_id == "eval-run-456"
-    assert 0.0 <= validated.benchmark_score <= 1.0
-    assert 0.0 <= validated.accuracy <= 1.0
-    assert validated.p95_latency_ms > 0
+    assert first.status_code == 200
+    assert first.json() == []
+    assert second.json() == first.json()

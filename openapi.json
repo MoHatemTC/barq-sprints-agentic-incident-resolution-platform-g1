@@ -574,6 +574,194 @@
         }
       }
     },
+    "/api/v1/suggestions/{execution_id}": {
+      "get": {
+        "tags": [
+          "Suggestion Review"
+        ],
+        "summary": "Review a completed AI draft awaiting acceptance",
+        "description": "Return the suggestion a completed run left on the incident, together with its confidence, classification and citation sources, for a human to accept or reject. Distinct from /api/v1/approvals/pending/{execution_id}, which serves a *paused* thread: a drafted run has no interrupt and 404s there.",
+        "operationId": "review_suggestion_api_v1_suggestions__execution_id__get",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "execution_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Execution Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuggestionReviewResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid operator token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such execution, or it did not draft.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceNow or database unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/suggestions/{execution_id}/decide": {
+      "post": {
+        "tags": [
+          "Suggestion Review"
+        ],
+        "summary": "Accept or reject a completed AI draft",
+        "description": "Accepting writes the acceptance to the incident: ai_resolution, ai_processing_state=complete and ai_processing_end in the single write the field model requires, which is the only path to 'complete'. Rejecting records the decision for audit and leaves the incident for the human to close. The decision is immutable: a second one is 409. Who decided comes from the operator token, never the body.",
+        "operationId": "decide_suggestion_api_v1_suggestions__execution_id__decide_post",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "execution_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Execution Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SuggestionDecisionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuggestionDecisionResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid operator token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token lacks the approver role.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No execution, or it did not draft.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Already decided.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceNow or database unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/config": {
       "get": {
         "tags": [
@@ -711,6 +899,9 @@
               }
             }
           },
+          "501": {
+            "description": "No evaluation engine is deployed."
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -793,6 +984,17 @@
   },
   "components": {
     "schemas": {
+      "AIProcessingState": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "in_progress",
+          "awaiting_approval",
+          "complete",
+          "failed"
+        ],
+        "title": "AIProcessingState"
+      },
       "ApprovalDecisionRequest": {
         "properties": {
           "decision": {
@@ -1840,6 +2042,248 @@
           "hybrid_reranked"
         ],
         "title": "RetrievalMode"
+      },
+      "SuggestionDecisionRequest": {
+        "properties": {
+          "decision": {
+            "type": "string",
+            "pattern": "^(approved|rejected)$",
+            "title": "Decision",
+            "description": "'approved' applies the resolution and completes the incident; 'rejected' records the decision and leaves the incident to be closed by hand."
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason",
+            "description": "Why the draft was accepted or rejected."
+          },
+          "solution": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Solution",
+            "description": "The resolution actually applied. Optional on approval: when omitted the drafted suggestion is accepted as written. When given it becomes ai_resolution verbatim, which is what lets an operator record what they did rather than what the model proposed."
+          },
+          "evidence": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence",
+            "description": "Optional structured evidence for the decision."
+          }
+        },
+        "type": "object",
+        "required": [
+          "decision"
+        ],
+        "title": "SuggestionDecisionRequest",
+        "description": "Accept or reject a completed draft."
+      },
+      "SuggestionDecisionResponse": {
+        "properties": {
+          "approval_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Approval Id"
+          },
+          "execution_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Execution Id"
+          },
+          "incident_sys_id": {
+            "type": "string",
+            "title": "Incident Sys Id"
+          },
+          "decision": {
+            "type": "string",
+            "title": "Decision"
+          },
+          "decided_by": {
+            "type": "string",
+            "title": "Decided By",
+            "description": "The operator token's subject, never taken from the body."
+          },
+          "decided_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Decided At"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "ai_resolution_written": {
+            "type": "boolean",
+            "title": "Ai Resolution Written",
+            "description": "True when ai_resolution and ai_processing_end were written.",
+            "default": false
+          },
+          "ai_processing_end": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Processing End"
+          },
+          "ai_processing_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Processing State"
+          }
+        },
+        "type": "object",
+        "required": [
+          "approval_id",
+          "execution_id",
+          "incident_sys_id",
+          "decision",
+          "decided_by",
+          "decided_at"
+        ],
+        "title": "SuggestionDecisionResponse",
+        "description": "The recorded decision and, on acceptance, what was written to the incident."
+      },
+      "SuggestionReviewResponse": {
+        "properties": {
+          "execution_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Execution Id"
+          },
+          "incident_sys_id": {
+            "type": "string",
+            "title": "Incident Sys Id"
+          },
+          "incident_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Incident Number"
+          },
+          "suggestion": {
+            "type": "string",
+            "title": "Suggestion",
+            "description": "The drafted resolution currently on the incident's AI Suggestion field.",
+            "default": ""
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence",
+            "description": "Confidence the confidence gate recorded, 0.00-1.00."
+          },
+          "classification": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Classification"
+          },
+          "processing_state": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AIProcessingState"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The incident's state. 'awaiting_approval' with a decided=None is a completed draft waiting for a human; there is no paused thread behind it."
+          },
+          "processing_start": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processing Start"
+          },
+          "human_review_required": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Human Review Required"
+          },
+          "decided": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided",
+            "description": "The recorded decision, or null while the draft is undecided."
+          }
+        },
+        "type": "object",
+        "required": [
+          "execution_id",
+          "incident_sys_id"
+        ],
+        "title": "SuggestionReviewResponse",
+        "description": "A drafted suggestion as it stands on the incident, for a human to judge."
       },
       "TraceResponse": {
         "properties": {

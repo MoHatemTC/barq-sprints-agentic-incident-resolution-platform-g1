@@ -86,7 +86,17 @@ class TestRowMapping:
     @pytest.mark.parametrize(
         ("outcome", "status"),
         [
-            ("suggested", "awaiting_approval"),
+            # A drafted suggestion is a *completed* run: the node ran to the end and
+            # its ServiceNow write succeeded. It used to record awaiting_approval,
+            # which is the state a paused thread has, so the row asserted a pause that
+            # did not exist — 24 such rows sat at awaiting_approval with zero matching
+            # approvals (dev407364, 2026-09-28). "Waiting for a person" is still true
+            # and is recorded on the incident's processing_state, which this test also
+            # pins, plus in the suggestion review route.
+            ("suggested", "succeeded"),
+            # Paused inside interrupt(), so act has no outcome of its own. This is
+            # the one case that really is awaiting_approval.
+            ("", "awaiting_approval"),
             ("escalated_high_risk", "blocked"),
             ("escalated_no_evidence", "blocked"),
             ("skipped_ineligible", "skipped"),
@@ -96,6 +106,20 @@ class TestRowMapping:
     def test_act_row_status(self, outcome: str, status: str) -> None:
         values = {"output": {"outcome": outcome, "processing_state": "awaiting_approval"}}
         assert summarize("act", values)[0] == status
+
+    def test_a_drafted_run_still_records_that_it_awaits_a_person(self) -> None:
+        """The node succeeds; the incident still says it is waiting for a human."""
+        values = {
+            "output": {
+                "outcome": "suggested",
+                "processing_state": "awaiting_approval",
+                "confidence": 0.9,
+            }
+        }
+        row_status, decision, _ = summarize("act", values)
+        assert row_status == "succeeded"
+        assert decision is not None
+        assert decision["processing_state"] == "awaiting_approval"
 
     def test_load_row_keeps_no_free_text(self) -> None:
         values = {"incident": {"number": "INC1", "description": "secret stuff", "priority": 3}}
@@ -195,8 +219,13 @@ class TestWorkflowStateTable:
         assert [r.node_name for r in stored] == [INPUT_NODE, START_NODE, *NODE_ORDER]
         assert [r.sequence_number for r in stored] == list(range(1, len(stored) + 1))
         assert {r.attempt for r in stored} == {1}
-        assert stored[-1].status == "awaiting_approval"
+        # A drafted suggestion completed. The row is not 'awaiting_approval' because
+        # nothing is paused: this run has no interrupt to approve, so that status
+        # asserted a pause which did not exist. The incident still says it awaits a
+        # person, and that is what processing_state records.
+        assert stored[-1].status == "succeeded"
         assert stored[-1].decision["outcome"] == "suggested"
+        assert stored[-1].decision["processing_state"] == "awaiting_approval"
         retrieve_row = next(r for r in stored if r.node_name == "retrieve")
         assert retrieve_row.evidence[0]["article_id"] == "KB0001-v2"
         risk_row = next(r for r in stored if r.node_name == "determine_risk")

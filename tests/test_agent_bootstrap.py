@@ -51,7 +51,7 @@ from agent.retrieval import (
 )
 from agent.runtime import build_runtime, invoke_incident_graph
 from agent.state import AgentState, EventPayload, initial_state
-from app.models.knowledge import Classification, SecurityLevel
+from app.models.knowledge import Article, Classification, SecurityLevel, WorkflowState
 from app.retrieval.embedding import EmbeddedText
 from app.retrieval.ingest import ingest_articles
 from app.retrieval.sources import LocalJSONSource
@@ -576,20 +576,111 @@ class TestQdrantRetriever:
         assert search_categories(label, incident_category) == expected
 
     @pytest.mark.parametrize("label", [Classification.OTHER, Classification.SECURITY])
-    def test_labels_without_corpus_coverage_have_no_evidence(
+    def test_labels_without_corpus_coverage_still_search_but_hold_a_higher_bar(
         self, corpus_qdrant: QdrantClient, label: Classification
     ) -> None:
+        """``other``/``security`` run the wide pass, gated at the out-of-category bar.
+
+        This used to return ``hits == []`` without searching at all, on the reasoning
+        that no corpus article covers those labels. #173 broke that premise: the
+        knowledge-capture trigger *is* the no-evidence interrupt, so every article the
+        platform learns comes out of this population and was then invisible to it.
+        KB1011-v1.0 was indexed and a near-identical incident still returned
+        hit_count=0 (dev407364, 2026-09-28).
+
+        The gate still holds: a query with no real match does not clear
+        ``threshold + OUT_OF_CATEGORY_EVIDENCE_MARGIN``, so the no-evidence interrupt
+        — and therefore S3.5 capture — still fires where it should. Relevance here
+        comes from ``HashingEngine``, whose absolute scale is not the production
+        model's, so this asserts the ordering, not a production score.
+        """
         client = MagicMock(wraps=corpus_qdrant)
-        result = self._retriever(client).search(
+        unrelated = self._retriever(client).search(
             "request annual leave approval next week holiday",
             classification=label,
             top_k=5,
-            threshold=0.0,
+            threshold=0.55,
         )
-        assert result.category_filter is None
-        assert result.hits == []
-        assert result.sufficient is False
-        client.query_points.assert_not_called()
+        assert unrelated.category_filter is None
+        # The wide pass runs. This is the whole point of the change.
+        client.query_points.assert_called()
+        assert unrelated.best_relevance < (0.55 + OUT_OF_CATEGORY_EVIDENCE_MARGIN)
+        assert unrelated.sufficient is False
+
+    @pytest.mark.parametrize("label", [Classification.OTHER, Classification.SECURITY])
+    def test_a_captured_article_is_reachable_from_its_own_label(
+        self, label: Classification
+    ) -> None:
+        """The regression this fixes: learn something, then find it again.
+
+        A directory-profile article (the KB1011 shape S3.5 produces) captured out of
+        a no-evidence interrupt must be retrievable by the next incident the
+        classifier labels the same way. Before the change the article was absent from
+        ``hits`` entirely, because the retriever never ran a search.
+
+        Ingested through the real ``ingest_articles`` path so the payload shape is
+        the production one, into a client of its own: ``corpus_qdrant`` is
+        module-scoped and adding an article to it would leak into every later test in
+        the module.
+        """
+        captured = Article(
+            article_number="KB1011",
+            version="1.0",
+            title="Updating Employee Job Title in the Staff Directory Admin Console",
+            body=(
+                "1. Open the staff directory admin console.\n"
+                "2. Search the employee by surname.\n"
+                "3. Correct the job title field to the current title from the HR "
+                "record.\n"
+                "4. Save the change.\n"
+                "5. Ask the user to refresh the directory page to confirm."
+            ),
+            short_description="Update a stale job title in the staff directory",
+            category="software",
+            service="general",
+            workflow_state=WorkflowState.HUMAN_RESOLVED,
+            security_level=SecurityLevel.INTERNAL,
+        )
+        client = QdrantClient(":memory:")
+        ingest_articles(
+            [captured],
+            client,
+            collection_name="agent_test",
+            embedding_engine=HashingEngine(),
+        )
+        retriever = self._retriever(client)
+
+        restated = retriever.search(
+            "My staff directory profile still shows the job title from my previous "
+            "department after I moved roles. Please update the title.",
+            classification=label,
+            top_k=5,
+            threshold=0.55,
+        )
+        assert "KB1011-v1.0" in {hit.article_id for hit in restated.hits}
+
+        # It is found *because it matches*, not merely because the corpus is now
+        # searched: a same-label query about something unrelated scores far lower, so
+        # the gate is still discriminating rather than trivially satisfied.
+        unrelated = retriever.search(
+            "request annual leave approval next week holiday",
+            classification=label,
+            top_k=5,
+            threshold=0.55,
+        )
+        assert restated.best_relevance > unrelated.best_relevance
+
+        # The sufficiency wiring is live on this path: clearing the bar flips the
+        # gate. (HashingEngine's scale is not the production model's, so the bar is
+        # set to what this engine can actually clear.)
+        cleared = retriever.search(
+            "My staff directory profile still shows the job title from my previous "
+            "department after I moved roles. Please update the title.",
+            classification=label,
+            top_k=5,
+            threshold=restated.best_relevance - OUT_OF_CATEGORY_EVIDENCE_MARGIN - 0.01,
+        )
+        assert cleared.sufficient is True
 
     def test_unrelated_query_scores_low(self, corpus_qdrant: QdrantClient) -> None:
         result = self._retriever(corpus_qdrant).search(
