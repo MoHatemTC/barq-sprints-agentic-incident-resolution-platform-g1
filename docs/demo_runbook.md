@@ -127,6 +127,11 @@ uv run python scripts/demo_s34_hitl_live.py --incident INC0010023 --keep-parked
 
 The script prints the exact `curl` for the decide call when it stops.
 
+To show the normal draft reaching `complete` after an operator accepts it,
+run `uv run python scripts/demo_s34_hitl_live.py --incident INC0010025
+--priority 3 --accept-draft`. The script verifies the resolution, processing
+end time, and second-decision 409. This passed on the local PDI on 2026-09-28.
+
 ## 4 · What each path proves
 
 **Low/medium risk (`INC0010025`) — straight through.** All eleven nodes run,

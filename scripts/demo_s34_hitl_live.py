@@ -232,9 +232,11 @@ async def straight_through(
     execution_id: str,
     headers: dict[str, str],
     step: dict[str, Any],
+    *,
+    accept_draft: bool,
 ) -> dict[str, Any]:
-    """The no-human path: every node runs and the cited draft is written."""
-    phase(6, "Straight-through path — no approval needed, the draft is written")
+    """The graph drafts without a pause; an operator may then accept it."""
+    phase(6, "Straight-through graph — no interrupt, cited draft written")
     at_park = step.get("at_park") or {}
     pending = httpx.get(
         f"{base}/api/v1/approvals/pending/{execution_id}", headers=headers, timeout=15.0
@@ -287,6 +289,45 @@ async def straight_through(
         str(after.get("ai_processing_state")) == "awaiting_approval",
         f"state={after.get('ai_processing_state')!r}",
     )
+    if accept_draft:
+        phase(9, "Accept the cited draft and complete the incident")
+        decided = httpx.post(
+            f"{base}/api/v1/suggestions/{execution_id}/decide",
+            headers=headers,
+            json={"decision": "approved", "reason": "Reviewed and accepted the cited draft."},
+            timeout=30.0,
+        )
+        check(
+            "suggestion decision returns 200",
+            decided.status_code == 200,
+            f"got {decided.status_code}",
+        )
+        if decided.status_code != 200:
+            say(f"        body: {decided.text[:400]}")
+            return step
+        step["suggestion_decision"] = decided.json()
+        completed = await snapshot(client, sys_id)
+        step["completed"] = completed
+        check(
+            "ServiceNow marks the incident complete",
+            str(completed.get("ai_processing_state")) == "complete",
+        )
+        check(
+            "accepted draft became the resolution",
+            str(completed.get("ai_resolution") or "") == suggestion,
+        )
+        check("processing end is set", bool(completed.get("ai_processing_end")))
+        replay = httpx.post(
+            f"{base}/api/v1/suggestions/{execution_id}/decide",
+            headers=headers,
+            json={"decision": "rejected"},
+            timeout=15.0,
+        )
+        check(
+            "a second suggestion decision is refused",
+            replay.status_code == 409,
+            f"got {replay.status_code}",
+        )
     return step
 
 
@@ -297,6 +338,7 @@ async def run_one(
     priority: str,
     solution: str,
     keep_parked: bool,
+    accept_draft: bool,
     park_timeout: float,
 ) -> dict[str, Any]:
     settings = get_settings()
@@ -426,7 +468,13 @@ async def run_one(
             # the demo: the same code path minus the interrupt.
             step["at_park"] = await snapshot(client, sys_id)
             return await straight_through(
-                base, client, sys_id, execution_id, operator_headers, step
+                base,
+                client,
+                sys_id,
+                execution_id,
+                operator_headers,
+                step,
+                accept_draft=accept_draft,
             )
 
         check(
@@ -666,6 +714,7 @@ async def main_async(args: argparse.Namespace) -> int:
                 priority=priority,
                 solution=solution,
                 keep_parked=args.keep_parked,
+                accept_draft=args.accept_draft,
                 park_timeout=args.timeout,
             )
         except (TimeoutError, httpx.HTTPError) as exc:
@@ -727,6 +776,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--keep-parked", action="store_true", help="stop after the brief; do not decide"
+    )
+    parser.add_argument(
+        "--accept-draft",
+        action="store_true",
+        help="accept a straight-through cited draft and verify complete write-back",
     )
     parser.add_argument(
         "--timeout",
