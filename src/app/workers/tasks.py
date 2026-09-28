@@ -45,12 +45,19 @@ from app.db.redis.keys import INCIDENT_DLQ_QUEUE
 from app.workers.celery_app import celery_app
 from app.workers.db import WorkerRepo, build_worker_repo
 from app.workers.producer import CORRELATION_HEADER
+from app.workers.reaper import reap_stale_executions as reap_stale
 from app.workers.retry_policy import (
     RetryableError,
     RetryConfig,
     TerminalError,
     backoff_delay,
     build_retry_config,
+)
+from app.workers.sync_engine import (
+    build_sync_database_url,
+    create_sync_engine,
+    create_sync_session_factory,
+    sync_session_scope,
 )
 from observability.tracing import get_tracer
 
@@ -426,6 +433,37 @@ def _flush_traces(**_: Any) -> None:
     get_tracer().flush()
 
 
+@celery_app.task(
+    name="app.workers.tasks.reap_stale_executions",
+    # The sweep is a few UPDATE statements; it must never be retried into a pile-up
+    # and never be killed mid-sweep by the limits that size an incident run.
+    max_retries=0,
+    soft_time_limit=30,
+    time_limit=60,
+)
+def reap_stale_executions() -> dict[str, Any]:
+    """One crash-reaper sweep. See ``workers/reaper.py`` for the reclaim rule.
+
+    A no-op sweep is the normal case and is not logged above info, so the beat does
+    not drown the worker's own logs.
+    """
+    settings = get_settings()
+    factory = create_sync_session_factory(create_sync_engine(build_sync_database_url(settings)))
+    with sync_session_scope(factory) as session:
+        report = reap_stale(
+            session,
+            time_limit_seconds=settings.worker_time_limit,
+        )
+        session.commit()
+    if report.reclaimed:
+        logger.warning(
+            "reaper_sweep_reclaimed",
+            count=len(report.reclaimed),
+            execution_ids=[str(e) for e in report.reclaimed],
+        )
+    return {"reclaimed": len(report.reclaimed), "examined": report.examined}
+
+
 process_incident = build_incident_task(celery_app, get_settings())
 
 __all__ = [
@@ -434,5 +472,6 @@ __all__ = [
     "build_incident_task",
     "invoke_graph",
     "process_incident",
+    "reap_stale_executions",
     "record_dead_letter",
 ]

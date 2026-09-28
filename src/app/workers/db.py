@@ -26,11 +26,15 @@ docs/sprint2_worker_topology.md):
 from __future__ import annotations
 
 import datetime as dt
+import os
+import socket
+from functools import lru_cache
 from typing import Any, Protocol
 from uuid import UUID, uuid4
 
 from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.sql import func
 
 from app.db.models import Event, Execution, Failure, RetryState
 from app.workers.sync_engine import (
@@ -43,6 +47,18 @@ from app.workers.sync_engine import (
 
 _QUEUED_STATUSES = ("accepted", "queued")
 _CLAIMABLE_STATUSES = ("accepted", "queued", "running")
+
+
+@lru_cache(maxsize=1)
+def _worker_id() -> str:
+    """Identify the process holding an execution lease.
+
+    Recorded on the row so a reclaimed execution can name the worker that died,
+    which is the difference between "something broke" and "host X lost pid Y".
+    """
+    return f"{socket.gethostname()}:{os.getpid()}"[:128]
+
+
 _PARKED_RETRY_STATES = ("exhausted", "cancelled")
 
 
@@ -179,7 +195,12 @@ class PostgresRepo:
                 Execution.execution_id == execution_id,
                 Execution.status.in_(_CLAIMABLE_STATUSES),
             )
-            .values(status="running")
+            # The lease. Claiming is the only place a run becomes 'running', so this
+            # is where the reaper's clock starts: a worker that dies leaves its
+            # heartbeat frozen here, and reap_stale_executions() reclaims it once the
+            # window (worker_time_limit + grace) passes. worker_id names the holder so
+            # the abandonment can say which worker died.
+            .values(status="running", heartbeat_at=func.now(), worker_id=_worker_id())
             .returning(Execution.execution_id)
         )
         with self._session_factory() as session, session.begin():

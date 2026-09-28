@@ -6,6 +6,7 @@ from api.routers.dlq import router as dlq_router
 from api.routers.eval import router as eval_router
 from api.routers.executions import router as executions_router
 from api.routers.health import router as health_router
+from api.routers.suggestions import router as suggestions_router
 from api.routers.webhook import router as webhook_router
 from app.auth.webhook_oauth import config_from_settings, create_token_router
 from app.core.config import Settings, get_settings
@@ -51,6 +52,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(webhook_router)
     app.include_router(executions_router)
     app.include_router(approvals_router)
+    app.include_router(suggestions_router)
     app.include_router(config_router)
     app.include_router(dlq_router)
     app.include_router(eval_router)

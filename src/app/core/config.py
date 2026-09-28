@@ -218,6 +218,14 @@ class Settings(RetrievalSettings):
         description="Prefetch multiplier: 1 for long-running tasks so workers do not "
         "hoard jobs while others sit idle",
     )
+    reaper_interval_seconds: float = Field(
+        default=60.0,
+        description="How often the crash reaper sweeps for executions left 'running' "
+        "by a dead worker. A run is only reclaimed once worker_time_limit plus the "
+        "reaper's grace margin has passed, so this interval controls detection "
+        "latency, not correctness; keep it well under that window so a crash is "
+        "noticed while the incident is still being looked at",
+    )
     worker_repo_backend: str = Field(
         default="postgres",
         description="Worker repository backend: 'postgres' or 'memory' (tests/stand-in)",

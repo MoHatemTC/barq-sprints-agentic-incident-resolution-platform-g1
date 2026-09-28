@@ -127,8 +127,25 @@ def summarize(
             status = "skipped"
         elif outcome.startswith("escalated"):
             status = "blocked"
-        else:
+        elif not outcome:
+            # act parked inside interrupt() and so has no outcome of its own yet.
+            # This is a genuinely paused thread, which is the one case that does
+            # belong at awaiting_approval.
             status = "awaiting_approval"
+        else:
+            # A drafted suggestion completed: the node ran to the end and its write
+            # to ServiceNow succeeded. It is not waiting on anything.
+            #
+            # This used to record "awaiting_approval", which is the state a *paused*
+            # thread has. A straight-through run has no interrupt to approve —
+            # /api/v1/approvals/pending/{id} returns 404 for it — so the row asserted
+            # a pause that did not exist: 24 act rows sat at awaiting_approval with
+            # zero matching approvals (dev407364, 2026-09-28).
+            #
+            # "Waiting for a person" is still true and is still recorded where it
+            # belongs: ``processing_state`` on the incident is awaiting_approval, and
+            # the draft is offered for review via the suggestion review route.
+            status = "succeeded"
         output_keys = ("outcome", "processing_state", "confidence", "classification", "write_back")
         return status, {k: output.get(k) for k in output_keys}, []
     section = DECISION_SECTIONS.get(node)

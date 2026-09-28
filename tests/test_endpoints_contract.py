@@ -19,7 +19,6 @@ from httpx import ASGITransport, AsyncClient
 import tests.helpers as h
 from api.schemas.config import REDACTED_SENTINEL, RedactedConfigResponse
 from api.schemas.dlq import DLQEventResponse, DLQReplayResponse
-from api.schemas.eval import EvalResultResponse, EvalRunResponse
 from api.schemas.executions import ExecutionResponse, IncidentExecutionsResponse, TraceResponse
 from app.core.constants import ERROR_STATUS_MAP
 from app.db.models import Execution, ExecutionNodeState
@@ -340,24 +339,37 @@ async def test_dlq_list_contract_and_replay_rbac_matrix(client) -> None:
 # ---------------------------------------------------------------------------
 @pytest.mark.asyncio
 async def test_eval_run_and_results_stub_contract(client) -> None:
+    """No evaluation engine is deployed, so both endpoints must say so.
+
+    The Sprint 2 stub fabricated a result on every read — a fixed 0.92 / 0.94 /
+    342.5 ms with ``completed_at`` stamped from ``now()``, so two reads seconds apart
+    reported two completion times for one fixed score, and ``POST /run`` returned
+    202 with a run_id that never appeared anywhere. The contract now is an honest
+    refusal (501) and an empty list, which is distinguishable from "scored zero".
+    """
     run = await client.post(
         "/api/v1/eval/run",
         json={"dataset_name": "servicenow-incident-benchmarks-v1", "sample_size": 10},
         headers=AUTH,
     )
-    assert run.status_code == 202
-    run_body = EvalRunResponse.model_validate(run.json())
-    assert run_body.status == "started"
+    assert run.status_code == 501
+    assert run.json()["error"]["code"] == "NOT_IMPLEMENTED"
 
     results = await client.get("/api/v1/eval/results", headers=AUTH)
     assert results.status_code == 200
     entries = results.json()
-    assert isinstance(entries, list) and entries
-    EvalResultResponse.model_validate(entries[0])
+    assert entries == []
+
+    # Repeated reads stay identical. The old stub's timestamp moved on every call,
+    # which is what made the fabrication visible to a reviewer.
+    again = await client.get("/api/v1/eval/results", headers=AUTH)
+    assert again.json() == entries
 
     filtered = await client.get("/api/v1/eval/results?run_id=eval-x", headers=AUTH)
     assert filtered.status_code == 200
-    assert filtered.json()[0]["run_id"] == "eval-x"
+    # The run_id filter is honoured, and since nothing has ever been evaluated the
+    # filtered answer is still an empty list rather than a synthetic match.
+    assert filtered.json() == []
 
     # Request schema rejects invalid input.
     invalid = [

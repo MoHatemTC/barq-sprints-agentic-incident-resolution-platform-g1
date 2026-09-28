@@ -64,6 +64,8 @@ EXPECTED_COLUMNS = {
         "started_at",
         "ended_at",
         "termination_cause",
+        "heartbeat_at",
+        "worker_id",
         "updated_at",
     },
     "workflow_state": {
@@ -125,6 +127,10 @@ NULLABLE_COLUMNS = {
         "agent_version",
         "ended_at",
         "termination_cause",
+        # Lease columns for the crash reaper. Nullable so existing rows are untouched
+        # and are treated as stale (NULL heartbeat) by reap_stale_executions().
+        "heartbeat_at",
+        "worker_id",
     },
     "workflow_state": {"ended_at", "decision", "state_snapshot"},
     "approvals": {"workflow_state_id", "reason", "evidence"},
@@ -316,6 +322,7 @@ def test_all_timestamp_columns_are_timezone_aware() -> None:
         ("idempotency_keys", "created_at"),
         ("executions", "started_at"),
         ("executions", "ended_at"),
+        ("executions", "heartbeat_at"),
         ("executions", "updated_at"),
         ("workflow_state", "started_at"),
         ("workflow_state", "ended_at"),

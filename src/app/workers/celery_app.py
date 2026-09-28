@@ -66,6 +66,19 @@ def create_celery_app(settings: Settings) -> Celery:
         broker_connection_retry_on_startup=True,
         # Recycle prefork children to bound long-running memory growth.
         worker_max_tasks_per_child=1000,
+        # Crash reaper. Runs on its own queue so a sweep never competes with, or
+        # delays, an incident. See workers/reaper.py for why a beat entry alone was
+        # not enough: nothing reclaimed a row left 'running' by a dead worker.
+        beat_schedule={
+            "reap-stale-executions": {
+                "task": "app.workers.tasks.reap_stale_executions",
+                "schedule": float(settings.reaper_interval_seconds),
+                "options": {"queue": "barq-maintenance"},
+            },
+        },
+        task_routes={
+            "app.workers.tasks.reap_stale_executions": {"queue": "barq-maintenance"},
+        },
     )
     return app
 
