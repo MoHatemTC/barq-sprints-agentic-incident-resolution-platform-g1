@@ -8,8 +8,8 @@ Agentic incident resolution on ServiceNow: event-driven, observable, and guardra
 **Explicitly out of scope, by design:** polling of any kind, Kubernetes, and admin-credential authentication.
 
 Built by BARQ × Sprints G1 across four one-week sprints. See [TEAM.md](TEAM.md) for who
-owns what, and [docs/ROADMAP.md](docs/ROADMAP.md) for the full four-sprint scope — this
-Sprints 1 and 2 are merged and Sprint 3 is in progress.
+owns what, and [docs/ROADMAP.md](docs/ROADMAP.md) for the four-sprint scope and the
+latest recorded delivery status.
 
 ---
 

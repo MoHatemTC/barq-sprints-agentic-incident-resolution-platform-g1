@@ -65,7 +65,7 @@ Tracked in the [Sprint 3 milestone](https://github.com/MoHatemTC/barq-sprints-ag
 |---|---|---|
 | S3.1 — Multi-agent diagnosis and resolution | [@MohamedAbdelaiem](https://github.com/MohamedAbdelaiem) | [sprint3_multi_agent_design.md](sprint3_multi_agent_design.md) |
 | S3.2 — Tool registry, permission classes and allowlist | [@ahmedtamer101](https://github.com/ahmedtamer101) | [sprint3_tool_registry.md](sprint3_tool_registry.md) |
-| S3.3 — Input and output guardrails | [@Tasneemmohammed0](https://github.com/Tasneemmohammed0) | No design record in the repository yet |
+| S3.3 — Input and output guardrails | [@Tasneemmohammed0](https://github.com/Tasneemmohammed0) | [sprint-3/guardrail_design.md](sprint-3/guardrail_design.md) |
 | S3.4 — LangGraph interrupt/resume, approval audit, crash recovery | [@ali-ezz](https://github.com/ali-ezz) | [sprint3_hitl_design.md](sprint3_hitl_design.md), [sprint3_recovery_design.md](sprint3_recovery_design.md) |
 | S3.5 — Human-resolution KB write-back and Qdrant re-ingestion | [@kerolos-mohsen](https://github.com/kerolos-mohsen) | [sprint3_knowledge_capture_design.md](sprint3_knowledge_capture_design.md) |
 

@@ -1,7 +1,8 @@
 # Roadmap
 
-The full PRD scope across four one-week sprints. Text below is taken directly from the
-PRD; nothing here is inferred beyond the due dates, which are marked as provisional.
+The PRD scope across four one-week sprints, updated where the team moved work into
+earlier sprints. The task briefs in Airtable and the code merged on GitHub determine
+delivery status; this roadmap records scope rather than grading.
 
 Requirement IDs (`FR-*`, `A-*`, `NFR-*`) refer to the PRD's Functional Requirements,
 List of Features and Non-Functional Requirements sections.
@@ -57,10 +58,11 @@ and capture of a human resolution back into the knowledge base and the vector st
 
 Requirements: FR-16 → FR-18, plus FR-12 · A-12, A-13, A-14
 
-Status at the end of Sprint 3: S3.1, S3.2, S3.4 and S3.5 merged. **S3.3 (input and
-output guardrails) is not delivered** — `safety_check` ships as an explicit
-pass-through that returns `passed=True, implemented=False`, and the input screening
-stage is absent. That is the one gap in this sprint's scope.
+Status checked on 2026-09-28: Airtable marks all five Sprint 3 tasks `Done`.
+S3.1, S3.2, S3.3 and S3.5 are merged on `main`; S3.4 is implemented and live-tested
+in [PR #158](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pull/158),
+which still needs a current approval and merge. S3.3 includes input screening,
+redaction and a real `safety_check`; it is no longer a pass-through.
 
 Definition of done: a live incident runs the full graph to a cited draft; a high-risk
 incident stops at the risk node; killing the process mid-run and retrying resumes from
@@ -78,10 +80,17 @@ versioned evaluation dataset wired into CI as a regression gate; a reliability p
 covering timeouts, retries, dead-letter handling, fallback paths and health checks;
 GitHub Actions building a deployable image on every pull request.
 
-Already delivered ahead of Sprint 4: the tool registry with permission classes and
+Implemented ahead of Sprint 4: the tool registry with permission classes and
 server-side allowlist (S3.2), LangGraph interrupt and resume for high-risk actions and
-below-threshold confidence (S3.4), and Langfuse tracing with per-node spans, retrieval,
-tool calls, generations, token usage, latency and cost (S2.5, S3.1).
+below-threshold confidence (S3.4, pending merge in #158), input and output guardrails
+(S3.3), and Langfuse tracing with per-node spans, retrieval, tool calls, generations,
+token usage, latency and cost (S2.5, S3.1).
+
+As checked in Airtable on 2026-09-28, no Sprint 4 task records have been published.
+The remaining PRD scope above has no assigned Sprint 4 task owner or deadline yet.
+The repository has an adversarial seed set and a retrieval evaluation set, but the
+PRD's evaluation regression gate and deployable-image build on every pull request
+are not in `.github/workflows/ci.yml` yet. They remain Sprint 4 delivery work.
 
 Requirements: FR-18 → FR-20 and the remaining NFRs · A-14, A-15
 
