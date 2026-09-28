@@ -20,6 +20,8 @@ To respect sprint boundaries and teammate workstream ownership, endpoints are ca
 |                                   atomic idempotency, Redis queueing, and immediate 202 Accepted. |
 | • GET /health                   : Process liveness probe (HTTP 200).                              |
 | • GET /ready                    : Live dependency readiness checking PostgreSQL and Redis.       |
+| • POST /api/v1/oauth/token      : OAuth client-credentials exchange; issues the webhook or        |
+|                                   operator JWT that every Bearer route above then requires.      |
 | • Execution Endpoints           : Reads live data from the operational database schema            |
 |   (GET /executions/{id})          established by Ahmed in S2.2.                                   |
 +---------------------------------------------------------------------------------------------------+
@@ -28,7 +30,9 @@ To respect sprint boundaries and teammate workstream ownership, endpoints are ca
 +---------------------------------------------------------------------------------------------------+
 | TIER 2: SPRINTS 3–4 DOWNSTREAM ENDPOINTS (Strict Contract Stubs)                                  |
 +---------------------------------------------------------------------------------------------------+
-| • HITL Approvals (GET /approvals, POST /approvals/{id}/decide)                                    |
+| • HITL Approvals (GET /approvals, GET /approvals/{id}, POST /approvals/{id}/decide, and           |
+|   GET /approvals/pending/{execution_id} — the last added by S3.4 for an execution parked on an    |
+|   interrupt)                                                                                      |
 | • DLQ Management (GET /dlq, POST /dlq/{event_id}/replay with Operator RBAC)                       |
 | • Evaluation & Benchmarking (GET /eval/results, POST /eval/run)                                    |
 | • Runtime Config (GET /config with secrets redacted)                                              |
@@ -45,7 +49,7 @@ To respect sprint boundaries and teammate workstream ownership, endpoints are ca
 ### 3.1. Executions (`src/api/routers/executions.py`)
 * **Schemas**: `ExecutionResponse`, `TraceResponse`, `IncidentExecutionsResponse` in [src/api/schemas/executions.py](../../src/api/schemas/executions.py).
 * **Business Logic Status**: **Implemented with Real Database Logic**.
-* **Rationale**: Ahmed Tamer (S2.2) already deployed the canonical PostgreSQL operational schema (`events`, `executions`, `execution_node_states`). Queries for incident executions and execution statuses read directly from the database session. If an execution has not yet generated detailed agent trace steps, the trace endpoint returns a structured response indicating trace progression.
+* **Rationale**: Ahmed Tamer (S2.2) already deployed the canonical PostgreSQL operational schema (`events`, `executions`, `workflow_state`). There is no `execution_node_states` *table*: per-node attempts live in `workflow_state`, and the ORM class that maps it is named `ExecutionNodeState`. The full set of seven tables is `events`, `idempotency_keys`, `executions`, `workflow_state`, `approvals`, `failures`, `retry_state`. Queries for incident executions and execution statuses read directly from the database session. If an execution has not yet generated detailed agent trace steps, the trace endpoint returns a structured response indicating trace progression.
 
 ### 3.2. HITL Approvals (`src/api/routers/approvals.py`)
 * **Schemas**: `ApprovalResponse`, `ApprovalDecisionRequest` in [src/api/schemas/approvals.py](../../src/api/schemas/approvals.py).

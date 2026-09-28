@@ -159,9 +159,13 @@ def ingest_articles(
     ``purge_unknown_articles=True`` (the seed-script path) to additionally
     remove points of articles no longer in the corpus.
 
-    Crucial: BM25 IDF fitting requires that all chunk texts are embedded
-    together in a single batch call to embed_documents, preserving true
-    corpus statistics.
+    Crucial: BM25 IDF is **not** fitted here. Nothing in this module embeds the
+    whole corpus in one batch, and an earlier version of this docstring claimed
+    otherwise and argued for keeping the single batch so corpus statistics were
+    preserved. That was wrong and was retracted: the sparse vectors carry term
+    frequencies only, and Qdrant applies IDF server-side via ``Modifier.IDF`` (see
+    ``clients/qdrant.py``). Do not remove the modifier, and do not restore a
+    whole-corpus batch to "fix" IDF.
 
     Raises:
         ValueError: If the input is empty or produces no chunks — seeding

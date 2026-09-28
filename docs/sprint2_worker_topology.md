@@ -120,7 +120,7 @@ witnessed the failure is dead — it aborted with the task's transaction).
    killed at grace expiry is recovered by redelivery + the running→running claim, not by grace.
    Grace only shortens the *worst case* container shutdown; correctness comes from acks_late.
    Revisit if Sprint 3 graph runs become long enough that re-running them is expensive.
-3. **redis-py is pinned to 5.2.1**: 8.x breaks kombu 5.6 BRPOP parsing
+3. **redis-py is pinned to 5.3.1**: 8.x breaks kombu 5.6 BRPOP parsing
    (`KeyError: 'properties'` on delivery — reproduced live). Revisit when kombu supports 8.x.
 4. ~~`create_celery_app` currently does not apply `worker_concurrency`~~ **Fixed**: the celery app
    now applies `worker_concurrency` from Settings (a `--concurrency` CLI flag still overrides), so
@@ -138,7 +138,7 @@ witnessed the failure is dead — it aborted with the task's transaction).
 | Failure logged from a dead session | fresh session per repo operation |
 | Replay LREM racing a fresh DLQ push | exact-string LREM; new record ⇒ new `failed_at` ⇒ different string |
 
-## 9. Configuration (defaults; every value config-driven)
+## 9. Configuration (defaults; every value config-driven except where noted)
 
 | Setting | Default | Why |
 |---|---|---|
@@ -149,11 +149,11 @@ witnessed the failure is dead — it aborted with the task's transaction).
 | `worker_prefetch` | 1 | long tasks must not sit behind hoarded jobs |
 | `worker_concurrency` | 4 | applied in the celery app config; a `--concurrency` CLI flag still overrides |
 | `worker_repo_backend` | postgres | `memory` exists for fast tests only |
-| `worker_max_tasks_per_child` | 1000 | bounds prefork child memory growth |
+| `worker_max_tasks_per_child` | 1000 | bounds prefork child memory growth — **hard-coded, not config-driven**: there is no `Settings` field for it. It is a literal at `src/app/workers/celery_app.py:68`, which is the one place the worker code departs from the "no literal concurrency/retry/timeout numbers" invariant recorded at `src/app/core/config.py:178`. Change it in the app factory, not in an env file. |
 
 ## 10. Version pins (evidence in `docs/sprint2_test_output.txt`)
 
-celery 5.6.3 · kombu 5.6.2 · redis 5.2.1 (pinned, §7.3) · psycopg 3.3.5 · SQLAlchemy 2.0.53.
+celery 5.6.3 · kombu 5.6.2 · redis 5.3.1 (pinned, §7.3) · psycopg 3.3.6 · SQLAlchemy 2.0.54.
 
 ## 11. Measured evidence & Topology Benchmarks (2026-09-16, dev stack)
 

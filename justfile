@@ -85,4 +85,3 @@ test-integration:
 # transcript doubles as review evidence; see docs/sprint2_cli_walkthrough.md.
 walkthrough:
     bash scripts/s2_3_cli_walkthrough.sh
-

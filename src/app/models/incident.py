@@ -102,7 +102,18 @@ class Incident(BaseModel):
 
 
 class IncidentUpdatePayload(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
+    """The agent's write body for the incident table.
+
+    ``extra="forbid"`` is load-bearing, not tidiness. Every AI field is written
+    through a hand-typed ``x_2215032_ai_inc_0_ai_*`` alias, and under the Pydantic
+    default a single-character typo in one of them is silently dropped from
+    ``to_table_api_body()``: the write goes out missing that field and nothing
+    reports it, because the field never entered the requested body for
+    ``_verify_write_persisted`` to compare. Forbidding extras turns that silent
+    no-write into a loud error at the call site.
+    """
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     work_notes: str | None = None
 

@@ -23,12 +23,14 @@ from uuid import uuid4
 import pytest
 import structlog
 from httpx import ASGITransport, AsyncClient
+from langgraph.checkpoint.memory import InMemorySaver
 from opentelemetry.sdk.trace import ReadableSpan, TracerProvider
 from opentelemetry.sdk.trace.export import SpanExporter, SpanExportResult
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 from agent.graph import build_graph, run_graph
 from agent.nodes import NODE_ORDER
+from agent.runtime import build_runtime, invoke_incident_graph, resume_incident_graph
 from agent.state import EventPayload
 from app.core.config import Environment
 from app.core.logging import configure_logging
@@ -44,6 +46,7 @@ from observability.tracing import (
 )
 from tests.agent_support import (
     EXECUTION_ID,
+    ORDER_P1,
     VPN,
     FakeLLM,
     FakeServiceNow,
@@ -131,6 +134,40 @@ def _isolate_global_tracer():
 
 
 class TestCorrelation:
+    def test_resume_rejoins_execution_trace_and_restores_request_context(self) -> None:
+        tracer, exporter = recording_tracer()
+        deps = make_deps(tracer=tracer, llm=FakeLLM(vpn_answers()))
+        runtime = build_runtime(deps, InMemorySaver())
+        correlation_id = "corr-resume-continuity"
+        with tracer.span("worker.pickup", correlation_id=correlation_id):
+            paused = invoke_incident_graph(
+                event_for(ORDER_P1),
+                execution_id=EXECUTION_ID,
+                correlation_id=correlation_id,
+                attempt=1,
+                runtime=runtime,
+            )
+        assert paused["paused"] is True
+        with tracer.span("operator.request", correlation_id="unrelated-request"):
+            request_trace = tracer.current_trace_id()
+            resumed = resume_incident_graph(
+                execution_id=EXECUTION_ID,
+                decision={"decision": "approved", "decided_by": "operator"},
+                correlation_id=correlation_id,
+                runtime=runtime,
+            )
+            assert tracer.current_trace_id() == request_trace
+        assert resumed["paused"] is False
+        spans = finished(tracer, exporter)
+        writes = [s for s in spans if s.name.startswith("servicenow.write_")]
+        assert {s.name for s in writes} == {
+            "servicenow.write_ai_fields",
+            "servicenow.write_execution_log",
+        }
+        assert {format(s.context.trace_id, "032x") for s in writes} == {
+            trace_id_for(correlation_id)
+        }
+
     def test_trace_id_is_deterministic_per_correlation_id(self) -> None:
         assert trace_id_for("abc") == trace_id_for("abc")
         assert trace_id_for("abc") != trace_id_for("abd")

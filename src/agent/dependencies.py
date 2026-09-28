@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from functools import lru_cache
 
+from agent.audit_store import GraphAuditStore, MemoryGraphAuditStore, build_audit_store
 from agent.config import AgentSettings, get_agent_settings
 from agent.llm import LLMClient, get_llm
 from agent.retrieval import Retriever, build_default_retriever
@@ -39,6 +40,7 @@ class AgentDependencies:
     tools: ToolRegistry
     tracer: Tracer
     clock: Callable[[], datetime] = field(default=utc_now)
+    audit: GraphAuditStore = field(default_factory=MemoryGraphAuditStore)
 
 
 def build_production_tool_registry(
@@ -59,14 +61,16 @@ def build_production_tool_registry(
 @lru_cache
 def get_agent_dependencies() -> AgentDependencies:
     tracer = get_tracer()
+    settings = get_agent_settings()
     llm = get_llm()
     gateway = IncidentGateway(build_servicenow_backend, tracer)
     return AgentDependencies(
-        settings=get_agent_settings(),
+        settings=settings,
         llm=llm,
         retriever=build_default_retriever(),
         tools=build_production_tool_registry(gateway, llm),
         tracer=tracer,
+        audit=build_audit_store(settings.agent_checkpointer_backend),
     )
 
 

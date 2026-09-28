@@ -815,7 +815,7 @@ async def test_integration_event_persisted_and_enqueued_end_to_end(integration_a
     queue_items = await redis.lrange(QUEUE, 0, -1)
     assert len(queue_items) == 1
     # The queue carries Celery's full message envelope, not a bare event dict
-    # (S2.3: a raw JSON string on the queue crashes the worker -- see
+    # (S2.3: a raw JSON string on the queue crashes the worker — see
     # docs/sprint2_worker_topology.md), so decode it before looking inside.
     import base64
 

@@ -36,8 +36,9 @@ Do not request a formal review until every required item is checked.
 - [x] Scope, validation, lifecycle, and permission assumptions are documented.
 - [x] Required Incident form screenshots are readable.
 - [x] Supporting Studio, choice, validation, and update-set preview screenshots are included.
-- [x] Current screenshots contain no credentials or secrets.
+- [x] Current screenshots contain no credentials or secrets. Scope: the nine PNGs in this folder, all of which capture ServiceNow Studio, form and update-set views. None of them shows knowledge-base content, and this claim does not extend to the repository as a whole.
 - [x] No `TBD`, `REPLACE_WITH`, or placeholder text remains.
+- [x] Stated separately because it is not a secret but is still derived from INTERNAL source material: the S1.4 corpus at `data/corpus/barq_articles.json` is **committed to this public repository** (only the source PDF `data/barq-system-kb.pdf` is git-ignored). Nothing in it is a credential, but the runbook text is publicly readable, and an earlier doc claimed otherwise.
 
 ## Export and import verification
 

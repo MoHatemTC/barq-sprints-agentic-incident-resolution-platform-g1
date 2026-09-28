@@ -1,10 +1,8 @@
 """CLI script to seed the Qdrant knowledge base with article chunks.
 
-Single idempotent command: ensures the collection exists, chunks the
-corpus (baseline + stressor articles, when present),
-embeds all chunks in one dual-vector pass, upserts with
-deterministic point IDs, and verifies the stored point count matches the
-upserted count — exiting non-zero on any mismatch.
+Single idempotent command: ensures the collection exists, chunks the corpus,
+embeds and upserts deterministic points, then verifies each expected point's
+identity and text. Unrelated live knowledge is preserved.
 """
 
 import argparse
@@ -17,9 +15,10 @@ from qdrant_client import QdrantClient
 
 from app.core.config import Settings, get_retrieval_settings
 from app.core.logging import configure_logging
+from app.retrieval.chunking import chunk_article
 from app.retrieval.embedding import FastEmbedEngine
-from app.retrieval.ingest import ingest_articles
-from app.retrieval.manual.manual_ingest import ingest_manual_sections
+from app.retrieval.ingest import build_point_id, ingest_articles
+from app.retrieval.manual.manual_ingest import build_section_point_id, ingest_manual_sections
 from app.retrieval.manual.manual_sources import ManualCorpusJSONSource
 from app.retrieval.sources import LocalJSONSource
 
@@ -105,7 +104,7 @@ def main() -> int:
         client=client,
         collection_name=collection_name,
         embedding_engine=engine,
-        purge_unknown_articles=True,
+        purge_unknown_articles=False,
     )
 
     manual_path = Path("data/corpus/manual_sections.json")
@@ -121,18 +120,56 @@ def main() -> int:
             client=client,
             collection_name=collection_name,
             embedding_engine=engine,
-            purge_unknown_sections=True,
+            purge_unknown_sections=False,
         )
         total_points += manual_points
 
+    expected = {
+        build_point_id(article.article_id, chunk.chunk_index): (
+            article.article_id,
+            chunk.text,
+        )
+        for article in all_articles
+        for chunk in chunk_article(article, chunk_size=700, chunk_overlap=120)
+    }
+    if manual_path.exists():
+        expected.update(
+            {
+                build_section_point_id(chunk.section_id, chunk.chunk_index): (
+                    chunk.section_id,
+                    chunk.text,
+                )
+                for chunk in sections
+            }
+        )
+    missing_or_changed = []
+    for ids in (list(expected)[start : start + 100] for start in range(0, len(expected), 100)):
+        found = {
+            str(point.id): point.payload or {}
+            for point in client.retrieve(
+                collection_name=collection_name,
+                ids=ids,
+                with_payload=True,
+                with_vectors=False,
+            )
+        }
+        for point_id in ids:
+            identity, body = expected[point_id]
+            payload = found.get(point_id, {})
+            if (
+                payload.get("article_id", payload.get("section_id")) != identity
+                or payload.get("chunk_text") != body
+            ):
+                missing_or_changed.append(point_id)
     stored = client.get_collection(collection_name=collection_name).points_count
-    if stored != total_points:
+    if missing_or_changed or len(expected) != total_points:
         logger.error(
             "seeding_verification_failed",
             collection=collection_name,
             stored=stored,
-            upserted=total_points,
-            remedy="rebuild with: uv run python scripts/setup_qdrant.py --force-recreate",
+            expected=len(expected),
+            missing_or_changed=len(missing_or_changed),
+            remedy="re-run the seed; preserve unrelated live knowledge",
         )
         return 1
 

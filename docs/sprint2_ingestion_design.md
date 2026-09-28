@@ -17,7 +17,7 @@ Per **FR-08**, the ingestion boundary must **never** block the request thread on
 1. **Authentication & Contract v1 Validation**: Authenticates caller via Bearer token and validates payload against Outbound Event Contract v1.
 2. **Atomic Idempotent Persistence**: Inserts the event into PostgreSQL (`idempotency_keys`, `events`, `executions`) within a single transactional boundary.
 3. **Queue Enqueueing**: Enqueues new events into the primary Redis FIFO queue (`barq:incident:events`) in $O(1)$ constant time.
-4. **Immediate 202 Response**: Returns acknowledgment with correlation ID and duplicate replay flag in $< 280\text{ ms}$ at $p95$ (well under the 500 ms SLA mandated by **NFR-01**).
+4. **Immediate 202 Response**: Returns acknowledgment with correlation ID and duplicate replay flag at a p95 **under 280 ms in the run tabulated in §5** — inside the 500 ms budget mandated by **NFR-01**. The margin is smaller than that figure suggests: across the five recorded runs of this same sweep, the worst p95 is 403.7 ms. See the run-note in §5.
 
 ```
 ┌─────────────────────────────────────────┐
@@ -126,13 +126,43 @@ $$\text{Acknowledgement Latency } p95 < 500\text{ ms across all queue depths (0,
 Because Redis `LPUSH` is strictly an $O(1)$ constant-time operation, pushing to an empty queue or a queue with 10,000 pre-existing items exhibits identical performance.
 
 ### Sustained Load Results (50 Concurrency, 500 Requests/Depth)
+
+> [!NOTE]
+> **These figures are one run of a benchmark that was executed several times with
+> different results.** The sweep below (500 requests per depth, 3 depths, concurrency 50)
+> was run repeatedly and each run produced its own numbers. The other recorded runs are
+> [`docs/sprint2_latency_report.md`](sprint2_latency_report.md),
+> [`docs/sprint-2/sprint-2.1/verification_evidence.md`](sprint-2/sprint-2.1/verification_evidence.md),
+> [`docs/sprint-2/sprint-2.1/baseline_latency_report.md`](sprint-2/sprint-2.1/baseline_latency_report.md)
+> and [`docs/sprint-2/sprint-2.1/sprint2_latency_report.md`](sprint-2/sprint-2.1/sprint2_latency_report.md).
+> **No run is designated authoritative** and nothing records which one supersedes which,
+> so do not present this table's figures as *the* latency and never splice numbers from
+> two runs into one table. Run-to-run p95 spread at a single depth reaches ~150 ms, which
+> is larger than the between-depth differences in any one of these tables — the
+> queue-depth independence argument has to be made from within a run, as below, not by
+> comparing runs.
+>
+> This run was captured on **Windows 11 (AMD64)**. The repository's `CONTRIBUTING.md`,
+> `README.md` and `justfile` (`set shell := ["bash", "-cu"]`) are POSIX, so reproduce it as:
+>
+> ```bash
+> uv run python tests/load/run_load_test.py --base-url http://127.0.0.1:8000 \
+>   --depths 0 1000 10000 --requests-per-depth 500 --concurrency 50
+> ```
+
 | Queue Depth | Requests | Failures | $p50$ (ms) | $p95$ (ms) | Max (ms) | Throughput | SLA Result |
-|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
 | **0** | 500 | 0 | 214.7 | **278.2** | 303.2 | 224.9 rps | **PASS** |
 | **1,000** | 500 | 0 | 202.5 | **266.7** | 290.0 | 235.3 rps | **PASS** |
 | **10,000** | 500 | 0 | 199.6 | **256.6** | 295.5 | 234.9 rps | **PASS** |
 
-*Conclusion: Latency variance across depths is within ~20 ms, verifying complete queue-depth independence and 100% compliance with NFR-01.*
+*Conclusion, for this run only: p95 stays within 21.6 ms across the three depths
+(278.2 → 256.6 ms), which is consistent with queue-depth independence, and every depth
+meets the 500 ms budget. The ~20 ms spread is a property of this run, not a measured
+constant — `verification_evidence.md` reports ~40 ms for the same sweep and
+`sprint2_latency_report.md` a 94.8 ms spread (291.5 → 386.3 ms). Nothing here supports a
+general "within ~20 ms" figure, and the NFR-01 headroom should be quoted from the worst
+recorded run (386.3 ms p95, 77% of budget) rather than the fastest.*
 
 ---
 

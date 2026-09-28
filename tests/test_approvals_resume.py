@@ -1,0 +1,270 @@
+"""The decide endpoint resumes the execution it paused (S3.4, FR-17).
+
+This is the loop the brief calls out as missing: the graph genuinely parks, the
+API resumes *that* thread with ``Command(resume=...)``, and the approval row is
+written only once the graph has taken the decision.
+"""
+
+from __future__ import annotations
+
+import asyncio
+from unittest.mock import AsyncMock, MagicMock, patch
+from uuid import UUID, uuid4
+
+import pytest
+from httpx import ASGITransport, AsyncClient
+from langgraph.checkpoint.memory import InMemorySaver
+
+import tests.helpers as h
+from agent.audit_store import MemoryGraphAuditStore
+from agent.runtime import build_runtime, invoke_incident_graph, resume_incident_graph
+from api.routers import approvals as approvals_router
+from app.db.models import Approval, Execution
+from app.main import create_app
+from tests.agent_support import (
+    EXECUTION_ID,
+    ORDER_P1,
+    FakeLLM,
+    FakeServiceNow,
+    event_for,
+    make_deps,
+    vpn_answers,
+)
+from tests.helpers import mock_settings
+
+AUTH_HEADERS = h.AUTH_HEADERS
+
+
+@pytest.fixture
+def app_with_db():
+    """Test application with a mocked database session (mirrors test_approvals)."""
+    app = create_app(settings=mock_settings())
+
+    mock_session = MagicMock()
+    mock_session.get = AsyncMock()
+    mock_session.execute = AsyncMock()
+    mock_session.commit = AsyncMock()
+    mock_session.refresh = AsyncMock()
+    mock_session.rollback = AsyncMock()
+    mock_session.add = MagicMock()
+    default_result = MagicMock()
+    default_result.scalar_one_or_none.return_value = None
+    default_result.scalars.return_value.all.return_value = []
+    mock_session.execute.return_value = default_result
+
+    class MockAsyncSessionContext:
+        async def __aenter__(self):
+            return mock_session
+
+        async def __aexit__(self, exc_type, exc_val, exc_tb):
+            pass
+
+    app.state.engine = MagicMock()
+    app.state.session_factory = MagicMock(return_value=MockAsyncSessionContext())
+    app.state.redis = MagicMock()
+    return app, mock_session
+
+
+def _parked_execution(store: MemoryGraphAuditStore, backend: FakeServiceNow):
+    """Run a P1 through the graph and leave it paused in act."""
+    deps = make_deps(llm=FakeLLM(vpn_answers()), servicenow=backend)
+    deps.audit = store
+    runtime = build_runtime(deps, checkpointer=InMemorySaver())
+    result = invoke_incident_graph(
+        event_for(ORDER_P1),
+        runtime=runtime,
+        execution_id=EXECUTION_ID,
+        correlation_id="corr-api-resume",
+        attempt=1,
+    )
+    assert result["paused"] is True
+    assert backend.updates == []
+    return runtime, deps
+
+
+@pytest.mark.asyncio
+async def test_decide_resumes_the_parked_execution(app_with_db) -> None:
+    store = MemoryGraphAuditStore()
+    backend = FakeServiceNow()
+    # The graph's nodes bridge to async tool calls with asyncio.run(), which needs
+    # a thread with no running loop; this test is async, so park off-loop.
+    runtime, deps = await asyncio.to_thread(_parked_execution, store, backend)
+
+    app, mock_session = app_with_db
+    execution = Execution(
+        execution_id=UUID(EXECUTION_ID),
+        event_record_id=uuid4(),
+        incident_sys_id=ORDER_P1["sys_id"],
+        status="awaiting_approval",
+    )
+
+    async def mock_get(model, pk):
+        if model is Approval:
+            return None
+        if model is Execution and pk == UUID(EXECUTION_ID):
+            return execution
+        return None
+
+    mock_session.get.side_effect = mock_get
+
+    payload = {"decision": "approved", "reason": "P1 change window"}
+    with (
+        patch.object(approvals_router, "get_audit_store", return_value=store),
+        patch.object(
+            approvals_router,
+            "resume_incident_graph",
+            side_effect=lambda **kw: resume_incident_graph(**kw, runtime=runtime),
+        ) as resume,
+    ):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                f"/api/v1/approvals/{EXECUTION_ID}/decide", json=payload, headers=AUTH_HEADERS
+            )
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["decision"] == "approved"
+    assert body["facts"]["outcome"] == "escalated_high_risk"
+    assert body["brief"]["judgment_required"]
+
+    # The decision reached the very thread that paused, and only then wrote.
+    assert resume.call_count == 1
+    assert resume.call_args.kwargs["execution_id"] == EXECUTION_ID
+    assert resume.call_args.kwargs["decision"]["decision"] == "approved"
+    assert len(backend.updates) == 1
+
+    # The approval row is recorded against that execution.
+    mock_session.add.assert_called_once()
+    recorded = mock_session.add.call_args[0][0]
+    assert isinstance(recorded, Approval)
+    assert recorded.execution_id == UUID(EXECUTION_ID)
+    assert recorded.decision == "approved"
+    mock_session.commit.assert_awaited_once()
+
+    # The audit receipt distinguishes this from a direct run.
+    receipt = deps.audit.get_receipt(EXECUTION_ID)
+    assert receipt is not None
+    assert receipt["lifecycle"] == "interrupt_resume"
+
+
+@pytest.mark.asyncio
+async def test_decide_for_an_unknown_id_is_404(app_with_db) -> None:
+    """An id that resolves to neither an approval nor an execution is 404 (#147).
+
+    The Sprint 2.1 stub answered 200 with a decision it had stored nowhere; the
+    decision has to be a real row or there is nothing to report.
+    """
+    store = MemoryGraphAuditStore()
+    app, mock_session = app_with_db
+    mock_session.get.return_value = None
+
+    with (
+        patch.object(approvals_router, "get_audit_store", return_value=store),
+        patch.object(approvals_router, "resume_incident_graph") as resume,
+    ):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                f"/api/v1/approvals/{uuid4()}/decide",
+                json={"decision": "approved", "reason": "ok"},
+                headers=AUTH_HEADERS,
+            )
+
+    assert resp.status_code == 404
+    assert resp.json()["error"]["code"] == "RESOURCE_NOT_FOUND"
+    resume.assert_not_called()
+    mock_session.add.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_pending_endpoint_returns_the_brief_before_a_decision(app_with_db) -> None:
+    """A reviewer must be able to read the brief *before* deciding (FR-17)."""
+    store = MemoryGraphAuditStore()
+    backend = FakeServiceNow()
+    await asyncio.to_thread(_parked_execution, store, backend)
+
+    app, _ = app_with_db
+    with patch.object(approvals_router, "get_audit_store", return_value=store):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get(
+                f"/api/v1/approvals/pending/{EXECUTION_ID}", headers=AUTH_HEADERS
+            )
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["status"] == "awaiting_approval"
+    assert body["decision"] is None
+    assert body["brief"]["judgment_required"]
+    assert body["facts"]["outcome"] == "escalated_high_risk"
+    assert body["facts"]["incident"]["number"] == ORDER_P1["number"]
+    assert backend.updates == []
+
+
+class _ScalarResult:
+    """Just enough of a SQLAlchemy Result for the approval lookup."""
+
+    def __init__(self, value: object) -> None:
+        self._value = value
+
+    def scalar_one_or_none(self) -> object:
+        return self._value
+
+
+@pytest.mark.asyncio
+async def test_second_decision_on_one_execution_is_refused(app_with_db) -> None:
+    """The path id is an execution_id, so the primary-key lookup alone is not enough.
+
+    Found by running the real stack: two contradictory rows were stored for one
+    execution because the immutability check only asked for ``Approval(id)``.
+    """
+    store = MemoryGraphAuditStore()
+    backend = FakeServiceNow()
+    runtime, _ = await asyncio.to_thread(_parked_execution, store, backend)
+
+    app, mock_session = app_with_db
+    execution = Execution(
+        execution_id=UUID(EXECUTION_ID),
+        event_record_id=uuid4(),
+        incident_sys_id=ORDER_P1["sys_id"],
+        status="awaiting_approval",
+    )
+
+    async def get(model, pk):
+        return execution if model is Execution and pk == UUID(EXECUTION_ID) else None
+
+    mock_session.get.side_effect = get
+
+    with (
+        patch.object(approvals_router, "get_audit_store", return_value=store),
+        patch.object(
+            approvals_router,
+            "resume_incident_graph",
+            side_effect=lambda **kw: resume_incident_graph(**kw, runtime=runtime),
+        ),
+    ):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            first = await client.post(
+                f"/api/v1/approvals/{EXECUTION_ID}/decide",
+                json={"decision": "approved", "reason": "ok"},
+                headers=AUTH_HEADERS,
+            )
+            assert first.status_code == 200, first.text
+            assert mock_session.add.call_count == 1
+            recorded = mock_session.add.call_args[0][0]
+
+            async def execute(stmt, *args, **kwargs):
+                descriptions = getattr(stmt, "column_descriptions", None)
+                if descriptions and descriptions[0].get("entity") is Approval:
+                    return _ScalarResult(recorded)
+                return _ScalarResult(None)
+
+            mock_session.execute.side_effect = execute
+            second = await client.post(
+                f"/api/v1/approvals/{EXECUTION_ID}/decide",
+                json={"decision": "rejected", "reason": "changed my mind"},
+                headers=AUTH_HEADERS,
+            )
+
+    assert second.status_code == 409, second.text
+    assert "already been decided" in second.json()["error"]["message"]
+    assert mock_session.add.call_count == 1
+    assert mock_session.commit.await_count == 1

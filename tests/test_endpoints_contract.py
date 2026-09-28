@@ -87,6 +87,9 @@ def _session_factory(session: MagicMock) -> MagicMock:
 def _execute_result(rows: list):
     result = MagicMock()
     result.scalars.return_value.all.return_value = rows
+    # A result built from an empty row list has no single row to hand back; an
+    # unconfigured MagicMock here would read as "already decided" and 409.
+    result.scalar_one_or_none.return_value = None
     return result
 
 

@@ -49,18 +49,30 @@ Authorization: Bearer <operator JWT with "operator" in its roles claim>
 |---|---|:---:|:---:|---|
 | **GET** | `/health` | None | `200 OK` | Process liveness probe |
 | **GET** | `/ready` | None | `200 OK` / `503` | Dependency readiness probe (PostgreSQL + Redis) |
+| **POST** | `/api/v1/oauth/token` | None (client credentials in body) | `200 OK` | Exchange OAuth client credentials for a webhook or operator bearer JWT (#136, #148) |
 | **POST** | `/api/v1/webhook/incident` | Bearer | `202 Accepted` | Ingest inbound ServiceNow incident event |
-| **GET** | `/api/v1/executions/{execution_id}` | Bearer | `200 OK` / `404` | Retrieve execution status and metadata |
-| **GET** | `/api/v1/executions/{execution_id}/trace` | Bearer | `200 OK` / `404` | Retrieve workflow node execution trace |
+| **GET** | `/api/v1/executions/{execution_id}` | Bearer | `200 OK` / `404` † | Retrieve execution status and metadata |
+| **GET** | `/api/v1/executions/{execution_id}/trace` | Bearer | `200 OK` / `404` † | Retrieve workflow node execution trace |
 | **GET** | `/api/v1/incidents/{sys_id}/executions` | Bearer | `200 OK` | List all executions for an incident sys_id |
 | **GET** | `/api/v1/approvals` | Bearer | `200 OK` | List recorded human approval decisions |
-| **GET** | `/api/v1/approvals/{id}` | Bearer | `200 OK` / `404` | Get specific approval decision details |
+| **GET** | `/api/v1/approvals/{id}` | Bearer | `200 OK` / `404` † | Get specific approval decision details |
 | **POST** | `/api/v1/approvals/{id}/decide` | Bearer | `200 OK` | Submit human operator approval decision |
+| **GET** | `/api/v1/approvals/pending/{execution_id}` | Bearer | `200 OK` / `404` † | Serve the approval brief for an execution parked on an interrupt (S3.4) |
 | **GET** | `/api/v1/dlq` | Bearer | `200 OK` | List all dead-lettered events |
 | **POST** | `/api/v1/dlq/{event_id}/replay` | Bearer + Operator | `202 Accepted` | Replay a dead-lettered event into active queue |
 | **GET** | `/api/v1/config` | Bearer | `200 OK` | Inspect runtime configuration (secrets redacted) |
 | **POST** | `/api/v1/eval/run` | Bearer | `202 Accepted` | Trigger diagnostic model evaluation benchmark |
 | **GET** | `/api/v1/eval/results` | Bearer | `200 OK` | Retrieve evaluation benchmark results |
+
+† **The 404s are real at runtime but are not in the committed `openapi.json`.** The
+handlers raise `RESOURCE_NOT_FOUND` and return 404 for an unknown execution, an unknown
+`sys_id` or an id that resolves to no approval — verified live — but the committed
+specification declares only `200` and `422` for `/api/v1/executions/{execution_id}`,
+`/api/v1/executions/{execution_id}/trace` and `/api/v1/approvals/{id}`. The contract is
+therefore under-specified rather than the behaviour being wrong: a client generated from
+`openapi.json` will not know a 404 is possible. Two routes are missing from earlier
+revisions of this table and are now included: `POST /api/v1/oauth/token` and
+`GET /api/v1/approvals/pending/{execution_id}` (the latter added by S3.4).
 
 ---
 
@@ -102,16 +114,23 @@ still rejected with 422 `UNKNOWN_CONTRACT_VERSION`.
 ```json
 {
   "execution_id": "11111111-1111-1111-1111-111111111111",
+  "event_record_id": "22222222-2222-2222-2222-222222222222",
   "incident_sys_id": "a1b2c3d4e5f60718293a4b5c6d7e8f90",
   "status": "succeeded",
-  "node_reached": "remediate",
+  "node_reached": "act",
   "model_name": "gemini-2.5-pro",
   "agent_version": "v1.0.0",
   "started_at": "2026-09-18T07:15:00Z",
   "ended_at": "2026-09-18T07:15:12Z",
-  "termination_cause": "Remediation plan applied and verified"
+  "termination_cause": "Remediation plan applied and verified",
+  "updated_at": "2026-09-18T07:15:12Z"
 }
 ```
+`node_reached` is the last graph node entered. The eleven nodes are `load`, `validate`,
+`classify`, `determine_risk`, `retrieve`, `diagnose`, `generate`, `verify_evidence`,
+`safety_check`, `confidence_check`, `act` — there is no `remediate` node.
+`event_record_id` and `updated_at` are required by the schema; an earlier revision of this
+example omitted both, so it could not have validated.
 
 #### Trace Response (`TraceResponse`, HTTP 200)
 ```json
@@ -121,8 +140,10 @@ still rejected with 422 `UNKNOWN_CONTRACT_VERSION`.
   "status": "succeeded",
   "node_states": [
     {
+      "id": "33333333-3333-3333-3333-333333333333",
+      "execution_id": "11111111-1111-1111-1111-111111111111",
       "sequence_number": 1,
-      "node_name": "triage",
+      "node_name": "classify",
       "attempt": 1,
       "status": "succeeded",
       "started_at": "2026-09-18T07:15:00Z",
@@ -133,6 +154,8 @@ still rejected with 422 `UNKNOWN_CONTRACT_VERSION`.
   ]
 }
 ```
+`node_name` is a graph node name from the list above; there is no `triage` node. `id` and
+`execution_id` are required on each entry by `ExecutionNodeStateResponse`.
 
 ---
 

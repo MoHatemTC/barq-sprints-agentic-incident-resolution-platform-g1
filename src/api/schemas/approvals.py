@@ -28,12 +28,12 @@ class ApprovalResponse(BaseModel):
         default=None,
         description="Foreign key to workflow_state.id if associated with a specific node",
     )
-    decision: ApprovalDecision = Field(
-        ...,
-        description="Decision outcome matching approvals.decision constraint",
+    decision: ApprovalDecision | None = Field(
+        default=None,
+        description="Decision outcome matching approvals.decision constraint; null while paused",
     )
-    decided_by: str = Field(
-        ...,
+    decided_by: str | None = Field(
+        default=None,
         max_length=255,
         description="Identity of the operator or automated service that decided",
     )
@@ -45,9 +45,21 @@ class ApprovalResponse(BaseModel):
         default=None,
         description="Structured context or parameters evaluated during decision",
     )
-    decided_at: datetime = Field(
-        ...,
+    decided_at: datetime | None = Field(
+        default=None,
         description="Timestamp when the decision was finalized",
+    )
+    status: str = Field(
+        default="decided",
+        description="decided | awaiting_approval",
+    )
+    brief: dict[str, Any] | None = Field(
+        default=None,
+        description="Approval Brief Agent output; descriptive only",
+    )
+    facts: dict[str, Any] | None = Field(
+        default=None,
+        description="Raw interrupt payload persisted at pause time",
     )
 
 

@@ -100,12 +100,32 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "401": {
+            "description": "Missing or invalid webhook bearer token.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Payload failed contract validation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Database or queue unavailable; nothing was accepted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -396,13 +416,62 @@
         }
       }
     },
+    "/api/v1/approvals/pending/{execution_id}": {
+      "get": {
+        "tags": [
+          "Approvals"
+        ],
+        "summary": "Read the approval brief awaiting a decision",
+        "description": "Return the persisted interrupt payload for a paused execution: the Approval Brief Agent's summary alongside the raw facts it was written from (NFR-07). Nothing here has been decided yet.",
+        "operationId": "get_pending_approval_api_v1_approvals_pending__execution_id__get",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "execution_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Execution Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/approvals/{id}/decide": {
       "post": {
         "tags": [
           "Approvals"
         ],
-        "summary": "Submit human operator approval decision",
-        "description": "Record a human operator decision ('approved', 'rejected', 'cancelled', 'expired') for an approval request. The id is an approval id or the id of the execution it belongs to. The decider and the authorisation both come from the operator token, never from the body or a header: 409 if that execution is already decided, 404 if the id resolves to neither.",
+        "summary": "Submit human operator approval decision and resume graph (S3.4)",
+        "description": "Resume a paused LangGraph thread with Command(resume=...), then record the decision for audit. The id is an approval id or the id of the execution it belongs to. Who decided, and whether they may, come from the operator token and never from the body: 409 if that execution is already decided, 404 if the id resolves to neither.",
         "operationId": "decide_approval_api_v1_approvals__id__decide_post",
         "security": [
           {
@@ -438,6 +507,56 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ApprovalResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid operator token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token lacks the approver role.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No approval or execution with this id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Already decided, or the execution is not paused.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Audit store or database unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -711,6 +830,19 @@
             ],
             "title": "Evidence",
             "description": "Optional structured evidence or parameter overrides"
+          },
+          "solution": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 8000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Solution",
+            "description": "Optional human-authored resolution knowledge contributed while deciding an escalated incident. Distinct from 'reason': the reason annotates the decision, the solution is the fix itself and is composed into a KB article by knowledge capture (S3.5). Persisted folded into 'evidence' together with the knowledge-capture tool name. Accepted as either 'solution' or 'human_solution'."
           }
         },
         "additionalProperties": false,
@@ -749,19 +881,33 @@
             "description": "Foreign key to workflow_state.id if associated with a specific node"
           },
           "decision": {
-            "type": "string",
-            "enum": [
-              "approved",
-              "rejected",
-              "cancelled",
-              "expired"
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "approved",
+                  "rejected",
+                  "cancelled",
+                  "expired"
+                ]
+              },
+              {
+                "type": "null"
+              }
             ],
             "title": "Decision",
-            "description": "Decision outcome matching approvals.decision constraint"
+            "description": "Decision outcome matching approvals.decision constraint; null while paused"
           },
           "decided_by": {
-            "type": "string",
-            "maxLength": 255,
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Decided By",
             "description": "Identity of the operator or automated service that decided"
           },
@@ -791,20 +937,56 @@
             "description": "Structured context or parameters evaluated during decision"
           },
           "decided_at": {
-            "type": "string",
-            "format": "date-time",
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Decided At",
             "description": "Timestamp when the decision was finalized"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "decided | awaiting_approval",
+            "default": "decided"
+          },
+          "brief": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brief",
+            "description": "Approval Brief Agent output; descriptive only"
+          },
+          "facts": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Facts",
+            "description": "Raw interrupt payload persisted at pause time"
           }
         },
         "additionalProperties": false,
         "type": "object",
         "required": [
           "id",
-          "execution_id",
-          "decision",
-          "decided_by",
-          "decided_at"
+          "execution_id"
         ],
         "title": "ApprovalResponse",
         "description": "Schema representing an approval record from the 'approvals' table."
@@ -889,6 +1071,65 @@
         ],
         "title": "DLQReplayResponse",
         "description": "Response schema returned upon replaying a DLQ event."
+      },
+      "ErrorBody": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code",
+            "description": "Stable machine-readable code, e.g. AUTHENTICATION_FAILED, PERMISSION_DENIED, RESOURCE_CONFLICT, SERVICE_UNAVAILABLE."
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Human-readable explanation."
+          },
+          "details": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Details",
+            "description": "Structured context. For a 422 this carries field_errors."
+          },
+          "correlation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Correlation Id",
+            "description": "Correlates the response with the server log and the trace."
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Timestamp",
+            "description": "When the error was produced."
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "message",
+          "timestamp"
+        ],
+        "title": "ErrorBody",
+        "description": "The ``error`` object inside the envelope."
+      },
+      "ErrorResponse": {
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ErrorBody"
+          }
+        },
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "title": "ErrorResponse",
+        "description": "The unified error envelope returned by every failing endpoint."
       },
       "EvalResultResponse": {
         "properties": {

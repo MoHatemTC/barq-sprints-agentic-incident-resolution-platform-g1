@@ -2,6 +2,29 @@
 
 Generated: 2026-09-18 07:53 UTC by `tests/load/run_load_test.py`
 
+> [!NOTE]
+> **This is one run of a benchmark that was executed several times with different
+> results.** The sweep below (500 requests per depth, 3 depths, concurrency 50) was run
+> repeatedly and each run produced its own numbers. The other recorded runs are
+> [`docs/sprint-2/sprint-2.1/verification_evidence.md`](sprint-2/sprint-2.1/verification_evidence.md),
+> [`docs/sprint-2/sprint-2.1/baseline_latency_report.md`](sprint-2/sprint-2.1/baseline_latency_report.md),
+> [`docs/sprint-2/sprint-2.1/sprint2_latency_report.md`](sprint-2/sprint-2.1/sprint2_latency_report.md)
+> and [`docs/sprint2_ingestion_design.md`](sprint2_ingestion_design.md). **No run is
+> designated authoritative** and nothing records which one supersedes which, so do not
+> present this file's figures as *the* latency and never splice numbers from two runs into
+> one table. This run happens to be the slowest of the five (p95 386.3 ms at depth 10,000,
+> 77% of the 500 ms budget); another run of the identical command recorded 256.6 ms at
+> that depth.
+>
+> Captured on **Windows 11 (AMD64)** with Python 3.12.13. Reproduction steps are POSIX;
+> the closing "higher concurrency or depth" block is PowerShell and its POSIX equivalent
+> is:
+>
+> ```bash
+> uv run python tests/load/run_load_test.py --base-url http://127.0.0.1:8000 \
+>   --depths 0 1000 10000 --requests-per-depth 1000 --concurrency 100
+> ```
+
 ## Environment
 
 - OS: Windows 11 (AMD64)

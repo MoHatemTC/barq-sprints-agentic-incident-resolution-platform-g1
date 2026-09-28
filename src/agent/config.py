@@ -16,7 +16,7 @@ from typing import Literal
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-AGENT_VERSION = "s2.5-graph-1.0.0"
+AGENT_VERSION = "s3.4-graph-1.0.0"
 
 
 class AgentSettings(BaseSettings):

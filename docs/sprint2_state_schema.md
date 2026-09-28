@@ -344,16 +344,19 @@ The committed S2.2 tests cover:
 - reconstruction of complete, missing, and running executions with deterministic
   histories and no child-row multiplication.
 
-Phase 7 validation on 2026-09-16 produced the following current evidence:
+Phase 7 validation on 2026-09-16 produced the following evidence. The per-suite results
+are as captured on that date; the full-suite and tooling counts in the last four bullets
+have been refreshed to the current repository, since those are the figures a reader would
+otherwise quote as current:
 
 - `tests/test_idempotency.py`: 11 passed;
 - `tests/test_audit_reconstruction.py`: 3 passed;
 - `tests/db`: 22 passed;
-- full suite: 366 passed, 9 skipped, and one warning that payload indexes have no
-  effect in the in-memory Qdrant test backend;
-- Ruff check and format check: passed (137 files already formatted);
-- mypy: passed for 53 source files;
-- `uv lock --check`: passed (108 packages resolved); and
+- full suite: **1255 passed, 30 skipped** (was 366 passed, 9 skipped when captured), and
+  one warning that payload indexes have no effect in the in-memory Qdrant test backend;
+- Ruff check and format check: passed (**340 files** already formatted);
+- mypy: passed for **151 source files**;
+- `uv lock --check`: passed (**149 packages** resolved); and
 - `git diff --check`: passed.
 
 The PostgreSQL-backed runs used the healthy local PostgreSQL 16 service and the

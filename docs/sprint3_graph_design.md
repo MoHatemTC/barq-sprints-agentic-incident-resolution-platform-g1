@@ -20,7 +20,7 @@ sections written before it and writes exactly one section.
 | 6 | `diagnose` | `incident`, `classification`, `retrieval` | `diagnosis` | yes | Diagnostic Agent |
 | 7 | `generate` | `incident`, `retrieval`, `diagnosis`, `critic_feedback` | `draft`, `revision_count` | yes | Resolution Agent (revises on feedback) |
 | 8 | `verify_evidence` | `draft`, `retrieval`, `diagnosis` | `verification`, `critic_feedback` | yes | Critic/Verifier Agent (deterministic + semantic) |
-| 9 | `safety_check` | (Sprint 4) | `safety` | no | pass-through |
+| 9 | `safety_check` | (S3.3, not merged) | `safety` | no | pass-through — `implemented=False` |
 | 10 | `confidence_check` | `diagnosis`, `draft` | `confidence` | no | — |
 | 11 | `act` | everything | `output` | no | the only ServiceNow write |
 
@@ -30,7 +30,11 @@ sections written before it and writes exactly one section.
   1. *Deterministic Python citation validation*: checks `article_id` and `section` against retrieved hits.
   2. *Semantic LLM verification*: evaluates isolated step assertions against cited evidence chunks.
   Produces structured `GateResult` and `CriticFeedback`.
-- `safety_check` returns a `GateResult` with `passed=True` and `implemented=False` (scheduled for Sprint 4).
+- `safety_check` is an explicit pass-through: it returns
+  `GateResult(gate="safety_check", passed=True, implemented=False)` without reading
+  `state` or `deps`, so it cannot fail on any input today. The output guardrails
+  (schema, action allowlist, secret scan of the draft) are **S3.3 — open, owner
+  Tasneem Mohammed**; the edge condition that routes a failed gate to `act` already exists.
 - `confidence_check` applies the manual's floor (0.45).
 
 **`generate` output.** It is a numbered procedure. Each step cites its article, version
@@ -201,9 +205,12 @@ to ELEVATED, because a tier that cannot be read cannot be ruled Tier 1 (§11.1).
 - **Sprint 3.1 Delivery:** `verify_evidence` is fully implemented as the Critic / Verifier Agent
   with deterministic citation checks, LLM-based semantic evidence verification against retrieved text,
   and structured feedback emission driving the multi-agent revision loop.
-- **Sprint 4:** implement `safety_check` (output schema, action allowlist, secret scan of the draft),
-  plus input screening for embedded instructions (manual §11.6). Add the approval interrupt on
-  `risk.approval_required`.
+- **S3.3 (guardrails — open, owner Tasneem Mohammed):** implement `safety_check` (output
+  schema, action allowlist, secret scan of the draft), plus input screening for embedded
+  instructions (manual §11.6). Until it lands, `safety_check` passes every draft
+  unconditionally.
+- **Approval interrupt on `risk.approval_required`:** shipped in S3.4 — `interrupt()` in
+  `act` plus the approvals API; see [`sprint3_hitl_design.md`](sprint3_hitl_design.md).
 - **S2.4 (#110):** `QdrantRetriever` already calls whichever entry point the tree
   carries (`_run_search`); once #110 is on `main`, delete the try/except shim in
   `agent/retrieval.py` and import `hybrid_search` directly. The evidence gate cannot
@@ -211,16 +218,31 @@ to ELEVATED, because a tier that cannot be read cannot be ruled Tier 1 (§11.1).
   into `hit.score` (values from about −11 to +11, negative for a poor match), which are
   not comparable to the calibrated 0–1 §11.7 threshold. Either normalise them or keep
   the separate dense cosine, which is what happens today.
-- **Write-back is not idempotent across a hard kill.** `act` PATCHes ServiceNow before
-  LangGraph commits its checkpoint. If the worker is SIGKILLed — or hits Celery's
-  `soft_time_limit` — in that window, the retry resumes before `act` and sends the PATCH
-  again; because `work_notes` is append-only, the note is duplicated. The window is
-  narrow but real, and the existing resume test only fails at `generate`, so it does not
-  cover it. Closing it properly needs a write-back marker keyed by execution id,
-  recorded before the call and checked on resume, which means giving
-  `AgentDependencies` a database session it does not currently have. Deferred rather
-  than rushed: with `AGENT_WRITE_BACK_ENABLED` false — the default, and the setting used
-  for review — no PATCH is issued at all.
+- **Write-back idempotency across a hard kill — closed in S3.4.** This used to be listed
+  here as an open defect: `act` PATCHes ServiceNow before LangGraph commits its
+  checkpoint, so a SIGKILL (or Celery's `soft_time_limit`) in that window replayed the
+  PATCH on resume and, because `work_notes` is append-only, duplicated the note. `act` now
+  carries a three-phase intent receipt instead — `writing` (saved *before* the PATCH, so a
+  restart can always tell "in flight" from "never started") → `fields_written` (the PATCH
+  returned) → `logged` (the execution-log row landed) → `written` (run closed). `logged`
+  and `written` are terminal and short-circuit; `fields_written` skips the PATCH; any other
+  non-terminal phase asks ServiceNow through the read-back probe `_write_already_landed`,
+  which compares this run's own `ai_processing_start` first and otherwise falls back to
+  `work_notes` / `ai_classification` / `ai_suggestion` / `ai_agent_version` /
+  `ai_model_name`, returning `False` (write again) on any read failure. Coverage:
+  `tests/test_crash_recovery.py::test_kill_before_the_write_records_an_in_flight_receipt_and_the_retry_writes_once`,
+  `::test_kill_after_the_write_never_duplicates_it` (mutation-checked: it fails if the
+  read-back probe is removed) and
+  `::test_kill_between_the_execution_log_and_the_final_receipt_does_not_replay_the_log`.
+- **Write-back is on by default, and one window is still open.** `AGENT_WRITE_BACK_ENABLED`
+  defaults to `True` (`agent/config.py:132`) and `.env.example` sets it true, so the PATCH
+  really is issued in every run these paths cover. The residual: a kill *after* the
+  execution-log row lands but *before* the receipt reaches `logged` still replays the log
+  row. Closing it needs a read-back probe for the execution-log table, and `execution_id`
+  is deliberately not unique there, so row existence cannot distinguish this attempt from
+  an earlier one. The consequence is one extra audit row; the authoritative record of a
+  run is `executions` + `workflow_state`. Design detail:
+  [`sprint3_recovery_design.md`](sprint3_recovery_design.md).
 - **Corpus:** decide on the `restricted` tags that exclude every hardware article (see
   `sprint2_tracing_and_agent.md` §4).
 - **"Ask" outcome:** the W0.3 set expects vague reports to be answered with a request

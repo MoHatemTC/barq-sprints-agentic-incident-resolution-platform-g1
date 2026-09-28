@@ -13,10 +13,24 @@ This document specifies the architecture, metadata schema, controlled vocabulary
 
 Rather than relying on synthetic placeholders or generic IT templates, the knowledge corpus is extracted directly from **Section 6 (Service Desk Standard Operating Procedures & Engineering Runbooks)** of the official **BARQ Systems IT Service Operations Manual (`data/barq-system-kb.pdf`)**.
 
-The canonical corpus is stored at [data/corpus/barq_articles.json](../../../data/corpus/barq_articles.json) (git-ignored — the source manual is marked INTERNAL) and comprises **11 verified records** with realistic technical syntax:
+The canonical corpus is stored at [data/corpus/barq_articles.json](../../../data/corpus/barq_articles.json) and comprises **11 verified records** with realistic technical syntax:
 - **Verbatim Error Signatures**: Exact platform error strings carried through unmodified (`RFC_ERROR_COMMUNICATION`, `HTTP 500`, `connection acquisition timed out`, `invalid credentials`).
 - **Standard Operating Procedures**: Four canonical sections (`## Symptom`, `## Cause`, `## Resolution`, `## Escalation`) formatted in clean Markdown; resolutions are numbered plain-prose steps. The retired `KB0010-v1.0` additionally carries a `## Warning` section quoting the manual's "Why this revision is dangerous" callout.
 - **No Fenced Code Blocks**: The source manual contains no fenced code — its procedures are prose steps, and the extraction preserves them as prose (the chunker's fence-balancing machinery exists for future code-bearing sources).
+
+> [!IMPORTANT]
+> **The corpus is committed to this repository, and is therefore public.**
+> `git ls-files data/corpus/` returns `README.md`, `barq_articles.json` and
+> `barq_ingestion_report.md`. `.gitignore` matches `data/*` and then re-includes the
+> corpus directory and those three files by name. Anyone with read access to this
+> repository can read the extracted runbook text.
+>
+> What is *not* committed is the source: `data/barq-system-kb.pdf`, the BARQ Systems
+> IT Service Operations Manual (Edition 4.0) the corpus was extracted from, is
+> git-ignored and the manual is marked INTERNAL. An earlier revision of this
+> paragraph said the corpus itself was git-ignored; that was wrong. Anyone who assumed
+> the extracted text was private on the strength of that sentence should re-check the
+> tracking status before relying on it.
 
 ---
 
@@ -45,9 +59,9 @@ Every record in `data/corpus/barq_articles.json` and every point payload in Qdra
 |---|---|---|---|---|
 | `category` | Keyword | Open controlled vocabulary slug (`network`, `software`, `hardware`, `inquiry`) | `KEYWORD` | High-level ServiceNow incident taxonomy partition |
 | `service` | Keyword | Open controlled vocabulary slug (`corporate-vpn`, `corporate-email`, `file-services`, `print-services`, `identity`, `endpoint`, `sap-erp`, `corporate-wifi`, `order-processing`) | `KEYWORD` | Configuration item (CI) and service routing |
-| `workflow_state` | Keyword | Closed enum: `published`, `draft`, `retired` | `KEYWORD` | Lifecycle governance; excludes decommissioned runbooks from standard resolution |
+| `workflow_state` | Keyword | Closed enum: `published`, `human_resolved`, `draft`, `retired` | `KEYWORD` | Lifecycle governance; excludes decommissioned runbooks from standard resolution. `human_resolved` is the platform-owned extension added by S3.5 knowledge capture — ServiceNow's own choice list cannot hold it and stores such articles as `published`, so the publish handler maps it on the way out |
 | `version` | Keyword | Semver string (`1.0`, `2.0`, `3.0`, `4.0`) | `KEYWORD` | Version-specific resolution targeting |
-| `security_level` | Keyword | Closed enum: `public`, `internal`, `restricted` | `KEYWORD` | Tiered role-based access control (RBAC) filtering. **Enforced** by `retrieve_knowledge`'s `max_security_level`, default `internal` (#45) |
+| `security_level` | Keyword | Closed enum: `public`, `internal`, `restricted` | `KEYWORD` | Tiered role-based access control (RBAC) filtering. **Enforced** by `max_security_level` in `src/app/retrieval/filters.py` (`build_metadata_filter`), default `internal` (#45) |
 
 ### 3.2 Core Article Identity Fields
 - `article_number`: Unique KB identifier in the manual's four-digit format `^KB\d{4}$` (`KB0001` through `KB0010`).
@@ -75,6 +89,11 @@ Because raw PDF tables in the Operations Manual do not feature a native security
 2. **`restricted` (Elevated Engineering & Production Infrastructure Access)**:
    - Covers shared print infrastructure, endpoint driver-level diagnostics, core ERP reachability, and production service remediation procedures.
    - Applied to: `KB0004` (Print Services), `KB0007` (Endpoint Performance), `KB0008` (SAP Basis RFC), `KB0010` both versions (Order Service Pool Exhaustion).
+
+   That is **four restricted articles** (`KB0004`, `KB0007`, `KB0008`, `KB0010`), which is
+   five of the eleven indexed records — `KB0010` is present twice, as retired `v1.0` and
+   published `v2.0`. Count articles, not records, when stating how much of the corpus is
+   above the default `internal` ceiling.
 
 The mapping is implemented as the `SECURITY_TIERS` table in [src/app/retrieval/barq_manual.py](../../../src/app/retrieval/barq_manual.py) and asserted per-article by [tests/retrieval/test_corpus.py](../../../tests/retrieval/test_corpus.py).
 
@@ -182,8 +201,12 @@ barq-sprints-agentic-incident-resolution-platform-g1/
 │   │   ├── barq_manual.py       # PDF Section 6 extraction and text cleaning logic
 │   │   ├── chunking.py          # Markdown header splitter + code fence balancer
 │   │   ├── embedding.py         # FastEmbedEngine (bge-small-en-v1.5 + Qdrant/bm25)
-│   │   ├── extraction.py        # ServiceNow HTML -> Markdown (publish round-trip, next sprint step)
-│   │   ├── ingest.py            # Batch chunking, single-batch BM25 fitting, UUIDv5 upsert
+│   │   ├── extraction/          # ServiceNow HTML -> Markdown (publish round-trip, next sprint step)
+│   │   ├── filters.py           # build_metadata_filter, DEFAULT_WORKFLOW_STATES, security tiers
+│   │   ├── hybrid_search.py     # hybrid_search() / timed_hybrid_search() — the retrieval entry point
+│   │   ├── html_markdown.py     # HTML-to-Markdown helpers used by extraction/
+│   │   ├── ingest.py            # Batch chunking, single-batch embedding, UUIDv5 upsert
+│   │   ├── rerank.py            # CrossEncoderReranker for HYBRID_RERANKED mode
 │   │   └── sources.py           # LocalJSONSource loader
 │   └── clients/
 │       └── qdrant.py            # QdrantClient factory and ensure_collection()
@@ -191,12 +214,12 @@ barq-sprints-agentic-incident-resolution-platform-g1/
 │   ├── __init__.py              # Package marker
 │   ├── embedding.py             # Re-exports FastEmbedEngine, EmbeddingEngine, EmbeddedText, DENSE_VECTOR_SIZE
 │   ├── ingest.py                # Re-exports ingest_articles, build_point_id, KB_NAMESPACE
-│   └── search.py                # Re-exports retrieve_knowledge, RetrievalHit
+│   └── search.py                # Re-exports RetrievalHit only; the search entry point is hybrid_search.py
 ├── data/
 │   ├── barq-system-kb.pdf       # Source BARQ Operations Manual (Edition 4.0, git-ignored, INTERNAL)
-│   ├── coverage_matrix.csv      # Real incident-to-runbook ground truth mapping (13 scenarios)
+│   ├── coverage_matrix.csv      # Real incident-to-runbook ground truth mapping (25 scenarios)
 │   └── corpus/
-│       ├── barq_articles.json   # 11 canonical extracted runbooks (git-ignored, INTERNAL)
+│       ├── barq_articles.json   # 11 canonical extracted runbooks (tracked; the source PDF is not)
 │       ├── README.md            # Corpus schema documentation (tracked)
 │       └── barq_ingestion_report.md  # Sanitized extraction report: counts + warnings only (tracked)
 ├── docker-compose.yml           # Persistent Qdrant 1.14.0 (volume: barq_qdrant_data)
@@ -216,7 +239,10 @@ barq-sprints-agentic-incident-resolution-platform-g1/
     │   ├── test_corpus.py        # Corpus schema, tiers, lifecycle, matrix
     │   ├── test_embedding.py     # FastEmbed dual dense/sparse engine
     │   ├── test_extraction.py    # ServiceNow HTML -> Markdown round-trip
-    │   └── test_ingest.py        # Ingestion orchestration (mocked embed, in-memory Qdrant)
+    │   ├── test_filters.py       # Mandatory filter conditions, cumulative security tiers
+    │   ├── test_rerank.py       # Cross-encoder lazy load, tie-breaks, top_n validation
+    │   ├── test_ingest.py        # Ingestion orchestration (mocked embed, in-memory Qdrant)
+    │   └── test_search.py        # End-to-end hybrid_search incl. the P3 KB0010-v1/v2 guard
     ├── clients/
     │   └── test_qdrant.py        # Client factory, collection setup, dimension guard
     ├── core/
@@ -244,7 +270,8 @@ barq-sprints-agentic-incident-resolution-platform-g1/
 - Guarantees zero structural corruption during retrieval.
 
 ### 8.3 Ingestion & Embedding Approach (`src/app/retrieval/ingest.py`)
-- **Single-Batch BM25 Fitting**: In `ingest_articles()`, all 45 chunk texts across all 11 articles are flattened into a single list and passed to `embedding_engine.embed_documents(all_chunk_texts)` in one batch call. This fits the corpus-wide document frequency $n(t)$ accurately without multi-pass skew.
+- **Single-batch embedding, no BM25 fitting**: In `ingest_articles()`, all 45 chunk texts across all 11 articles are flattened into a single list and passed to `embedding_engine.embed_documents(all_chunk_texts)` in one call. That batching is a throughput decision; it fits nothing. The pinned `Qdrant/bm25` FastEmbed model sets `requires_idf=True` and emits the same sparse values for a document whether it is embedded alone or alongside the whole corpus, so the corpus-wide document frequency $n(t)$ is never computed client-side. **IDF is applied server-side by Qdrant**, via `Modifier.IDF` on the sparse vector index in [src/app/clients/qdrant.py](../../../src/app/clients/qdrant.py).
+  > An earlier revision of this bullet claimed the batch call fitted $n(t)$ accurately and that server-side IDF was therefore *disabled* to avoid double-scaling. Both halves were wrong: nothing was ever fitted, so BM25 ran with every term weighted equally — a rare error code scored no higher than a common word, which defeats the purpose of the sparse leg. #44 corrected the code to `Modifier.IDF`; [sprint1_index_spec.md](sprint1_index_spec.md) §3 carries the full retraction. Do not "optimise" the modifier back to `None` on the strength of the old text.
 - **Deterministic UUIDv5 (dedicated namespace)**: `KB_NAMESPACE = uuid.uuid5(uuid.NAMESPACE_DNS, "barq-g1-kb")`; point IDs are `uuid.uuid5(KB_NAMESPACE, f"{article_id}::chunk::{chunk_index}")`. Running `seed_qdrant.py` multiple times leaves exactly 45 points with byte-identical IDs (verified against the live Qdrant).
 - **Verification & failure behavior**: upserts run with `wait=True`; the seed script compares stored vs upserted counts and exits non-zero on mismatch; an empty corpus raises instead of silently seeding nothing.
 - **Persistent Storage**: Docker volume `barq_qdrant_data` persists the collection on disk, surviving container restarts without re-indexing.

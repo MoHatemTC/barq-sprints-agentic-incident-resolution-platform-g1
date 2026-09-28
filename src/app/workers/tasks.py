@@ -204,6 +204,9 @@ def _run_incident(
     if status == "succeeded":
         logger.info("zombie_redelivery_skipped", execution_id=execution_id)
         return {"status": "already_done", "execution_id": execution_id}
+    if status == "awaiting_approval":
+        logger.info("hitl_redelivery_skipped", execution_id=execution_id)
+        return {"status": "awaiting_approval", "execution_id": execution_id}
 
     if not repo.claim_for_running(execution_uuid):
         # Terminal or unknown: not claimable (replay resets the state first).
@@ -291,6 +294,15 @@ def _run_incident(
         logger.error("unclassified_failure", execution_id=execution_id, reason=str(exc))
         raise
 
+    if result.get("paused"):
+        repo.mark_awaiting_approval(
+            execution_uuid,
+            node_reached=str(result["node_reached"]) if result.get("node_reached") else None,
+            agent_version=str(result["agent_version"]) if result.get("agent_version") else None,
+        )
+        logger.info("incident_awaiting_approval", execution_id=execution_id)
+        return {"status": "awaiting_approval", "execution_id": execution_id, "result": result}
+
     repo.mark_succeeded(execution_uuid, **_execution_summary(result))
     logger.info("incident_processed", execution_id=execution_id)
     return {"status": "succeeded", "execution_id": execution_id, "result": result}
@@ -308,7 +320,9 @@ def _execution_summary(result: dict[str, Any]) -> dict[str, Any]:
     outcome = result.get("outcome")
     if not outcome:
         return {}
-    summary: dict[str, Any] = {"termination_cause": str(outcome)}
+    lifecycle = result.get("lifecycle")
+    cause = f"{lifecycle}:{outcome}" if lifecycle and lifecycle != "direct" else str(outcome)
+    summary: dict[str, Any] = {"termination_cause": cause}
     if node := result.get("node_reached"):
         summary["node_reached"] = str(node)
     if model := result.get("model_name"):

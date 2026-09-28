@@ -127,7 +127,11 @@ async def test_write_ai_fields_delegates_exact_arguments_without_approval_lookup
     audit_sink: CaptureAudit,
 ) -> None:
     payload = IncidentUpdatePayload(
-        ai_summary="VPN restored",
+        # A real field. This previously read ``ai_summary``, which is not one of
+        # the scoped app's columns, so it was accepted and then silently dropped
+        # from the write body — the exact failure IncidentUpdatePayload now
+        # forbids.
+        ai_suggestion="VPN restored",
         work_notes="AI: reset the client",
         ai_human_review_required=False,
     )

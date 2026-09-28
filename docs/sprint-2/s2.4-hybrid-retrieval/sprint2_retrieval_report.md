@@ -2,6 +2,12 @@
 
 Generated from `eval/ablation_results.json` -- seed `42`, collection `incident_knowledge_base`, top_k `5`. Regenerate with `uv run python eval/generate_report.py` after any change to the eval set, corpus, or retrieval code -- do not hand-edit the tables below.
 
+> **This file is a generated snapshot of one ablation run, not a spec.** The prose below is
+> emitted by `eval/generate_report.py` and is left exactly as generated. One reference in
+> it has since gone stale: `retrieve_knowledge` was replaced by `hybrid_search` in #110, and
+> the `internal` default is now `DEFAULT_MAX_SECURITY_LEVEL` in
+> `src/app/retrieval/filters.py`. Read `hybrid_retrieval_spec.md` for current behaviour.
+
 **Security levels, both reported on purpose:** this ablation ran at `restricted`, the level the eval set needs so restricted articles (KB0010, MIR-2026-03) are reachable at all. The application itself defaults to `internal` (`AGENT_MAX_SECURITY_LEVEL` in `.env.example`, enforced by `retrieve_knowledge`). The two differ by design: widen the app's level only per-incident, never to make this table's numbers look better.
 
 ## Summary

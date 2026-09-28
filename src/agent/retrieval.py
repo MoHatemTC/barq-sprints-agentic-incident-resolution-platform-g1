@@ -83,6 +83,20 @@ def _mandatory_filter(extra: Filter | None, max_security_level: SecurityLevel) -
 #: the gate is what stops a junk match becoming a draft.
 OUT_OF_CATEGORY_EVIDENCE_MARGIN = 0.1
 
+
+def _evidence_key(article_id: str, chunk_index: int) -> tuple[str, int]:
+    """The one place a hit is identified for the dense re-scoring pass.
+
+    Both sides of that pass must agree on this tuple: the search returns hits keyed
+    by the composition S2.4 puts in ``article_id``, and the re-scoring query
+    rebuilds it from the stored payload. Composing it in two places let the formats
+    drift, at which point every relevance silently became 0.0 and every incident
+    escalated as "no evidence" — a scoring bug indistinguishable from a policy
+    decision. One function, one rule.
+    """
+    return (article_id, chunk_index)
+
+
 #: Classification label → corpus category (inverse of the S1.4 mapping, #70).
 CLASSIFICATION_TO_CORPUS_CATEGORY: dict[Classification, str] = {
     label: category for category, label in CORPUS_CATEGORY_TO_CLASSIFICATION.items()
@@ -267,10 +281,29 @@ class QdrantRetriever:
                 chunk_index=hit.chunk_index,
                 text=hit.chunk_text,
                 fused_score=hit.score,
-                relevance=relevance.get((hit.article_id, hit.chunk_index), 0.0),
+                relevance=relevance.get(_evidence_key(hit.article_id, hit.chunk_index), 0.0),
             )
             for hit in hits
         ]
+        # A hit the dense pass never returned a score for means the key built here
+        # and the key built in _dense_scores disagree — a composition-rule drift, not
+        # a weak result. Defaulting those to 0.0 would leave every incident scoring
+        # 0.0 relevance, which reads downstream as "no evidence" and escalates the
+        # whole queue to a human with a trace that looks like a healthy search. Fail
+        # loudly instead. Presence is checked, not the value: a genuine cosine of 0.0
+        # is clamped to 0.0 and is a real score, not a missing one.
+        missing = [
+            hit.article_id
+            for hit in hits
+            if _evidence_key(hit.article_id, hit.chunk_index) not in relevance
+        ]
+        if missing:
+            raise TerminalError(
+                f"retrieval relevance could not be scored for {len(missing)} of "
+                f"{len(hits)} hits (e.g. {missing[0]}): the article-id composition "
+                "used by the dense pass no longer matches the one used to index the "
+                "collection"
+            )
         return items, max((item.relevance for item in items), default=0.0)
 
     def _dense_scores(
@@ -318,7 +351,7 @@ class QdrantRetriever:
         scores: dict[tuple[str, int], float] = {}
         for point in response.points:
             payload: dict[str, Any] = point.payload or {}
-            key = (
+            key = _evidence_key(
                 f"{payload.get('article_number')}-v{payload.get('version')}",
                 int(payload.get("chunk_index", -1)),
             )
