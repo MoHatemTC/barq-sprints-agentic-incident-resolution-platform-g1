@@ -23,6 +23,7 @@ from tests.agent_support import (
     ORDER_P1,
     VPN,
     FakeLLM,
+    FakeRetriever,
     FakeServiceNow,
     build_fake_deps,
     event_for,
@@ -130,13 +131,13 @@ def test_deps_includes_audit_store() -> None:
 
 
 def test_interrupt_outcomes_set() -> None:
-    """INTERRUPT_OUTCOMES includes the three required outcomes."""
+    """All human-decision outcomes, including missing evidence, park the graph."""
     from agent.nodes.act import INTERRUPT_OUTCOMES
 
     assert Outcome.ESCALATED_HIGH_RISK in INTERRUPT_OUTCOMES
     assert Outcome.ESCALATED_BLOCKED in INTERRUPT_OUTCOMES
     assert Outcome.ESCALATED_LOW_CONFIDENCE in INTERRUPT_OUTCOMES
-    assert Outcome.ESCALATED_NO_EVIDENCE not in INTERRUPT_OUTCOMES
+    assert Outcome.ESCALATED_NO_EVIDENCE in INTERRUPT_OUTCOMES
 
 
 def test_decide_outcome_high_risk_interrupt() -> None:
@@ -311,6 +312,21 @@ def test_interrupt_at_low_confidence() -> None:
     assert result["confidence"] < deps.settings.agent_confidence_floor
     assert backend.updates == []
     assert deps.audit.get_interrupt(EXECUTION_ID) is not None
+
+
+def test_no_evidence_pauses_for_a_human_solution() -> None:
+    backend = FakeServiceNow()
+    deps = make_deps(retriever=FakeRetriever(hits=[]), servicenow=backend)
+
+    _, result = _run(deps, VPN, InMemorySaver())
+
+    assert result["paused"] is True
+    assert result["outcome"] == "escalated_no_evidence"
+    assert backend.updates == []
+    payload = deps.audit.get_interrupt(EXECUTION_ID)
+    assert payload is not None
+    assert "VPN client says invalid credentials" in payload["incident"]["description"]
+    assert "+971" not in payload["incident"]["description"]
 
 
 def test_resume_with_approval() -> None:

@@ -61,6 +61,10 @@ class ApprovalResponse(BaseModel):
         default=None,
         description="Raw interrupt payload persisted at pause time",
     )
+    knowledge_capture: dict[str, Any] | None = Field(
+        default=None,
+        description="Publication result for a human solution submitted with this decision",
+    )
 
 
 class ApprovalDecisionRequest(BaseModel):
