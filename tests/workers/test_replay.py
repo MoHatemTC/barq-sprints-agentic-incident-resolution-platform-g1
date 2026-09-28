@@ -17,7 +17,10 @@ import json
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
+import pytest
+
 from app.db.redis.keys import INCIDENT_DLQ_QUEUE
+from app.exceptions.app_errors import ConflictError
 from app.workers.db import InMemoryRepo
 from app.workers.replay import load_dead_letters, replay_event
 
@@ -140,6 +143,30 @@ def test_replay_refuses_events_still_in_flight() -> None:
     assert "not parked" in (outcome.reason or "")
     producer.assert_not_called()  # nothing was enqueued behind the caller's back
     assert len(redis.lrange(INCIDENT_DLQ_QUEUE, 0, -1)) == 2  # DLQ untouched
+
+
+def test_replay_preserves_parked_event_when_incident_reset_fails() -> None:
+    repo = _parked_repo(state="exhausted")
+    redis = FakeListRedis()
+    _dlq_with_event(redis, records_for_event=1)
+    original_records = redis.lrange(INCIDENT_DLQ_QUEUE, 0, -1)
+
+    with (
+        patch(
+            "app.workers.replay.reset_failed_incident_for_replay",
+            side_effect=ConflictError("Human Lock"),
+        ),
+        patch("app.workers.replay.send_incident_event") as producer,
+        pytest.raises(ConflictError, match="Human Lock"),
+    ):
+        replay_event(repo, redis, EVENT_PAYLOAD["event_id"], max_attempts=5)
+
+    execution_id = repo.find_execution_id(EVENT_PAYLOAD["event_id"])
+    assert execution_id is not None
+    assert repo.get_status(execution_id) == "failed"
+    assert repo.get_retry_state(execution_id)["state"] == "exhausted"
+    assert redis.lrange(INCIDENT_DLQ_QUEUE, 0, -1) == original_records
+    producer.assert_not_called()
 
 
 def test_replay_refuses_unknown_event_ids() -> None:

@@ -131,7 +131,7 @@ All thirteen Incident columns carry the `x_2215032_ai_inc_0_ai_` prefix. **Scrip
 
 ## Sprint 1 — Platform Build
 
-Goal: the platform side exists as a real ServiceNow application, with an audit trail and an identity a risk owner would sign off. Covers FR-01, FR-02 and FR-06. Tracked in the [Sprint 1 milestone](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/milestone/1); Sprints 2–4 are [scoped in the roadmap](docs/ROADMAP.md) with their own milestones; Sprints 1 and 2 are merged, Sprint 3 is in progress.
+Goal: the platform side exists as a real ServiceNow application, with an audit trail and an identity a risk owner would sign off. Covers FR-01, FR-02 and FR-06. Tracked in the [Sprint 1 milestone](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/milestone/1). Sprints 1–3 have merged code; [the roadmap](docs/ROADMAP.md) records the remaining Sprint 4 PRD scope, for which Airtable has not yet published tasks.
 
 | Task | Scope | Owner |
 |---|---|---|

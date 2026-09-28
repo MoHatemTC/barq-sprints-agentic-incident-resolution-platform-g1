@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-28T13:41:55.196738+00:00",
+  "generated_at": "2026-09-28T19:27:03.592961+00:00",
   "api": "http://127.0.0.1:8099",
   "failures": [],
   "runs": {
@@ -23,10 +23,10 @@
         "ai_failure_reason": null,
         "ai_retry_count": "0"
       },
-      "event_id": "s34-demo-INC0010023-1790602825",
-      "correlation_id": "67ce2cb1-6897-4217-afc9-98c03d9fe4b8",
-      "ack_ms": 36.4,
-      "execution_id": "870e683b-fcba-4cf8-8777-72ab6836ee5c",
+      "event_id": "s34-demo-INC0010023-1790623539",
+      "correlation_id": "2ef37614-cfe0-4831-88df-042d4ad812fc",
+      "ack_ms": 47.2,
+      "execution_id": "a9b78f17-0eea-4d7f-901f-dda2a4d47caf",
       "status_at_park": "awaiting_approval",
       "at_park": {
         "ai_enabled": true,
@@ -44,13 +44,13 @@
         "ai_failure_reason": null,
         "ai_retry_count": "0"
       },
-      "approval_id": "870e683b-fcba-4cf8-8777-72ab6836ee5c",
+      "approval_id": "a9b78f17-0eea-4d7f-901f-dda2a4d47caf",
       "brief": {
         "gate": "escalated_high_risk",
         "degraded": false,
-        "planned_action": "Write a work note to ServiceNow stating that the risk was assessed as high before retrieval because Priority 1 incidents leave the automated path before any search, resulting in no automated action taken and escalation for a human decision.",
-        "incident_summary": "The incident (INC0010023) is a Priority 1 software issue where 'order-processing' is returning 500 errors.",
-        "judgment_required": "Approve the planned ServiceNow write escalating the incident for a human decision, or reject it."
+        "planned_action": "AI Suggested Response: risk assessed as high before retrieval \u2014 Priority 1 leaves the automated path before any search (\u00a711.7). No action taken. Escalated for human decision.",
+        "incident_summary": "Incident INC0010023 is a Priority 1 software incident involving a monitoring alert for connection pool saturation on order-processing, which is causing orders to fail and return 500 errors.",
+        "judgment_required": "Approve the planned ServiceNow write to escalate the incident for human decision with no automated action taken, or reject it."
       },
       "decision": "approved",
       "write_visible_after_s": 0.0,
@@ -63,7 +63,7 @@
         "ai_resolution": null,
         "ai_model_name": "gemini/gemini-3.5-flash",
         "ai_agent_version": "s3.4-graph-1.0.0",
-        "ai_processing_start": "2026-09-28 13:40:26+00:00",
+        "ai_processing_start": "2026-09-28 19:25:40+00:00",
         "ai_processing_end": null,
         "ai_human_review_required": true,
         "ai_human_lock": false,
@@ -104,21 +104,21 @@
         "ai_failure_reason": null,
         "ai_retry_count": "0"
       },
-      "event_id": "s34-demo-INC0010025-1790602861",
-      "correlation_id": "679894b8-65e7-422b-89e0-7d1057793192",
-      "ack_ms": 10.2,
-      "execution_id": "d3a08a32-f83b-475d-ab02-334c9ab9c5f1",
+      "event_id": "s34-demo-INC0010025-1790623572",
+      "correlation_id": "4af9444c-2acc-4d76-a233-d374db993a0e",
+      "ack_ms": 15.6,
+      "execution_id": "6a292e57-0dcb-4b06-bc30-120f9dd7d794",
       "status_at_park": "succeeded",
       "at_park": {
         "ai_enabled": true,
         "ai_processing_state": "awaiting_approval",
         "ai_classification": "network",
-        "ai_confidence": 0.9,
-        "ai_suggestion": "1. Check whether webmail works for this user. [KB0002 v3.0 \u00a7Resolution]\n2. Close the client fully and reopen it. [KB0002 v3.0 \u00a7Resolution]\n3. If it still fails, recreate the mail profile and allow the cache to rebuild. [KB0002 v3.0 \u00a7Resolution]\n4. Confirm mail flow before closing. [KB0002 v3.0 \u00a7Resolution]\n\nSources: KB0002 v3.0 \u2014 OUTLOOK SHOWS DISCONNECTED AND NO MAIL IS DELIVERED",
+        "ai_confidence": 0.95,
+        "ai_suggestion": "1. Check whether webmail works for this user to determine if the fault is client-side. [KB0002 v3.0 \u00a7Resolution]\n2. Close the mail client fully and reopen it. [KB0002 v3.0 \u00a7Resolution]\n3. If the connection issue persists, recreate the mail profile and allow the cache to rebuild. [KB0002 v3.0 \u00a7Resolution]\n4. Confirm mail flow before closing. [KB0002 v3.0 \u00a7Resolution]\n\nSources: KB0002 v3.0 \u2014 OUTLOOK SHOWS DISCONNECTED AND NO MAIL IS DELIVERED",
         "ai_resolution": null,
         "ai_model_name": "gemini/gemini-3.5-flash",
         "ai_agent_version": "s3.4-graph-1.0.0",
-        "ai_processing_start": "2026-09-28 13:41:01+00:00",
+        "ai_processing_start": "2026-09-28 19:26:12+00:00",
         "ai_processing_end": null,
         "ai_human_review_required": true,
         "ai_human_lock": false,
@@ -129,12 +129,12 @@
         "ai_enabled": true,
         "ai_processing_state": "awaiting_approval",
         "ai_classification": "network",
-        "ai_confidence": 0.9,
-        "ai_suggestion": "1. Check whether webmail works for this user. [KB0002 v3.0 \u00a7Resolution]\n2. Close the client fully and reopen it. [KB0002 v3.0 \u00a7Resolution]\n3. If it still fails, recreate the mail profile and allow the cache to rebuild. [KB0002 v3.0 \u00a7Resolution]\n4. Confirm mail flow before closing. [KB0002 v3.0 \u00a7Resolution]\n\nSources: KB0002 v3.0 \u2014 OUTLOOK SHOWS DISCONNECTED AND NO MAIL IS DELIVERED",
+        "ai_confidence": 0.95,
+        "ai_suggestion": "1. Check whether webmail works for this user to determine if the fault is client-side. [KB0002 v3.0 \u00a7Resolution]\n2. Close the mail client fully and reopen it. [KB0002 v3.0 \u00a7Resolution]\n3. If the connection issue persists, recreate the mail profile and allow the cache to rebuild. [KB0002 v3.0 \u00a7Resolution]\n4. Confirm mail flow before closing. [KB0002 v3.0 \u00a7Resolution]\n\nSources: KB0002 v3.0 \u2014 OUTLOOK SHOWS DISCONNECTED AND NO MAIL IS DELIVERED",
         "ai_resolution": null,
         "ai_model_name": "gemini/gemini-3.5-flash",
         "ai_agent_version": "s3.4-graph-1.0.0",
-        "ai_processing_start": "2026-09-28 13:41:01+00:00",
+        "ai_processing_start": "2026-09-28 19:26:12+00:00",
         "ai_processing_end": null,
         "ai_human_review_required": true,
         "ai_human_lock": false,
@@ -155,7 +155,7 @@
         "safety_check:succeeded",
         "confidence_check:succeeded",
         "servicenow.write:succeeded",
-        "act:awaiting_approval"
+        "act:succeeded"
       ]
     }
   }

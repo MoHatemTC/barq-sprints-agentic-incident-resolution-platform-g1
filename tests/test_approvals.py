@@ -426,11 +426,15 @@ async def test_approved_no_evidence_solution_captures_after_commit(
         "point_count": 1,
     }
     mock_session.commit.assert_awaited_once()
-    capture.assert_awaited_once_with(
-        execution_id=str(execution_id),
-        interrupt_payload=payload,
-        solution="Changed the VPN route and restarted it.",
-    )
+    # The incident is passed as a validated snapshot rather than the raw interrupt
+    # payload: capture is no longer coupled to the paused-thread shape, which is what
+    # let it be reached from a straight-through acceptance too.
+    capture.assert_awaited_once()
+    kwargs = capture.await_args.kwargs
+    assert kwargs["execution_id"] == str(execution_id)
+    assert kwargs["solution"] == "Changed the VPN route and restarted it."
+    assert kwargs["incident"].sys_id == h.VALID_SYS_ID
+    assert kwargs["incident"].number == "INC0010139"
     assert mock_session.add.call_args.args[0].evidence["tool_name"] == "publish_kb_article"
 
 

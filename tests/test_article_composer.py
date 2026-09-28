@@ -93,11 +93,32 @@ class TestComposeArticle:
             )
 
     def test_category_normalized_to_slug(self) -> None:
+        """The model's category is slugified when the incident's own is unusable.
+
+        The incident here carries no ServiceNow category, so the model's guess is
+        the only source and slug normalization is what is under test.
+        """
+        uncategorised = INCIDENT.model_copy(update={"category": ""})
         answer = FAITHFUL_ANSWER.model_copy(update={"category": "Corporate VPN"})
         article = compose_article(
-            INCIDENT, FAITHFUL_SOLUTION, deps=_deps(answer), article_number="KB1001"
+            uncategorised, FAITHFUL_SOLUTION, deps=_deps(answer), article_number="KB1001"
         )
         assert article.category == "corporate-vpn"
+
+    def test_incident_category_wins_over_the_model_guess(self) -> None:
+        """A grounded field beats an LLM opinion about the field.
+
+        The model guessed "software" for a staff-directory title correction because
+        the fix was done in a console, and the article was indexed under a category
+        the incident never belonged to (dev407364 2026-09-28, KB1011). It was only
+        ever retrievable because the wide pass ignores category.
+        """
+        incident = INCIDENT.model_copy(update={"category": "Inquiry"})
+        answer = FAITHFUL_ANSWER.model_copy(update={"category": "Software"})
+        article = compose_article(
+            incident, FAITHFUL_SOLUTION, deps=_deps(answer), article_number="KB1001"
+        )
+        assert article.category == "inquiry"
 
     def test_missing_service_falls_back_to_valid_slug(self) -> None:
         incident = INCIDENT.model_copy(update={"service": None})

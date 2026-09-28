@@ -138,6 +138,7 @@ def replay_dlq_event(
             redis_client=redis_client,
             event_id=event_id,
             max_attempts=settings.worker_max_retries,
+            settings=settings,
         )
     except (ResourceNotFoundError, ConflictError, ServiceUnavailableError):
         raise

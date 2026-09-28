@@ -55,13 +55,25 @@ def _execution(**overrides) -> Execution:
 
 
 def _incident(**overrides) -> SimpleNamespace:
+    # Every field snapshot_from_incident() reads, so the stub mirrors the real
+    # Incident rather than growing one attribute per failure.
     values: dict = dict(
+        sys_id="a" * 32,
         number="INC0010146",
+        short_description="Outlook disconnected, no mail delivered",
+        description="Outlook shows disconnected and no mail is delivered.",
+        priority=5,
+        impact=3,
+        urgency=3,
+        category="inquiry",
+        service=None,
+        ai_enabled=True,
         ai_suggestion=SUGGESTION,
         ai_confidence=0.95,
         ai_classification="access",
         ai_processing_state=AIProcessingState.AWAITING_APPROVAL,
         ai_processing_start=datetime.now(UTC),
+        ai_processing_end=None,
         ai_human_review_required=True,
         ai_human_lock=False,
         ai_resolution=None,
@@ -263,6 +275,67 @@ async def test_operators_own_words_become_the_resolution(app_with_db) -> None:
 
 
 @pytest.mark.asyncio
+async def test_retry_after_servicenow_write_only_commits_missing_approval(app_with_db) -> None:
+    """A failed audit commit cannot cause a second ServiceNow work note."""
+    app, session = app_with_db
+    execution = _execution()
+    session.get = AsyncMock(return_value=execution)
+    completed_at = datetime.now(UTC)
+
+    with patch("api.routers.suggestions.ServiceNowClient") as client_cls:
+        instance = client_cls.return_value
+        instance.get_incident = AsyncMock(
+            return_value=_incident(
+                ai_processing_state=AIProcessingState.COMPLETE,
+                ai_resolution=SUGGESTION,
+                ai_processing_end=completed_at,
+            )
+        )
+        instance.update_incident = AsyncMock()
+        instance.aclose = AsyncMock()
+        async with _client(app) as http:
+            resp = await http.post(
+                f"/api/v1/suggestions/{execution.execution_id}/decide",
+                json={"decision": "approved"},
+                headers=AUTH_HEADERS,
+            )
+
+    assert resp.status_code == 200
+    assert resp.json()["ai_processing_end"] == completed_at.isoformat()
+    instance.update_incident.assert_not_awaited()
+    session.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_completed_incident_with_different_resolution_is_not_overwritten(app_with_db) -> None:
+    app, session = app_with_db
+    execution = _execution()
+    session.get = AsyncMock(return_value=execution)
+
+    with patch("api.routers.suggestions.ServiceNowClient") as client_cls:
+        instance = client_cls.return_value
+        instance.get_incident = AsyncMock(
+            return_value=_incident(
+                ai_processing_state=AIProcessingState.COMPLETE,
+                ai_resolution="Another operator resolved this incident.",
+                ai_processing_end=datetime.now(UTC),
+            )
+        )
+        instance.update_incident = AsyncMock()
+        instance.aclose = AsyncMock()
+        async with _client(app) as http:
+            resp = await http.post(
+                f"/api/v1/suggestions/{execution.execution_id}/decide",
+                json={"decision": "approved"},
+                headers=AUTH_HEADERS,
+            )
+
+    assert resp.status_code == 409
+    instance.update_incident.assert_not_awaited()
+    session.add.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_acceptance_fails_loudly_if_serviceNow_refuses(app_with_db) -> None:
     """A decision that could not be applied must stay retryable, not be recorded.
 
@@ -460,3 +533,122 @@ async def test_a_paused_execution_is_refused_with_a_pointer_to_the_right_route(
 
     assert resp.status_code == 409
     assert "/api/v1/approvals" in resp.json()["error"]["message"]
+
+
+# ────────────────────────────── knowledge capture ──────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_an_operator_resolution_is_captured_to_the_kb(app_with_db) -> None:
+    """The S3.5 input, and it was missing from this route entirely.
+
+    A straight-through acceptance is the most common way a human supplies a fix, and
+    it taught the platform nothing: the approval came back with
+    ``knowledge_capture: null`` (dev407364, 2026-09-28, INC0010160). Capture used to
+    be reachable only from the paused-approval route, which had an interrupt payload
+    to hand over, and that coupling confined learning to one of several paths.
+    """
+    app, session = app_with_db
+    execution = _execution()
+    session.get = AsyncMock(return_value=execution)
+    mine = "Recreated the mail profile so the cache rebuilt; mail flow confirmed."
+
+    captured = SimpleNamespace(ingested=True, article_number="KB1012", point_count=1)
+    with (
+        patch("api.routers.suggestions.ServiceNowClient") as client_cls,
+        patch(
+            "api.routers.suggestions.capture_approved_solution",
+            AsyncMock(return_value=captured),
+        ) as capture,
+    ):
+        instance = client_cls.return_value
+        instance.get_incident = AsyncMock(return_value=_incident())
+        instance.update_incident = AsyncMock()
+        instance.aclose = AsyncMock()
+        async with _client(app) as http:
+            resp = await http.post(
+                f"/api/v1/suggestions/{execution.execution_id}/decide",
+                json={"decision": "approved", "solution": mine},
+                headers=AUTH_HEADERS,
+            )
+
+    assert resp.status_code == 200
+    assert resp.json()["knowledge_capture"] == {
+        "status": "ingested",
+        "article_number": "KB1012",
+        "point_count": 1,
+    }
+    capture.assert_awaited_once()
+    assert capture.await_args.kwargs["solution"] == mine
+    assert capture.await_args.kwargs["incident"].number == "INC0010146"
+
+
+@pytest.mark.asyncio
+async def test_accepting_the_models_own_draft_teaches_nothing(app_with_db) -> None:
+    """Acceptance with no operator solution must not become knowledge.
+
+    Re-ingesting the model's own words would let the platform cite itself, inflating
+    confidence on suggestions it had no independent evidence for. The gate is the
+    operator's solution, never the act of accepting.
+    """
+    app, session = app_with_db
+    execution = _execution()
+    session.get = AsyncMock(return_value=execution)
+
+    with (
+        patch("api.routers.suggestions.ServiceNowClient") as client_cls,
+        patch("api.routers.suggestions.capture_approved_solution", AsyncMock()) as capture,
+    ):
+        instance = client_cls.return_value
+        instance.get_incident = AsyncMock(return_value=_incident())
+        instance.update_incident = AsyncMock()
+        instance.aclose = AsyncMock()
+        async with _client(app) as http:
+            resp = await http.post(
+                f"/api/v1/suggestions/{execution.execution_id}/decide",
+                json={"decision": "approved"},
+                headers=AUTH_HEADERS,
+            )
+
+    assert resp.status_code == 200
+    # The draft was applied, so the incident is still completed...
+    assert resp.json()["ai_resolution_written"] is True
+    # ...but nothing was learned from the model's own text.
+    assert resp.json()["knowledge_capture"] is None
+    capture.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_a_capture_failure_does_not_undo_a_recorded_decision(app_with_db) -> None:
+    """The decision is already committed and immutable; capture comes after it.
+
+    A KB outage must not fail the acceptance or, worse, leave the operator unable to
+    retry behind a 409.
+    """
+    app, session = app_with_db
+    execution = _execution()
+    session.get = AsyncMock(return_value=execution)
+
+    with (
+        patch("api.routers.suggestions.ServiceNowClient") as client_cls,
+        patch(
+            "api.routers.suggestions.capture_approved_solution",
+            AsyncMock(side_effect=RuntimeError("Qdrant unreachable")),
+        ),
+    ):
+        instance = client_cls.return_value
+        instance.get_incident = AsyncMock(return_value=_incident())
+        instance.update_incident = AsyncMock()
+        instance.aclose = AsyncMock()
+        async with _client(app) as http:
+            resp = await http.post(
+                f"/api/v1/suggestions/{execution.execution_id}/decide",
+                json={"decision": "approved", "solution": "Fixed it by hand."},
+                headers=AUTH_HEADERS,
+            )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["decision"] == "approved"
+    assert body["ai_resolution_written"] is True
+    assert body["knowledge_capture"] == {"status": "failed"}

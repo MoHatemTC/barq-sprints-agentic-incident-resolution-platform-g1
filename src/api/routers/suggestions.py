@@ -28,7 +28,9 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from agent.approval_capture import capture_approved_solution, snapshot_from_incident
 from api.auth import require_role, verify_bearer_token
+from api.decision_lock import lock_execution_decision
 from api.schemas.approvals import fold_solution_into_evidence
 from api.schemas.errors import ErrorResponse
 from api.schemas.suggestions import (
@@ -153,6 +155,9 @@ async def decide_suggestion(
     execution = await db.get(Execution, execution_id)
     if execution is None:
         raise ResourceNotFoundError(f"No execution '{execution_id}' found")
+    # The approval index protects PostgreSQL, but without a decision lock two
+    # requests can both PATCH ServiceNow before one loses the insert race.
+    await lock_execution_decision(db, execution_id)
     if execution.termination_cause != _DRAFTED:
         raise ConflictError(
             f"Execution '{execution_id}' finished as '{execution.termination_cause}', "
@@ -186,36 +191,57 @@ async def decide_suggestion(
         # written. Either way ``ai_resolution`` ends up non-empty, which is what the
         # field model demands before ``complete`` is legal.
         applied = resolution or (incident.ai_suggestion or "").strip()
-        update = IncidentUpdatePayload(
-            ai_processing_state=AIProcessingState.COMPLETE,
-            ai_resolution=applied,
-            ai_processing_end=now,
-            ai_human_review_required=False,
-            work_notes=(
-                f"AI Suggested Response accepted by {decided_by}. "
-                f"Confidence {incident.ai_confidence}. Resolution applied."
-            ),
-        )
-        try:
-            await _update_incident(settings, execution.incident_sys_id, update)
-        except ServiceNowError as exc:
-            logger.exception(
-                "suggestion_acceptance_write_failed",
-                execution_id=str(execution_id),
-                error=str(exc),
+        processing_end = now
+        if incident.ai_processing_state == AIProcessingState.COMPLETE:
+            # The ServiceNow write may have succeeded before the immutable
+            # Approval commit failed. A retry must finish the audit without
+            # appending the work note or resolution a second time. A different
+            # resolution means another actor completed the incident; never
+            # overwrite it on the strength of this stale draft.
+            if (incident.ai_resolution or "").strip() != applied:
+                raise ConflictError(
+                    "Incident is already complete with a different resolution; "
+                    "the draft decision cannot overwrite it."
+                )
+            if incident.ai_processing_end is None:
+                raise ConflictError(
+                    "Incident is marked complete without a processing end time; "
+                    "the draft decision cannot treat it as an applied write."
+                )
+            processing_end = incident.ai_processing_end
+            logger.info("suggestion_write_already_applied", execution_id=str(execution_id))
+        else:
+            update = IncidentUpdatePayload(
+                ai_processing_state=AIProcessingState.COMPLETE,
+                ai_resolution=applied,
+                ai_processing_end=now,
+                ai_human_review_required=False,
+                work_notes=(
+                    f"AI Suggested Response accepted by {decided_by}. "
+                    f"Confidence {incident.ai_confidence}. Resolution applied."
+                ),
             )
-            raise ServiceUnavailableError(
-                f"ServiceNow refused the acceptance write: {exc}"
-            ) from exc
+            try:
+                await _update_incident(settings, execution.incident_sys_id, update)
+            except ServiceNowError as exc:
+                logger.exception(
+                    "suggestion_acceptance_write_failed",
+                    execution_id=str(execution_id),
+                    error=str(exc),
+                )
+                raise ServiceUnavailableError(
+                    f"ServiceNow refused the acceptance write: {exc}"
+                ) from exc
         written = {
             "ai_resolution_written": True,
-            "ai_processing_end": now.isoformat(),
+            "ai_processing_end": processing_end.isoformat(),
             "ai_processing_state": AIProcessingState.COMPLETE.value,
         }
         logger.info(
-            "suggestion_accepted",
+            "suggestion_resolved",
             execution_id=str(execution_id),
             incident=execution.incident_sys_id,
+            decision=payload.decision,
             decided_by=decided_by,
             confidence=incident.ai_confidence,
         )
@@ -261,6 +287,42 @@ async def decide_suggestion(
             "suggestion_decision_record_failed", execution_id=str(execution_id), error=str(exc)
         )
         raise ServiceUnavailableError("Database unavailable to record the decision.") from exc
+
+    # 3. Capture the human's resolution, after the approval row is committed.
+    #
+    # Only when the operator wrote the resolution themselves. Accepting the model's
+    # own draft must not become knowledge: re-ingesting it would let the platform
+    # cite itself, inflating confidence on suggestions it had no independent
+    # evidence for. This is the S3.5 input, and it was missing from this route
+    # entirely -- a straight-through acceptance is the most common way a human
+    # supplies a fix, and it taught the platform nothing.
+    #
+    # Runs after the ServiceNow write and the commit, like the escalation path: the
+    # registry verifies the approved tool-scoped row before it publishes, and a KB
+    # failure must not undo a human decision that is already recorded.
+    if resolution:
+        try:
+            captured = await capture_approved_solution(
+                execution_id=str(execution.execution_id),
+                incident=snapshot_from_incident(incident),
+                solution=resolution,
+            )
+            written["knowledge_capture"] = (
+                {
+                    "status": "ingested" if captured.ingested else "published_unindexed",
+                    "article_number": captured.article_number,
+                    "point_count": captured.point_count,
+                }
+                if captured is not None
+                else {"status": "not_published"}
+            )
+        except Exception as exc:  # noqa: BLE001 — the decision is already committed
+            logger.exception(
+                "knowledge_capture_failed_after_approval",
+                execution_id=str(execution_id),
+                error=str(exc),
+            )
+            written["knowledge_capture"] = {"status": "failed"}
 
     return SuggestionDecisionResponse(
         approval_id=approval.id,

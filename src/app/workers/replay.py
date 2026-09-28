@@ -4,13 +4,15 @@ The Redis DLQ list (``barq:incident:dlq``) is a bulletin board for humans:
 no worker ever consumes it. PostgreSQL is the durable truth. Replay therefore
 
 1. re-reads the ORIGINAL event from the immutable ``events`` table,
-2. resets the parked state atomically (``reset_for_replay`` is guarded with
+2. resets a failed ServiceNow incident to ``pending`` with its old failure
+   reason and timestamps cleared (refuses Human Lock or a completed incident),
+3. resets the parked state atomically (``reset_for_replay`` is guarded with
    ``WHERE state IN ('exhausted', 'cancelled')`` — 0 rows ⇒ refuse),
-3. removes the event's records from the Redis list, and
-4. re-enqueues through :func:`app.workers.producer.send_incident_event` so the
+4. removes the event's records from the Redis list, and
+5. re-enqueues through :func:`app.workers.producer.send_incident_event` so the
    envelope format keeps a single owner.
 
-Order matters: reset → LREM → enqueue. If replay dies between reset and
+Order matters: ServiceNow reset → database reset → LREM → enqueue. If replay dies between reset and
 enqueue the event sits in 'queued' without a live message; recovery is the
 documented re-enqueue sweep (``events WHERE status = 'queued'``). Enqueueing
 before LREM instead would race the worker: a fresh failure could push a new
@@ -36,9 +38,10 @@ from uuid import UUID
 import redis as redis_lib
 import structlog
 
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 from app.db.redis.keys import INCIDENT_DLQ_QUEUE
 from app.workers.db import WorkerRepo, build_worker_repo
+from app.workers.incident_state import reset_failed_incident_for_replay
 from app.workers.producer import send_incident_event
 
 logger = structlog.getLogger(__name__)
@@ -112,6 +115,7 @@ def replay_event(
     event_id: str,
     *,
     max_attempts: int,
+    settings: Settings | None = None,
 ) -> ReplayOutcome:
     """Reset one parked event and put it back on the events queue.
 
@@ -128,6 +132,20 @@ def replay_event(
         return ReplayOutcome(
             event_id=event_id, reason=f"no execution exists for event_id: {event_id}"
         )
+
+    state = (repo.get_retry_state(execution_id) or {}).get("state")
+    if state not in {"exhausted", "cancelled"}:
+        return ReplayOutcome(
+            event_id=event_id,
+            execution_id=execution_id,
+            reason=f"event is not parked (retry_state={state!r}) — "
+            "only 'exhausted'/'cancelled' events replay",
+        )
+
+    # A terminal failure is visible on the incident. The graph only accepts
+    # pending incidents, so reset the ServiceNow fields before resetting the DB
+    # and re-enqueueing. If SN refuses, the original DLQ record remains intact.
+    reset_failed_incident_for_replay(settings or get_settings(), payload)
 
     if not repo.reset_for_replay(execution_id, max_attempts=max_attempts):
         state = (repo.get_retry_state(execution_id) or {}).get("state")

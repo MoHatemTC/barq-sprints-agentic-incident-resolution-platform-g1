@@ -310,7 +310,10 @@ def test_dead_lettered_event_replays_successfully_when_issue_clears() -> None:
     fake_redis = FakeDlqRedis()
 
     # 2. Trigger replay with send_incident_event patched
-    with mock.patch("app.workers.replay.send_incident_event") as mock_producer:
+    with (
+        mock.patch("app.workers.replay.send_incident_event") as mock_producer,
+        mock.patch("app.workers.replay.reset_failed_incident_for_replay"),
+    ):
         result = replay_event(repo, fake_redis, event_id, max_attempts=5)
         assert result.replayed is True
         assert result.event_id == event_id

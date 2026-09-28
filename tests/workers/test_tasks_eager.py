@@ -27,7 +27,7 @@ from app.workers import tasks as tasks_module
 from app.workers.db import InMemoryRepo
 from app.workers.db import InMemoryRepo as _BaseInMemoryRepo
 from app.workers.retry_policy import RetryableError, RetryConfig, TerminalError
-from app.workers.tasks import _run_incident, record_dead_letter
+from app.workers.tasks import IncidentTask, _run_incident, record_dead_letter
 
 EXECUTION_ID = uuid4()
 PAYLOAD_OK = {
@@ -95,6 +95,34 @@ class TestSuccessPath:
         _run_incident(FakeTask(), PAYLOAD_OK, str(EXECUTION_ID), CFG, repo)
 
         assert repo.get_retry_state(EXECUTION_ID) is not None
+
+    def test_langgraph_prepares_servicenow_retry_before_invocation(self) -> None:
+        repo = make_repo()
+        settings = MagicMock()
+        order: list[str] = []
+
+        def prepare(*_args):
+            order.append("prepare")
+
+        def graph(*_args, **_kwargs):
+            order.append("graph")
+            return {"outcome": "suggested"}
+
+        with (
+            mock.patch.object(tasks_module, "prepare_servicenow_retry_sync", side_effect=prepare),
+            mock.patch.object(tasks_module, "invoke_graph", side_effect=graph),
+        ):
+            result = _run_incident(
+                FakeTask(),
+                PAYLOAD_OK,
+                str(EXECUTION_ID),
+                CFG,
+                repo,
+                graph_backend="langgraph",
+                settings=settings,
+            )
+        assert result["status"] == "succeeded"
+        assert order == ["prepare", "graph"]
 
 
 class TestRetryablePath:
@@ -230,6 +258,25 @@ class TestDeadLetterRecord:
         assert record["failure_reason"] == "LLM timeout"
         assert record["retry_count"] == 3
         assert record["failed_at"] is not None
+
+    def test_final_failure_hook_updates_incident_after_dead_letter(self) -> None:
+        task = IncidentTask()
+        task.settings = MagicMock()
+        task.repo = make_repo()
+        task.dlq_redis = MagicMock()
+        task.request_stack = MagicMock(top=FakeRequest())
+        with mock.patch.object(tasks_module, "write_final_failure_best_effort") as write_back:
+            task.on_failure(
+                TerminalError("invalid incident"),
+                "celery-task-id",
+                (PAYLOAD_TERMINAL, str(EXECUTION_ID)),
+                {},
+                None,
+            )
+        task.dlq_redis.lpush.assert_called_once()
+        write_back.assert_called_once()
+        assert write_back.call_args.args[1] == PAYLOAD_TERMINAL
+        assert write_back.call_args.args[2] == str(EXECUTION_ID)
 
 
 class TestMaxRetriesOneEdgeCase:

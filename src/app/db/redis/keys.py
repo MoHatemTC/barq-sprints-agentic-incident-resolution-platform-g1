@@ -8,7 +8,13 @@ INCIDENT_EVENTS_QUEUE = "barq:incident:events"
 # Dead Letter Queue (DLQ) for poisoned or exhausted retry events
 INCIDENT_DLQ_QUEUE = "barq:incident:dlq"
 
+# Housekeeping that must not delay an incident: the crash reaper's sweep lives here
+# so a sweep never competes with, or sits in front of, real work on the events queue.
+# The worker consumes both; the reaper is routed here by name in celery_app.
+INCIDENT_MAINTENANCE_QUEUE = "barq:incident:maintenance"
+
 __all__ = [
     "INCIDENT_DLQ_QUEUE",
     "INCIDENT_EVENTS_QUEUE",
+    "INCIDENT_MAINTENANCE_QUEUE",
 ]

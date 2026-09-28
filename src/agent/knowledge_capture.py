@@ -5,8 +5,9 @@ pipeline turns it into retrievable knowledge: compose (one LLM call) → publish
 through the ToolRegistry (server-enforced, audited) → ingest via the existing
 S2.4 pipeline (deterministic point IDs) → audit via the registered execution-log
 tool. Fail rules are absolute: a refused or failed publish means zero Qdrant
-writes; a failed ingest after a *verified* publish is drift — recorded loudly,
-recoverable by re-running (idempotent), never a crash of the resolution itself.
+writes; a failed ingest after a *verified* publish is drift — recorded loudly
+without failing the human resolution. Repair must reuse the published article ID;
+starting capture again allocates a new number and is not an idempotent repair.
 """
 
 from __future__ import annotations
@@ -131,9 +132,9 @@ async def capture_human_resolution(
 
     article.sys_id = str(sys_id)
 
-    # 3. Ingest via the existing pipeline; deterministic point IDs make any
-    #    re-run idempotent. A failure here is drift: ServiceNow has the article,
-    #    Qdrant does not. Record it loudly; the resolution flow continues.
+    # 3. Ingest via the existing pipeline; point IDs are deterministic for this
+    #    article ID. A failure here is drift: ServiceNow has the article, Qdrant
+    #    does not. Record the ID; the resolution flow continues.
     point_count = 0
     ingested = False
     try:
@@ -146,7 +147,10 @@ async def capture_human_resolution(
             article_number=article.article_id,
             sys_id=article.sys_id,
             error=str(exc),
-            remediation="re-run capture for this execution; ingestion is idempotent",
+            remediation=(
+                "re-ingest this published article ID; a new capture allocates a "
+                "different article number"
+            ),
         )
 
     # 4. Audit through the registry, linking execution → article → points.
@@ -234,7 +238,7 @@ async def _audit(
         result=(
             f"knowledge capture: article {article.article_id} published "
             f"(sys_id {article.sys_id}); {point_count} qdrant points ingested"
-            + ("" if ingested else " — INGESTION DRIFT, re-run capture to repair")
+            + ("" if ingested else " — INGESTION DRIFT, re-ingest this article ID")
         ),
     )
     try:
