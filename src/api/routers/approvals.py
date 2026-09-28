@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from agent.approval_capture import capture_approved_solution
 from agent.audit_store import GraphAuditStore, build_audit_store
 from agent.runtime import resume_incident_graph
+from agent.state import IncidentSnapshot
 from api.auth import require_role, verify_bearer_token
 from api.schemas.approvals import (
     ApprovalDecisionRequest,
@@ -335,18 +336,22 @@ async def decide_approval(
         response.facts = interrupt_payload
         # Capture follows the immutable commit so the registry can verify the
         # approved, tool-scoped row. A KB failure cannot undo a human decision.
-        if (
-            payload.decision == "approved"
-            and payload.solution
-            and interrupt_payload.get("outcome")
-            in {"escalated_no_evidence", "escalated_low_confidence"}
-        ):
+        #
+        # The trigger is "the operator wrote a resolution", not "which gate fired".
+        # It used to be restricted to no-evidence and low-confidence interrupts,
+        # which meant a human who fixed a high-risk escalation or a
+        # guardrail-blocked incident in their own words taught the platform
+        # nothing -- and those are exactly the cases where a human had something
+        # real to say. Acceptance with no solution still captures nothing, so the
+        # model never re-ingests its own draft as "human knowledge".
+        if payload.decision == "approved" and payload.solution:
             evidence = resolved_approval.evidence or {}
             solution = evidence.get("solution") if isinstance(evidence, dict) else None
             try:
                 captured = await capture_approved_solution(
                     execution_id=execution_id_str,
-                    interrupt_payload=interrupt_payload,
+                    # The interrupt payload already carries a validated snapshot.
+                    incident=IncidentSnapshot.model_validate(interrupt_payload["incident"]),
                     solution=str(solution or ""),
                 )
                 response.knowledge_capture = (

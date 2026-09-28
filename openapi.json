@@ -2165,6 +2165,19 @@
               }
             ],
             "title": "Ai Processing State"
+          },
+          "knowledge_capture": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Knowledge Capture",
+            "description": "Knowledge capture result, present when the operator supplied their own resolution. None when they merely accepted the drafted suggestion: the model's own words are not captured as human knowledge."
           }
         },
         "type": "object",

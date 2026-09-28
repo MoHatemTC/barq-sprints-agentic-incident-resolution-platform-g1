@@ -27,17 +27,21 @@ from app.workers.sync_engine import (
 
 
 async def capture_approved_solution(
-    *, execution_id: str, interrupt_payload: dict[str, Any], solution: str
+    *, execution_id: str, incident: IncidentSnapshot, solution: str
 ) -> KnowledgeCaptureResult | None:
     """Use the real approval checker and publisher on the committed decision.
 
-    The endpoint invokes this only for an approved no-evidence or low-confidence
-    interrupt. Its approval row must exist first: the high-risk registry checks
-    that row and its ``publish_kb_article`` scope before ServiceNow is touched.
+    Callers pass the incident directly rather than an interrupt payload. Capture used
+    to be reachable only from the paused-approval route, which had a payload to hand
+    over, and that coupling is what confined learning to one of the several ways a
+    human can supply a resolution. A straight-through draft has no interrupt at all,
+    so accepting one taught the platform nothing.
+
+    The caller's Approval row must exist first: the high-risk registry checks that
+    row and its ``publish_kb_article`` scope before ServiceNow is touched.
     """
     settings = get_settings()
     kb_sys_id = settings.servicenow_kb_id
-    incident = IncidentSnapshot.model_validate(interrupt_payload["incident"])
     deps = get_agent_dependencies()
     engine = create_sync_engine(build_sync_database_url(settings))
     kb_client = ServiceNowKBClient(kb_publisher_settings(settings))
@@ -71,4 +75,26 @@ async def capture_approved_solution(
         engine.dispose()
 
 
-__all__ = ["capture_approved_solution"]
+def snapshot_from_incident(incident: Any) -> IncidentSnapshot:
+    """Adapt a ServiceNow ``Incident`` to the snapshot capture reasons over.
+
+    Both decision routes hold a real ``Incident``; capture only needs the fields the
+    article is composed from, so this is the one place that mapping lives instead of
+    each route hand-rolling it.
+    """
+    return IncidentSnapshot(
+        sys_id=incident.sys_id,
+        number=incident.number,
+        short_description=incident.short_description or "",
+        description=incident.description or "",
+        priority=incident.priority,
+        impact=incident.impact,
+        urgency=incident.urgency,
+        category=incident.category or "",
+        service=incident.service,
+        ai_enabled=bool(incident.ai_enabled),
+        ai_human_lock=incident.ai_human_lock,
+    )
+
+
+__all__ = ["capture_approved_solution", "snapshot_from_incident"]

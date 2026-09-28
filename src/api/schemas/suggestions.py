@@ -81,3 +81,11 @@ class SuggestionDecisionResponse(BaseModel):
     )
     ai_processing_end: str | None = None
     ai_processing_state: str | None = None
+    knowledge_capture: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Knowledge capture result, present when the operator supplied their own "
+            "resolution. None when they merely accepted the drafted suggestion: the "
+            "model's own words are not captured as human knowledge."
+        ),
+    )
