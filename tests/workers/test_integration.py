@@ -11,7 +11,7 @@ the test worker shares the queue with a different retry budget, which is
 exactly the config-drift incident the drift-guard test below pins.
 
 A real Celery worker subprocess consumes the actual events queue with a test-
-scaled configuration (budget 3, base 0.2s, jitter off → deterministic 1:2
+scaled configuration (budget 3, base 1s, jitter off → deterministic 1:2
 delays), so what is measured is the shipped machinery — broker round-trips,
 ETA scheduling, on_failure hooks — not a mock. Deselected by default; run with
 ``pytest -m integration``.
@@ -61,10 +61,11 @@ from app.workers.tasks import GRAPH_STUB_SLEEP_SECONDS
 pytestmark = pytest.mark.integration
 
 # Test-scaled worker configuration: deterministic delays base*2**(attempt-1)
-# = 0.2s, 0.4s (max_retries=3 → attempts 1..3, retries after 1 and 2).
+# = 1s, 2s (max_retries=3 → attempts 1..3, retries after 1 and 2). The
+# intervals are wide enough to distinguish on a busy CI runner.
 WORKER_MAX_RETRIES = 3
-WORKER_BACKOFF_BASE = 0.2
-WORKER_BACKOFF_MAX = 0.5
+WORKER_BACKOFF_BASE = 1.0
+WORKER_BACKOFF_MAX = 2.0
 
 # Every attempt burns the stub-graph sleep; an interval between two consecutive
 # failures is therefore sleep + delay (+ scheduling overhead).
@@ -301,8 +302,11 @@ def test_transient_event_retries_with_exponential_backoff_then_dead_letters(
     send_incident_event(payload, execution_id)
 
     _wait_until(
-        lambda: (repo.get_retry_state(execution_id) or {}).get("state") == "exhausted",
-        description="retry budget exhaustion",
+        lambda: (
+            (repo.get_retry_state(execution_id) or {}).get("state") == "exhausted"
+            and len(_dlq_records_for(redis_client, payload["event_id"])) == 1
+        ),
+        description="retry budget exhaustion and DLQ record write",
     )
 
     # Empirical backoff measured from the DATABASE (failures.occurred_at),
@@ -434,8 +438,11 @@ def test_replay_of_exhausted_event_resets_budget_and_preserves_history(
     execution_id = _seed_event_with_execution(sync_engine, payload)
     send_incident_event(payload, execution_id)
     _wait_until(
-        lambda: (repo.get_retry_state(execution_id) or {}).get("state") == "exhausted",
-        description="first exhaustion",
+        lambda: (
+            (repo.get_retry_state(execution_id) or {}).get("state") == "exhausted"
+            and len(_dlq_records_for(redis_client, payload["event_id"])) == 1
+        ),
+        description="first exhaustion and DLQ record write",
     )
     assert repo.count_failures(execution_id) == WORKER_MAX_RETRIES
     assert len(_dlq_records_for(redis_client, payload["event_id"])) == 1
@@ -448,8 +455,11 @@ def test_replay_of_exhausted_event_resets_budget_and_preserves_history(
     # The reset is proven by the re-run: the event burns a FRESH budget and the
     # failure history stays (Postgres is the durable truth, the DLQ record goes).
     _wait_until(
-        lambda: (repo.get_retry_state(execution_id) or {}).get("state") == "exhausted",
-        description="second exhaustion after replay",
+        lambda: (
+            (repo.get_retry_state(execution_id) or {}).get("state") == "exhausted"
+            and len(_dlq_records_for(redis_client, payload["event_id"])) == 1
+        ),
+        description="second exhaustion after replay and DLQ record write",
     )
     assert repo.count_failures(execution_id) == 2 * WORKER_MAX_RETRIES
     assert len(_dlq_records_for(redis_client, payload["event_id"])) == 1
