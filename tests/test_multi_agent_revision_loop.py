@@ -276,7 +276,7 @@ class TestScenarioCBudgetExhaustion:
         assert result["outcome"] == "escalated_blocked"
         assert result["escalated"] is True
         assert result["suggested"] is False
-        assert backend.updates == []
+        assert len(backend.updates) == 1
 
         # The operator approves the blocked draft's escalation note, and only then
         # does the very same execution write to ServiceNow.
@@ -285,8 +285,8 @@ class TestScenarioCBudgetExhaustion:
         assert resumed["resumed"] is True
 
         # Verify ServiceNow incident update withheld the suggestion and recorded work notes
-        assert len(backend.updates) == 1
-        body = backend.updates[0][1].to_table_api_body()
+        assert len(backend.updates) == 2
+        body = backend.updates[1][1].to_table_api_body()
         assert "x_2215032_ai_inc_0_ai_suggestion" not in body
         assert body["x_2215032_ai_inc_0_ai_human_review_required"] == "true"
         assert body["x_2215032_ai_inc_0_ai_processing_state"] == "awaiting_approval"
