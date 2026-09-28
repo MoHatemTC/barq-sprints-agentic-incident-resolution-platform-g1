@@ -18,6 +18,13 @@ not an end-to-end shared run. Before presenting EC2, run the shared incident
 flow and read back the ServiceNow fields, approval row, knowledge article and
 Qdrant hit. The local PDI script below is evidence for the local stack only.
 
+The shared EC2 runs `AGENT_MAX_SECURITY_LEVEL=restricted` (changed 2026-09-28).
+The application default is now `restricted` as well. The original `internal`
+default hid 5 of 11 corpus articles from the agent — the correct article was
+retrieved, scored 0.80–0.91, then filtered out before the agent saw it, and the
+run escalated as "no evidence." The `restricted` level makes the published
+retrieval numbers describe the running system.
+
 The demo script is `scripts/demo_s34_hitl_live.py`. It exercises both halves of
 the platform and prints `PASS`/`FAIL` per phase, exiting non-zero if anything
 fails, so it works as a gate and not only as a transcript.
