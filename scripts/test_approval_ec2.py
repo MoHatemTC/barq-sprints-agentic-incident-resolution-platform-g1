@@ -8,6 +8,7 @@ import base64
 import json
 import urllib.request
 from pathlib import Path
+
 from dotenv import dotenv_values
 
 
@@ -21,7 +22,10 @@ def get_token(base_url: str, env: dict) -> str:
     token_req = urllib.request.Request(
         f"{base_url}/api/v1/oauth/token",
         data=b"grant_type=client_credentials",
-        headers={"Authorization": f"Basic {auth_header}", "Content-Type": "application/x-www-form-urlencoded"},
+        headers={
+            "Authorization": f"Basic {auth_header}",
+            "Content-Type": "application/x-www-form-urlencoded",
+        },
     )
     with urllib.request.urlopen(token_req) as resp:
         return json.loads(resp.read())["access_token"]
@@ -38,23 +42,31 @@ async def get_sys_id_for_number(number: str) -> str:
         return inc.sys_id
 
 
-def resolve_execution_id(base_url: str, headers: dict, number: str | None, execution_id: str | None) -> str:
+def resolve_execution_id(
+    base_url: str,
+    headers: dict,
+    number: str | None,
+    execution_id: str | None,
+) -> str:
     if execution_id:
         return execution_id
     if not number:
         raise ValueError("Must provide either --number INCXXXX or --execution-id <UUID>")
 
     sys_id = asyncio.run(get_sys_id_for_number(number))
-    req = urllib.request.Request(f"{base_url}/api/v1/incidents/{sys_id}/executions", headers=headers)
+    req = urllib.request.Request(
+        f"{base_url}/api/v1/incidents/{sys_id}/executions",
+        headers=headers,
+    )
     with urllib.request.urlopen(req) as resp:
         data = json.loads(resp.read())
         executions = data.get("executions", [])
-    
+
     # Find execution awaiting approval
     for ex in executions:
         if ex.get("status") == "awaiting_approval":
             return ex["execution_id"]
-    
+
     # Otherwise return the most recent
     if executions:
         return executions[0]["execution_id"]
@@ -62,27 +74,28 @@ def resolve_execution_id(base_url: str, headers: dict, number: str | None, execu
 
 
 def list_pending_approvals(base_url: str, headers: dict) -> None:
-    from app.clients.servicenow_client import ServiceNowClient
-    from app.core.config import get_settings
-
-    async def _fetch():
-        async with ServiceNowClient(get_settings()) as client:
-            req = urllib.request.Request(f"{base_url}/api/v1/approvals", headers=headers)
-            with urllib.request.urlopen(req) as resp:
-                approvals = json.loads(resp.read())
-            print(f"Total historical approvals: {len(approvals)}")
-
     # Query Postgres directly for executions awaiting approval
     import psycopg
+
     env = dotenv_values(Path(__file__).resolve().parents[1] / ".env")
-    conn_str = f"postgresql://{env.get('POSTGRES_USER','postgres')}:{env.get('POSTGRES_PASSWORD','postgres')}@{env.get('POSTGRES_HOST','localhost')}:{env.get('POSTGRES_PORT','5432')}/{env.get('POSTGRES_DB','barq_incident_dev')}"
-    
+    conn_str = (
+        f"postgresql://{env.get('POSTGRES_USER','postgres')}:"
+        f"{env.get('POSTGRES_PASSWORD','postgres')}@"
+        f"{env.get('POSTGRES_HOST','localhost')}:"
+        f"{env.get('POSTGRES_PORT','5432')}/"
+        f"{env.get('POSTGRES_DB','barq_incident_dev')}"
+    )
+
     try:
         with psycopg.connect(conn_str) as conn:
             with conn.cursor() as cur:
-                cur.execute("SELECT execution_id, incident_sys_id, started_at FROM executions WHERE status = 'awaiting_approval' ORDER BY started_at DESC LIMIT 20;")
+                cur.execute(
+                    "SELECT execution_id, incident_sys_id, started_at "
+                    "FROM executions WHERE status = 'awaiting_approval' "
+                    "ORDER BY started_at DESC LIMIT 20;"
+                )
                 rows = cur.fetchall()
-        
+
         if not rows:
             print("\nNo incidents currently awaiting approval.")
             return
@@ -100,9 +113,16 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Approve or refuse incidents on EC2")
     parser.add_argument("--number", help="ServiceNow incident number (e.g. INC0010170)")
     parser.add_argument("--execution-id", help="Execution UUID")
-    parser.add_argument("--action", choices=["inspect", "approve", "reject", "list"], default="inspect")
+    parser.add_argument(
+        "--action",
+        choices=["inspect", "approve", "reject", "list"],
+        default="inspect",
+    )
     parser.add_argument("--reason", default="Approved by support engineer")
-    parser.add_argument("--solution", help="Human resolution solution text (recommended for approvals)")
+    parser.add_argument(
+        "--solution",
+        help="Human resolution solution text (recommended for approvals)",
+    )
     parser.add_argument("--base-url", default="http://localhost:8000")
     args = parser.parse_args()
 
@@ -118,19 +138,24 @@ def main() -> None:
     execution_id = resolve_execution_id(args.base_url, headers, args.number, args.execution_id)
 
     # Inspect
-    pending_req = urllib.request.Request(f"{args.base_url}/api/v1/approvals/pending/{execution_id}", headers=headers)
+    pending_req = urllib.request.Request(
+        f"{args.base_url}/api/v1/approvals/pending/{execution_id}",
+        headers=headers,
+    )
     with urllib.request.urlopen(pending_req) as resp:
         pending_data = json.loads(resp.read())
 
     incident_info = (pending_data.get("facts") or {}).get("incident") or {}
-    print(f"\n=======================================================")
-    print(f"Incident:    {incident_info.get('number', 'Unknown')} ({incident_info.get('short_description', '')})")
+    print("\n=======================================================")
+    num = incident_info.get("number", "Unknown")
+    desc = incident_info.get("short_description", "")
+    print(f"Incident:    {num} ({desc})")
     print(f"Execution:   {execution_id}")
     print(f"Status:      {pending_data.get('decision') or 'awaiting_approval'}")
     if pending_data.get("brief"):
         print(f"AI Brief:    {pending_data['brief'].get('incident_summary')}")
         print(f"Judgment:    {pending_data['brief'].get('judgment_required')}")
-    print(f"=======================================================\n")
+    print("=======================================================\n")
 
     if args.action == "inspect":
         print("To approve: run with --action approve [--solution 'your resolution text']")
@@ -138,28 +163,37 @@ def main() -> None:
         return
 
     # Decide
-    decision_payload = {
-        "decision": "approved" if args.action == "approve" else "rejected",
+    decision = "approved" if args.action == "approve" else "rejected"
+    payload = {
+        "decision": decision,
         "reason": args.reason,
     }
-    if args.action == "approve" and args.solution:
-        decision_payload["solution"] = args.solution
+    if args.solution:
+        payload["solution"] = args.solution
 
-    print(f"Submitting decision: {decision_payload['decision'].upper()}...")
     decide_req = urllib.request.Request(
         f"{args.base_url}/api/v1/approvals/{execution_id}/decide",
-        data=json.dumps(decision_payload).encode(),
+        data=json.dumps(payload).encode(),
         headers=headers,
         method="POST",
     )
-    with urllib.request.urlopen(decide_req) as resp:
-        result = json.loads(resp.read())
+    try:
+        with urllib.request.urlopen(decide_req) as resp:
+            result = json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        print("Error submitting decision:", e.read().decode())
+        return
 
-    print("\nResult:")
-    print(f"  Decision recorded: {result.get('decision')} by {result.get('decided_by')}")
+    print("================ DECISION APPLIED ================")
+    print(f"Status:      {result.get('status')}")
+    print(f"Verdict:     {result.get('decision')} by {result.get('decided_by')}")
+    print(f"ServiceNow:  {result.get('servicenow_write')}")
     if result.get("knowledge_capture"):
-        print(f"  Knowledge Capture: Article {result['knowledge_capture'].get('article_number')} ({result['knowledge_capture'].get('status')})")
-    print("\nSuccessfully updated ServiceNow and platform database!")
+        art_num = result["knowledge_capture"].get("article_number")
+        art_status = result["knowledge_capture"].get("status")
+        print(f"KB Learned:  {art_num} ({art_status})")
+    print("==================================================")
+    print("Graph execution resumed and saved in database!")
 
 
 if __name__ == "__main__":
