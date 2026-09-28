@@ -86,6 +86,7 @@ logs/
 tmp/
 *.sqlite
 *.sqlite3
+celerybeat-schedule.db*
 
 # =========================
 # Docker

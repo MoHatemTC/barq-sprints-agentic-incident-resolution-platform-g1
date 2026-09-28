@@ -65,6 +65,8 @@ depending on a repo `.env` file, which may not exist in a fresh checkout.
 
 ```bash
 . scripts/load_local_demo_env.sh
+uv run alembic current
+uv run alembic upgrade head
 uv run uvicorn app.main:app --host 127.0.0.1 --port 8099
 ```
 
@@ -90,6 +92,14 @@ Confirm both are up:
 ```bash
 curl -s http://127.0.0.1:8099/ready     # {"status":"ready","database":"connected","redis":"connected"}
 ```
+
+`/ready` checks connectivity, not schema version. Confirm `uv run alembic current`
+prints `0003_execution_lease (head)` before running the demo. An older local
+database may have the seven Sprint 2 tables but no `alembic_version` row;
+`upgrade head` then tries to recreate `events` and fails. Inspect that schema
+against migration `0001` before stamping it as `0001_postgresql_state_schema`,
+then apply migrations `0002` and `0003`. Never stamp an unknown schema just to
+silence the error.
 
 ## 3 · Run the demo
 
