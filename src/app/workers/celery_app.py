@@ -19,7 +19,7 @@ from celery import Celery
 from pydantic import SecretStr
 
 from app.core.config import Settings, get_settings
-from app.db.redis.keys import INCIDENT_EVENTS_QUEUE
+from app.db.redis.keys import INCIDENT_EVENTS_QUEUE, INCIDENT_MAINTENANCE_QUEUE
 
 
 def build_broker_url(settings: Settings) -> str:
@@ -73,11 +73,11 @@ def create_celery_app(settings: Settings) -> Celery:
             "reap-stale-executions": {
                 "task": "app.workers.tasks.reap_stale_executions",
                 "schedule": float(settings.reaper_interval_seconds),
-                "options": {"queue": "barq-maintenance"},
+                "options": {"queue": INCIDENT_MAINTENANCE_QUEUE},
             },
         },
         task_routes={
-            "app.workers.tasks.reap_stale_executions": {"queue": "barq-maintenance"},
+            "app.workers.tasks.reap_stale_executions": {"queue": INCIDENT_MAINTENANCE_QUEUE},
         },
     )
     return app
