@@ -283,8 +283,8 @@ async def straight_through(
         say(f"        {seq:>2}  {name:<20} {node.get('status')}")
     check("the node trace is recorded in PostgreSQL", len(nodes) > 0, f"{len(nodes)} node states")
     check(
-        "the run is marked complete, not escalated",
-        str(after.get("ai_processing_state")) in {"complete", "awaiting_approval"},
+        "the draft awaits human review, without a graph approval pause",
+        str(after.get("ai_processing_state")) == "awaiting_approval",
         f"state={after.get('ai_processing_state')!r}",
     )
     return step
