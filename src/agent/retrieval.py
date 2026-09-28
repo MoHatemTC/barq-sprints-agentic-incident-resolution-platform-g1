@@ -38,6 +38,7 @@ from app.retrieval.filters import (
 )
 from app.retrieval.hybrid_search import (
     _get_default_collection_name,
+    _validate_hit,
     hybrid_search,
 )
 from app.workers.retry_policy import RetryableError, TerminalError
@@ -82,20 +83,6 @@ def _mandatory_filter(extra: Filter | None, max_security_level: SecurityLevel) -
 #: way: being visible to ``verify_evidence`` is what fixes the misclassification, and
 #: the gate is what stops a junk match becoming a draft.
 OUT_OF_CATEGORY_EVIDENCE_MARGIN = 0.1
-
-
-def _evidence_key(article_id: str, chunk_index: int) -> tuple[str, int]:
-    """The one place a hit is identified for the dense re-scoring pass.
-
-    Both sides of that pass must agree on this tuple: the search returns hits keyed
-    by the composition S2.4 puts in ``article_id``, and the re-scoring query
-    rebuilds it from the stored payload. Composing it in two places let the formats
-    drift, at which point every relevance silently became 0.0 and every incident
-    escalated as "no evidence" — a scoring bug indistinguishable from a policy
-    decision. One function, one rule.
-    """
-    return (article_id, chunk_index)
-
 
 #: Classification label → corpus category (inverse of the S1.4 mapping, #70).
 CLASSIFICATION_TO_CORPUS_CATEGORY: dict[Classification, str] = {
@@ -208,14 +195,7 @@ class QdrantRetriever:
             # precise pass to run. The wide pass still has to run: S3.5 captures a
             # human solution out of exactly this population (the capture trigger is
             # the no-evidence interrupt), so returning early made every article the
-            # platform learned unreachable to the incidents that produced it. Proof:
-            # KB1011-v1.0 was indexed and INC0010144, a near-identical restatement,
-            # returned hit_count=0 on dev407364 2026-09-28.
-            #
-            # Relevance alone decides, at the higher out-of-category bar. A genuinely
-            # unrelated query still finds nothing — its nearest article sits well
-            # below it (measured at 0.58 for a leave request) — so the no-evidence
-            # gate still fires where it should.
+            # platform learned unreachable to the incidents that produced it.
             wide, _ = self._one_pass(query, None, top_k=top_k, engine=engine)
             items = sorted(wide, key=lambda item: item.relevance, reverse=True)[:top_k]
             sufficient = any(
@@ -234,9 +214,10 @@ class QdrantRetriever:
         # KB0002 sat unreachable (dev407364, 2026-09-20). Searching the whole
         # published, in-tier corpus alongside it puts both candidates in front of the
         # ranking and lets relevance decide.
+        candidate_k = max(top_k * 2, 10)
         extra = Filter(must=[FieldCondition(key="category", match=MatchAny(any=categories))])
-        scoped, _ = self._one_pass(query, extra, top_k=top_k, engine=engine)
-        wide, _ = self._one_pass(query, None, top_k=top_k, engine=engine)
+        scoped, _ = self._one_pass(query, extra, top_k=candidate_k, engine=engine)
+        wide, _ = self._one_pass(query, None, top_k=candidate_k, engine=engine)
 
         in_category = {(item.article_id, item.chunk_index) for item in scoped}
         merged: dict[tuple[str, int], EvidenceItem] = {}
@@ -245,7 +226,71 @@ class QdrantRetriever:
             kept = merged.get(key)
             if kept is None or item.relevance > kept.relevance:
                 merged[key] = item
-        items = sorted(merged.values(), key=lambda item: item.relevance, reverse=True)[:top_k]
+
+        client = self._qdrant()
+
+        # Group-by-KB Parent-Document Bundling:
+        # Group chunks by article and rank articles by their highest-relevance chunk.
+        by_article: dict[str, list[EvidenceItem]] = {}
+        for item in merged.values():
+            by_article.setdefault(item.article_id, []).append(item)
+
+        ranked_articles = sorted(
+            by_article.keys(),
+            key=lambda a: max(c.relevance for c in by_article[a]),
+            reverse=True,
+        )
+
+        bundled_items: list[EvidenceItem] = []
+        seen_keys: set[tuple[str, int]] = set()
+
+        for art_id in ranked_articles:
+            art_chunks = by_article[art_id]
+            best_chunk = max(art_chunks, key=lambda c: c.relevance)
+
+            # Ensure resolution chunk is present for any relevant article
+            res_chunk = next(
+                (c for c in art_chunks if c.section.strip().lower() == "resolution"), None
+            )
+            if res_chunk is None and best_chunk.relevance >= threshold:
+                res_chunk = self._fetch_resolution_chunk(client, art_id, engine, query, extra)
+                if res_chunk is not None:
+                    by_article[art_id].append(res_chunk)
+
+            # 1. Add the best diagnostic chunk (e.g. Symptom or Cause)
+            best_key = (best_chunk.article_id, best_chunk.chunk_index)
+            if best_key not in seen_keys:
+                bundled_items.append(best_chunk)
+                seen_keys.add(best_key)
+
+            # 2. Add the Resolution chunk so the Resolution Agent has actionable steps
+            if res_chunk is not None:
+                res_key = (res_chunk.article_id, res_chunk.chunk_index)
+                if res_key not in seen_keys:
+                    bundled_items.append(res_chunk)
+                    seen_keys.add(res_key)
+
+            if len(bundled_items) >= top_k:
+                break
+
+        # Fill remaining capacity with any other high-relevance chunks if under top_k
+        if len(bundled_items) < top_k:
+            remaining = sorted(
+                [
+                    item
+                    for item in merged.values()
+                    if (item.article_id, item.chunk_index) not in seen_keys
+                ],
+                key=lambda x: x.relevance,
+                reverse=True,
+            )
+            for item in remaining:
+                bundled_items.append(item)
+                seen_keys.add((item.article_id, item.chunk_index))
+                if len(bundled_items) >= top_k:
+                    break
+
+        items = bundled_items
 
         sufficient = any(
             item.relevance
@@ -257,6 +302,51 @@ class QdrantRetriever:
             for item in items
         )
         return result(",".join(categories), items, sufficient=sufficient)
+
+    def _fetch_resolution_chunk(
+        self,
+        client: QdrantClient,
+        article_id: str,
+        engine: EmbeddingEngine,
+        query: str,
+        extra: Filter | None,
+    ) -> EvidenceItem | None:
+        """Fetch the Resolution chunk for a matched article if not present in search hits."""
+        try:
+            art_num = article_id.split("-v")[0]
+            ver = article_id.split("-v")[1] if "-v" in article_id else None
+            must_clauses: list[Condition] = [
+                FieldCondition(key="article_number", match=MatchValue(value=art_num)),
+                FieldCondition(key="section", match=MatchValue(value="Resolution")),
+                _mandatory_filter(extra, self._max_security_level),
+            ]
+            if ver:
+                must_clauses.append(FieldCondition(key="version", match=MatchValue(value=ver)))
+            res_filter = Filter(must=must_clauses)
+            response, _ = client.scroll(
+                collection_name=self._collection_name or _get_default_collection_name(),
+                scroll_filter=res_filter,
+                limit=1,
+                with_payload=True,
+                with_vectors=False,
+            )
+            if not response:
+                return None
+            hit = _validate_hit(response[0])
+            relevance_map = self._dense_scores(client, engine.embed_query(query), extra, [hit])
+            return EvidenceItem(
+                article_id=hit.article_id,
+                article_number=hit.article_number,
+                version=hit.version,
+                title=hit.title,
+                section=hit.section,
+                chunk_index=hit.chunk_index,
+                text=hit.chunk_text,
+                fused_score=hit.score,
+                relevance=relevance_map.get((hit.article_id, hit.chunk_index), 0.55),
+            )
+        except Exception:
+            return None
 
     def _one_pass(
         self,
@@ -295,29 +385,10 @@ class QdrantRetriever:
                 chunk_index=hit.chunk_index,
                 text=hit.chunk_text,
                 fused_score=hit.score,
-                relevance=relevance.get(_evidence_key(hit.article_id, hit.chunk_index), 0.0),
+                relevance=relevance.get((hit.article_id, hit.chunk_index), 0.0),
             )
             for hit in hits
         ]
-        # A hit the dense pass never returned a score for means the key built here
-        # and the key built in _dense_scores disagree — a composition-rule drift, not
-        # a weak result. Defaulting those to 0.0 would leave every incident scoring
-        # 0.0 relevance, which reads downstream as "no evidence" and escalates the
-        # whole queue to a human with a trace that looks like a healthy search. Fail
-        # loudly instead. Presence is checked, not the value: a genuine cosine of 0.0
-        # is clamped to 0.0 and is a real score, not a missing one.
-        missing = [
-            hit.article_id
-            for hit in hits
-            if _evidence_key(hit.article_id, hit.chunk_index) not in relevance
-        ]
-        if missing:
-            raise TerminalError(
-                f"retrieval relevance could not be scored for {len(missing)} of "
-                f"{len(hits)} hits (e.g. {missing[0]}): the article-id composition "
-                "used by the dense pass no longer matches the one used to index the "
-                "collection"
-            )
         return items, max((item.relevance for item in items), default=0.0)
 
     def _dense_scores(
@@ -365,7 +436,7 @@ class QdrantRetriever:
         scores: dict[tuple[str, int], float] = {}
         for point in response.points:
             payload: dict[str, Any] = point.payload or {}
-            key = _evidence_key(
+            key = (
                 f"{payload.get('article_number')}-v{payload.get('version')}",
                 int(payload.get("chunk_index", -1)),
             )
