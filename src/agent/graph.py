@@ -184,7 +184,7 @@ def run_graph(
         if not isinstance(value, dict):
             value = {}
         _record_pause(graph, config, _parked_node(parked))
-        return _paused(value, values if isinstance(values, dict) else {})
+        return _paused(value, cast(dict[str, Any], values if isinstance(values, dict) else {}))
     if isinstance(final, dict) and final.get("__interrupt__"):
         parked = graph.get_state(config) if graph.checkpointer is not None else None
         values = parked.values if parked is not None else final
@@ -193,7 +193,7 @@ def run_graph(
         if not isinstance(value, dict):
             value = {}
         _record_pause(graph, config, _parked_node(parked))
-        return _paused(value, values if isinstance(values, dict) else {})
+        return _paused(value, cast(dict[str, Any], values if isinstance(values, dict) else {}))
     return _result(final, resumed=resumed)
 
 
