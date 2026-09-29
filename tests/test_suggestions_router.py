@@ -431,11 +431,11 @@ async def test_acceptance_refuses_when_there_is_nothing_to_accept(app_with_db) -
 
 
 @pytest.mark.asyncio
-async def test_rejection_records_the_decision_and_writes_nothing(app_with_db) -> None:
+async def test_rejection_records_the_decision_and_marks_the_attempt_failed(app_with_db) -> None:
     """A rejected draft must not be dressed up as a resolution.
 
-    There is nothing to record as ``ai_resolution``, so claiming ``complete`` would
-    be a fabrication. The incident is left for a human to close.
+    There is nothing to record as ``ai_resolution``. A rejection ends the AI
+    attempt and leaves the incident for a human to close.
     """
     app, session = app_with_db
     execution = _execution()
@@ -457,8 +457,37 @@ async def test_rejection_records_the_decision_and_writes_nothing(app_with_db) ->
     body = resp.json()
     assert body["decision"] == "rejected"
     assert body["ai_resolution_written"] is False
-    assert body["ai_processing_end"] is None
+    assert body["ai_processing_state"] == "failed"
+    assert body["ai_processing_end"] is not None
+    update = instance.update_incident.await_args.args[1].to_table_api_body()
+    assert update["x_2215032_ai_inc_0_ai_processing_state"] == "failed"
+    assert update["x_2215032_ai_inc_0_ai_failure_reason"].startswith("Human rejected")
+    assert update["x_2215032_ai_inc_0_ai_human_review_required"] == "false"
+
+
+@pytest.mark.asyncio
+async def test_rejection_cannot_overwrite_an_already_completed_incident(app_with_db) -> None:
+    app, session = app_with_db
+    execution = _execution()
+    session.get = AsyncMock(return_value=execution)
+
+    with patch("api.routers.suggestions.ServiceNowClient") as client_cls:
+        instance = client_cls.return_value
+        instance.get_incident = AsyncMock(
+            return_value=_incident(ai_processing_state=AIProcessingState.COMPLETE)
+        )
+        instance.update_incident = AsyncMock()
+        instance.aclose = AsyncMock()
+        async with _client(app) as http:
+            resp = await http.post(
+                f"/api/v1/suggestions/{execution.execution_id}/decide",
+                json={"decision": "rejected"},
+                headers=AUTH_HEADERS,
+            )
+
+    assert resp.status_code == 409
     instance.update_incident.assert_not_awaited()
+    session.add.assert_not_called()
 
 
 @pytest.mark.asyncio

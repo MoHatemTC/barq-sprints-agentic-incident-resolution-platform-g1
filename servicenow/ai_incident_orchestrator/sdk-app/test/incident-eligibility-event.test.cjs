@@ -216,6 +216,26 @@ for (const [previousRetryCount, advancedRetryCount] of [['0', '1'], ['1', '2']])
     })
 }
 
+test('human rejection stays failed without advancing retries or emitting another event', () => {
+    const retryLogs = []
+    const escalate = loadFunction('escalateExhaustedRetry', { gs: retryGs(retryLogs) })
+    const { evaluate, queued } = eligibilityHarness()
+    const previous = record('update', {
+        x_2215032_ai_inc_0_ai_processing_state: 'awaiting_approval',
+    })
+    const current = record('update', {
+        x_2215032_ai_inc_0_ai_processing_state: 'failed',
+        x_2215032_ai_inc_0_ai_failure_reason: 'Human rejected AI action: wrong suggestion',
+    })
+
+    escalate(current, previous)
+    evaluate(current, previous)
+
+    assert.equal(current.getValue('x_2215032_ai_inc_0_ai_retry_count'), '0')
+    assert.deepEqual(retryLogs, [])
+    assert.deepEqual(queued, [])
+})
+
 test('exhausted retry count cannot emit through a transition to pending', () => {
     const { evaluate, logs, queued } = eligibilityHarness()
 

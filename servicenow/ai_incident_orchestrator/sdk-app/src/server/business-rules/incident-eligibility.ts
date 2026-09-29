@@ -53,6 +53,13 @@ function suppress(current: any, reason: string): void {
 export function evaluateIncidentEligibility(current: any, previous: any): void {
     const operation = current.operation()
     const processingState = current.getValue('x_2215032_ai_inc_0_ai_processing_state')
+    if (
+        processingState === 'failed' &&
+        String(current.getValue('x_2215032_ai_inc_0_ai_failure_reason') || '').indexOf('Human rejected') === 0
+    ) {
+        suppress(current, 'human_rejected')
+        return
+    }
     const isNewFailedTransition =
         operation === 'update' &&
         processingState === 'failed' &&

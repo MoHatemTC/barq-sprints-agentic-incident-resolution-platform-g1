@@ -338,7 +338,10 @@ def _apply_human_decision(output: FinalOutput, decision: dict[str, Any]) -> Fina
             "summary": note,
             "work_note": note,
             "suggestion": None,
-            "approval_required": True,
+            "approval_required": False,
+            "human_review_required": False,
+            "processing_state": AIProcessingState.FAILED.value,
+            "processing_end": datetime.now(UTC).isoformat(),
         }
     )
 
@@ -463,6 +466,8 @@ def _perform_write(
     elif output.processing_state == AIProcessingState.COMPLETE.value:
         fields["ai_processing_end"] = datetime.now(UTC)
     started = _parse_ts(state.get("started_at"))
+    if output.processing_state == AIProcessingState.FAILED.value:
+        fields["ai_failure_reason"] = f"Human rejected AI action: {output.summary}"[:4000]
     if started is not None:
         # The S1.1 model rejects an explicit None timestamp, so it is omitted instead.
         fields["ai_processing_start"] = started
@@ -546,6 +551,8 @@ def _perform_write(
     log_status = (
         ExecutionStatus.SUCCEEDED
         if output.processing_state == AIProcessingState.COMPLETE.value
+        else ExecutionStatus.FAILED
+        if output.processing_state == AIProcessingState.FAILED.value
         else ExecutionStatus.AWAITING_APPROVAL
     )
     _write_execution_log(
