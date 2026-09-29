@@ -41,11 +41,13 @@ async function api(path, options = {}) {
   return body;
 }
 
-$("load-button").addEventListener("click", async () => {
-  const id = $("execution-id").value.trim();
+async function loadBrief(id) {
   if (!uuid.test(id)) { message("Enter a valid execution ID.", "error"); return; }
   const entered = $("operator-token").value.trim();
-  if (entered) { token = entered.replace(/^Bearer\s+/i, ""); $("operator-token").value = ""; }
+  if (entered) {
+    token = entered.replace(/^Bearer\s+/i, "");
+    $("operator-token").value = "";
+  }
   if (!token) { message("Paste an operator bearer token.", "error"); return; }
   $("load-button").disabled = true;
   message("Loading approval brief…");
@@ -53,11 +55,20 @@ $("load-button").addEventListener("click", async () => {
     const approval = await api(`/api/v1/approvals/pending/${encodeURIComponent(id)}`);
     executionId = id;
     showBrief(approval);
-    message("Approval brief loaded. Review it before deciding.", "success");
+    if (approval.decision) {
+      message(`Decision already recorded: ${approval.decision}.`, "info");
+    } else {
+      message("Approval brief loaded. Review it before deciding.", "success");
+    }
   } catch (error) {
     $("review-panel").hidden = true;
     message(error.message, "error");
   } finally { $("load-button").disabled = false; }
+}
+
+$("load-button").addEventListener("click", () => {
+  const id = $("execution-id").value.trim();
+  loadBrief(id);
 });
 
 async function decide(decision) {
@@ -89,4 +100,6 @@ $("approve-button").addEventListener("click", () => decide("approved"));
 $("reject-button").addEventListener("click", () => decide("rejected"));
 
 const initialId = new URLSearchParams(window.location.search).get("execution_id");
-if (initialId && uuid.test(initialId)) $("execution-id").value = initialId;
+if (initialId && uuid.test(initialId)) {
+  $("execution-id").value = initialId;
+}
