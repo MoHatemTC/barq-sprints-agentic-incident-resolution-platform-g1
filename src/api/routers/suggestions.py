@@ -101,16 +101,22 @@ async def review_suggestion(
         await db.execute(select(Approval).where(Approval.execution_id == execution_id).limit(1))
     ).scalar_one_or_none()
 
+    suggestion = incident.ai_suggestion or ""
+    human_review_required = incident.ai_human_review_required
+    if decided is not None and decided.decision == "rejected":
+        suggestion = ""
+        human_review_required = False
+
     return SuggestionReviewResponse(
         execution_id=execution.execution_id,
         incident_sys_id=execution.incident_sys_id,
         incident_number=incident.number,
-        suggestion=incident.ai_suggestion or "",
+        suggestion=suggestion,
         confidence=incident.ai_confidence,
         classification=incident.ai_classification,
         processing_state=incident.ai_processing_state,
         processing_start=incident.ai_processing_start,
-        human_review_required=incident.ai_human_review_required,
+        human_review_required=human_review_required,
         decided=decided.decision if decided is not None else None,
     )
 

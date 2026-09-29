@@ -268,3 +268,44 @@ async def test_second_decision_on_one_execution_is_refused(app_with_db) -> None:
     assert "already been decided" in second.json()["error"]["message"]
     assert mock_session.add.call_count == 1
     assert mock_session.commit.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_pending_approval_returns_recorded_decision_on_reload(app_with_db) -> None:
+    """Reloading a decided execution reflects the recorded decision rather than
+    appearing pending.
+    """
+    store = MemoryGraphAuditStore()
+    backend = FakeServiceNow()
+    await asyncio.to_thread(_parked_execution, store, backend)
+
+    app, mock_session = app_with_db
+    recorded_approval = Approval(
+        id=uuid4(),
+        execution_id=UUID(EXECUTION_ID),
+        decision="rejected",
+        decided_by="operator_1",
+        reason="refused action",
+    )
+
+    async def execute(stmt, *args, **kwargs):
+        descriptions = getattr(stmt, "column_descriptions", None)
+        if descriptions and descriptions[0].get("entity") is Approval:
+            return _ScalarResult(recorded_approval)
+        return _ScalarResult(None)
+
+    mock_session.execute.side_effect = execute
+
+    with patch.object(approvals_router, "get_audit_store", return_value=store):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get(
+                f"/api/v1/approvals/pending/{EXECUTION_ID}", headers=AUTH_HEADERS
+            )
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["decision"] == "rejected"
+    assert body["status"] == "decided"
+    assert body["decided_by"] == "operator_1"
+    assert body["reason"] == "refused action"
+    assert body["brief"]["judgment_required"]

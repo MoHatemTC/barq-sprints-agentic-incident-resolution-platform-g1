@@ -135,7 +135,10 @@ async def get_approval(
         "from (NFR-07). Nothing here has been decided yet."
     ),
 )
-async def get_pending_approval(execution_id: UUID) -> ApprovalResponse:
+async def get_pending_approval(
+    execution_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+) -> ApprovalResponse:
     """The reviewer's view of a paused thread (S3.4): brief + raw evidence."""
     try:
         payload = get_audit_store().get_interrupt(str(execution_id))
@@ -145,6 +148,20 @@ async def get_pending_approval(execution_id: UUID) -> ApprovalResponse:
 
     if payload is None:
         raise ResourceNotFoundError(f"No paused interrupt found for execution '{execution_id}'")
+
+    try:
+        existing = (
+            await db.execute(select(Approval).where(Approval.execution_id == execution_id).limit(1))
+        ).scalar_one_or_none()
+    except SQLAlchemyError as exc:
+        logger.exception("approval_check_failed", execution_id=str(execution_id), error=str(exc))
+        raise ServiceUnavailableError("Database unavailable to check approval state.") from exc
+
+    if existing is not None:
+        response = ApprovalResponse.model_validate(existing)
+        response.brief = payload.get("brief")
+        response.facts = payload
+        return response
 
     return _paused_response(execution_id, payload)
 

@@ -176,6 +176,40 @@ async def test_review_returns_the_draft_awaiting_acceptance(app_with_db) -> None
 
 
 @pytest.mark.asyncio
+async def test_review_clears_suggestion_when_rejected(app_with_db) -> None:
+    """A rejected suggestion is not returned as an active suggestion on review."""
+    app, session = app_with_db
+    execution = _execution()
+    session.get = AsyncMock(return_value=execution)
+    rejected_approval = Approval(
+        id=uuid4(),
+        execution_id=execution.execution_id,
+        decision="rejected",
+        decided_by="barq-operator",
+        reason="refused",
+    )
+
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = rejected_approval
+    session.execute = AsyncMock(return_value=mock_result)
+
+    with patch("api.routers.suggestions.ServiceNowClient") as client_cls:
+        instance = client_cls.return_value
+        instance.get_incident = AsyncMock(return_value=_incident())
+        instance.aclose = AsyncMock()
+        async with _client(app) as http:
+            resp = await http.get(
+                f"/api/v1/suggestions/{execution.execution_id}", headers=AUTH_HEADERS
+            )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["suggestion"] == ""
+    assert body["decided"] == "rejected"
+    assert body["human_review_required"] is False
+
+
+@pytest.mark.asyncio
 async def test_review_404s_for_an_unknown_execution(app_with_db) -> None:
     app, session = app_with_db
     session.get = AsyncMock(return_value=None)
