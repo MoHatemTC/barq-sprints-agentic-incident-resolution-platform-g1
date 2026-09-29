@@ -305,7 +305,7 @@ async def test_pending_approval_returns_recorded_decision_on_reload(app_with_db)
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["decision"] == "rejected"
-    assert body["status"] == "rejected"
+    assert body["status"] == "decided"
     assert body["decided_by"] == "operator_1"
     assert body["reason"] == "refused action"
     assert body["brief"]["judgment_required"]
