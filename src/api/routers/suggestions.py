@@ -260,10 +260,30 @@ async def decide_suggestion(
             "request supplied no solution. Nothing would be written."
         )
     else:
-        # Declined with no resolution offered. Record the decision and stop. The
-        # incident is deliberately not marked complete — there is no resolution to
-        # record, and claiming one would be a fabrication. The human closes it in
-        # ServiceNow, which is the correct outcome for a rejected suggestion.
+        # A refusal ends this AI attempt without inventing a human resolution.
+        reason = f"Human rejected AI suggestion: {(payload.reason or 'no reason supplied').strip()}"
+        if incident.ai_processing_state != AIProcessingState.AWAITING_APPROVAL:
+            raise ConflictError(
+                f"Incident is '{incident.ai_processing_state}', not awaiting approval; "
+                "a stale draft cannot change its state."
+            )
+        update = IncidentUpdatePayload(
+            ai_processing_state=AIProcessingState.FAILED,
+            ai_failure_reason=reason[:4000],
+            ai_processing_end=now,
+            ai_human_review_required=False,
+            ai_suggestion="",
+        )
+        try:
+            await _update_incident(settings, execution.incident_sys_id, update)
+        except ServiceNowError as exc:
+            logger.exception("suggestion_rejection_write_failed", execution_id=str(execution_id))
+            raise ServiceUnavailableError(f"ServiceNow refused the rejection write: {exc}") from exc
+        written = {
+            "ai_resolution_written": False,
+            "ai_processing_end": now.isoformat(),
+            "ai_processing_state": AIProcessingState.FAILED.value,
+        }
         logger.info(
             "suggestion_rejected",
             execution_id=str(execution_id),

@@ -34,6 +34,10 @@ export function escalateExhaustedRetry(current: any, previous: any): void {
         return
     }
 
+    if (String(current.getValue('x_2215032_ai_inc_0_ai_failure_reason') || '').indexOf('Human rejected') === 0) {
+        return
+    }
+
     if (!previous || previous.getValue(PROCESSING_STATE) === 'failed') {
         return
     }

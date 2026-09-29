@@ -424,6 +424,10 @@ def test_resume_with_rejection() -> None:
     assert len(backend.updates) == 2
     body = backend.updates[1][1].to_table_api_body()
     assert "x_2215032_ai_inc_0_ai_suggestion" not in body
+    assert body["x_2215032_ai_inc_0_ai_processing_state"] == "failed"
+    assert body["x_2215032_ai_inc_0_ai_failure_reason"].startswith("Human rejected")
+    assert body["x_2215032_ai_inc_0_ai_processing_end"]
+    assert body["x_2215032_ai_inc_0_ai_human_review_required"] == "false"
     assert "human rejected by security" in body["work_notes"].lower()
 
 
