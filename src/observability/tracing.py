@@ -135,12 +135,14 @@ class Span:
         except Exception as exc:  # noqa: BLE001
             _report(self._tracer, "span_update_failed", exc)
 
-    def fail(self, exc: BaseException) -> None:
+    def fail(self, exc: BaseException, *, include_message: bool = True) -> None:
         # ``status_message`` is not an input/output/metadata field, so the client's
         # mask hook never sees it. Redact here or an exception that quotes request
         # data (a pydantic ValidationError echoes the offending values) exports
         # verbatim.
-        message = redact_text(f"{type(exc).__name__}: {exc}")
+        message = (
+            redact_text(f"{type(exc).__name__}: {exc}") if include_message else type(exc).__name__
+        )
         self.update(level="ERROR", status_message=message[:500])
 
 
@@ -189,6 +191,7 @@ class Tracer:
         version: str | None = None,
         model: str | None = None,
         model_parameters: Mapping[str, Any] | None = None,
+        record_exception_details: bool = True,
     ) -> Iterator[Span]:
         """Open a child of the current span, or a root span in the trace derived
         from ``correlation_id`` when no span is active."""
@@ -219,8 +222,12 @@ class Tracer:
         try:
             yield handle
         except BaseException as exc:
-            handle.fail(exc)
-            self._close(cm, exc)
+            handle.fail(exc, include_message=record_exception_details)
+            # Langfuse's context manager may automatically record the exception
+            # object and its chain. Sensitive callers close normally after marking
+            # the observation as failed, so only the stable exception type above is
+            # exported.
+            self._close(cm, exc if record_exception_details else None)
             raise
         else:
             self._close(cm, None)

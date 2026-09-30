@@ -11,14 +11,16 @@ from typing import Any
 
 from agent.dependencies import AgentDependencies
 from agent.guardrails.input_screening import screen_text
+from agent.guardrails.pii_detection import PIIProtectionOutcome, protect_residual_pii
 from agent.guardrails.semantic_injection_classifier import (
     ClassifierOutcome,
     classify_injection,
 )
 from agent.policy import snapshot_incident
+from agent.prompts import PIIText
 from agent.state import AgentState, EventPayload, GateResult, IncidentSnapshot
 from agent.tools import ToolCallContext
-from observability.redaction import redact_text_with_count
+from observability.redaction import REDACTED, redact_text_with_count
 
 
 def load(state: AgentState, deps: AgentDependencies) -> dict[str, Any]:
@@ -58,23 +60,57 @@ def _run_input_guardrails(
         sanitized_description, description_count = redact_text_with_count(incident.description)
         redaction_count = short_count + description_count
 
-        # 3. Semantic classifier, on the sanitized text, and only when
-        # deterministic screening has already passed
+        # 3. Residual-PII detection, then 4. semantic classification. Neither
+        # model is called after deterministic screening has already blocked.
+        pii_ran = False
+        pii_outcome: PIIProtectionOutcome | None = None
         classifier_ran = False
         classifier_outcome: ClassifierOutcome | None = None
         if pattern_result.flagged:
             blocked = True
             detection_layer = "pattern_screening"
+            protected_short = REDACTED
+            protected_description = REDACTED
+        elif not deps.settings.agent_pii_detection_enabled:
+            pii_outcome = PIIProtectionOutcome(
+                available=False,
+                failure_category="detector_disabled",
+            )
+            blocked = True
+            detection_layer = "residual_pii"
+            protected_short = REDACTED
+            protected_description = REDACTED
         else:
-            classifier_ran = True
-            sanitized_text = f"{sanitized_short}\n{sanitized_description}"
-            classifier_outcome = classify_injection(deps.llm, sanitized_text)
-            if classifier_outcome.available:
-                blocked = classifier_outcome.is_injection
-                detection_layer = "semantic_classifier" if blocked else "none"
+            pii_ran = True
+            pii_outcome = protect_residual_pii(
+                deps.llm,
+                PIIText(
+                    short_description=sanitized_short,
+                    description=sanitized_description,
+                ),
+                max_chars=deps.settings.agent_max_incident_chars,
+            )
+            pii_protected = pii_outcome.protected
+            if not pii_outcome.available or pii_protected is None:
+                blocked = True
+                detection_layer = "residual_pii"
+                protected_short = REDACTED
+                protected_description = REDACTED
             else:
-                blocked = False
-                detection_layer = "none"
+                protected_short = pii_protected.short_description
+                protected_description = pii_protected.description
+                classifier_ran = True
+                protected_text = f"{protected_short}\n{protected_description}"
+                classifier_outcome = classify_injection(deps.llm, protected_text)
+                if classifier_outcome.available:
+                    blocked = classifier_outcome.is_injection
+                    detection_layer = "semantic_classifier" if blocked else "none"
+                else:
+                    blocked = False
+                    detection_layer = "none"
+                if blocked:
+                    protected_short = REDACTED
+                    protected_description = REDACTED
 
         gate = GateResult(
             gate="input_guardrail",
@@ -85,6 +121,20 @@ def _run_input_guardrails(
                     "layer": "pattern_screening",
                     "flagged": pattern_result.flagged,
                     "categories": [c.value for c in pattern_result.categories],
+                },
+                {
+                    "layer": "residual_pii",
+                    "ran": pii_ran,
+                    "available": pii_outcome.available if pii_outcome else None,
+                    "finding_count": (
+                        pii_outcome.finding_count if pii_outcome and pii_outcome.available else None
+                    ),
+                    "categories": (
+                        [category.value for category in pii_outcome.categories]
+                        if pii_outcome and pii_outcome.available
+                        else None
+                    ),
+                    "failure_category": pii_outcome.failure_category if pii_outcome else None,
                 },
                 {
                     "layer": "semantic_classifier",
@@ -107,6 +157,17 @@ def _run_input_guardrails(
                 "passed": gate.passed,
                 "detection_layer": detection_layer,
                 "pattern_categories": [c.value for c in pattern_result.categories],
+                "pii_ran": pii_ran,
+                "pii_available": pii_outcome.available if pii_outcome else None,
+                "pii_finding_count": (
+                    pii_outcome.finding_count if pii_outcome and pii_outcome.available else None
+                ),
+                "pii_categories": (
+                    [category.value for category in pii_outcome.categories]
+                    if pii_outcome and pii_outcome.available
+                    else None
+                ),
+                "pii_failure_category": pii_outcome.failure_category if pii_outcome else None,
                 "classifier_ran": classifier_ran,
                 "classifier_available": (
                     classifier_outcome.available if classifier_outcome else None
@@ -117,8 +178,8 @@ def _run_input_guardrails(
 
     sanitized_incident = incident.model_copy(
         update={
-            "short_description": sanitized_short,
-            "description": sanitized_description,
+            "short_description": protected_short,
+            "description": protected_description,
         }
     )
     return sanitized_incident, gate

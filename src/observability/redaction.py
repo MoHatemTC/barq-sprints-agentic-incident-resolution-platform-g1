@@ -24,6 +24,22 @@ REDACTED = "***REDACTED***"
 REDACTED_EMAIL = "***EMAIL***"
 REDACTED_PHONE = "***PHONE***"
 
+# Category-specific markers used by the residual-PII guardrail. The keys are
+# deliberately plain strings so this low-level observability module does not
+# depend on the agent prompt schemas.
+PII_REDACTION_MARKERS: dict[str, str] = {
+    "person_name": "***PII_PERSON_NAME***",
+    "postal_address": "***PII_POSTAL_ADDRESS***",
+    "date_of_birth": "***PII_DATE_OF_BIRTH***",
+    "government_id": "***PII_GOVERNMENT_ID***",
+    "financial_account": "***PII_FINANCIAL_ACCOUNT***",
+    "payment_card": "***PII_PAYMENT_CARD***",
+    "employee_or_customer_id": "***PII_EMPLOYEE_OR_CUSTOMER_ID***",
+}
+REDACTION_MARKERS: frozenset[str] = frozenset(
+    {REDACTED, REDACTED_EMAIL, REDACTED_PHONE, *PII_REDACTION_MARKERS.values()}
+)
+
 #: Mapping keys whose values are always secret. Compared case-insensitively after
 #: stripping ``-`` and ``_`` so ``Client-Secret`` and ``client_secret`` both match.
 SENSITIVE_KEYS: frozenset[str] = frozenset(
@@ -153,9 +169,11 @@ def langfuse_mask(*, data: Any, **_: Any) -> Any:
 
 
 __all__ = [
+    "PII_REDACTION_MARKERS",
     "REDACTED",
     "REDACTED_EMAIL",
     "REDACTED_PHONE",
+    "REDACTION_MARKERS",
     "SENSITIVE_KEYS",
     "langfuse_mask",
     "redact_text",

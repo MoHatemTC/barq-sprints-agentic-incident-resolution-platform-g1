@@ -132,6 +132,13 @@ class AgentSettings(BaseSettings):
         gt=0,
         description="Length bound on incident text sent to the model (manual §11.6).",
     )
+    agent_pii_detection_enabled: bool = Field(
+        default=False,
+        description=(
+            "Authorization gate for sending regex-redacted incident text to the residual-PII "
+            "model. Keep false until the configured provider is approved; false fails closed."
+        ),
+    )
 
     # -- write-back ------------------------------------------------------------------
     agent_write_back_enabled: bool = Field(

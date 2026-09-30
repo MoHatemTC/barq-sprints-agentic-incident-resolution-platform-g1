@@ -350,6 +350,7 @@ class TestScenarioDStateAuditabilityAndResilience:
 
         # Verify LLM calls count
         assert llm.purposes() == [
+            "pii_detection",
             "injection_classifier",
             "classify",
             "diagnose",
@@ -417,6 +418,7 @@ class TestScenarioDStateAuditabilityAndResilience:
 
         # Confirm nodes completed before failure
         assert llm1.purposes() == [
+            "pii_detection",
             "injection_classifier",
             "classify",
             "diagnose",
