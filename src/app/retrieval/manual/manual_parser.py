@@ -7,7 +7,7 @@ from pathlib import Path
 import pdfplumber
 import structlog
 
-from app.models.manual_section import ManualSection, ManualSectionType
+from app.models.manual_section import ManualSection, ManualSectionType, TextBlock
 from app.retrieval.barq_manual import (
     check_pdftotext_installed,
     extract_raw_text_from_pdf,
@@ -402,7 +402,7 @@ def build_manual_sections(
                 section_id=ManualSection.build_section_id(raw.section_number),
                 section_number=raw.section_number,
                 title=raw.title,
-                body=raw.body,
+                blocks=[TextBlock(text=raw.body)],
                 content_type=content_type,
                 pages=raw.pages,
                 ocr_confidence=ocr_confidence,

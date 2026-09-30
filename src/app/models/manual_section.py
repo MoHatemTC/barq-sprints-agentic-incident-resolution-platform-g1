@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -15,6 +15,41 @@ class ManualSectionType(StrEnum):
     TABLE = "table"
     OCR = "ocr"
     LAYOUT = "layout"
+
+
+class TextBlock(BaseModel):
+    """A block of text content."""
+
+    type: Literal["text"] = "text"
+    text: str
+
+
+class TableBlock(BaseModel):
+    """A structured table with headers and rows."""
+
+    type: Literal["table"] = "table"
+    headers: list[str] | None = None
+    rows: list[list[str]]
+    row_count: int
+    column_count: int
+    metadata: dict[str, Any] | None = None
+
+    def to_semantic_text(self) -> str:
+        """Convert table to clear semantic text for embedding."""
+        lines = []
+        for row in self.rows:
+            parts = []
+            for i, cell in enumerate(row):
+                cell = cell.strip()
+                if not cell:
+                    continue
+                if self.headers and i < len(self.headers) and self.headers[i].strip():
+                    parts.append(f"{self.headers[i].strip()}: {cell}")
+                else:
+                    parts.append(cell)
+            if parts:
+                lines.append(" | ".join(parts))
+        return "\n".join(lines)
 
 
 class ManualSection(BaseModel):
@@ -33,9 +68,9 @@ class ManualSection(BaseModel):
         ..., description='Numbered ("3.4", "10.1.2") or lettered appendix ("A", "E.2")'
     )
     title: str = Field(..., min_length=1, max_length=300)
-    body: str = Field(
+    blocks: list[TextBlock | TableBlock] = Field(
         ...,
-        description="Extracted section content, ready for chunking",
+        description="Structured generic blocks (text or table)",
     )
     content_type: ManualSectionType
     pages: tuple[int, ...] = Field(..., description="1-indexed page numbers this section spans")
@@ -65,6 +100,17 @@ class ManualSection(BaseModel):
     def build_section_id(cls, section_number: str) -> str:
         """Deterministic section id from a section number, e.g. "3.4" -> "section-3.4"."""
         return f"{SECTION_ID_PREFIX}{section_number}"
+
+    @property
+    def body(self) -> str:
+        """Combine blocks into semantic text representation, primarily for chunking."""
+        parts = []
+        for block in self.blocks:
+            if isinstance(block, TextBlock):
+                parts.append(block.text)
+            elif isinstance(block, TableBlock):
+                parts.append(block.to_semantic_text())
+        return "\n\n".join(parts)
 
 
 class ManualSectionChunk(BaseModel):

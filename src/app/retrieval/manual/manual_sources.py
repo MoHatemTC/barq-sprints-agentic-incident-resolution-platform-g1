@@ -1,6 +1,13 @@
-"""Manual corpus JSON source, the boundary between a pre-extracted manual
+"""Manual corpus sources: the boundary between a pre-extracted manual
 corpus file and the chunking/ingestion pipeline, mirroring
 `app.retrieval.sources.LocalJSONSource` for KB articles.
+
+Two source implementations are provided:
+
+* ``ManualCorpusJSONSource`` — loads from the legacy ``manual_sections.json``
+  produced by the PDF extraction pipeline.
+* ``MarkdownManualSource`` — loads directly from ``parsed-pdf.md`` using the
+  new Markdown section parser, skipping PDF extraction entirely.
 """
 
 from __future__ import annotations
@@ -43,6 +50,31 @@ class ManualCorpusJSONSource:
             reverse=rel_raw.get("reverse", {}),
         )
         return sections, relationships
+
+    # Backward-compatible alias used by scripts/seed_qdrant.py.
+    load_sections_and_relationships = load_sections
+
+
+class MarkdownManualSource:
+    """Loads manual sections directly from ``parsed-pdf.md``.
+
+    This is the new ingestion path that replaces the OCR/layout/table PDF
+    extraction pipeline.  It delegates to ``markdown_parser.parse_markdown_manual``
+    which handles section detection, HTML-table conversion and Appendix E
+    relationship extraction.
+    """
+
+    def __init__(self, path: Path) -> None:
+        self.path = path
+
+    def load_sections(self) -> tuple[list[ManualSection], AppendixERelationships]:
+        from app.retrieval.manual.markdown_parser import parse_markdown_manual
+
+        sections, relationships, _report = parse_markdown_manual(self.path)
+        return sections, relationships
+
+    # Alias for consistency with ManualCorpusJSONSource.
+    load_sections_and_relationships = load_sections
 
 
 def sections_and_relationships_to_json(
