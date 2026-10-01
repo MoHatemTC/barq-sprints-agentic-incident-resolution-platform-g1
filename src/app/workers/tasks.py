@@ -254,65 +254,82 @@ def _run_incident(
         )
 
     if admission.mode == AdmissionMode.FOLLOWER and admission.cluster_id is not None:
-        cluster_status = cache.get_cluster_status(admission.cluster_id)
-        if cluster_status == ClusterStatus.RESOLVED:
-            solution = cache.get_cluster_solution(admission.cluster_id) or {}
-            repo.mark_succeeded(execution_uuid, **_execution_summary(solution))
+        cluster_id = admission.cluster_id
+        cluster = repo.get_cluster(cluster_id) if repo is not None else None
+        if cluster is not None and cluster.anchor_execution_id == execution_uuid:
             logger.info(
-                "incident_follower_resolved_from_cluster",
+                "retrying_leader_resuming_execution",
                 execution_id=execution_id,
-                cluster_id=str(admission.cluster_id),
-                anchor_incident=admission.anchor_incident_number,
+                cluster_id=str(cluster_id),
             )
-            return {
-                "status": "succeeded",
-                "execution_id": execution_id,
-                "cluster_id": str(admission.cluster_id),
-                "cluster_role": "follower",
-                "result": solution,
-            }
-
-        if cluster_status == ClusterStatus.AWAITING_APPROVAL:
-            repo.mark_awaiting_approval(execution_uuid)
-            logger.info(
-                "incident_follower_awaiting_cluster_approval",
-                execution_id=execution_id,
-                cluster_id=str(admission.cluster_id),
-                anchor_incident=admission.anchor_incident_number,
-            )
-            return {
-                "status": "awaiting_approval",
-                "execution_id": execution_id,
-                "cluster_id": str(admission.cluster_id),
-                "cluster_role": "follower",
-            }
-
-        if cluster_status in (ClusterStatus.RUNNING, ClusterStatus.CREATING):
-            logger.info(
-                "incident_follower_yielding_to_leader",
-                execution_id=execution_id,
-                cluster_id=str(admission.cluster_id),
-            )
-            if hasattr(task, "retry"):
-                try:
-                    raise task.retry(countdown=2.0)
-                except Exception as exc:
-                    from celery.exceptions import Retry
-
-                    if isinstance(exc, Retry):
-                        raise
-            logger.warning(
-                "follower_yield_not_handled_falling_back_to_independent",
-                execution_id=execution_id,
-                cluster_id=str(admission.cluster_id),
+            admission = AdmissionResult(
+                mode=AdmissionMode.LEADER,
+                cluster_id=cluster_id,
+                similarity_score=1.0,
+                reason="retrying_leader_execution",
+                anchor_incident_sys_id=admission.anchor_incident_sys_id,
+                anchor_incident_number=admission.anchor_incident_number,
             )
         else:
-            logger.warning(
-                "cluster_leader_decoupled_fallback_to_independent",
-                execution_id=execution_id,
-                cluster_id=str(admission.cluster_id),
-                cluster_status=str(cluster_status),
-            )
+            cluster_status = cache.get_cluster_status(cluster_id)
+            if cluster_status == ClusterStatus.RESOLVED:
+                solution = cache.get_cluster_solution(cluster_id) or {}
+                repo.mark_succeeded(execution_uuid, **_execution_summary(solution))
+                logger.info(
+                    "incident_follower_resolved_from_cluster",
+                    execution_id=execution_id,
+                    cluster_id=str(cluster_id),
+                    anchor_incident=admission.anchor_incident_number,
+                )
+                return {
+                    "status": "succeeded",
+                    "execution_id": execution_id,
+                    "cluster_id": str(cluster_id),
+                    "cluster_role": "follower",
+                    "result": solution,
+                }
+
+            if cluster_status == ClusterStatus.AWAITING_APPROVAL:
+                repo.mark_awaiting_approval(execution_uuid)
+                logger.info(
+                    "incident_follower_awaiting_cluster_approval",
+                    execution_id=execution_id,
+                    cluster_id=str(cluster_id),
+                    anchor_incident=admission.anchor_incident_number,
+                )
+                return {
+                    "status": "awaiting_approval",
+                    "execution_id": execution_id,
+                    "cluster_id": str(cluster_id),
+                    "cluster_role": "follower",
+                }
+
+            if cluster_status in (ClusterStatus.RUNNING, ClusterStatus.CREATING):
+                logger.info(
+                    "incident_follower_yielding_to_leader",
+                    execution_id=execution_id,
+                    cluster_id=str(cluster_id),
+                )
+                if hasattr(task, "retry"):
+                    try:
+                        raise task.retry(countdown=2.0)
+                    except Exception as exc:
+                        from celery.exceptions import Retry
+
+                        if isinstance(exc, Retry):
+                            raise
+                logger.warning(
+                    "follower_yield_not_handled_falling_back_to_independent",
+                    execution_id=execution_id,
+                    cluster_id=str(cluster_id),
+                )
+            else:
+                logger.warning(
+                    "cluster_leader_decoupled_fallback_to_independent",
+                    execution_id=execution_id,
+                    cluster_id=str(cluster_id),
+                    cluster_status=str(cluster_status),
+                )
 
     try:
         if graph_backend == "langgraph" and settings is not None:

@@ -20,6 +20,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 import structlog
+from sqlalchemy.exc import IntegrityError
 
 from app.models.semantic_cluster import (
     AdmissionMode,
@@ -158,6 +159,21 @@ class AdmissionLockTimeoutError(Exception):
     """Raised when distributed admission lock acquisition times out under high contention."""
 
 
+_worker_embedding_engine: Any = None
+_worker_engine_lock = threading.Lock()
+
+
+def _get_worker_embedding_engine() -> Any:
+    global _worker_embedding_engine
+    if _worker_embedding_engine is None:
+        with _worker_engine_lock:
+            if _worker_embedding_engine is None:
+                from app.retrieval.embedding import FastEmbedEngine
+
+                _worker_embedding_engine = FastEmbedEngine()
+    return _worker_embedding_engine
+
+
 class SemanticCache:
     """Coordinates clustering, single-flight execution, and shared resolution reuse.
 
@@ -186,15 +202,13 @@ class SemanticCache:
         """Generate embedding vector for text using FastEmbedEngine or custom callable."""
         if self._embed_fn is not None:
             return self._embed_fn(text)
-        from app.retrieval.embedding import FastEmbedEngine
-
-        engine = FastEmbedEngine()
+        engine = _get_worker_embedding_engine()
         res = engine.embed_query(text)
         return res.dense
 
     @contextlib.contextmanager
     def _distributed_lock(
-        self, service: str | None, ttl_seconds: float = 5.0, timeout: float = 3.0
+        self, service: str | None, ttl_seconds: float = 15.0, timeout: float = 5.0
     ):
         """Acquire a distributed Redis lock or local fallback lock with Lua token release."""
         if self.redis_client is None:
@@ -240,8 +254,44 @@ class SemanticCache:
             except Exception as exc:
                 logger.warning("redis_lock_release_failed", error=str(exc))
 
-    def _get_active_anchors(self, service: str | None = None) -> list[CachedClusterAnchor]:
-        """Fetch active cluster anchors from Redis, Postgres, and memory, purging expired."""
+    def _evict_stale_anchor(self, cluster_id: UUID) -> None:
+        """Evict a cluster anchor from Redis and local cache when invalidated by PostgreSQL."""
+        cid_str = str(cluster_id)
+        self._anchors.pop(cluster_id, None)
+        if self.redis_client is not None:
+            try:
+                self.redis_client.srem(REDIS_ACTIVE_SET, cid_str)
+                self.redis_client.delete(f"{REDIS_ANCHOR_PREFIX}{cid_str}")
+            except Exception as exc:
+                logger.warning("redis_stale_anchor_evict_failed", error=str(exc))
+
+    def _is_cluster_authoritatively_active(self, cluster_id: UUID) -> bool:
+        """Verify candidate cluster is currently active in PostgreSQL source of truth."""
+        if self.repo is None:
+            return True
+        cluster = self.repo.get_cluster(cluster_id)
+        if cluster is None:
+            return False
+        if cluster.status in ("failed", "expired"):
+            return False
+        if cluster.expires_at and cluster.expires_at <= _utcnow():
+            return False
+        return True
+
+    def _get_active_anchors(
+        self, service: str | None = None, refresh_from_db: bool = False
+    ) -> list[CachedClusterAnchor]:
+        """Fetch active cluster anchors from Redis, PostgreSQL, and memory, purging expired.
+
+        Parameters
+        ----------
+        service:
+            Normalized service name to filter by.
+        refresh_from_db:
+            If False (fast path), reads shared anchors from Redis (and local cache) without
+            hitting PostgreSQL. If True (authoritative path, used inside double-search or on miss),
+            reconciles Redis anchors against PostgreSQL and rehydrates any missing active clusters.
+        """
         active: dict[UUID, CachedClusterAnchor] = {}
 
         # 1. Fetch shared anchors from Redis across all worker processes
@@ -266,10 +316,21 @@ class SemanticCache:
             except Exception as exc:
                 logger.warning("redis_active_anchors_fetch_failed", error=str(exc))
 
-        # 2. Rehydrate from PostgreSQL if Redis was restarted / flushed / missing active clusters
-        if self.repo is not None:
+        # 2. Authoritative PostgreSQL reconciliation / rehydration
+        # (on miss, fallback, or explicit refresh)
+        should_query_db = self.repo is not None and (refresh_from_db or not active)
+        if should_query_db and self.repo is not None:
             try:
                 db_active_clusters = self.repo.list_active_clusters(service=service)
+                db_active_ids = {c.cluster_id for c in db_active_clusters}
+
+                # Prune stale Redis/local anchors that PostgreSQL says are no longer active
+                if refresh_from_db:
+                    stale_cids = [cid for cid in list(active.keys()) if cid not in db_active_ids]
+                    for stale_cid in stale_cids:
+                        active.pop(stale_cid, None)
+                        self._evict_stale_anchor(stale_cid)
+
                 for c in db_active_clusters:
                     vec = getattr(c, "anchor_vector", None)
                     if c.cluster_id not in active and vec is not None:
@@ -359,12 +420,30 @@ class SemanticCache:
                     similarity_score=similarity,
                     role="follower",
                 )
+            except IntegrityError:
+                # Idempotent re-entry: member already registered in database
+                logger.info(
+                    "cluster_member_already_registered",
+                    cluster_id=str(cluster_id),
+                    execution_id=str(execution_id),
+                )
+            except ValueError as exc:
+                # InMemoryRepo raises ValueError for duplicates
+                if "already in a cluster" in str(exc):
+                    logger.info(
+                        "cluster_member_already_registered_in_memory",
+                        cluster_id=str(cluster_id),
+                        execution_id=str(execution_id),
+                    )
+                else:
+                    raise
             except Exception as exc:
-                logger.warning(
+                logger.error(
                     "cluster_member_registration_failed",
                     cluster_id=str(cluster_id),
                     error=str(exc),
                 )
+                raise
 
         return AdmissionResult(
             mode=AdmissionMode.FOLLOWER,
@@ -384,7 +463,9 @@ class SemanticCache:
         norm_service: str | None,
         inc_category: Any,
     ) -> AdmissionResult:
-        """Create new cluster as LEADER in memory, Redis, and PostgreSQL."""
+        """Create new cluster as LEADER:
+        durably commit in PostgreSQL FIRST, then publish to Redis.
+        """
         cluster_id = uuid4()
         now = _utcnow()
         expires_at = now + dt.timedelta(seconds=self.ttl_seconds)
@@ -401,22 +482,8 @@ class SemanticCache:
             status=ClusterStatus.RUNNING,
             expires_at=expires_at,
         )
-        self._anchors[cluster_id] = new_anchor
 
-        # 1. Publish to Redis for instant cross-worker visibility
-        if self.redis_client is not None:
-            try:
-                cid_str = str(cluster_id)
-                self.redis_client.setex(
-                    f"{REDIS_ANCHOR_PREFIX}{cid_str}",
-                    self.ttl_seconds,
-                    json.dumps(new_anchor.to_dict()),
-                )
-                self.redis_client.sadd(REDIS_ACTIVE_SET, cid_str)
-            except Exception as exc:
-                logger.warning("redis_anchor_registration_failed", error=str(exc))
-
-        # 2. Persist authoritative cluster in PostgreSQL
+        # 1. Durably persist cluster in authoritative PostgreSQL FIRST
         if self.repo is not None:
             try:
                 self.repo.create_cluster(
@@ -433,11 +500,26 @@ class SemanticCache:
                     anchor_vector=vector,
                 )
             except Exception as exc:
-                logger.warning(
+                logger.error(
                     "cluster_creation_failed_in_repo",
                     cluster_id=str(cluster_id),
                     error=str(exc),
                 )
+                raise
+
+        # 2. Record locally and publish to Redis for instant cross-worker coordination
+        self._anchors[cluster_id] = new_anchor
+        if self.redis_client is not None:
+            try:
+                cid_str = str(cluster_id)
+                self.redis_client.setex(
+                    f"{REDIS_ANCHOR_PREFIX}{cid_str}",
+                    self.ttl_seconds,
+                    json.dumps(new_anchor.to_dict()),
+                )
+                self.redis_client.sadd(REDIS_ACTIVE_SET, cid_str)
+            except Exception as exc:
+                logger.warning("redis_anchor_registration_failed", error=str(exc))
 
         return AdmissionResult(
             mode=AdmissionMode.LEADER,
@@ -458,11 +540,15 @@ class SemanticCache:
         Flow:
         1. Eligibility check (inactive, closed, locked, or empty text -> INDEPENDENT).
         2. Vector embedding via FastEmbed.
-        3. FIRST SEARCH (Uncontended): Check active anchors. If match >= tau, join as FOLLOWER.
-        4. CRITICAL SECTION: Acquire Redis distributed lock.
-        5. DOUBLE SEARCH (Inside Lock): Re-read shared anchors to ensure another worker didn't
-           just create a cluster while waiting for the lock.
-        6. If match found inside lock -> FOLLOWER. If still none -> LEADER.
+        3. FIRST SEARCH (Fast-path): Check active anchors without hitting PostgreSQL.
+           If candidate matches:
+             - If it is the original leader retrying -> resume as LEADER.
+             - If authoritatively active in PostgreSQL -> join as FOLLOWER.
+             - If stale in Redis -> evict and continue to lock.
+        4. CRITICAL SECTION: Acquire Redis distributed lock (with 15s lease duration).
+        5. DOUBLE SEARCH (Inside Lock): Authoritatively reconcile anchors against PostgreSQL.
+        6. If match found inside lock -> FOLLOWER (or LEADER if retrying leader).
+           If still none -> commit in PostgreSQL FIRST, publish to Redis, return LEADER.
         """
         # 1. Eligibility gate (closed, inactive, human-locked, or empty text)
         if not is_incident_cluster_eligible(incident):
@@ -489,8 +575,8 @@ class SemanticCache:
         inc_category = _get_field(incident, "category", None)
         norm_service = str(inc_service).strip().lower() if inc_service else None
 
-        # 4. FIRST SEARCH: Uncontended check across active anchors
-        anchors = self._get_active_anchors(service=norm_service)
+        # 4. FIRST SEARCH: Uncontended check across active anchors (fast path, no N+1 DB query)
+        anchors = self._get_active_anchors(service=norm_service, refresh_from_db=False)
         best_candidate, best_similarity = self._find_matching_candidate(
             vector, norm_service, anchors
         )
@@ -504,30 +590,74 @@ class SemanticCache:
         )
 
         if best_candidate is not None and best_similarity >= self.threshold:
-            # Immediate uncontended match: join as FOLLOWER without acquiring lock!
-            return self._join_as_follower(
-                best_candidate, execution_id, inc_sys_id, inc_number, best_similarity
-            )
+            # Check if this is the original leader retrying
+            if best_candidate.anchor_execution_id == execution_id:
+                logger.info(
+                    "admit_leader_retry_detected",
+                    execution_id=str(execution_id),
+                    cluster_id=str(best_candidate.cluster_id),
+                )
+                return AdmissionResult(
+                    mode=AdmissionMode.LEADER,
+                    cluster_id=best_candidate.cluster_id,
+                    similarity_score=1.0,
+                    reason="retrying_leader_execution",
+                    anchor_incident_sys_id=best_candidate.anchor_incident_sys_id,
+                    anchor_incident_number=best_candidate.anchor_incident_number,
+                )
 
-        # 5. CRITICAL SECTION: Acquire Distributed Admission Lock
-        with self._distributed_lock(norm_service):
+            # Validate against PostgreSQL authoritative state
+            if self._is_cluster_authoritatively_active(best_candidate.cluster_id):
+                return self._join_as_follower(
+                    best_candidate, execution_id, inc_sys_id, inc_number, best_similarity
+                )
+            else:
+                # Stale anchor in Redis/cache - evict and fall through to distributed lock
+                logger.warning(
+                    "stale_redis_anchor_evicted",
+                    cluster_id=str(best_candidate.cluster_id),
+                    execution_id=str(execution_id),
+                )
+                self._evict_stale_anchor(best_candidate.cluster_id)
+
+        # 5. CRITICAL SECTION: Acquire Distributed Admission Lock (15s safe lease)
+        with self._distributed_lock(norm_service, ttl_seconds=15.0, timeout=5.0):
             # 6. DOUBLE SEARCH (Inside Lock):
-            # Re-read active anchors to check if another worker created a cluster
-            anchors_in_lock = self._get_active_anchors(service=norm_service)
+            # Authoritatively reconcile with PostgreSQL and re-check active anchors
+            anchors_in_lock = self._get_active_anchors(service=norm_service, refresh_from_db=True)
             second_candidate, second_similarity = self._find_matching_candidate(
                 vector, norm_service, anchors_in_lock
             )
 
             if second_candidate is not None and second_similarity >= self.threshold:
-                logger.info(
-                    "semantic_cache_double_search_prevented_race",
-                    execution_id=str(execution_id),
-                    cluster_id=str(second_candidate.cluster_id),
-                    similarity=round(second_similarity, 4),
-                )
-                return self._join_as_follower(
-                    second_candidate, execution_id, inc_sys_id, inc_number, second_similarity
-                )
+                # Check if this is the original leader retrying
+                if second_candidate.anchor_execution_id == execution_id:
+                    logger.info(
+                        "admit_leader_retry_detected_in_lock",
+                        execution_id=str(execution_id),
+                        cluster_id=str(second_candidate.cluster_id),
+                    )
+                    return AdmissionResult(
+                        mode=AdmissionMode.LEADER,
+                        cluster_id=second_candidate.cluster_id,
+                        similarity_score=1.0,
+                        reason="retrying_leader_execution",
+                        anchor_incident_sys_id=second_candidate.anchor_incident_sys_id,
+                        anchor_incident_number=second_candidate.anchor_incident_number,
+                    )
+
+                if self._is_cluster_authoritatively_active(second_candidate.cluster_id):
+                    logger.info(
+                        "semantic_cache_double_search_prevented_race",
+                        execution_id=str(execution_id),
+                        cluster_id=str(second_candidate.cluster_id),
+                        similarity=round(second_similarity, 4),
+                    )
+                    return self._join_as_follower(
+                        second_candidate, execution_id, inc_sys_id, inc_number, second_similarity
+                    )
+                else:
+                    self._evict_stale_anchor(second_candidate.cluster_id)
 
             # Still no matching cluster exists -> safely elected as LEADER
             if second_candidate is not None and 0.0 <= second_similarity < self.threshold:
@@ -598,6 +728,12 @@ class SemanticCache:
             anchor.status = ClusterStatus.FAILED
             anchor.failure_reason = reason
             self._sync_anchor_to_redis(anchor)
+
+        if self.redis_client is not None:
+            try:
+                self.redis_client.srem(REDIS_ACTIVE_SET, str(cluster_id))
+            except Exception:
+                pass
 
         if self.repo is not None:
             try:

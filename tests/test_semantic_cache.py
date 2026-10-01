@@ -903,12 +903,13 @@ def test_live_multiprocess_redis_race_prevents_duplicate_leaders() -> None:
     """
     import multiprocessing
     import os
+    import queue
 
     import redis as live_redis_lib
 
     host = os.environ.get("REDIS_HOST", "localhost")
     port = int(os.environ.get("REDIS_PORT", 6379))
-    pw = os.environ.get("REDIS_PASSWORD", "LbiW95y37XrwRXCPfNvu3KR4")
+    pw = os.environ.get("REDIS_PASSWORD") or None
 
     # Verify live Redis is reachable
     try:
@@ -916,7 +917,7 @@ def test_live_multiprocess_redis_race_prevents_duplicate_leaders() -> None:
         if not r.ping():
             pytest.skip("Live Redis not reachable")
     except Exception:
-        pytest.skip("Live Redis not reachable")
+        pytest.skip("Live Redis not reachable or credentials unconfigured")
 
     test_service = f"mp-test-{uuid4().hex[:8]}"
     lock_key = f"barq:lock:admission:{test_service}"
@@ -933,10 +934,13 @@ def test_live_multiprocess_redis_race_prevents_duplicate_leaders() -> None:
     p1.join(timeout=10)
     p2.join(timeout=10)
 
-    # Read results from queue
+    # Read exactly 2 results from queue with blocking timeout (avoids queue.empty race)
     res_list = []
-    while not q.empty():
-        res_list.append(q.get())
+    for _ in range(2):
+        try:
+            res_list.append(q.get(timeout=5.0))
+        except queue.Empty:
+            break
 
     assert len(res_list) == 2, f"Expected 2 results from OS processes, got {len(res_list)}"
     modes = [m for _, m, _ in res_list]
@@ -951,3 +955,240 @@ def test_live_multiprocess_redis_race_prevents_duplicate_leaders() -> None:
         r.delete(f"barq:cluster:anchor:{cid}")
         r.srem("barq:cluster:active_set", cid)
     r.delete(lock_key)
+
+
+def test_retrying_leader_resumes_as_leader() -> None:
+    """Issue 6: A retry/redelivery of the original leader execution must match its own anchor
+
+    and resume as LEADER rather than being misclassified as a FOLLOWER.
+    """
+    repo = InMemoryRepo()
+    cache = SemanticCache(repo=repo, embed_fn=dummy_embed_fn)
+
+    leader_exec_id = uuid4()
+    repo.seed_execution(leader_exec_id, status="running")
+
+    payload = {
+        "event_id": "evt-leader-retry-01",
+        "sys_id": "sys_leader_retry_01",
+        "number": "INC_LDR_001",
+        "service": "payment-api",
+        "category": "software",
+        "short_description": "Payment timeout gateway error",
+        "description": "504 gateway timeout on payments",
+    }
+
+    # First admission: elected as LEADER
+    res1 = cache.admit(payload, leader_exec_id)
+    assert res1.mode == AdmissionMode.LEADER
+    cluster_id = res1.cluster_id
+
+    # Simulation: Leader task retries with the SAME execution ID
+    res_retry = cache.admit(payload, leader_exec_id)
+    assert res_retry.mode == AdmissionMode.LEADER
+    assert res_retry.cluster_id == cluster_id
+    assert res_retry.reason == "retrying_leader_execution"
+
+    # A genuinely different execution still joins as FOLLOWER
+    follower_exec_id = uuid4()
+    repo.seed_execution(follower_exec_id, status="queued")
+    res_follower = cache.admit(payload, follower_exec_id)
+    assert res_follower.mode == AdmissionMode.FOLLOWER
+    assert res_follower.cluster_id == cluster_id
+
+
+def test_stale_redis_anchor_cannot_cause_reuse_of_failed_cluster() -> None:
+    """Issue 3: If PostgreSQL says a cluster is FAILED, it must not remain usable
+
+    merely because Redis still contains an anchor. Stale anchor must be evicted.
+    """
+    repo = InMemoryRepo()
+    redis_store: dict[str, Any] = {}
+
+    class TestRedisClient:
+        def get(self, key: str) -> str | None:
+            return redis_store.get(key)
+
+        def setex(self, key: str, ttl: int, val: str) -> bool:
+            redis_store[key] = val
+            return True
+
+        def sadd(self, key: str, member: str) -> int:
+            redis_store.setdefault(key, set()).add(member)
+            return 1
+
+        def smembers(self, key: str) -> set[str]:
+            return set(redis_store.get(key, set()))
+
+        def srem(self, key: str, member: str) -> int:
+            if key in redis_store and isinstance(redis_store[key], set):
+                redis_store[key].discard(member)
+            return 1
+
+        def delete(self, *keys: str) -> int:
+            for k in keys:
+                redis_store.pop(k, None)
+            return 1
+
+        def set(self, key: str, val: str, **kwargs: Any) -> bool:
+            return True
+
+        def eval(self, *args: Any, **kwargs: Any) -> int:
+            return 1
+
+    fake_redis = TestRedisClient()
+    cache = SemanticCache(repo=repo, redis_client=fake_redis, embed_fn=dummy_embed_fn)
+
+    # 1. Create a cluster as leader
+    exec1 = uuid4()
+    repo.seed_execution(exec1, status="running")
+    payload1 = {
+        "event_id": "evt-failed-01",
+        "sys_id": "sys_failed_01",
+        "number": "INC_FAIL_001",
+        "service": "billing",
+        "category": "software",
+        "short_description": "Payment gateway timeout",
+        "description": "504 gateway timeout",
+    }
+    res1 = cache.admit(payload1, exec1)
+    assert res1.mode == AdmissionMode.LEADER
+    failed_cluster_id = res1.cluster_id
+
+    # 2. In PostgreSQL, mark cluster as failed (e.g. fatal unhandled error in worker)
+    repo.update_cluster_status(failed_cluster_id, status="failed", failure_reason="OOMKilled")
+
+    # 3. Simulate stale state: Redis anchor was NOT cleared (or was out-of-sync)
+    # The anchor key remains in redis_store and active_set
+    assert f"barq:cluster:anchor:{failed_cluster_id}" in redis_store
+
+    # 4. Inbound incident arrives from another execution
+    exec2 = uuid4()
+    repo.seed_execution(exec2, status="queued")
+    payload2 = {
+        "event_id": "evt-failed-02",
+        "sys_id": "sys_failed_02",
+        "number": "INC_FAIL_002",
+        "service": "billing",
+        "category": "software",
+        "short_description": "Payment gateway timeout",
+        "description": "504 gateway timeout",
+    }
+
+    # Must NOT join the failed cluster! Must evict stale anchor and elect new leader
+    res2 = cache.admit(payload2, exec2)
+    assert res2.mode == AdmissionMode.LEADER
+    assert res2.cluster_id != failed_cluster_id
+    # Stale anchor was evicted from Redis active_set
+    assert str(failed_cluster_id) not in redis_store.get("barq:cluster:active_set", set())
+
+
+def test_membership_registration_failure_propagates() -> None:
+    """Issue 4: Actual repository failures during follower registration must not be swallowed."""
+    repo = InMemoryRepo()
+    cache = SemanticCache(repo=repo, embed_fn=dummy_embed_fn)
+
+    # 1. Create leader cluster
+    exec1 = uuid4()
+    repo.seed_execution(exec1, status="running")
+    payload1 = {
+        "event_id": "evt-mem-01",
+        "sys_id": "sys_mem_01",
+        "number": "INC_MEM_001",
+        "service": "auth",
+        "category": "software",
+        "short_description": "VPN authentication timeout",
+        "description": "RADIUS timeout",
+    }
+    cache.admit(payload1, exec1)
+
+    # 2. Poison add_cluster_member to raise a database operational error
+    def _exploding_add_member(*args: Any, **kwargs: Any) -> Any:
+        raise RuntimeError("OperationalError: connection to PostgreSQL server lost")
+
+    repo.add_cluster_member = _exploding_add_member  # type: ignore[method-assign]
+
+    # 3. Inbound follower incident must raise RuntimeError, not silently return FOLLOWER
+    exec2 = uuid4()
+    repo.seed_execution(exec2, status="queued")
+    payload2 = {
+        "event_id": "evt-mem-02",
+        "sys_id": "sys_mem_02",
+        "number": "INC_MEM_002",
+        "service": "auth",
+        "category": "software",
+        "short_description": "VPN authentication timeout",
+        "description": "RADIUS timeout",
+    }
+
+    with pytest.raises(RuntimeError, match="connection to PostgreSQL server lost"):
+        cache.admit(payload2, exec2)
+
+
+def test_postgres_commit_before_redis_publication() -> None:
+    """Issue 5: Ensure cluster is created/committed in PostgreSQL
+
+    before Redis anchor is published.
+    """
+    repo = InMemoryRepo()
+    call_log: list[str] = []
+
+    class OrderTrackingRedis:
+        def __init__(self) -> None:
+            self.store: dict[str, Any] = {}
+
+        def get(self, key: str) -> str | None:
+            return self.store.get(key)
+
+        def setex(self, key: str, ttl: int, val: str) -> bool:
+            call_log.append("redis_setex")
+            self.store[key] = val
+            return True
+
+        def sadd(self, key: str, member: str) -> int:
+            call_log.append("redis_sadd")
+            self.store.setdefault(key, set()).add(member)
+            return 1
+
+        def smembers(self, key: str) -> set[str]:
+            return set(self.store.get(key, set()))
+
+        def srem(self, key: str, member: str) -> int:
+            return 1
+
+        def set(self, *args: Any, **kwargs: Any) -> bool:
+            return True
+
+        def eval(self, *args: Any, **kwargs: Any) -> int:
+            return 1
+
+    orig_create = repo.create_cluster
+
+    def _logged_create(*args: Any, **kwargs: Any) -> Any:
+        call_log.append("postgres_create_cluster")
+        return orig_create(*args, **kwargs)
+
+    repo.create_cluster = _logged_create  # type: ignore[method-assign]
+    fake_redis = OrderTrackingRedis()
+    cache = SemanticCache(repo=repo, redis_client=fake_redis, embed_fn=dummy_embed_fn)
+
+    exec1 = uuid4()
+    repo.seed_execution(exec1, status="running")
+    payload = {
+        "event_id": "evt-order-01",
+        "sys_id": "sys_order_01",
+        "number": "INC_ORD_001",
+        "service": "database",
+        "category": "software",
+        "short_description": "Postgres deadlock detected",
+        "description": "Transaction aborted due to deadlock",
+    }
+
+    cache.admit(payload, exec1)
+
+    assert "postgres_create_cluster" in call_log
+    assert "redis_setex" in call_log
+    # PostgreSQL must be called BEFORE Redis publication
+    pg_idx = call_log.index("postgres_create_cluster")
+    redis_idx = call_log.index("redis_setex")
+    assert pg_idx < redis_idx, f"PostgreSQL ({pg_idx}) must precede Redis publication ({redis_idx})"

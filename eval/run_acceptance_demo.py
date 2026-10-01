@@ -22,8 +22,13 @@ from dataclasses import dataclass
 from typing import Any
 from uuid import uuid4
 
-# Ensure project root is in python path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+# Ensure project root and src/ are in sys.path
+_repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+_src_path = os.path.join(_repo_root, "src")
+if _src_path not in sys.path:
+    sys.path.insert(0, _src_path)
+if _repo_root not in sys.path:
+    sys.path.insert(0, _repo_root)
 
 # Windows console encoding safeguard
 if sys.stdout and hasattr(sys.stdout, "reconfigure"):
@@ -32,12 +37,12 @@ if sys.stdout and hasattr(sys.stdout, "reconfigure"):
     except Exception:
         pass
 
-from src.agent.semantic_cache import (  # noqa: E402
+from agent.semantic_cache import (  # noqa: E402
     AdmissionMode,
     SemanticCache,
 )
-from src.app.core.config import get_settings  # noqa: E402
-from src.app.workers.db import InMemoryRepo  # noqa: E402
+from app.core.config import get_settings  # noqa: E402
+from app.workers.db import InMemoryRepo  # noqa: E402
 
 # ANSI Color codes for terminal beauty
 CYAN = "\033[96m"

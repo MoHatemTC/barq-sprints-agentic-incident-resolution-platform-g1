@@ -60,6 +60,8 @@ if str(_EVAL_DIR) not in sys.path:
 
 from calibration_pairs import CALIBRATION_PAIRS, IncidentPair  # noqa: E402
 
+from agent.semantic_cache import DEFAULT_SIMILARITY_THRESHOLD  # noqa: E402
+
 # ---------------------------------------------------------------------------
 # Cosine similarity  (matches the implementation in semantic_cache.py exactly)
 # ---------------------------------------------------------------------------
@@ -262,7 +264,7 @@ def run_calibration(
     domain_filter:
         If set, only pairs whose ``domain`` matches this string are evaluated.
     """
-    current_tau = 0.80  # current value in semantic_cache.py
+    current_tau = DEFAULT_SIMILARITY_THRESHOLD  # production value from semantic_cache.py
 
     # Apply domain filter
     if domain_filter:
