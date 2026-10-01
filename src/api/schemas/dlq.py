@@ -15,6 +15,10 @@ class DLQEventResponse(BaseModel):
 
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
+    execution_id: str | None = None
+    correlation_id: str | None = None
+    failure_type: str | None = None
+
     event_id: str = Field(
         ...,
         description="Unique event identifier",

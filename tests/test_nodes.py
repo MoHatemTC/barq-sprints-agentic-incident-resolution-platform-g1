@@ -487,7 +487,7 @@ class TestGenerate:
         assert draft["dropped_steps"] == 2
         assert draft["rendered"].startswith("1. Clear the cache.")
 
-    def test_draft_fits_the_4000_char_field(self) -> None:
+    def test_oversized_draft_preserves_all_steps_for_revision(self) -> None:
         answers = vpn_answers()
         answers["generate"] = GenerateOutput(
             steps=[
@@ -496,8 +496,10 @@ class TestGenerate:
             ]
         )
         draft = generate(self._state(), make_deps(llm=FakeLLM(answers)))["draft"]
-        assert len(draft["rendered"]) <= 4000
-        assert 0 < len(draft["steps"]) < 8
+        assert len(draft["rendered"]) > 4000
+        assert draft["length_exceeded"]
+        assert len(draft["steps"]) == 8
+        assert draft["dropped_steps"] == 0
 
     def test_generate_handles_structured_critiques_and_increments_revision_count(self) -> None:
         """Asserts that generate consumes critic feedback and increments revision_count."""

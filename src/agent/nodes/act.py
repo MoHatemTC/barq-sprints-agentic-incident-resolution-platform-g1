@@ -316,7 +316,10 @@ def _apply_human_decision(output: FinalOutput, decision: dict[str, Any]) -> Fina
     solution = str(decision.get("solution") or "").strip() or None
     if verdict == "approved":
         if solution:
-            note = f"{PREFIX}: human resolution approved by {who}. {why}. Resolution: {solution}"
+            note = (
+                f"{PREFIX}: human resolution approved by {who}. {why}. "
+                f"Original review: {output.summary}. Resolution: {solution}"
+            )
             return output.model_copy(
                 update={
                     "summary": note,
@@ -337,7 +340,8 @@ def _apply_human_decision(output: FinalOutput, decision: dict[str, Any]) -> Fina
         update={
             "summary": note,
             "work_note": note,
-            "suggestion": None,
+            "suggestion": "",
+            "resolution": "",
             "approval_required": False,
             "human_review_required": False,
             "processing_state": AIProcessingState.FAILED.value,
@@ -436,6 +440,16 @@ def act(state: AgentState, deps: AgentDependencies) -> dict[str, Any]:
             _write_escalation_to_servicenow(state, deps, output)
         deps.audit.save_interrupt(execution_id, payload)
         decision = _request_human_decision(payload)
+        if (
+            decision.get("decision") == "approved"
+            and not decision.get("solution")
+            and decision.get("source") != "no_graph"
+        ):
+            draft = Draft.model_validate(state["draft"]) if state.get("draft") else None
+            if draft and draft.steps and not draft.length_exceeded and len(draft.rendered) <= 4000:
+                decision = {**decision, "solution": draft.rendered}
+            elif decision.get("source") != "no_graph":
+                raise ValueError("Approval requires a complete draft or an operator solution.")
         output = _apply_human_decision(output, decision)
 
     return _perform_write(state, deps, output)
@@ -459,7 +473,7 @@ def _perform_write(
         "ai_agent_version": deps.settings.agent_version,
         "ai_human_review_required": output.human_review_required,
     }
-    if output.resolution:
+    if output.resolution is not None:
         fields["ai_resolution"] = output.resolution
     if output.processing_end:
         fields["ai_processing_end"] = _parse_ts(output.processing_end)

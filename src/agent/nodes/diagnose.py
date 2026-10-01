@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from agent.citations import resolve_article_id
 from agent.dependencies import AgentDependencies
 from agent.nodes.classify import incident_text
 from agent.prompts import DIAGNOSE_SYSTEM, DiagnoseOutput, diagnose_prompt, evidence_block
@@ -45,9 +46,13 @@ def diagnose(state: AgentState, deps: AgentDependencies) -> dict[str, Any]:
             ),
             schema=DiagnoseOutput,
         )
-        retrieved = {hit.article_id for hit in retrieval.hits}
-        # A cited article that was not retrieved is not evidence.
-        matched = [a for a in dict.fromkeys(answer.matched_article_ids) if a in retrieved]
+        matched = list(
+            dict.fromkeys(
+                resolved
+                for value in answer.matched_article_ids
+                if (resolved := resolve_article_id(value, retrieval.hits)) is not None
+            )
+        )
         diagnosis = Diagnosis(
             probable_cause=answer.probable_cause,
             matched_article_ids=matched,

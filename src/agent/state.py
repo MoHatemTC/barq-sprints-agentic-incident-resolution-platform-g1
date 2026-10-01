@@ -147,6 +147,7 @@ class DraftStep(_Section):
 
 
 class Draft(_Section):
+    length_exceeded: bool = False
     steps: list[DraftStep]
     rendered: str
     dropped_steps: int = 0

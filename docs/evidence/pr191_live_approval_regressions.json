@@ -1,0 +1,50 @@
+{
+  "recorded_at": "2026-10-01T02:39:29.073189+00:00",
+  "instance": "https://dev434590.service-now.com",
+  "stack": "real local FastAPI/Celery/PostgreSQL/Redis/Qdrant/Gemini/ServiceNow",
+  "database": "barq_pr191_live",
+  "cases": [
+    {
+      "scenario": "approve_checkpointed_draft",
+      "incident": "INC0010037",
+      "sys_id": "7e4d12df73e7cf902aedfed25ab8b759",
+      "execution_id": "cda81ef4-1ea8-49db-b2a6-1c6fdd281ce5",
+      "correlation_id": "pr191-030faaad-99f2-4d51-a775-333e5a610949",
+      "pending_http": 200,
+      "paused_outcome": "escalated_low_confidence",
+      "checkpointed_step_count": 5,
+      "decision_http": 200,
+      "processing_state": "complete",
+      "resolution_chars": 604,
+      "suggestion_chars": 604,
+      "human_review_required": "false",
+      "processing_end": "2026-10-01 02:40:14",
+      "duplicate_http": 409,
+      "database_status": "succeeded",
+      "termination_cause": "interrupt_resume:escalated_low_confidence",
+      "approval_rows": 1
+    },
+    {
+      "scenario": "reject_pre_retrieval",
+      "incident": "INC0010038",
+      "sys_id": "6e7d9253732bcf902aedfed25ab8b779",
+      "execution_id": "676c9b92-6229-497d-97ca-eaaca93739af",
+      "correlation_id": "pr191-d04fa346-6c73-47af-b882-dcdd3ba9e554",
+      "pending_http": 200,
+      "paused_outcome": "escalated_high_risk",
+      "checkpointed_step_count": 0,
+      "empty_approval_http": 409,
+      "decision_http": 200,
+      "processing_state": "failed",
+      "resolution_chars": 0,
+      "suggestion_chars": 0,
+      "human_review_required": "false",
+      "processing_end": "2026-10-01 02:40:45",
+      "duplicate_http": 409,
+      "database_status": "failed",
+      "termination_cause": "human_rejected:interrupt_resume:escalated_high_risk",
+      "approval_rows": 1
+    }
+  ],
+  "result": "passed"
+}

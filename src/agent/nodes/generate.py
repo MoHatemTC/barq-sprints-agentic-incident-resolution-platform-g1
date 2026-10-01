@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from agent.citations import resolve_article_id, resolve_section
 from agent.dependencies import AgentDependencies
 from agent.nodes.classify import incident_text
 from agent.prompts import (
@@ -122,21 +123,29 @@ def generate(state: AgentState, deps: AgentDependencies) -> dict[str, Any]:
             prompt=prompt,
             schema=GenerateOutput,
         )
-        allowed = {item.article_id for item in evidence}
-        steps = [
-            DraftStep(text=s.text, article_id=s.article_id, section=s.section)
-            for s in answer.steps
-            if s.article_id in allowed and s.text.strip()
-        ]
+        steps: list[DraftStep] = []
+        for step in answer.steps:
+            article_id = resolve_article_id(step.article_id, evidence)
+            if article_id and step.text.strip():
+                section = resolve_section(step.section, article_id, evidence)
+                steps.append(
+                    DraftStep(
+                        text=step.text, article_id=article_id, section=section or step.section
+                    )
+                )
         rendered, sources = render(steps, evidence)
-        while len(rendered) > MAX_SUGGESTION_CHARS and steps:
-            steps = steps[:-1]
-            rendered, sources = render(steps, evidence)
+        # Omit the redundant footer before declaring overflow. Every step retains
+        # its citation; never discard the final rollback/restart/validation steps.
+        if len(rendered) > MAX_SUGGESTION_CHARS:
+            footer = "\n\nSources: " + "; ".join(sources)
+            if sources:
+                rendered = rendered[: -len(footer)]
         draft = Draft(
             steps=steps,
             rendered=rendered,
             dropped_steps=len(answer.steps) - len(steps),
             sources=sources,
+            length_exceeded=len(rendered) > MAX_SUGGESTION_CHARS,
             revision_count=new_revision_count,
         )
         result = {

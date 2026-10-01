@@ -63,7 +63,7 @@ def _validate_hit(point) -> RetrievalHit:
             f"Point {point.id} has malformed payload violating the ingestion contract: {err}"
         ) from err
     return RetrievalHit(
-        score=float(point.score),
+        score=float(getattr(point, "score", 0.0)),
         article_id=validated.article_id,
         article_number=validated.article_number,
         version=validated.version,

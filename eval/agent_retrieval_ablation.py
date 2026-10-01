@@ -1,4 +1,4 @@
-"""Read-only evaluation of query augmentation and ranking through QdrantRetriever.
+"""Read-only evaluation of focused query rewriting and ranking through QdrantRetriever.
 
 Requires the real local models, Qdrant and (with --rewrite) the configured Gemini
 proxy. Never invokes ServiceNow or changes the index. Ground truth is the checked-in
@@ -68,6 +68,11 @@ def summarize(rows: list[dict]) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--collection", default=None)
+    parser.add_argument(
+        "--noisy",
+        action="store_true",
+        help="Synthetic administrative boilerplate around labelled incidents",
+    )
     parser.add_argument("--rewrite", action="store_true", help="Makes real Gemini calls")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
@@ -99,6 +104,7 @@ def main() -> None:
             tracer=tracer,
         )
         report = {
+            "query_fixture": "synthetic administrative noise" if args.noisy else "original labels",
             "recorded_at": datetime.now(UTC).isoformat(),
             "collection": collection,
             "payload_sha256": digest,
@@ -126,7 +132,16 @@ def main() -> None:
         }
         queries = []
         for row in records:
-            original = row["query"][:QUERY_CHARS]
+            source = row["query"]
+            if args.noisy:
+                boilerplate = (
+                    "Dear service desk, please include this ticket in the weekly "
+                    "incident dashboard "
+                    "and audit reporting. This paragraph is an administrative email footer, "
+                    "not an additional technical problem. Thank you for reviewing this request. "
+                )
+                source = boilerplate * 2 + "Reported fault: " + source + "\n" + boilerplate
+            original = source[:QUERY_CHARS]
             start = time.perf_counter()
             augmented = rewrite_query(original, deps) if args.rewrite else original
             rewrite_ms = (time.perf_counter() - start) * 1000
@@ -197,6 +212,20 @@ def main() -> None:
             )
     finally:
         client.close()
+        # Dispose native model sessions while Python and their locks are still
+        # alive; macOS teardown otherwise can abort after writing the report.
+        if "deps" in locals() and deps.llm is not None:
+            deps.llm._client.close()
+        from app.retrieval.rerank import get_default_reranker
+
+        get_default_reranker.cache_clear()
+        if "retriever" in locals():
+            del retriever
+        if "engine" in locals():
+            del engine
+        import gc
+
+        gc.collect()
         if previous_mode is None:
             os.environ.pop("RETRIEVAL_MODE", None)
         else:

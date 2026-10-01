@@ -166,6 +166,10 @@ class WorkerRepo(Protocol):
         False when the event is not parked — never reset an in-flight event."""
         ...
 
+    def restore_failed_replay(self, execution_id: UUID, previous: dict) -> bool:
+        """Restore a failed enqueue only if no worker has claimed the replay."""
+        ...
+
     def find_execution_id(self, event_id: str) -> UUID | None:
         """Resolve the one execution accepted for an event (uq_executions_
         event_record_id guarantees at most one). The replay CLI's entry point."""
@@ -427,6 +431,7 @@ class PostgresRepo:
                     RetryState.attempt_count,
                     RetryState.max_attempts,
                     RetryState.next_retry_at,
+                    RetryState.last_attempt_at,
                 ).where(RetryState.execution_id == execution_id)
             ).first()
             if row is None:
@@ -436,6 +441,7 @@ class PostgresRepo:
                 "attempt_count": row.attempt_count,
                 "max_attempts": row.max_attempts,
                 "next_retry_at": row.next_retry_at,
+                "last_attempt_at": row.last_attempt_at,
             }
 
     def reset_for_replay(self, execution_id: UUID, max_attempts: int) -> bool:
@@ -462,6 +468,31 @@ class PostgresRepo:
                 update(Execution)
                 .where(Execution.execution_id == execution_id)
                 .values(status="queued", ended_at=None, termination_cause=None)
+            )
+            return True
+
+    def restore_failed_replay(self, execution_id: UUID, previous: dict) -> bool:
+        with self._session_factory() as session, session.begin():
+            row = session.execute(
+                update(Execution)
+                .where(Execution.execution_id == execution_id, Execution.status == "queued")
+                .values(
+                    status="failed", ended_at=_utcnow(), termination_cause="replay_enqueue_failed"
+                )
+                .returning(Execution.execution_id)
+            ).first()
+            if row is None:
+                return False
+            session.execute(
+                update(RetryState)
+                .where(RetryState.execution_id == execution_id)
+                .values(
+                    state=previous["state"],
+                    last_attempt_at=previous.get("last_attempt_at"),
+                    attempt_count=previous.get("attempt_count", 0),
+                    max_attempts=previous.get("max_attempts", 5),
+                    next_retry_at=None,
+                )
             )
             return True
 
@@ -576,6 +607,7 @@ class InMemoryRepo:
                 "failure_type": failure_type,
                 "message": message,
                 "retryable": retryable,
+                "details": details,
                 "occurred_at": _utcnow(),
             }
         )
@@ -713,6 +745,16 @@ class InMemoryRepo:
         execution["status"] = "queued"
         execution["ended_at"] = None
         execution["termination_cause"] = None
+        return True
+
+    def restore_failed_replay(self, execution_id: UUID, previous: dict) -> bool:
+        execution = self.executions.get(execution_id)
+        if not execution or execution["status"] != "queued":
+            return False
+        execution.update(
+            status="failed", ended_at=_utcnow(), termination_cause="replay_enqueue_failed"
+        )
+        self.retry_states[execution_id].update(previous)
         return True
 
     def find_execution_id(self, event_id: str) -> UUID | None:

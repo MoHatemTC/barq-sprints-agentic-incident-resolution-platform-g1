@@ -1,0 +1,75 @@
+{
+  "recorded_at": "2026-10-01T02:54:10.462299+00:00",
+  "cases": [
+    {
+      "execution_id": "cda81ef4-1ea8-49db-b2a6-1c6fdd281ce5",
+      "correlation_id": "pr191-030faaad-99f2-4d51-a775-333e5a610949",
+      "derived_trace_id": "3e0751cb085237ce2a1b6f14d1b9d22b",
+      "trace_ids": [
+        "3e0751cb085237ce2a1b6f14d1b9d22b"
+      ],
+      "observation_count": 32,
+      "span_names": [
+        "agent.critic",
+        "agent.diagnostic",
+        "agent.resolution",
+        "approval.resume",
+        "guardrail.input_screening",
+        "guardrail.safety_check",
+        "llm.classify",
+        "llm.diagnose",
+        "llm.generate",
+        "llm.injection_classifier",
+        "llm.query_rewrite",
+        "llm.verify_evidence",
+        "node.act",
+        "node.classify",
+        "node.confidence_check",
+        "node.determine_risk",
+        "node.diagnose",
+        "node.generate",
+        "node.load",
+        "node.retrieve",
+        "node.safety_check",
+        "node.validate",
+        "node.verify_evidence",
+        "queue.enqueue",
+        "retrieval.query_rewrite",
+        "servicenow.read_incident",
+        "servicenow.write_ai_fields",
+        "servicenow.write_execution_log",
+        "webhook.receipt",
+        "worker.pickup"
+      ],
+      "continuous": true
+    },
+    {
+      "execution_id": "676c9b92-6229-497d-97ca-eaaca93739af",
+      "correlation_id": "pr191-d04fa346-6c73-47af-b882-dcdd3ba9e554",
+      "derived_trace_id": "c92db52db6d1426baf3bfb1a37041d5e",
+      "trace_ids": [
+        "c92db52db6d1426baf3bfb1a37041d5e"
+      ],
+      "observation_count": 17,
+      "span_names": [
+        "approval.resume",
+        "guardrail.input_screening",
+        "llm.classify",
+        "llm.injection_classifier",
+        "node.act",
+        "node.classify",
+        "node.determine_risk",
+        "node.load",
+        "node.validate",
+        "queue.enqueue",
+        "servicenow.read_incident",
+        "servicenow.write_ai_fields",
+        "servicenow.write_execution_log",
+        "webhook.receipt",
+        "worker.pickup"
+      ],
+      "continuous": true
+    }
+  ],
+  "result": "passed"
+}

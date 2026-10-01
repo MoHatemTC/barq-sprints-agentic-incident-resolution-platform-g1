@@ -73,8 +73,8 @@ def _run_input_guardrails(
                 blocked = classifier_outcome.is_injection
                 detection_layer = "semantic_classifier" if blocked else "none"
             else:
-                blocked = False
-                detection_layer = "none"
+                blocked = True
+                detection_layer = "classifier_unavailable"
 
         gate = GateResult(
             gate="input_guardrail",
@@ -100,7 +100,13 @@ def _run_input_guardrails(
                     ),
                 },
             ],
-            reason="blocked by input guardrail" if blocked else None,
+            reason=(
+                "semantic input screening unavailable; processing withheld"
+                if detection_layer == "classifier_unavailable"
+                else "blocked by input guardrail"
+                if blocked
+                else None
+            ),
         )
         span.update(
             output={

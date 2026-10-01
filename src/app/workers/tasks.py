@@ -40,7 +40,7 @@ from celery.signals import worker_process_shutdown
 
 from agent.config import get_agent_settings
 from app.core.config import Settings, get_settings
-from app.core.correlation import clear_correlation_id, set_correlation_id
+from app.core.correlation import clear_correlation_id, get_correlation_id, set_correlation_id
 from app.db.redis.keys import INCIDENT_DLQ_QUEUE
 from app.workers.celery_app import celery_app
 from app.workers.db import WorkerRepo, build_worker_repo
@@ -121,28 +121,40 @@ def record_dead_letter(
     execution_id: str,
     exc: Exception,
     attempt: int,
+    correlation_id: str | None = None,
 ) -> None:
     """Persist the DLQ record. Redis FIRST (it survives a Postgres outage —
     they are separate dependencies), stderr second, then a best-effort DB
     reconciliation for any state the in-body handlers could not record."""
-    reason = str(exc)
+    from observability.redaction import redact_text
+
+    reason = redact_text(str(exc))[:4000]
     record: dict[str, Any] = {
+        "execution_id": execution_id,
+        "correlation_id": correlation_id or get_correlation_id() or execution_id,
+        "failure_type": _failure_type(exc),
         "event_id": str(payload.get("event_id", "")),
         "payload": payload,
         "failure_reason": reason,
         "retry_count": attempt,
         "failed_at": dt.datetime.now(dt.UTC).isoformat(),
     }
+    log_context = {
+        "event_id": record["event_id"],
+        "execution_id": execution_id,
+        "correlation_id": record["correlation_id"],
+        "failure_type": record["failure_type"],
+    }
     try:
         redis_sink.lpush(INCIDENT_DLQ_QUEUE, json.dumps(record))
     except Exception:  # noqa: BLE001 — Redis down must not prevent DB reconciliation
         logger.error(
             "dead_letter_redis_push_failed",
-            event_id=record["event_id"],
+            **log_context,
             reason=reason,
         )
     else:
-        logger.warning("dead_lettered", event_id=record["event_id"], reason=reason)
+        logger.warning("dead_lettered", **log_context, reason=reason)
 
     try:
         execution_uuid = UUID(execution_id)
@@ -156,6 +168,7 @@ def record_dead_letter(
                 failure_type="unhandled_on_failure",
                 message=reason,
                 retryable=False,
+                details={**record, **_failure_details(exc, execution_id, record["correlation_id"])},
             )
             repo.mark_cancelled(
                 execution_id=execution_uuid,
@@ -164,7 +177,7 @@ def record_dead_letter(
                 termination_cause=reason,
             )
     except Exception:  # noqa: BLE001 — the DLQ write already succeeded
-        logger.error("dead_letter_db_reconciliation_failed", event_id=record["event_id"])
+        logger.error("dead_letter_db_reconciliation_failed", **log_context)
 
 
 class IncidentTask(Task):
@@ -185,8 +198,31 @@ class IncidentTask(Task):
         payload = (args or (None,))[0] or {}
         execution_id = str((args or (None, None))[1] or "")
         attempt = int(getattr(self.request, "retries", 0)) + 1
-        record_dead_letter(self.repo, self.dlq_redis, payload, execution_id, exc, attempt)
+        record_dead_letter(
+            self.repo,
+            self.dlq_redis,
+            payload,
+            execution_id,
+            exc,
+            attempt,
+            correlation_id=correlation_id_from(self.request),
+        )
         write_final_failure_best_effort(self.settings, payload, execution_id, exc, attempt)
+
+
+def _failure_details(
+    exc: BaseException, execution_id: str, correlation_id: str | None
+) -> dict[str, Any]:
+    import traceback
+
+    from observability.redaction import redact_text
+
+    return {
+        "execution_id": execution_id,
+        "correlation_id": correlation_id or execution_id,
+        "failure_type": _failure_type(exc),
+        "traceback": redact_text("".join(traceback.format_exception(exc)))[:12000],
+    }
 
 
 def _failure_type(exc: BaseException) -> str:
@@ -260,6 +296,7 @@ def _run_incident(
             failure_type=_failure_type(exc),
             message=str(exc),
             retryable=True,
+            details=_failure_details(exc, execution_id, correlation_id),
         )
 
         if attempt < cfg.max_retries:
@@ -290,6 +327,7 @@ def _run_incident(
             failure_type=_failure_type(exc),
             message=str(exc),
             retryable=False,
+            details=_failure_details(exc, execution_id, correlation_id),
         )
         repo.mark_cancelled(
             execution_id=execution_uuid,
@@ -307,6 +345,7 @@ def _run_incident(
             failure_type=_failure_type(exc),
             message=str(exc),
             retryable=False,
+            details=_failure_details(exc, execution_id, correlation_id),
         )
         repo.mark_cancelled(
             execution_id=execution_uuid,

@@ -289,6 +289,20 @@ async def decide_approval(
 
     resumed: dict[str, Any] | None = None
     if interrupt_payload is not None:
+        if payload.decision == "approved" and not payload.solution:
+            draft = interrupt_payload.get("draft") or {}
+            rendered = draft.get("rendered") if isinstance(draft, dict) else None
+            if (
+                not isinstance(rendered, str)
+                or not rendered
+                or not draft.get("steps")
+                or draft.get("length_exceeded")
+                or len(rendered) > 4000
+            ):
+                raise ConflictError(
+                    "Approval requires a complete draft or an operator solution; "
+                    "the execution remains paused."
+                )
         decision = {
             "decision": payload.decision,
             "decided_by": decided_by,
@@ -422,8 +436,10 @@ async def _close_resumed_execution(
         return
     lifecycle = resumed.get("lifecycle")
     cause = f"{lifecycle}:{outcome}" if lifecycle and lifecycle != "direct" else str(outcome)
+    if resumed.get("processing_state") == "failed":
+        cause = f"human_rejected:{cause}"
     values: dict[str, Any] = {
-        "status": "succeeded",
+        "status": "failed" if resumed.get("processing_state") == "failed" else "succeeded",
         "ended_at": ended_at,
         "termination_cause": cause,
     }
@@ -439,7 +455,10 @@ async def _close_resumed_execution(
     await db.execute(
         update(RetryState)
         .where(RetryState.execution_id == execution_id)
-        .values(state="succeeded", next_retry_at=None)
+        .values(
+            state="cancelled" if resumed.get("processing_state") == "failed" else "succeeded",
+            next_retry_at=None,
+        )
     )
 
 

@@ -8,6 +8,7 @@ written only once the graph has taken the decision.
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID, uuid4
 
@@ -107,7 +108,11 @@ async def test_decide_resumes_the_parked_execution(app_with_db) -> None:
 
     mock_session.get.side_effect = mock_get
 
-    payload = {"decision": "approved", "reason": "P1 change window"}
+    payload = {
+        "decision": "approved",
+        "reason": "P1 change window",
+        "solution": "Operator verified the recovery.",
+    }
     with (
         patch.object(approvals_router, "get_audit_store", return_value=store),
         patch.object(
@@ -165,7 +170,7 @@ async def test_decide_for_an_unknown_id_is_404(app_with_db) -> None:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.post(
                 f"/api/v1/approvals/{uuid4()}/decide",
-                json={"decision": "approved", "reason": "ok"},
+                json={"decision": "approved", "reason": "ok", "solution": "Verified recovery."},
                 headers=AUTH_HEADERS,
             )
 
@@ -244,7 +249,7 @@ async def test_second_decision_on_one_execution_is_refused(app_with_db) -> None:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             first = await client.post(
                 f"/api/v1/approvals/{EXECUTION_ID}/decide",
-                json={"decision": "approved", "reason": "ok"},
+                json={"decision": "approved", "reason": "ok", "solution": "Verified recovery."},
                 headers=AUTH_HEADERS,
             )
             assert first.status_code == 200, first.text
@@ -309,3 +314,54 @@ async def test_pending_approval_returns_recorded_decision_on_reload(app_with_db)
     assert body["decided_by"] == "operator_1"
     assert body["reason"] == "refused action"
     assert body["brief"]["judgment_required"]
+
+
+@pytest.mark.asyncio
+async def test_empty_approval_keeps_pre_retrieval_execution_paused_and_decidable(
+    app_with_db,
+) -> None:
+    store = MemoryGraphAuditStore()
+    backend = FakeServiceNow()
+    await asyncio.to_thread(_parked_execution, store, backend)
+    app, session = app_with_db
+    execution = Execution(
+        execution_id=UUID(EXECUTION_ID),
+        event_record_id=uuid4(),
+        incident_sys_id=ORDER_P1["sys_id"],
+        status="awaiting_approval",
+    )
+    session.get.side_effect = lambda model, pk: execution if model is Execution else None
+    with (
+        patch.object(approvals_router, "get_audit_store", return_value=store),
+        patch.object(approvals_router, "resume_incident_graph") as resume,
+    ):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.post(
+                f"/api/v1/approvals/{EXECUTION_ID}/decide",
+                json={"decision": "approved"},
+                headers=AUTH_HEADERS,
+            )
+    assert response.status_code == 409
+    assert "remains paused" in response.json()["error"]["message"]
+    resume.assert_not_called()
+    session.add.assert_not_called()
+    assert execution.status == "awaiting_approval"
+    assert store.get_interrupt(EXECUTION_ID)
+
+
+@pytest.mark.asyncio
+async def test_rejected_resume_closes_database_as_failed(app_with_db) -> None:
+    app, session = app_with_db
+    await approvals_router._close_resumed_execution(
+        session,
+        UUID(EXECUTION_ID),
+        {
+            "outcome": "escalated_blocked",
+            "processing_state": "failed",
+            "lifecycle": "interrupt_resume",
+        },
+        datetime.now(UTC),
+    )
+    statements = [call.args[0].compile().params for call in session.execute.call_args_list]
+    assert statements[0]["status"] == "failed"
+    assert statements[1]["state"] == "cancelled"

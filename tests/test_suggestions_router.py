@@ -463,6 +463,12 @@ async def test_rejection_records_the_decision_and_marks_the_attempt_failed(app_w
     assert update["x_2215032_ai_inc_0_ai_processing_state"] == "failed"
     assert update["x_2215032_ai_inc_0_ai_failure_reason"].startswith("Human rejected")
     assert update["x_2215032_ai_inc_0_ai_human_review_required"] == "false"
+    assert update["x_2215032_ai_inc_0_ai_suggestion"] == ""
+    assert update["x_2215032_ai_inc_0_ai_resolution"] == ""
+    assert "Human rejected" in update["work_notes"]
+    assert execution.status == "failed"
+    assert execution.termination_cause == "human_rejected:suggested"
+    assert execution.ended_at is not None
 
 
 @pytest.mark.asyncio

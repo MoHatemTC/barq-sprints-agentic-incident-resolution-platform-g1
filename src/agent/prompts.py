@@ -56,7 +56,8 @@ class StepOutput(BaseModel):
     )
     section: str = Field(
         description=(
-            "Exact section of that article that supports this action (e.g. 'Resolution Steps')."
+            "Exact section of that article that supports this action (e.g. 'Resolution'); "
+            "copy the section label from evidence."
         )
     )
 
@@ -211,7 +212,9 @@ Rules:
 
 4. Set `symptom_match=true` ONLY when the symptoms described in the incident
    report are explicitly or clearly consistent with symptoms described in the
-   retrieved evidence.
+   retrieved evidence. Evidence may describe the issue in ANY section, including
+   Cause or Resolution; a literal Symptoms heading is not required. A resolution
+   for an unrelated problem or a product-name match alone is insufficient.
 
 5. If no retrieved evidence directly supports the reported issue:
    - set `matched_article_ids` to []

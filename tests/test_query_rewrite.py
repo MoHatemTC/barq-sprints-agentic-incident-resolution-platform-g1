@@ -18,12 +18,12 @@ def test_disabled_rewrite_calls_no_model() -> None:
     assert deps.llm.calls == []
 
 
-def test_augmented_query_retains_identifiers_negation_and_original_text() -> None:
+def test_focused_query_retains_identifiers_and_negation_without_raw_noise() -> None:
     original = "Outlook 16.0 error 0x800CCC0E; not a password problem"
     llm = FakeLLM({"query_rewrite": QueryRewriteOutput(query="Outlook disconnected")})
     deps = make_deps(llm=llm, agent_query_rewrite_enabled=True)
     query = rewrite_query(original, deps)
-    assert query == f"Outlook disconnected\nOriginal incident:\n{original}"
+    assert query == "Outlook disconnected\n16.0\n0x800CCC0E\nnot a password problem"
     assert original in llm.calls[0]["prompt"]
     assert llm.purposes() == ["query_rewrite"]
 
@@ -71,8 +71,8 @@ def test_retrieve_node_sends_only_bounded_redacted_source_and_keeps_filters() ->
     assert "joe@example.com" not in sent
     assert len(sent) < 1200
     call = deps.retriever.calls[0]
-    assert call["query"].startswith("VPN authentication error 691\n")
-    assert build_query(incident) in call["query"]
+    assert call["query"] == "VPN authentication error 691"
+    assert build_query(incident) not in call["query"]
     assert call["incident_category"] == "network"
     assert call["top_k"] == deps.settings.agent_retrieval_top_k
     assert update["retrieval"]["query"] == call["query"]
@@ -108,3 +108,16 @@ def test_enabled_rewrite_runs_through_the_whole_graph_and_failure_still_complete
         assert result["path"] == FULL_PATH
         assert result["outcome"] == "suggested"
         assert llm.purposes().count("query_rewrite") == 1
+
+
+def test_rewrite_keeps_plain_numeric_error_code_without_reintroducing_chatter() -> None:
+    original = (
+        "Hello service desk. VPN fails with error 691. Please include this in weekly reports."
+    )
+    deps = make_deps(
+        llm=FakeLLM({"query_rewrite": QueryRewriteOutput(query="VPN authentication failure")}),
+        agent_query_rewrite_enabled=True,
+    )
+    result = rewrite_query(original, deps)
+    assert result == "VPN authentication failure\nerror 691"
+    assert "weekly reports" not in result

@@ -323,7 +323,7 @@ class QdrantRetriever:
             must_clauses: list[Condition] = [
                 FieldCondition(key="article_number", match=MatchValue(value=art_num)),
                 FieldCondition(key="section", match=MatchValue(value="Resolution")),
-                _mandatory_filter(extra, self._max_security_level),
+                _mandatory_filter(None, self._max_security_level),
             ]
             if ver:
                 must_clauses.append(FieldCondition(key="version", match=MatchValue(value=ver)))
@@ -338,7 +338,7 @@ class QdrantRetriever:
             if not response:
                 return None
             hit = _validate_hit(response[0])
-            relevance_map = self._dense_scores(client, engine.embed_query(query), extra, [hit])
+            relevance_map = self._dense_scores(client, engine.embed_query(query), None, [hit])
             return EvidenceItem(
                 article_id=hit.article_id,
                 article_number=hit.article_number,
@@ -348,7 +348,7 @@ class QdrantRetriever:
                 chunk_index=hit.chunk_index,
                 text=hit.chunk_text,
                 fused_score=hit.score,
-                relevance=relevance_map.get((hit.article_id, hit.chunk_index), 0.55),
+                relevance=relevance_map.get((hit.article_id, hit.chunk_index), 0.0),
             )
         except Exception:
             return None

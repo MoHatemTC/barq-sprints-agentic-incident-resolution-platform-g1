@@ -316,7 +316,12 @@ class TestWorkflowStateTable:
             saver,
             execution_id,
             1,
-            resume={"decision": "approved", "decided_by": "lead_ops", "reason": "change window"},
+            resume={
+                "decision": "approved",
+                "decided_by": "lead_ops",
+                "reason": "change window",
+                "solution": "Operator verified the recovery.",
+            },
         )
         assert resumed["paused"] is False
         assert resumed["resumed"] is True
@@ -371,7 +376,12 @@ class TestWorkflowStateTable:
             saver,
             execution_id,
             1,
-            resume={"decision": "approved", "decided_by": "lead_ops", "reason": "change window"},
+            resume={
+                "decision": "approved",
+                "decided_by": "lead_ops",
+                "reason": "change window",
+                "solution": "Operator verified the recovery.",
+            },
         )
         assert resumed["paused"] is False
         assert resumed["resumed"] is True
