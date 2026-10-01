@@ -15,6 +15,7 @@ _PRB_RE = re.compile(r"^PRB\d+$")
 _KE_RE = re.compile(r"^KE\d+$")
 _CHG_RE = re.compile(r"^CHG\d+$")
 _MIR_RE = re.compile(r"^MIR\S+$")
+_RITM_RE = re.compile(r"^RITM\d+$")
 
 _ROW_IDENTIFIER_RE = re.compile(r"\s*((?:KB|INC|PRB|KE|CHG|RITM)\d+|MIR-\d{4}-\d+)")
 _TRAILING_SECTION_LIST_RE = re.compile(r"(\d+(?:\.\d+)*(?:\s*,\s*\d+(?:\.\d+)*)*)\s*$")
@@ -152,4 +153,5 @@ def relationships_for_section(
         "related_known_error_ids": tuple(i for i in identifiers if _KE_RE.match(i)),
         "related_change_ids": tuple(i for i in identifiers if _CHG_RE.match(i)),
         "related_mir_ids": tuple(i for i in identifiers if _MIR_RE.match(i)),
+        "related_ritm_ids": tuple(i for i in identifiers if _RITM_RE.match(i)),
     }

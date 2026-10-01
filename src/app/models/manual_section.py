@@ -98,8 +98,8 @@ class ManualSection(BaseModel):
 
     @classmethod
     def build_section_id(cls, section_number: str) -> str:
-        """Deterministic section id from a section number, e.g. "3.4" -> "section-3.4"."""
-        return f"{SECTION_ID_PREFIX}{section_number}"
+        slug = section_number.strip().lower().replace(" ", "-")
+        return f"{SECTION_ID_PREFIX}{slug}"
 
     @property
     def body(self) -> str:
@@ -137,6 +137,7 @@ class ManualSectionChunk(BaseModel):
     related_known_error_ids: tuple[str, ...] = Field(default_factory=tuple)
     related_change_ids: tuple[str, ...] = Field(default_factory=tuple)
     related_mir_ids: tuple[str, ...] = Field(default_factory=tuple)
+    related_ritm_ids: tuple[str, ...] = Field(default_factory=tuple)
 
     @classmethod
     def build_chunk_id(cls, section_id: str, chunk_index: int) -> str:
@@ -176,6 +177,7 @@ class ManualSectionPayload(BaseModel):
     related_known_error_ids: list[str] = Field(default_factory=list)
     related_change_ids: list[str] = Field(default_factory=list)
     related_mir_ids: list[str] = Field(default_factory=list)
+    related_ritm_ids: list[str] = Field(default_factory=list)
 
     @classmethod
     def from_chunk(cls, chunk: ManualSectionChunk) -> ManualSectionPayload:
@@ -195,6 +197,7 @@ class ManualSectionPayload(BaseModel):
             related_known_error_ids=list(chunk.related_known_error_ids),
             related_change_ids=list(chunk.related_change_ids),
             related_mir_ids=list(chunk.related_mir_ids),
+            related_ritm_ids=list(chunk.related_ritm_ids),
         )
 
     def to_qdrant_payload(self) -> dict[str, Any]:
