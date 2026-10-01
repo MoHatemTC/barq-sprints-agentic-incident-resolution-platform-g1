@@ -62,6 +62,7 @@ JSONB_COLUMNS = {
     ("approvals", "evidence"),
     ("failures", "details"),
     ("semantic_clusters", "solution"),
+    ("semantic_clusters", "anchor_vector"),
 }
 
 TASK_FUNCTIONS = {"barq_reject_approval_mutation", "barq_set_updated_at"}
