@@ -89,3 +89,9 @@ Source releases: [Langfuse](https://github.com/langfuse/langfuse-python/releases
 [CodeQL action](https://github.com/github/codeql-action/releases/tag/v4.38.2),
 [urllib3](https://github.com/urllib3/urllib3/releases/tag/2.8.0),
 [virtualenv](https://github.com/pypa/virtualenv/releases/tag/21.7.12).
+
+GitHub alert #18 subsequently reported that #207's target virtualenv 21.7.12
+still has an activation-script command-injection vulnerability. This PR advances
+only that package to 21.7.13, the maintainer's first fixed version for
+[GHSA-p58f-9548-mpm2](https://github.com/pypa/virtualenv/security/advisories/GHSA-p58f-9548-mpm2).
+The alert remains open on main until this patch merges; it was not dismissed.
