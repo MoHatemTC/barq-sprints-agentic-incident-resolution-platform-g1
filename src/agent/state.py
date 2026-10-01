@@ -130,6 +130,8 @@ class RetrievalResult(_Section):
     threshold: float
     sufficient: bool
     latency_ms: float
+    mmr_applied: bool = False
+    mmr_lambda: float | None = None
 
 
 class Diagnosis(_Section):

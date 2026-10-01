@@ -24,6 +24,7 @@ from typing import Any, Protocol
 from qdrant_client import QdrantClient
 from qdrant_client.models import Condition, FieldCondition, Filter, MatchAny, MatchValue
 
+from agent.diversity import mmr_order
 from agent.state import EvidenceItem, RetrievalResult
 from app.clients.qdrant import DENSE_VECTOR_NAME
 from app.core.config import RetrievalMode, get_retrieval_settings
@@ -174,7 +175,10 @@ class QdrantRetriever:
         engine = _MemoEngine(self._engine_factory())
         started = time.perf_counter()
         categories = search_categories(classification, incident_category)
-        reranked = get_retrieval_settings().retrieval_mode == RetrievalMode.HYBRID_RERANKED
+        settings = get_retrieval_settings()
+        reranked = settings.retrieval_mode == RetrievalMode.HYBRID_RERANKED
+
+        mmr_applied = False
 
         def rank_score(item: EvidenceItem) -> float:
             return item.fused_score if reranked else item.relevance
@@ -193,9 +197,15 @@ class QdrantRetriever:
                 threshold=threshold,
                 sufficient=sufficient,
                 latency_ms=round((time.perf_counter() - started) * 1000, 2),
+                mmr_applied=mmr_applied,
+                mmr_lambda=settings.retrieval_mmr_lambda
+                if settings.retrieval_mmr_enabled
+                else None,
             )
 
-        if not categories:
+        if not categories and (
+            not settings.retrieval_mmr_enabled or settings.retrieval_mmr_lambda == 1
+        ):
             # No corpus category covers this label (security, other), so there is no
             # precise pass to run. The wide pass still has to run: S3.5 captures a
             # human solution out of exactly this population (the capture trigger is
@@ -220,8 +230,14 @@ class QdrantRetriever:
         # published, in-tier corpus alongside it puts both candidates in front of the
         # ranking and lets relevance decide.
         candidate_k = max(top_k * 2, 10)
-        extra = Filter(must=[FieldCondition(key="category", match=MatchAny(any=categories))])
-        scoped, _ = self._one_pass(query, extra, top_k=candidate_k, engine=engine)
+        extra = (
+            Filter(must=[FieldCondition(key="category", match=MatchAny(any=categories))])
+            if categories
+            else None
+        )
+        scoped: list[EvidenceItem] = []
+        if extra is not None:
+            scoped, _ = self._one_pass(query, extra, top_k=candidate_k, engine=engine)
         wide, _ = self._one_pass(query, None, top_k=candidate_k, engine=engine)
 
         in_category = {(item.article_id, item.chunk_index) for item in scoped}
@@ -245,6 +261,42 @@ class QdrantRetriever:
             key=lambda a: max(rank_score(c) for c in by_article[a]),
             reverse=True,
         )
+
+        if settings.retrieval_mmr_enabled and settings.retrieval_mmr_lambda < 1:
+            # Diversify only articles that already clear the existing evidence
+            # gate. Other articles retain their rank slots; novelty cannot make
+            # weak evidence eligible. Select whole articles before adding their
+            # diagnostic/Resolution companions so MMR never penalizes siblings.
+            representatives = {
+                article: max(by_article[article], key=rank_score)
+                for article in ranked_articles
+                if any(
+                    chunk.relevance
+                    >= (
+                        threshold
+                        if (chunk.article_id, chunk.chunk_index) in in_category
+                        else threshold + OUT_OF_CATEGORY_EVIDENCE_MARGIN
+                    )
+                    for chunk in by_article[article]
+                )
+            }
+            if len(representatives) > 1:
+                scores = {
+                    article: max(0.0, min(1.0, rank_score(chunk)))
+                    for article, chunk in representatives.items()
+                }
+                vectors = self._representative_vectors(client, representatives)
+                try:
+                    diversified = iter(
+                        mmr_order(scores, vectors, lambda_mult=settings.retrieval_mmr_lambda)
+                    )
+                except ValueError as exc:
+                    raise TerminalError("MMR dense vector contract violated") from exc
+                mmr_applied = True
+                ranked_articles = [
+                    next(diversified) if article in representatives else article
+                    for article in ranked_articles
+                ]
 
         bundled_items: list[EvidenceItem] = []
         seen_keys: set[tuple[str, int]] = set()
@@ -306,7 +358,77 @@ class QdrantRetriever:
             )
             for item in items
         )
-        return result(",".join(categories), items, sufficient=sufficient)
+        return result(",".join(categories) or None, items, sufficient=sufficient)
+
+    def _representative_vectors(
+        self, client: QdrantClient, representatives: dict[str, EvidenceItem]
+    ) -> dict[str, list[float]]:
+        """Read indexed vectors for exact representative versions/chunks in one pool.
+
+        Do not re-embed or read out-of-tier records. Missing vectors are a contract
+        failure, and transport outages are retried rather than silently claiming
+        diversity succeeded.
+        """
+        clauses: list[Condition] = [
+            Filter(
+                must=[
+                    FieldCondition(
+                        key="article_number", match=MatchValue(value=item.article_number)
+                    ),
+                    FieldCondition(key="version", match=MatchValue(value=item.version)),
+                    FieldCondition(key="chunk_index", match=MatchValue(value=item.chunk_index)),
+                ]
+            )
+            for item in representatives.values()
+        ]
+        scoped = Filter(
+            must=[_mandatory_filter(None, self._max_security_level), Filter(should=clauses)]
+        )
+        vectors: dict[str, list[float]] = {}
+        expected = {
+            (item.article_number, item.version, item.chunk_index): article
+            for article, item in representatives.items()
+        }
+        try:
+            offset = None
+            while True:
+                points, offset = client.scroll(
+                    collection_name=self._collection_name or _get_default_collection_name(),
+                    scroll_filter=scoped,
+                    limit=max(1, len(representatives)),
+                    offset=offset,
+                    with_payload=["article_number", "version", "chunk_index"],
+                    with_vectors=[DENSE_VECTOR_NAME],
+                )
+                for point in points:
+                    payload = point.payload or {}
+                    key = (
+                        payload.get("article_number"),
+                        payload.get("version"),
+                        payload.get("chunk_index"),
+                    )
+                    if not (
+                        isinstance(key[0], str)
+                        and isinstance(key[1], str)
+                        and isinstance(key[2], int)
+                    ):
+                        continue
+                    article = expected.get((key[0], key[1], key[2]))
+                    if article is not None and isinstance(point.vector, dict):
+                        vector = point.vector.get(DENSE_VECTOR_NAME)
+                        if isinstance(vector, list) and all(
+                            isinstance(v, (int, float)) for v in vector
+                        ):
+                            vectors[article] = [
+                                float(v) for v in vector if isinstance(v, (int, float))
+                            ]
+                if offset is None:
+                    break
+        except Exception as exc:
+            raise RetryableError(f"MMR vectors unavailable: {type(exc).__name__}") from exc
+        if set(vectors) != set(representatives):
+            raise TerminalError("MMR representative dense vectors missing from permitted index")
+        return vectors
 
     def _fetch_resolution_chunk(
         self,

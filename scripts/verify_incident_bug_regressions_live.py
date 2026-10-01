@@ -31,6 +31,7 @@ def main() -> None:
         AGENT_CONFIDENCE_FLOOR="0.99",
         AGENT_QUERY_REWRITE_ENABLED="true",
         RETRIEVAL_MODE="hybrid_reranked",
+        RETRIEVAL_MMR_ENABLED="true",
     )
     url = URL.create(
         "postgresql+psycopg",
@@ -261,6 +262,18 @@ def main() -> None:
                     .mappings()
                     .one()
                 )
+                retrieval = (
+                    conn.execute(
+                        text(
+                            "SELECT decision FROM workflow_state WHERE execution_id=:id "
+                            "AND node_name='retrieve' ORDER BY sequence_number DESC LIMIT 1"
+                        ),
+                        {"id": execution_id},
+                    ).scalar()
+                    or {}
+                )
+                case["retrieval_mmr_applied"] = retrieval.get("mmr_applied", False)
+                case["retrieval_mmr_lambda"] = retrieval.get("mmr_lambda")
                 case["database_status"] = dbrow["status"]
                 case["termination_cause"] = dbrow["termination_cause"]
                 case["approval_rows"] = conn.execute(

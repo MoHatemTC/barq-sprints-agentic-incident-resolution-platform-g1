@@ -1,10 +1,12 @@
 # Query rewriting and final reranker ordering
 
-Ali's allocation is query rewriting and “Use byversity for reranker.” That spelling
-still does not identify a model reliably; the exact model ID/link remains needed.
-This PR does not silently substitute BGE, MMR or another provider. The current
-MiniLM model remains in place and was measured. Ali subsequently expanded this
-same PR to BUG-001–BUG-012; see `incident_bug_fixes.md` for that work.
+Ali's allocation is query rewriting and “Use byversity for reranker.” Exact-name
+research did not identify a published model. Ali confirmed diversity/MMR as the
+working interpretation on 2026-10-01 and authorized implementation. The original
+chat spelling is retained as history; its author's intent is not independently
+verified. This PR implements article-level MMR alongside the existing MiniLM
+cross-encoder, rather than inventing a model called “byversity.” Ali also expanded
+this same PR to BUG-001–BUG-012; see `incident_bug_fixes.md`.
 
 ## What exists and why
 
@@ -14,7 +16,10 @@ and `Qdrant/bm25` sparse retrieval, fused with RRF. The cross-encoder is
 `Xenova/ms-marco-MiniLM-L-6-v2`, enabled by `RETRIEVAL_MODE=hybrid_reranked`.
 Its FastEmbed/ONNX compatibility fits the existing runtime. No comparative
 model-selection rationale was found: compatibility is not proof of superiority.
-EC2's effective configuration was not inspected or changed for this PR.
+Read-only EC2 inspection on 2026-10-01 found both API and worker configured for
+`hybrid_reranked` with MiniLM, at main `41cfbc4`; local defaults use plain hybrid.
+No deployed configuration was changed. Main still loses the model's ordering
+downstream; this PR repairs that boundary.
 
 Dense cosine and reranker scores have different jobs. RRF rank sums and sigmoid
 cross-encoder scores cannot be interpreted as calibrated confidence. The final
@@ -49,7 +54,8 @@ flowchart LR
     R -->|Success| F[Focused query and preserved literals]
     F --> H
     H --> C[Optional cross-encoder]
-    C --> B[Deduplicated article and Resolution bundle]
+    C --> M[Optional article-level MMR]
+    M --> B[Deduplicated article and Resolution bundle]
     B --> G[Separate dense evidence gate]
 ```
 
@@ -93,7 +99,7 @@ Under this noise, false evidence-gate passes fall from five to one of six
 unanswerable cases; forbidden IDs remain zero. Rewriting produces real retrieval
 improvement here, not just successful fallback. It still costs about three
 seconds, and model nondeterminism and this small synthetic set limit the claim.
-These results do not identify or benchmark the requested “byversity” model.
+These results benchmark the existing MiniLM; the diversity/MMR comparison follows below.
 
 Reproduce each variant with:
 
@@ -104,11 +110,75 @@ uv run python -m eval.agent_retrieval_ablation --rewrite --noisy \
   --output docs/evidence/retrieval_query_ablation_noisy.json
 ```
 
-Before replacing the reranker, confirm its exact identifier/runtime and compare
-it on the same snapshot, then on the newly ingested KB with mapped manual/table
-ground truth. Rollback switches are `AGENT_QUERY_REWRITE_ENABLED=false` and
-`RETRIEVAL_MODE=hybrid`; restart processes to clear cached settings/models.
-No re-ingestion is required by these changes.
+## Diversity/MMR implementation and decision
+
+`RETRIEVAL_MMR_ENABLED=true` applies MMR to one representative per article after
+scoped/wide candidate merging and before Resolution bundling. It balances the
+existing query relevance score against the maximum positive cosine similarity to
+already-selected articles. In reranked mode, query relevance is the cross-encoder
+score; in hybrid mode it is dense cosine. The default lambda is 0.8: higher means
+more emphasis on relevance; 1 preserves the previous order without vector reads.
+
+Only articles that already clear the existing category-aware cosine gate are
+reordered. Other articles keep their rank slots. The strongest eligible match
+stays first. Exact version/chunk vectors are read from Qdrant using publication
+and security filters; no re-embedding, new model, provider call or index mutation
+is needed. Missing/invalid vectors raise a contract error; transport outages are
+retryable and are not disguised as successful MMR. Companion sections are added
+in the existing bundle order, within the unchanged top-k capacity. In particular,
+MMR does not penalize a Cause and Resolution pair for being similar.
+
+`RetrievalResult.mmr_applied` and `mmr_lambda` record the actual path in the
+checkpoint/node audit. Disabled mode does no diversity vector work. MMR remains
+**off by default**: the same algorithm improves some variants and regresses others.
+That is a measured deployment choice, not a fallback standing in for implementation.
+
+`retrieval_mmr_ablation.json` and `retrieval_mmr_ablation_noisy.json` compare on/off
+using the same snapshot and previously recorded original/focused queries. They
+make no new rewrite calls. Their latency is warm retrieval only, excluding query
+rewrite generation, and must not be compared as end-to-end latency against the
+older rewrite-inclusive tables. No tuning/held-out split is claimed: lambda 0.8
+was fixed before the comparison. The manual stressors remain unmapped.
+
+| Query set / mode | Primary recall, MMR off | Primary recall, MMR on |
+|---|---:|---:|
+| Clean hybrid, original | 95.7% | 95.7% |
+| Clean hybrid, focused | 95.7% | 100% |
+| Clean MiniLM, original | 100% | 95.7% |
+| Clean MiniLM, focused | 100% | 97.8% |
+| Synthetic-noise hybrid, original | 84.8% | 89.1% |
+| Synthetic-noise hybrid, focused | 93.5% | 95.7% |
+| Synthetic-noise MiniLM, focused | 100% | 89.1% |
+
+MMR changes real returned article order. All variants retain zero forbidden IDs;
+false evidence passes remain one of six for clean/focused queries and five of six
+for noisy originals. The miniature set does not prove production or new-KB quality.
+Keep the deployed cross-encoder's diversity switch off until new-KB held-out
+multi-issue labels support a benefit. Hybrid+MMR is a promising lower-cost candidate,
+not a declared universal winner. Relevance reranking and diversity selection solve
+different problems, so a larger relevance model is not automatically necessary.
+
+The live reproducer now enables MMR. Its approved PDI incident `INC0010039` records
+`mmr_applied=true`, lambda 0.8 in PostgreSQL and completes via stored-draft approval.
+The separate high-risk incident `INC0010040` never reaches retrieval; its empty
+approval returns 409 and rejection closes it as failed. Both retain single-trace
+Langfuse evidence through resumed ServiceNow writes. These artifacts prove operation,
+not improved production resolution accuracy.
+
+Reproduce MMR with the fixed focused-query artifacts:
+
+```sh
+uv run python -m eval.agent_retrieval_ablation --mmr \
+  --queries-from docs/evidence/retrieval_query_ablation_focused.json \
+  --output docs/evidence/retrieval_mmr_ablation.json
+uv run python -m eval.agent_retrieval_ablation --mmr --noisy \
+  --queries-from docs/evidence/retrieval_query_ablation_noisy.json \
+  --output docs/evidence/retrieval_mmr_ablation_noisy.json
+```
+
+Rollback switches are `RETRIEVAL_MMR_ENABLED=false`,
+`AGENT_QUERY_REWRITE_ENABLED=false`, and `RETRIEVAL_MODE=hybrid`; restart processes
+to clear cached settings/models. No re-ingestion is required by these changes.
 
 ## Research sources
 

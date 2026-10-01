@@ -26,10 +26,14 @@ the operator's structured decision, not the brief, drives resumption.
 
 ## Verification
 
-Local gates: Ruff lint/format and mypy passed. The unit run passed 1,426 tests;
+Local gates: Ruff lint/format and mypy passed. The unit run passed 1,443 tests;
 its 41 database-dependent cases were then run separately and all passed. All
 22 integration tests and 62 real-PDF/manual parser tests passed. OpenAPI matches
 the application. No test or CI gate was disabled.
+
+Article-level diversity/MMR is implemented and measured in this same PR; see
+`retrieval_query_rewrite_and_reranking.md`. Its default remains off because the
+benchmark shows trade-offs, including regressions with MiniLM.
 
 Automated tests cover benign technical input and attacks, fail-closed classifier
 failures, real in-memory Qdrant sibling filtering, version/section identity,
@@ -55,7 +59,7 @@ the other refuses an empty pre-retrieval approval, then rejects the same paused
 execution. ServiceNow reaches `complete` and `failed` respectively, PostgreSQL
 agrees, exactly one approval row exists per execution and duplicate decisions
 return 409. `pr191_trace_continuity.json` independently reads Langfuse and
-records 32 and 17 observations respectively under each original trace ID,
+records observations under each original trace ID,
 including worker and resumed ServiceNow write spans. No UI screenshot or EC2
 verification is claimed by these artifacts.
 

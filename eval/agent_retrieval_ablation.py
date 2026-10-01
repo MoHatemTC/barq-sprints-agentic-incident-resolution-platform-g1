@@ -75,6 +75,12 @@ def main() -> None:
     )
     parser.add_argument("--rewrite", action="store_true", help="Makes real Gemini calls")
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--mmr", action="store_true", help="Compare relevance with article-level diversity"
+    )
+    parser.add_argument(
+        "--queries-from", type=Path, help="Reuse focused queries from a previous artifact"
+    )
     args = parser.parse_args()
     settings = get_retrieval_settings()
     collection = args.collection or settings.qdrant_collection_name
@@ -82,6 +88,7 @@ def main() -> None:
     agent_settings = AgentSettings(agent_query_rewrite_enabled=args.rewrite)
     client = QdrantClient(url=settings.qdrant_url)
     previous_mode = os.environ.get("RETRIEVAL_MODE")
+    previous_mmr = os.environ.get("RETRIEVAL_MMR_ENABLED")
     try:
         digest, payloads = snapshot(client, collection)
         categories = {p["article_id"]: p["category"] for p in payloads}
@@ -127,9 +134,22 @@ def main() -> None:
                 }
             ),
             "classification_source": "primary article category from index; other if absent",
-            "latency_scope": "warm models, serial calls, includes one rewrite call where enabled",
+            "latency_scope": (
+                "warm retrieval only; reused focused query, excludes rewrite generation"
+                if args.queries_from
+                else "warm models, serial calls, includes one rewrite call where enabled"
+            ),
             "variants": {},
         }
+        prior = json.loads(args.queries_from.read_text()) if args.queries_from else None
+        if prior and (
+            prior["payload_sha256"] != digest or prior["query_fixture"] != report["query_fixture"]
+        ):
+            raise ValueError("Reused queries must have the same corpus snapshot and fixture")
+        reused = {row["incident_id"]: row for row in prior["evaluation_queries"]} if prior else {}
+        report["queries_reused_from"] = str(args.queries_from) if prior else None
+        report["mmr_lambda"] = settings.retrieval_mmr_lambda
+        report["diversity_scope"] = "eligible article representatives before companion bundling"
         queries = []
         for row in records:
             source = row["query"]
@@ -143,7 +163,15 @@ def main() -> None:
                 source = boilerplate * 2 + "Reported fault: " + source + "\n" + boilerplate
             original = source[:QUERY_CHARS]
             start = time.perf_counter()
-            augmented = rewrite_query(original, deps) if args.rewrite else original
+            augmented = (
+                reused[row["incident_id"]]["augmented"]
+                if prior
+                else rewrite_query(original, deps)
+                if args.rewrite
+                else original
+            )
+            if prior and reused[row["incident_id"]]["original"] != original:
+                raise ValueError("Original query differs from reused fixture")
             rewrite_ms = (time.perf_counter() - start) * 1000
             queries.append((original, augmented, rewrite_ms))
         # These queries come solely from the checked-in evaluation set, not KB payloads.
@@ -151,8 +179,14 @@ def main() -> None:
             {"incident_id": row["incident_id"], "original": original, "augmented": augmented}
             for row, (original, augmented, _) in zip(records, queries, strict=True)
         ]
-        for mode in (RetrievalMode.HYBRID, RetrievalMode.HYBRID_RERANKED):
+        modes = [
+            (mode, enabled)
+            for mode in (RetrievalMode.HYBRID, RetrievalMode.HYBRID_RERANKED)
+            for enabled in ([False, True] if args.mmr else [False])
+        ]
+        for mode, mmr_enabled in modes:
             os.environ["RETRIEVAL_MODE"] = mode.value
+            os.environ["RETRIEVAL_MMR_ENABLED"] = str(mmr_enabled).lower()
             get_retrieval_settings.cache_clear()
             # Model load and first inference are outside the warm-call metrics.
             retriever.search(
@@ -161,7 +195,7 @@ def main() -> None:
                 top_k=5,
                 threshold=agent_settings.agent_retrieval_threshold,
             )
-            for augment in [False, True] if args.rewrite else [False]:
+            for augment in [False, True] if args.rewrite or prior else [False]:
                 scored = []
                 for row, (original, augmented, rewrite_ms) in zip(records, queries, strict=True):
                     primary = row["primary_article_ids"]
@@ -184,6 +218,10 @@ def main() -> None:
                             "incident_id": row["incident_id"],
                             "answerable": row["is_answerable"],
                             "returned_article_ids": ids,
+                            "returned_sections": [
+                                {"article_id": hit.article_id, "section": hit.section}
+                                for hit in result.hits
+                            ],
                             "hit_at_1": bool(ids and ids[0] in expected),
                             "hit_at_5": bool(expected.intersection(ids)),
                             "primary_recall": len(set(primary).intersection(ids)) / len(primary)
@@ -194,12 +232,17 @@ def main() -> None:
                                 set(row["forbidden_article_ids"]).intersection(ids)
                             ),
                             "sufficient": result.sufficient,
+                            "mmr_applied": result.mmr_applied,
                             "best_relevance": result.best_relevance,
                             "rewrite_changed": augment and augmented != original,
                             "latency_ms": result.latency_ms + (rewrite_ms if augment else 0),
                         }
                     )
-                name = mode.value + ("_rewrite" if augment else "_original")
+                name = (
+                    mode.value
+                    + ("_mmr" if mmr_enabled else "")
+                    + ("_rewrite" if augment else "_original")
+                )
                 report["variants"][name] = {"summary": summarize(scored), "cases": scored}
         final_digest, _ = snapshot(client, collection)
         report["payload_snapshot_unchanged"] = digest == final_digest
@@ -230,6 +273,10 @@ def main() -> None:
             os.environ.pop("RETRIEVAL_MODE", None)
         else:
             os.environ["RETRIEVAL_MODE"] = previous_mode
+        if previous_mmr is None:
+            os.environ.pop("RETRIEVAL_MMR_ENABLED", None)
+        else:
+            os.environ["RETRIEVAL_MMR_ENABLED"] = previous_mmr
         get_retrieval_settings.cache_clear()
 
 
