@@ -87,7 +87,16 @@ class Settings(RetrievalSettings):
             "dlq_replay": True,
             "eval_benchmarks": False,
             "auto_remediation": False,
+            "semantic_caching": True,
         }
+    )
+    enable_semantic_cache: bool = Field(
+        default=True,
+        description=(
+            "Master toggle for Sprint 4 semantic caching & single-flight clustering. "
+            "Set to False (or ENABLE_SEMANTIC_CACHE=false in .env) in development/testing "
+            "to run every incident through the full LangGraph pipeline."
+        ),
     )
 
     # Host & Network Binding (Security)

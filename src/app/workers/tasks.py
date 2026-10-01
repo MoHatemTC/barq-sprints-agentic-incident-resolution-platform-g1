@@ -236,21 +236,38 @@ def _run_incident(
     repo.ensure_retry_state(execution_uuid, max_attempts=cfg.max_retries)
 
     # Sprint 4 (S4.2): Semantic deduplication & single-flight clustering
-    redis_client = getattr(task, "dlq_redis", None)
-    cache = semantic_cache or get_semantic_cache(repo=repo, redis_client=redis_client)
-    try:
-        admission = cache.admit(payload, execution_id=execution_uuid)
-    except AdmissionLockTimeoutError as exc:
-        logger.warning(
-            "admission_lock_timeout_yielding_retry",
+    active_settings = settings or getattr(task, "settings", None)
+    enable_cache = (
+        getattr(active_settings, "enable_semantic_cache", True)
+        if active_settings is not None
+        else True
+    )
+
+    if enable_cache:
+        redis_client = getattr(task, "dlq_redis", None)
+        cache = semantic_cache or get_semantic_cache(repo=repo, redis_client=redis_client)
+        try:
+            admission = cache.admit(payload, execution_id=execution_uuid)
+        except AdmissionLockTimeoutError as exc:
+            logger.warning(
+                "admission_lock_timeout_yielding_retry",
+                execution_id=execution_id,
+                error=str(exc),
+            )
+            if hasattr(task, "retry"):
+                raise task.retry(countdown=1.0) from exc
+            admission = AdmissionResult(
+                mode=AdmissionMode.INDEPENDENT,
+                reason="admission_lock_timeout_fallback",
+            )
+    else:
+        logger.info(
+            "semantic_cache_disabled_by_config",
             execution_id=execution_id,
-            error=str(exc),
         )
-        if hasattr(task, "retry"):
-            raise task.retry(countdown=1.0) from exc
         admission = AdmissionResult(
             mode=AdmissionMode.INDEPENDENT,
-            reason="admission_lock_timeout_fallback",
+            reason="semantic_cache_disabled_by_config",
         )
 
     if admission.mode == AdmissionMode.FOLLOWER and admission.cluster_id is not None:

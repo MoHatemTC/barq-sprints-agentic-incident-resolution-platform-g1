@@ -1196,3 +1196,60 @@ def test_postgres_commit_before_redis_publication() -> None:
     pg_idx = call_log.index("postgres_create_cluster")
     redis_idx = call_log.index("redis_setex")
     assert pg_idx < redis_idx, f"PostgreSQL ({pg_idx}) must precede Redis publication ({redis_idx})"
+
+
+def test_semantic_cache_disabled_by_config_runs_independent() -> None:
+    """When enable_semantic_cache is False, worker bypasses cache and runs independently."""
+    from app.workers.retry_policy import RetryConfig
+    from app.workers.tasks import _run_incident
+
+    class FakeTask:
+        def __init__(self) -> None:
+            self.request = SimpleNamespace(retries=0)
+
+        def retry(self, exc=None, countdown=None):
+            raise RuntimeError("Should not retry")
+
+    repo = InMemoryRepo()
+    cache = SemanticCache(repo=repo, embed_fn=dummy_embed_fn)
+    cfg = RetryConfig(max_retries=3, backoff_base=1.0, backoff_max=60.0, jitter=False)
+
+    exec1 = uuid4()
+    repo.seed_execution(exec1, status="queued")
+    payload = {
+        "event_id": "evt-01",
+        "sys_id": "sys_01",
+        "number": "INC001",
+        "service": "database",
+        "category": "software",
+        "short_description": "Postgres deadlock detected",
+        "description": "Transaction aborted due to deadlock",
+    }
+    _run_incident(
+        FakeTask(),
+        payload,
+        str(exec1),
+        cfg,
+        repo,
+        semantic_cache=cache,
+        graph_backend="stub",
+    )
+
+    mock_settings = SimpleNamespace(enable_semantic_cache=False, worker_soft_time_limit=120)
+    exec2 = uuid4()
+    repo.seed_execution(exec2, status="queued")
+    res2 = _run_incident(
+        FakeTask(),
+        payload,
+        str(exec2),
+        cfg,
+        repo,
+        semantic_cache=cache,
+        graph_backend="stub",
+        settings=mock_settings,  # type: ignore[arg-type]
+    )
+
+    assert res2["status"] == "succeeded"
+    assert "cluster_role" not in res2
+    assert res2.get("cluster_id") is None
+
