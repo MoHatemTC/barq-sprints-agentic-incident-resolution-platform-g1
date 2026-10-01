@@ -196,6 +196,7 @@ class WorkerRepo(Protocol):
         service: str | None = None,
         category: str | None = None,
         expires_at: dt.datetime | None = None,
+        anchor_vector: list[float] | None = None,
     ) -> SemanticCluster:
         """Create a semantic cluster and register its anchor member."""
         ...
@@ -225,6 +226,10 @@ class WorkerRepo(Protocol):
 
     def get_cluster(self, cluster_id: UUID) -> SemanticCluster | None:
         """Fetch a cluster by its primary key ID."""
+        ...
+
+    def list_active_clusters(self, service: str | None = None) -> list[SemanticCluster]:
+        """Fetch all active, non-expired clusters optionally filtered by service."""
         ...
 
     def get_active_cluster_for_execution(self, execution_id: UUID) -> SemanticCluster | None:
@@ -566,6 +571,7 @@ class PostgresRepo:
         service: str | None = None,
         category: str | None = None,
         expires_at: dt.datetime | None = None,
+        anchor_vector: list[float] | None = None,
     ) -> SemanticCluster:
         ttl_expires = expires_at or (_utcnow() + dt.timedelta(minutes=10))
         cluster = SemanticCluster(
@@ -580,6 +586,7 @@ class PostgresRepo:
             category=category,
             status="creating",
             expires_at=ttl_expires,
+            anchor_vector=anchor_vector,
         )
         anchor_member = SemanticClusterMember(
             cluster_id=cluster_id,
@@ -643,6 +650,17 @@ class PostgresRepo:
         with self._session_factory() as session:
             stmt = select(SemanticCluster).where(SemanticCluster.cluster_id == cluster_id)
             return session.scalar(stmt)
+
+    def list_active_clusters(self, service: str | None = None) -> list[SemanticCluster]:
+        with self._session_factory() as session:
+            now = _utcnow()
+            stmt = select(SemanticCluster).where(
+                SemanticCluster.status.in_(("creating", "running", "awaiting_approval", "resolved")),
+                SemanticCluster.expires_at > now,
+            )
+            if service:
+                stmt = stmt.where(SemanticCluster.service == service.strip().lower())
+            return list(session.scalars(stmt).all())
 
     def get_active_cluster_for_execution(self, execution_id: UUID) -> SemanticCluster | None:
         with self._session_factory() as session:
@@ -915,6 +933,7 @@ class InMemoryRepo:
         service: str | None = None,
         category: str | None = None,
         expires_at: dt.datetime | None = None,
+        anchor_vector: list[float] | None = None,
     ) -> SemanticCluster:
         ttl_expires = expires_at or (_utcnow() + dt.timedelta(minutes=10))
         cluster = SemanticCluster(
@@ -929,6 +948,7 @@ class InMemoryRepo:
             category=category,
             status="creating",
             expires_at=ttl_expires,
+            anchor_vector=anchor_vector,
             created_at=_utcnow(),
         )
         anchor_member = SemanticClusterMember(
@@ -997,6 +1017,16 @@ class InMemoryRepo:
 
     def get_cluster(self, cluster_id: UUID) -> SemanticCluster | None:
         return self.clusters.get(cluster_id)
+
+    def list_active_clusters(self, service: str | None = None) -> list[SemanticCluster]:
+        now = _utcnow()
+        res = []
+        for c in self.clusters.values():
+            if c.status in ("creating", "running", "awaiting_approval", "resolved") and c.expires_at > now:
+                if service and c.service and c.service != service.strip().lower():
+                    continue
+                res.append(c)
+        return res
 
     def get_active_cluster_for_execution(self, execution_id: UUID) -> SemanticCluster | None:
         now = _utcnow()

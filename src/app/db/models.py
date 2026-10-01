@@ -514,6 +514,7 @@ class SemanticCluster(Base):
     # Solution payload when resolved
     solution: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
     failure_reason: Mapped[str | None] = mapped_column(Text)
+    anchor_vector: Mapped[list[float] | None] = mapped_column(JSONB(none_as_null=True), nullable=True)
 
     # Timestamps & TTL
     created_at: Mapped[datetime] = mapped_column(

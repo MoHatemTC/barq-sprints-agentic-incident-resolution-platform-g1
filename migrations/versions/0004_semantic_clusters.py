@@ -60,6 +60,7 @@ def upgrade() -> None:
         ),
         sa.Column("solution", postgresql.JSONB(none_as_null=True), nullable=True),
         sa.Column("failure_reason", sa.Text(), nullable=True),
+        sa.Column("anchor_vector", postgresql.JSONB(none_as_null=True), nullable=True),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),

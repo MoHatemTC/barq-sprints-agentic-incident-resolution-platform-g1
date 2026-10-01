@@ -40,6 +40,34 @@ def dummy_embed_fn(text: str) -> list[float]:
     return [0.2, 0.2, 0.2, 0.2]
 
 
+def _process_worker_fn(
+    worker_id: str,
+    svc: str,
+    out_q: Any,
+    host: str,
+    port: int,
+    pwd: str | None,
+) -> None:
+    import redis as rlib
+    from agent.semantic_cache import SemanticCache
+
+    rc = rlib.Redis(host=host, port=port, password=pwd)
+    c = SemanticCache(redis_client=rc, embed_fn=dummy_embed_fn)
+
+    p = {
+        "event_id": f"evt-{worker_id}",
+        "sys_id": f"sys-{worker_id}",
+        "number": f"INC_{worker_id}",
+        "service": svc,
+        "category": "software",
+        "short_description": "Multi-process Redis race test incident",
+        "description": "Testing multi-process admission locking across live Redis",
+    }
+    res = c.admit(p, uuid4())
+    out_q.put((worker_id, res.mode.value, str(res.cluster_id)))
+
+
+
 def test_cosine_similarity_edge_cases() -> None:
     assert cosine_similarity([], []) == 0.0
     assert cosine_similarity([1.0, 0.0], [0.0, 1.0]) == 0.0
@@ -591,6 +619,333 @@ def test_worker_task_follower_falls_back_when_leader_failed() -> None:
     # Follower ran independently and succeeded!
     assert res2["status"] == "succeeded"
     assert repo.get_status(exec2) == "succeeded"
+
+
+def test_redis_double_search_prevents_concurrent_leader_race() -> None:
+    """CRITICAL INVARIANT TEST: Double-Search Distributed Lock Race Immunity.
+
+    Simulates two independent Celery worker processes concurrently picking up
+    identical incidents arriving at the exact same millisecond.
+    Verifies that the Double-Search Distributed Lock pattern guarantees:
+    - Exactly ONE worker becomes LEADER.
+    - The other worker becomes FOLLOWER via the inside-lock second search.
+    - Both share the exact same cluster_id.
+    - Zero duplicate clusters created.
+    """
+    import threading
+
+    class ThreadSafeMockRedis:
+        def __init__(self) -> None:
+            self._lock = threading.Lock()
+            self._kv: dict[str, str] = {}
+            self._sets: dict[str, set[str]] = {}
+
+        def set(self, key: str, val: str, nx: bool = False, px: int | None = None) -> bool:
+            with self._lock:
+                if nx and key in self._kv:
+                    return False
+                self._kv[key] = val
+                return True
+
+        def get(self, key: str) -> str | None:
+            with self._lock:
+                return self._kv.get(key)
+
+        def setex(self, key: str, ttl: int, val: str) -> bool:
+            with self._lock:
+                self._kv[key] = val
+                return True
+
+        def sadd(self, key: str, member: str) -> int:
+            with self._lock:
+                if key not in self._sets:
+                    self._sets[key] = set()
+                self._sets[key].add(member)
+                return 1
+
+        def smembers(self, key: str) -> set[str]:
+            with self._lock:
+                return set(self._sets.get(key, set()))
+
+        def srem(self, key: str, member: str) -> int:
+            with self._lock:
+                if key in self._sets:
+                    self._sets[key].discard(member)
+                return 1
+
+        def eval(self, script: str, numkeys: int, key: str, val: str) -> int:
+            # Emulates Lua release: if get(key) == val then del(key)
+            with self._lock:
+                if self._kv.get(key) == val:
+                    del self._kv[key]
+                    return 1
+                return 0
+
+    shared_redis = ThreadSafeMockRedis()
+    shared_repo = InMemoryRepo()
+
+    # Two separate cache instances (simulating two isolated worker OS processes)
+    cache_worker_a = SemanticCache(
+        repo=shared_repo,
+        redis_client=shared_redis,
+        embed_fn=dummy_embed_fn,
+    )
+    cache_worker_b = SemanticCache(
+        repo=shared_repo,
+        redis_client=shared_redis,
+        embed_fn=dummy_embed_fn,
+    )
+
+    inc_payload_a = {
+        "event_id": "evt-burst-01",
+        "sys_id": "sys_burst_01",
+        "number": "INC_BURST_001",
+        "service": "checkout-api",
+        "category": "software",
+        "short_description": "Checkout API 504 gateway timeout",
+        "description": "Massive 504 timeouts on checkout payment gateway",
+    }
+    inc_payload_b = {
+        "event_id": "evt-burst-02",
+        "sys_id": "sys_burst_02",
+        "number": "INC_BURST_002",
+        "service": "checkout-api",
+        "category": "software",
+        "short_description": "Checkout API 504 gateway timeout",
+        "description": "Massive 504 timeouts on checkout payment gateway",
+    }
+
+    results: list[AdmissionResult] = []
+    barrier = threading.Barrier(2)
+
+    def worker_admission(cache_instance: SemanticCache, payload: dict, exec_id: UUID) -> None:
+        # Synchronize thread start to ensure exact concurrent arrival
+        barrier.wait()
+        res = cache_instance.admit(payload, exec_id)
+        results.append(res)
+
+    t1 = threading.Thread(target=worker_admission, args=(cache_worker_a, inc_payload_a, uuid4()))
+    t2 = threading.Thread(target=worker_admission, args=(cache_worker_b, inc_payload_b, uuid4()))
+
+    t1.start()
+    t2.start()
+    t1.join()
+    t2.join()
+
+    assert len(results) == 2
+    modes = [r.mode for r in results]
+
+    # Non-negotiable invariant: Exactly one Leader, exactly one Follower!
+    assert AdmissionMode.LEADER in modes, "Must elect exactly one leader"
+    assert AdmissionMode.FOLLOWER in modes, "Second worker must join as follower"
+
+    leader_res = next(r for r in results if r.mode == AdmissionMode.LEADER)
+    follower_res = next(r for r in results if r.mode == AdmissionMode.FOLLOWER)
+
+    # Both workers must reference the exact same cluster!
+    assert follower_res.cluster_id == leader_res.cluster_id
+    assert follower_res.similarity_score == 1.0
+
+    # Exactly 1 cluster created in shared PostgreSQL / Repo!
+    assert len(shared_repo.clusters) == 1
+
+
+def test_admission_lock_timeout_yields_retry_without_duplicate_leader() -> None:
+    """Verifies that if admission lock acquisition times out under contention,
+    the worker task yields non-blockingly via task.retry rather than electing a duplicate leader.
+    """
+    from celery.exceptions import Retry
+
+    from app.workers.retry_policy import RetryConfig
+    from app.workers.tasks import _run_incident
+
+    class ContendedRedis:
+        def set(self, key: str, val: str, nx: bool = False, px: int | None = None) -> bool:
+            # Always fail to acquire lock to simulate heavy contention timeout
+            return False
+
+    class YieldingTask:
+        def __init__(self) -> None:
+            self.request = SimpleNamespace(retries=0)
+            self.retried_countdown = None
+
+        def retry(self, exc=None, countdown=None):
+            self.retried_countdown = countdown
+            raise Retry(exc=exc, when=None)
+
+    repo = InMemoryRepo()
+    cache = SemanticCache(repo=repo, redis_client=ContendedRedis(), embed_fn=dummy_embed_fn)
+    cfg = RetryConfig(max_retries=3, backoff_base=1.0, backoff_max=60.0, jitter=False)
+
+    exec_id = uuid4()
+    repo.seed_execution(exec_id, status="queued")
+    payload = {
+        "event_id": "evt-timeout-01",
+        "sys_id": "sys_timeout_01",
+        "number": "INC_TIMEOUT_001",
+        "service": "billing-engine",
+        "category": "software",
+        "short_description": "Billing engine deadlock",
+        "description": "Database deadlock on account ledger updates",
+    }
+
+    task = YieldingTask()
+    with pytest.raises(Retry):
+        _run_incident(
+            task,
+            payload,
+            str(exec_id),
+            cfg,
+            repo,
+            semantic_cache=cache,
+            graph_backend="stub",
+        )
+
+    # Yielded for 1.0s non-blocking retry
+    assert task.retried_countdown == 1.0
+    # ZERO clusters or duplicate leaders created!
+    assert len(repo.clusters) == 0
+
+
+def test_redis_loss_recovery_from_postgresql_authoritative_source() -> None:
+    """Verifies that PostgreSQL is the authoritative source of truth.
+    If Redis active anchors are lost (e.g. Redis restart / wipe), the cache
+    rehydrates active clusters from PostgreSQL on the next admission check.
+    """
+    shared_repo = InMemoryRepo()
+
+    redis_store: dict[str, Any] = {}
+
+    class FakeRedisStore:
+        def set(self, key: str, val: str, nx: bool = False, px: int | None = None) -> bool:
+            redis_store[key] = val
+            return True
+
+        def get(self, key: str) -> str | None:
+            return redis_store.get(key)
+
+        def setex(self, key: str, ttl: int, val: str) -> bool:
+            redis_store[key] = val
+            return True
+
+        def sadd(self, key: str, member: str) -> int:
+            redis_store.setdefault(key, set()).add(member)
+            return 1
+
+        def smembers(self, key: str) -> set[str]:
+            return set(redis_store.get(key, set()))
+
+        def srem(self, key: str, member: str) -> int:
+            if key in redis_store and isinstance(redis_store[key], set):
+                redis_store[key].discard(member)
+            return 1
+
+        def eval(self, script: str, numkeys: int, key: str, val: str) -> int:
+            redis_store.pop(key, None)
+            return 1
+
+    shared_redis = FakeRedisStore()
+    cache1 = SemanticCache(repo=shared_repo, redis_client=shared_redis, embed_fn=dummy_embed_fn)
+
+    exec1 = uuid4()
+    shared_repo.seed_execution(exec1, status="queued")
+    payload1 = {
+        "event_id": "evt-resilient-01",
+        "sys_id": "sys_resilient_01",
+        "number": "INC_RES_001",
+        "service": "order-pipeline",
+        "category": "software",
+        "short_description": "Kafka consumer group rebalance storm",
+        "description": "Kafka partitions constantly rebalancing across order-workers",
+    }
+    res1 = cache1.admit(payload1, exec1)
+    assert res1.mode == AdmissionMode.LEADER
+    assert len(shared_repo.clusters) == 1
+
+    # 2. Redis restarts! (All Redis keys wiped completely)
+    redis_store.clear()
+
+    # 3. Fresh Worker 2 instance (empty in-process cache, empty Redis)
+    cache2 = SemanticCache(repo=shared_repo, redis_client=shared_redis, embed_fn=dummy_embed_fn)
+
+    payload2 = {
+        "event_id": "evt-resilient-02",
+        "sys_id": "sys_resilient_02",
+        "number": "INC_RES_002",
+        "service": "order-pipeline",
+        "category": "software",
+        "short_description": "Kafka consumer rebalance storm",
+        "description": "Partitions rebalancing repeatedly across consumers",
+    }
+    exec2 = uuid4()
+    shared_repo.seed_execution(exec2, status="queued")
+
+    # Cache rehydrates from PostgreSQL and joins as FOLLOWER!
+    res2 = cache2.admit(payload2, exec2)
+    assert res2.mode == AdmissionMode.FOLLOWER
+    assert res2.cluster_id == res1.cluster_id
+    assert len(shared_repo.clusters) == 1
+    # Redis active index was restored from PostgreSQL!
+    assert "barq:cluster:active_set" in redis_store
+
+
+def test_live_multiprocess_redis_race_prevents_duplicate_leaders() -> None:
+    """CRITICAL MULTI-PROCESS INVARIANT TEST:
+    Executes across 2 truly separate OS processes against the live Redis instance.
+    Verifies that the Double-Search Distributed Lock pattern guarantees race immunity
+    across separate operating system process heaps.
+    """
+    import os
+    import multiprocessing
+    import redis as live_redis_lib
+
+    host = os.environ.get("REDIS_HOST", "localhost")
+    port = int(os.environ.get("REDIS_PORT", 6379))
+    pw = os.environ.get("REDIS_PASSWORD", "LbiW95y37XrwRXCPfNvu3KR4")
+
+    # Verify live Redis is reachable
+    try:
+        r = live_redis_lib.Redis(host=host, port=port, password=pw)
+        if not r.ping():
+            pytest.skip("Live Redis not reachable")
+    except Exception:
+        pytest.skip("Live Redis not reachable")
+
+    test_service = f"mp-test-{uuid4().hex[:8]}"
+    lock_key = f"barq:lock:admission:{test_service}"
+    r.delete(lock_key)
+
+    ctx = multiprocessing.get_context("spawn")
+    q = ctx.Queue()
+
+    p1 = ctx.Process(target=_process_worker_fn, args=("W1", test_service, q, host, port, pw))
+    p2 = ctx.Process(target=_process_worker_fn, args=("W2", test_service, q, host, port, pw))
+
+    p1.start()
+    p2.start()
+    p1.join(timeout=10)
+    p2.join(timeout=10)
+
+    # Read results from queue
+    res_list = []
+    while not q.empty():
+        res_list.append(q.get())
+
+    assert len(res_list) == 2, f"Expected 2 results from OS processes, got {len(res_list)}"
+    modes = [m for _, m, _ in res_list]
+    cluster_ids = [cid for _, _, cid in res_list]
+
+    assert "leader" in modes, "Exactly one OS process must become LEADER"
+    assert "follower" in modes, "The other OS process must become FOLLOWER"
+    assert cluster_ids[0] == cluster_ids[1], "Both processes must share the exact same cluster_id"
+
+    # Cleanup Redis test keys
+    for cid in cluster_ids:
+        r.delete(f"barq:cluster:anchor:{cid}")
+        r.srem("barq:cluster:active_set", cid)
+    r.delete(lock_key)
+
+
 
 
 

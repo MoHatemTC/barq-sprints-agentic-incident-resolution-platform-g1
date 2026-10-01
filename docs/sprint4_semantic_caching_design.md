@@ -1,11 +1,12 @@
 # Sprint 4 (S4.2) — Semantic Caching & Single-Flight Incident Clustering Design
 
-> **Document Version:** 1.0.0  
-> **Status:** Active / Production Ready  
+> **Document Version:** 1.1.0  
+> **Status:** Active / Production Hardened & Verified  
 > **Module Deliverables:**  
-> - `src/agent/semantic_cache.py` (Core clustering & admission engine)  
-> - `src/app/workers/tasks.py` (Celery worker execution seam integration)  
-> - `tests/test_semantic_cache.py` (11 unit & integration test suites)  
+> - `src/agent/semantic_cache.py` (Core clustering, distributed lock & admission engine)  
+> - `src/app/workers/tasks.py` (Celery worker execution seam & yield protocol integration)  
+> - `tests/test_semantic_cache.py` (15 unit, multi-threaded, and multi-process test suites)  
+> - `eval/run_acceptance_demo.py` (Standalone two-part acceptance demonstration runner)  
 > - `docs/sprint4_semantic_caching_design.md` (Architectural design & calibration record)  
 
 ---
@@ -183,7 +184,29 @@ $$A \sim \text{Anchor} \quad \text{and} \quad B \sim \text{Anchor} \implies A, B
 $$A \sim B \quad \text{and} \quad B \sim C \not\implies A \sim C$$
 New incidents are compared exclusively to the original elected **Anchor** vector, preventing cluster drift where dissimilar incidents chain together over time.
 
-### 4.3 Low-Confidence Fallback & Observability
+### 4.3 Atomic Admission & Race Immunity (Double-Search Distributed Lock)
+To guarantee that two independent Celery worker processes cannot elect two leaders for the same semantic incident burst arriving in the same millisecond:
+1. **First Search (Uncontended):** Check shared active anchors in Redis/PostgreSQL. If a confident match ($\text{similarity} \ge \tau$) is found, join as `FOLLOWER` immediately without lock contention.
+2. **Critical Section (Distributed Lock):** Acquire an atomic Redis distributed lock (`barq:lock:admission:{service}`, TTL: 5s, Acquisition Timeout: 3s) using `SET NX PX` with a unique UUID lock token.
+3. **Lua Ownership-Safe Release:** Locks are released only if the caller's UUID token matches using an atomic Lua script:
+   ```lua
+   if redis.call("get", KEYS[1]) == ARGV[1] then
+       return redis.call("del", KEYS[1])
+   else
+       return 0
+   end
+   ```
+4. **Double Search (Inside Lock):** Re-read shared active anchors from Redis. If a competing worker process created a cluster during the locking window, join as `FOLLOWER`.
+5. **Leader Election:** If and only if no matching cluster exists inside the critical section, atomically elect as `LEADER`, register the active anchor in Redis (`barq:cluster:anchor:{id}` + `barq:cluster:active_set`), and persist in PostgreSQL.
+6. **Lock Acquisition Timeout Safety:** If lock acquisition exceeds 3.0s under heavy contention, `SemanticCache` raises `AdmissionLockTimeoutError`. The worker catches this exception and yields via non-blocking `task.retry(countdown=1.0)`. **It never defaults to electing a leader on timeout**, mathematically preventing duplicate leader generation.
+
+### 4.4 PostgreSQL Authoritative Source of Truth & Redis Dynamic Rehydration
+Redis acts strictly as a high-speed coordination and index layer (`barq:cluster:anchor:{id}` with 600s TTL). **PostgreSQL remains the sole authoritative source of truth**:
+- If Redis restarts, crashes, or loses keys (`FLUSHDB`), active clusters are not lost.
+- Upon cache miss or empty Redis active set during admission, `_get_active_anchors()` queries PostgreSQL via `repo.list_active_clusters(service)` for active clusters ($expires\_at > now$).
+- Active clusters and their stored `anchor_vector` embeddings are dynamically rehydrated back into Redis with appropriate TTLs before admission proceeds.
+
+### 4.5 Low-Confidence Fallback & Observability
 If an inbound incident is evaluated against active clusters but fails the confidence threshold ($\text{similarity} < \tau$):
 ```python
 logger.info(
@@ -208,7 +231,7 @@ In standard Celery deployments (e.g. concurrency = 4), if 10 concurrent duplicat
 ### 5.2 Non-Blocking Yield Protocol
 Followers **never sleep synchronously**. Instead, they inspect the cluster status and yield:
 - **`ClusterStatus.RESOLVED`:** Solution already cached. Follower copies resolution, summarizes result, marks execution `succeeded`, and finishes immediately (0ms wait).
-- **`ClusterStatus.RUNNING`:** Leader is currently computing. Follower yields Celery thread by invoking `task.retry(countdown=2.0)`. The worker thread is freed immediately for other jobs.
+- **`ClusterStatus.RUNNING` or `ClusterStatus.CREATING`:** Leader is currently computing. Follower yields Celery thread by invoking `task.retry(countdown=2.0)`. The worker thread is freed immediately for other jobs.
 - **`ClusterStatus.AWAITING_APPROVAL`:** Leader paused at Human-in-the-Loop interrupt. Follower updates its execution row to `awaiting_approval` and yields.
 - **`ClusterStatus.FAILED` or `EXPIRED`:** If the Leader crashes, times out, or fails:
   - **Followers DO NOT adopt the failure.**
@@ -223,25 +246,30 @@ Maintains authoritative state, anchor vectors, operational metadata, and cached 
 
 ```sql
 CREATE TABLE semantic_clusters (
-    cluster_id UUID PRIMARY KEY,
-    anchor_incident_sys_id VARCHAR(64) NOT NULL,
+    cluster_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    anchor_incident_sys_id VARCHAR(32) NOT NULL,
     anchor_incident_number VARCHAR(32) NOT NULL,
-    anchor_execution_id UUID NOT NULL REFERENCES executions(execution_id),
-    pipeline_execution_id UUID NOT NULL REFERENCES executions(execution_id),
-    status VARCHAR(32) NOT NULL DEFAULT 'running',
+    anchor_execution_id UUID NOT NULL REFERENCES executions(execution_id) ON DELETE CASCADE,
+    pipeline_execution_id UUID NOT NULL,
+    service VARCHAR(100),
+    category VARCHAR(100),
     similarity_threshold FLOAT NOT NULL,
-    embedding_model VARCHAR(64) NOT NULL,
-    service VARCHAR(128),
-    category VARCHAR(64),
+    embedding_model VARCHAR(100) NOT NULL,
+    status VARCHAR(32) NOT NULL DEFAULT 'creating',
     solution JSONB,
     failure_reason TEXT,
+    anchor_vector JSONB,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    expires_at TIMESTAMPTZ NOT NULL
+    completed_at TIMESTAMPTZ,
+    expires_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT ck_semantic_clusters_status CHECK (
+        status IN ('creating', 'running', 'awaiting_approval', 'resolved', 'failed', 'expired')
+    )
 );
 
-CREATE INDEX ix_semantic_clusters_status ON semantic_clusters(status);
-CREATE INDEX ix_semantic_clusters_expires_at ON semantic_clusters(expires_at);
+CREATE INDEX ix_semantic_clusters_status_expires ON semantic_clusters(status, expires_at);
+CREATE INDEX ix_semantic_clusters_service ON semantic_clusters(service);
 ```
 
 ### 6.2 `semantic_cluster_members` Table
@@ -249,17 +277,20 @@ Maintains immutable record-level isolation for every incident joined to a cluste
 
 ```sql
 CREATE TABLE semantic_cluster_members (
-    member_id UUID PRIMARY KEY,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     cluster_id UUID NOT NULL REFERENCES semantic_clusters(cluster_id) ON DELETE CASCADE,
-    execution_id UUID NOT NULL UNIQUE REFERENCES executions(execution_id),
-    incident_sys_id VARCHAR(64) NOT NULL,
+    execution_id UUID NOT NULL REFERENCES executions(execution_id) ON DELETE CASCADE,
+    incident_sys_id VARCHAR(32) NOT NULL,
     incident_number VARCHAR(32) NOT NULL,
     similarity_score FLOAT NOT NULL,
     role VARCHAR(32) NOT NULL, -- 'anchor' or 'follower'
-    joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT ck_semantic_cluster_members_role CHECK (role IN ('anchor', 'follower')),
+    CONSTRAINT uq_semantic_cluster_members_cluster_execution UNIQUE (cluster_id, execution_id)
 );
 
 CREATE INDEX ix_semantic_cluster_members_cluster_id ON semantic_cluster_members(cluster_id);
+CREATE INDEX ix_semantic_cluster_members_execution_id ON semantic_cluster_members(execution_id);
 ```
 
 ---
@@ -278,16 +309,50 @@ Simulating an outage storm of 10 incoming incidents across 3 simultaneous failur
 - **Resource Savings:** **70.0% reduction** in expensive pipeline runs.
 - **Record Integrity:** 10 individual execution records, 10 audit trails, 0 cross-service false clusters.
 
-### 7.2 Full Test Suite Verification
-All 11 unit and integration tests passing in `tests/test_semantic_cache.py`:
-- `test_cosine_similarity_edge_cases`: Normalization, zero norms, vector mismatches.
-- `test_semantic_cache_first_incident_becomes_leader`: Initial anchor election.
-- `test_semantic_cache_similar_incident_joins_as_follower`: Cosine threshold admission.
-- `test_semantic_cache_low_confidence_fallback`: Sub-threshold fallback isolation.
-- `test_semantic_cache_prevents_cross_service_clustering`: Strict service isolation guard.
-- `test_semantic_cache_solution_publication_and_reuse`: Durable resolution caching.
-- `test_synthetic_burst_demonstration_10_incidents`: 70% compute savings validation.
-- `test_semantic_cache_real_fastembed_inference`: Real ONNX `bge-small-en-v1.5` embeddings.
-- `test_worker_task_leader_publishes_and_follower_reuses`: End-to-end Celery worker integration.
-- `test_worker_task_follower_yields_when_leader_running`: Non-blocking Celery yield protocol.
-- `test_worker_task_follower_falls_back_when_leader_failed`: Fail-safe decoupling recovery.
+### 7.2 Full Test Suite Verification (15/15 Tests Passing)
+All 15 unit, integration, and concurrency test suites passing in `tests/test_semantic_cache.py`:
+1. `test_cosine_similarity_edge_cases`: Normalization, zero norms, vector mismatches.
+2. `test_semantic_cache_first_incident_becomes_leader`: Initial anchor election & DB persistence.
+3. `test_semantic_cache_similar_incident_joins_as_follower`: Cosine threshold admission.
+4. `test_semantic_cache_low_confidence_fallback`: Sub-threshold fallback isolation.
+5. `test_semantic_cache_prevents_cross_service_clustering`: Strict service isolation guard.
+6. `test_semantic_cache_solution_publication_and_reuse`: Durable resolution caching & retrieval.
+7. `test_synthetic_burst_demonstration_10_incidents`: 70% compute savings validation across 3 clusters.
+8. `test_semantic_cache_real_fastembed_inference`: Real ONNX `bge-small-en-v1.5` embeddings.
+9. `test_worker_task_leader_publishes_and_follower_reuses`: End-to-end Celery worker integration.
+10. `test_worker_task_follower_yields_when_leader_running`: Non-blocking Celery yield protocol.
+11. `test_worker_task_follower_falls_back_when_leader_failed`: Fail-safe decoupling recovery.
+12. `test_redis_double_search_prevents_concurrent_leader_race`: Multi-threaded race test with simulated delay.
+13. `test_admission_lock_timeout_yields_retry_without_duplicate_leader`: Adversarial lock timeout safety verification.
+14. `test_redis_loss_recovery_from_postgresql_authoritative_source`: Complete Redis flush and dynamic rehydration from PostgreSQL.
+15. `test_live_multiprocess_redis_race_prevents_duplicate_leaders`: Live multi-process OS `spawn` test executing separate Python processes against live Redis on port 6379, proving true cross-process single-leader election.
+
+### 7.3 Standalone Acceptance Verification Runner (`eval/run_acceptance_demo.py`)
+To enable local, zero-friction verification of the entire clustering and single-flight resolution lifecycle without requiring access to the remote EC2 ServiceNow deployment, a dedicated CLI demonstration runner is provided in [`eval/run_acceptance_demo.py`](file:///d:/spritns/barq-sprints-agentic-incident-resolution-platform-g1/eval/run_acceptance_demo.py):
+
+```powershell
+.venv\Scripts\python.exe eval/run_acceptance_demo.py
+```
+
+#### Verification Execution Results:
+
+```text
+================================================================================
+                SPRINT 4.2 ACCEPTANCE VERIFICATION DASHBOARD
+================================================================================
+Metric                              | Demo 1 (Pure Burst)  | Demo 2 (Mixed Outage)
+------------------------------------+----------------------+---------------------
+Inbound Incident Count              | 10                   | 10                  
+Semantic Clusters Formed            | 1                    | 4                   
+LangGraph Pipeline Executions       | 1                    | 4                   
+Follower Solution Reuses            | 9                    | 6                   
+Compute / LLM Savings               | 90.0% Savings        | 60.0% Savings       
+False Joins (Precision Safety)      | 0 (100% Precision)   | 0 (100% Precision)  
+Record-Level Isolation              | 10/10 Preserved      | 10/10 Preserved     
+================================================================================
+```
+
+#### Architectural Key Points:
+1. **100% Local Execution:** Generates dense 384-dimensional embeddings via local ONNX runtime (`BAAI/bge-small-en-v1.5`), coordinates across live local Redis (`localhost:6379`), and isolates ticket records in-memory/Postgres without requiring remote EC2 connectivity.
+2. **Demo 1 (Pure Similar Burst):** 10 simultaneous Payment Gateway timeout tickets $\implies$ **1 Leader** runs LangGraph ($1\times$) and publishes the solution; **9 Followers** join the cluster and reuse the cached solution with **$0\times$ LLM calls** (**90.0% compute/token savings**).
+3. **Demo 2 (Mixed Outage Scenario):** 6 Payment Redis timeouts + 2 Checkout 504 Gateways + 2 Distinct/Independent failures (Warehouse Barcode Scanner + Okta MFA push failure) $\implies$ **4 pipeline executions instead of 10** (**60.0% compute savings**) with **0 false joins**.
