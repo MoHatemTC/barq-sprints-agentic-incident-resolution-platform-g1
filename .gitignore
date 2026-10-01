@@ -124,6 +124,7 @@ data/corpus/*
 !data/corpus/barq_ingestion_report.md
 !data/corpus/barq_articles.json
 !data/adversarial/
+!data/corpus/barq_manual.md
 
 src/app/ignored_folder
 .zcode/
