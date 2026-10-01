@@ -126,6 +126,15 @@ isolated database/audit/idempotency checks passed; 14 manual-parser tests passed
 with the real reference PDF temporarily linked. The PDF link was removed afterward.
 ServiceNow live opt-in tests were not enabled for this read-only retrieval change.
 
+The first SDK CI run failed its npm audit before building: the existing lockfile
+contained a newly reported high-severity brace-expansion vulnerability. A separate
+build-only fix updates its four resolved entries to compatible patches (1.1.21,
+2.1.7, 5.0.12), retaining SDK 4.8.0 and all other packages/platform metadata.
+Node 22.23.3 was used locally. The high-severity audit gate, frozen-key SDK build,
+28 SDK tests and exported-record comparison pass; nine moderate findings remain.
+The [upstream advisory](https://github.com/advisories/GHSA-qhr7-859c-m2p7)
+documents the patched versions. No audit threshold was relaxed.
+
 Before merge: confirm the exact requested reranker and its supported runtime,
 run it on the same snapshot and inspect changed queries, then repeat against the
 team's new ingested KB with mapped OCR/table ground truth. Require PR checks and
