@@ -8,6 +8,8 @@ from app.db.models import (
     Failure,
     IdempotencyKey,
     RetryState,
+    SemanticCluster,
+    SemanticClusterMember,
 )
 
 __all__ = [
@@ -18,4 +20,6 @@ __all__ = [
     "Failure",
     "IdempotencyKey",
     "RetryState",
+    "SemanticCluster",
+    "SemanticClusterMember",
 ]

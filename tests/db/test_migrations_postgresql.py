@@ -27,6 +27,8 @@ APPLICATION_TABLES = {
     "approvals",
     "failures",
     "retry_state",
+    "semantic_clusters",
+    "semantic_cluster_members",
 }
 
 TIMESTAMP_COLUMNS = {
@@ -46,6 +48,11 @@ TIMESTAMP_COLUMNS = {
     ("retry_state", "last_attempt_at"),
     ("retry_state", "created_at"),
     ("retry_state", "updated_at"),
+    ("semantic_clusters", "created_at"),
+    ("semantic_clusters", "completed_at"),
+    ("semantic_clusters", "expires_at"),
+    ("semantic_cluster_members", "joined_at"),
+    ("semantic_cluster_members", "applied_at"),
 }
 
 JSONB_COLUMNS = {
@@ -54,6 +61,8 @@ JSONB_COLUMNS = {
     ("workflow_state", "state_snapshot"),
     ("approvals", "evidence"),
     ("failures", "details"),
+    ("semantic_clusters", "solution"),
+    ("semantic_clusters", "anchor_vector"),
 }
 
 TASK_FUNCTIONS = {"barq_reject_approval_mutation", "barq_set_updated_at"}
