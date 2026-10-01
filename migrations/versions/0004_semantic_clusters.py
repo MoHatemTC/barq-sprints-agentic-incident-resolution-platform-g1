@@ -46,7 +46,7 @@ def upgrade() -> None:
             "pipeline_execution_id",
             sa.Uuid(as_uuid=True),
             nullable=False,
-            comment="The execution ID of the shared LangGraph pipeline run (the leader's execution).",
+            comment="The execution ID of the shared LangGraph pipeline run (leader execution).",
         ),
         sa.Column("service", sa.String(length=100), nullable=True),
         sa.Column("category", sa.String(length=100), nullable=True),
@@ -70,7 +70,8 @@ def upgrade() -> None:
         sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
         sa.CheckConstraint(
-            "status IN ('creating', 'running', 'awaiting_approval', 'resolved', 'failed', 'expired')",
+            "status IN ('creating', 'running', 'awaiting_approval', "
+            "'resolved', 'failed', 'expired')",
             name="ck_semantic_clusters_status",
         ),
     )

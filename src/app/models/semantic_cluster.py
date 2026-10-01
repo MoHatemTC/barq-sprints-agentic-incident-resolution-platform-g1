@@ -2,10 +2,9 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 
 class ClusterStatus(StrEnum):
@@ -30,6 +29,7 @@ class AdmissionMode(StrEnum):
 
 class AdmissionResult(BaseModel):
     """Result of the semantic admission engine evaluation."""
+
     model_config = ConfigDict(extra="ignore")
 
     mode: AdmissionMode
@@ -42,6 +42,7 @@ class AdmissionResult(BaseModel):
 
 class ClusterSolution(BaseModel):
     """The durable resolution produced by the leader LangGraph pipeline execution."""
+
     model_config = ConfigDict(extra="allow")
 
     outcome: str
@@ -57,6 +58,7 @@ class ClusterSolution(BaseModel):
 
 class ClusterMembershipView(BaseModel):
     """High-level view of an incident's membership in a semantic cluster."""
+
     model_config = ConfigDict(from_attributes=True)
 
     cluster_id: UUID

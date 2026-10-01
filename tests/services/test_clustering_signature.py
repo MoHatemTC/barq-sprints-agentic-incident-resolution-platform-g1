@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+
 import pytest
 
 from app.services.clustering.signature import (
@@ -71,10 +72,11 @@ def test_is_incident_cluster_eligible_empty_text() -> None:
 def test_sanitize_incident_text_redacts_credentials_and_pii() -> None:
     raw_text = (
         "Server failed with error. Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.t-ID "
-        "and password=SuperSecretPassword123! Contact admin@example.com at +1-555-555-0199."
+        "and conn = postgresql://admin:hunter2@10.0.0.5:5432/incidents. "
+        "Contact admin@example.com at +1-555-555-0199."
     )
     sanitized = sanitize_incident_text(raw_text)
-    assert "SuperSecretPassword123!" not in sanitized
+    assert "hunter2" not in sanitized
     assert "eyJhbGciOi" not in sanitized
     assert "admin@example.com" not in sanitized
     assert "+1-555-555-0199" not in sanitized
@@ -100,7 +102,10 @@ def test_build_incident_signature_deterministic_format() -> None:
     assert lines[1] == "Category: network"
     assert lines[2] == "Subcategory: firewall"
     assert lines[3] == "Summary: Connection timed out after 30s"
-    assert lines[4] == "Description: Outbound TCP connection to auth.internal:8443 dropped with ETIMEDOUT."
+    assert (
+        lines[4]
+        == "Description: Outbound TCP connection to auth.internal:8443 dropped with ETIMEDOUT."
+    )
 
     assert "INC0012345" not in sig
     assert "0123456789abcdef" not in sig

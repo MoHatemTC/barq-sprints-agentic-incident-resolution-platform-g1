@@ -476,12 +476,13 @@ class RetryState(Base):
 
 
 class SemanticCluster(Base):
-    """Authoritative durable cluster grouping semantically similar incidents for single-flight resolution."""
+    """Authoritative durable cluster grouping semantically similar incidents for resolution."""
 
     __tablename__ = "semantic_clusters"
     __table_args__ = (
         CheckConstraint(
-            "status IN ('creating', 'running', 'awaiting_approval', 'resolved', 'failed', 'expired')",
+            "status IN ('creating', 'running', 'awaiting_approval', "
+            "'resolved', 'failed', 'expired')",
             name="ck_semantic_clusters_status",
         ),
         Index("ix_semantic_clusters_status_expires", "status", "expires_at"),
@@ -495,7 +496,9 @@ class SemanticCluster(Base):
     anchor_incident_number: Mapped[str] = mapped_column(String(32), nullable=False)
     anchor_execution_id: Mapped[UUID] = mapped_column(
         Uuid(as_uuid=True),
-        ForeignKey("executions.execution_id", name="fk_semantic_clusters_execution", ondelete="CASCADE"),
+        ForeignKey(
+            "executions.execution_id", name="fk_semantic_clusters_execution", ondelete="CASCADE"
+        ),
         nullable=False,
     )
     pipeline_execution_id: Mapped[UUID] = mapped_column(
@@ -514,7 +517,9 @@ class SemanticCluster(Base):
     # Solution payload when resolved
     solution: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
     failure_reason: Mapped[str | None] = mapped_column(Text)
-    anchor_vector: Mapped[list[float] | None] = mapped_column(JSONB(none_as_null=True), nullable=True)
+    anchor_vector: Mapped[list[float] | None] = mapped_column(
+        JSONB(none_as_null=True), nullable=True
+    )
 
     # Timestamps & TTL
     created_at: Mapped[datetime] = mapped_column(
@@ -546,12 +551,16 @@ class SemanticClusterMember(Base):
     )
     cluster_id: Mapped[UUID] = mapped_column(
         Uuid(as_uuid=True),
-        ForeignKey("semantic_clusters.cluster_id", name="fk_cluster_members_cluster", ondelete="CASCADE"),
+        ForeignKey(
+            "semantic_clusters.cluster_id", name="fk_cluster_members_cluster", ondelete="CASCADE"
+        ),
         nullable=False,
     )
     execution_id: Mapped[UUID] = mapped_column(
         Uuid(as_uuid=True),
-        ForeignKey("executions.execution_id", name="fk_cluster_members_execution", ondelete="CASCADE"),
+        ForeignKey(
+            "executions.execution_id", name="fk_cluster_members_execution", ondelete="CASCADE"
+        ),
         nullable=False,
     )
     incident_sys_id: Mapped[str] = mapped_column(String(32), nullable=False)

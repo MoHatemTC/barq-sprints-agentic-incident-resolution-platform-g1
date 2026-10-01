@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from uuid import uuid4
-import datetime as dt
+
 import pytest
 
 from app.workers.db import InMemoryRepo

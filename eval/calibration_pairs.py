@@ -38,7 +38,7 @@ NEGATIVE pairs  Must:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
@@ -46,8 +46,8 @@ class IncidentPair:
     label: str
     a: str
     b: str
-    expected: str          # "positive" | "negative"
-    domain: str            # grouping label (e.g. "network", "identity", "db")
+    expected: str  # "positive" | "negative"
+    domain: str  # grouping label (e.g. "network", "identity", "db")
     rationale: str
 
 
@@ -58,11 +58,9 @@ class IncidentPair:
 # ---------------------------------------------------------------------------
 
 CALIBRATION_PAIRS: list[IncidentPair] = [
-
     # ======================================================================
     # SECTION A – POSITIVE PAIRS  (must cluster – same root cause)
     # ======================================================================
-
     # -- Network / VPN -------------------------------------------------------
     IncidentPair(
         label="vpn_auth_password_reset",
@@ -143,7 +141,6 @@ CALIBRATION_PAIRS: list[IncidentPair] = [
         expected="positive",
         rationale="Same switch port flapping event viewed from two different vantage points.",
     ),
-
     # -- Identity / Active Directory -----------------------------------------
     IncidentPair(
         label="ad_lockout_stale_credentials",
@@ -201,7 +198,6 @@ CALIBRATION_PAIRS: list[IncidentPair] = [
         expected="positive",
         rationale="Same password-expiry login block – two concurrent reporters.",
     ),
-
     # -- Email / Outlook -----------------------------------------------------
     IncidentPair(
         label="outlook_disconnected_patch",
@@ -242,9 +238,10 @@ CALIBRATION_PAIRS: list[IncidentPair] = [
             "Events disappear after acceptance."
         ),
         expected="positive",
-        rationale="Same Exchange calendar sync failure – two reporters describing it from different angles.",
+        rationale=(
+            "Same Exchange calendar sync failure – two reporters describing it from different angles."
+        ),
     ),
-
     # -- Printing ------------------------------------------------------------
     IncidentPair(
         label="print_queue_stall_followme",
@@ -283,9 +280,10 @@ CALIBRATION_PAIRS: list[IncidentPair] = [
             "Hard reset and reconnection attempts failed."
         ),
         expected="positive",
-        rationale="Same printer offline after firmware update – two observations of the same failure.",
+        rationale=(
+            "Same printer offline after firmware update – two observations of the same failure."
+        ),
     ),
-
     # -- Application / Database ----------------------------------------------
     IncidentPair(
         label="db_pool_exhausted_order_service",
@@ -293,7 +291,7 @@ CALIBRATION_PAIRS: list[IncidentPair] = [
         a=(
             "Service: order-service\n"
             "Category: application\n"
-            "Summary: Order service database connection pool exhausted returning HTTP 500 under load\n"
+            "Summary: Order service DB connection pool exhausted returning HTTP 500 under load\n"
             "Description: Connection pool is full. All requests to the order service "
             "return HTTP 500. Pool size is 20 and all connections are in use. "
             "DB host: orders-db-prod."
@@ -307,7 +305,9 @@ CALIBRATION_PAIRS: list[IncidentPair] = [
             "In-flight orders may be lost."
         ),
         expected="positive",
-        rationale="Same pool exhaustion event – two reporters describing slightly different impacts.",
+        rationale=(
+            "Same pool exhaustion event – two reporters describing slightly different impacts."
+        ),
     ),
     IncidentPair(
         label="postgres_deadlock_concurrent",
@@ -331,7 +331,6 @@ CALIBRATION_PAIRS: list[IncidentPair] = [
         expected="positive",
         rationale="Same PostgreSQL deadlock incident – two different service owners reporting it.",
     ),
-
     # -- SAP / ERP -----------------------------------------------------------
     IncidentPair(
         label="sap_rfc_timeout_ecc_prod",
@@ -377,7 +376,6 @@ CALIBRATION_PAIRS: list[IncidentPair] = [
         expected="positive",
         rationale="Same SAP session-limit issue with frozen sessions – two concurrent users reporting.",
     ),
-
     # -- Hardware / Endpoint -------------------------------------------------
     IncidentPair(
         label="laptop_cpu_throttle_post_update",
@@ -417,7 +415,6 @@ CALIBRATION_PAIRS: list[IncidentPair] = [
         expected="positive",
         rationale="Same docking station / external monitor failure – two concurrent reporters.",
     ),
-
     # -- Storage / File Access -----------------------------------------------
     IncidentPair(
         label="shared_drive_missing_signin",
@@ -460,7 +457,6 @@ CALIBRATION_PAIRS: list[IncidentPair] = [
         expected="positive",
         rationale="Same OneDrive sync stall – two users experiencing the same symptom.",
     ),
-
     # -- Cloud / Kubernetes --------------------------------------------------
     IncidentPair(
         label="k8s_pod_oom_killed",
@@ -506,11 +502,9 @@ CALIBRATION_PAIRS: list[IncidentPair] = [
         expected="positive",
         rationale="Same expired certificate on the API gateway – two engineers observing downstream failures.",
     ),
-
     # ======================================================================
     # SECTION B – NEGATIVE PAIRS  (must NOT cluster – different issues)
     # ======================================================================
-
     # -- Superficially similar (hard negatives) ------------------------------
     IncidentPair(
         label="vpn_auth_vs_ad_lockout",
@@ -611,7 +605,6 @@ CALIBRATION_PAIRS: list[IncidentPair] = [
             "and a wired switch port flap have different root causes and remediation."
         ),
     ),
-
     # -- Cross-domain negatives ----------------------------------------------
     IncidentPair(
         label="vpn_vs_shared_drive",
@@ -695,10 +688,7 @@ CALIBRATION_PAIRS: list[IncidentPair] = [
     IncidentPair(
         label="outlook_vs_wifi",
         domain="cross-domain",
-        a=(
-            "Category: email\n"
-            "Summary: Outlook shows disconnected and no new mail is delivered"
-        ),
+        a=("Category: email\nSummary: Outlook shows disconnected and no new mail is delivered"),
         b=(
             "Category: network\n"
             "Summary: Corporate Wi-Fi drops repeatedly and reconnects every five minutes"
@@ -742,7 +732,6 @@ CALIBRATION_PAIRS: list[IncidentPair] = [
         expected="negative",
         rationale="Hardware thermal throttling vs. cloud sync stall – unrelated.",
     ),
-
     # -- Maximal negatives (IT vs. non-IT) -----------------------------------
     IncidentPair(
         label="elevator_vs_sap",

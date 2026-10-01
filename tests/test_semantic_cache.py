@@ -3,16 +3,18 @@
 BARQ G1 - Sprint 4 (S4.2)
 Verifies:
 1. Similarity Clustering: Detects when incoming incidents are semantically similar.
-2. Shared Solution Reuse: Full resolution pipeline runs once per cluster; followers reuse cached solution.
-3. Low-Confidence Fallback: Explicit threshold tau (0.86) enforces independent execution below threshold.
-4. Visibility & Isolation: Preserves individual incident records and prevents cross-service false clustering.
+2. Shared Solution Reuse: Full pipeline runs once per cluster; followers reuse cached solution.
+3. Low-Confidence Fallback: Explicit threshold tau enforces independent fallback.
+4. Visibility & Isolation: Preserves individual incident records and prevents cross-service joins.
 5. Concurrent Burst: A burst of concurrent similar incidents reuses a single resolution run.
 """
 
 from __future__ import annotations
 
 from types import SimpleNamespace
-from uuid import uuid4
+from typing import Any
+from uuid import UUID, uuid4
+
 import pytest
 
 from agent.semantic_cache import (
@@ -20,7 +22,7 @@ from agent.semantic_cache import (
     SemanticCache,
     cosine_similarity,
 )
-from app.models.semantic_cluster import AdmissionMode, ClusterStatus
+from app.models.semantic_cluster import AdmissionMode, AdmissionResult, ClusterStatus
 from app.workers.db import InMemoryRepo
 
 
@@ -49,6 +51,7 @@ def _process_worker_fn(
     pwd: str | None,
 ) -> None:
     import redis as rlib
+
     from agent.semantic_cache import SemanticCache
 
     rc = rlib.Redis(host=host, port=port, password=pwd)
@@ -65,7 +68,6 @@ def _process_worker_fn(
     }
     res = c.admit(p, uuid4())
     out_q.put((worker_id, res.mode.value, str(res.cluster_id)))
-
 
 
 def test_cosine_similarity_edge_cases() -> None:
@@ -383,7 +385,9 @@ def test_semantic_cache_real_fastembed_inference() -> None:
         service="corporate-vpn",
         category="network",
         short_description="VPN GlobalProtect login timeout",
-        description="Cannot authenticate with GlobalProtect corporate VPN gateway, client times out.",
+        description=(
+            "Cannot authenticate with GlobalProtect corporate VPN gateway, client times out."
+        ),
         active=True,
         state="in_progress",
         ai_human_lock=False,
@@ -526,7 +530,9 @@ def test_worker_task_follower_yields_when_leader_running() -> None:
         "service": "postgres-cluster",
         "category": "database",
         "short_description": "Postgres connection pool exhausted",
-        "description": "FATAL: remaining connection slots are reserved for non-replication superuser connections",
+        "description": (
+            "FATAL: remaining connection slots are reserved for non-replication superuser"
+        ),
     }
     adm1 = cache.admit(payload1, exec1)
     assert adm1.mode == AdmissionMode.LEADER
@@ -895,8 +901,9 @@ def test_live_multiprocess_redis_race_prevents_duplicate_leaders() -> None:
     Verifies that the Double-Search Distributed Lock pattern guarantees race immunity
     across separate operating system process heaps.
     """
-    import os
     import multiprocessing
+    import os
+
     import redis as live_redis_lib
 
     host = os.environ.get("REDIS_HOST", "localhost")
@@ -944,8 +951,3 @@ def test_live_multiprocess_redis_race_prevents_duplicate_leaders() -> None:
         r.delete(f"barq:cluster:anchor:{cid}")
         r.srem("barq:cluster:active_set", cid)
     r.delete(lock_key)
-
-
-
-
-

@@ -328,7 +328,7 @@ All 15 unit, integration, and concurrency test suites passing in `tests/test_sem
 15. `test_live_multiprocess_redis_race_prevents_duplicate_leaders`: Live multi-process OS `spawn` test executing separate Python processes against live Redis on port 6379, proving true cross-process single-leader election.
 
 ### 7.3 Standalone Acceptance Verification Runner (`eval/run_acceptance_demo.py`)
-To enable local, zero-friction verification of the entire clustering and single-flight resolution lifecycle without requiring access to the remote EC2 ServiceNow deployment, a dedicated CLI demonstration runner is provided in [`eval/run_acceptance_demo.py`](file:///d:/spritns/barq-sprints-agentic-incident-resolution-platform-g1/eval/run_acceptance_demo.py):
+To enable local, zero-friction verification of the entire clustering and single-flight resolution lifecycle without requiring access to the remote EC2 ServiceNow deployment, a dedicated CLI demonstration runner is provided in [`eval/run_acceptance_demo.py`](../eval/run_acceptance_demo.py):
 
 ```powershell
 .venv\Scripts\python.exe eval/run_acceptance_demo.py

@@ -47,7 +47,7 @@ from agent.semantic_cache import (
 from app.core.config import Settings, get_settings
 from app.core.correlation import clear_correlation_id, set_correlation_id
 from app.db.redis.keys import INCIDENT_DLQ_QUEUE
-from app.models.semantic_cluster import AdmissionMode, ClusterStatus
+from app.models.semantic_cluster import AdmissionMode, AdmissionResult, ClusterStatus
 from app.workers.celery_app import celery_app
 from app.workers.db import WorkerRepo, build_worker_repo
 from app.workers.incident_state import (

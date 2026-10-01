@@ -40,9 +40,9 @@ from __future__ import annotations
 import argparse
 import math
 import sys
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
 
 # ---------------------------------------------------------------------------
 # Path setup – ensures imports work from repo root without installing packages
@@ -60,10 +60,10 @@ if str(_EVAL_DIR) not in sys.path:
 
 from calibration_pairs import CALIBRATION_PAIRS, IncidentPair  # noqa: E402
 
-
 # ---------------------------------------------------------------------------
 # Cosine similarity  (matches the implementation in semantic_cache.py exactly)
 # ---------------------------------------------------------------------------
+
 
 def cosine_similarity(a: list[float], b: list[float]) -> float:
     """Compute cosine similarity between two dense float vectors."""
@@ -80,6 +80,7 @@ def cosine_similarity(a: list[float], b: list[float]) -> float:
 # ---------------------------------------------------------------------------
 # Embedding  (re-uses the production FastEmbedEngine)
 # ---------------------------------------------------------------------------
+
 
 def embed_texts(texts: list[str]) -> list[list[float]]:
     """Batch-embed texts using the production FastEmbedEngine.
@@ -98,11 +99,12 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
 # Result dataclass
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class PairResult:
     label: str
     domain: str
-    expected: str      # "positive" | "negative"
+    expected: str  # "positive" | "negative"
     similarity: float
     rationale: str
 
@@ -110,6 +112,7 @@ class PairResult:
 # ---------------------------------------------------------------------------
 # Statistics helpers
 # ---------------------------------------------------------------------------
+
 
 def _mean(values: Sequence[float]) -> float:
     return sum(values) / len(values) if values else 0.0
@@ -133,6 +136,7 @@ def _stats_block(label: str, sims: list[float]) -> str:
 # ---------------------------------------------------------------------------
 # Calibration helpers
 # ---------------------------------------------------------------------------
+
 
 def _embed_pairs(
     pairs: list[IncidentPair],
@@ -206,7 +210,9 @@ def _tau_sweep(
 ) -> float:
     """Print per-tau correctness sweep and return the tau with best accuracy."""
     total = len(positives) + len(negatives)
-    print(f"  {'tau':>6}  {'TP':>4}  {'TN':>4}  {'FP':>4}  {'FN':>4}  {'Acc':>7}  {'Prec':>7}  {'Rec':>7}  Note")
+    print(
+        f"  {'tau':>6}  {'TP':>4}  {'TN':>4}  {'FP':>4}  {'FN':>4}  {'Acc':>7}  {'Prec':>7}  {'Rec':>7}  Note"
+    )
     print("  " + "-" * 74)
 
     best_acc = -1.0
@@ -238,6 +244,7 @@ def _tau_sweep(
 # ---------------------------------------------------------------------------
 # Main calibration entry point
 # ---------------------------------------------------------------------------
+
 
 def run_calibration(
     pairs: list[IncidentPair],
@@ -283,8 +290,10 @@ def run_calibration(
         dim = len(sample[0])
     except Exception:
         dim = 384  # fallback known value
-    print(f"       Embedded {len({p.a for p in pairs} | {p.b for p in pairs})} "
-          f"unique texts -> {dim}-dim vectors\n")
+    print(
+        f"       Embedded {len({p.a for p in pairs} | {p.b for p in pairs})} "
+        f"unique texts -> {dim}-dim vectors\n"
+    )
 
     positives = [r for r in results if r.expected == "positive"]
     negatives = [r for r in results if r.expected == "negative"]
@@ -310,14 +319,8 @@ def run_calibration(
     print(f"\n  Separation gap (min_positive - max_negative) : {separation_gap:+.4f}")
 
     if separation_gap <= 0:
-        overlap = [
-            r.label
-            for r in positives
-            if r.similarity <= max(neg_sims)
-        ] + [
-            r.label
-            for r in negatives
-            if r.similarity >= min(pos_sims)
+        overlap = [r.label for r in positives if r.similarity <= max(neg_sims)] + [
+            r.label for r in negatives if r.similarity >= min(pos_sims)
         ]
         print(
             f"\n  WARNING: Classes overlap! Overlapping pairs: {overlap}\n"
@@ -337,8 +340,8 @@ def run_calibration(
     # Safety margin = 10% of separation gap, minimum 0.01 absolute.
     safety_margin = max(0.01, abs(separation_gap) * 0.10)
     recommended_tau = midpoint - safety_margin
-    recommended_tau = max(recommended_tau, max_neg + 0.01)   # must stay above max_neg
-    recommended_tau = min(recommended_tau, min_pos - 0.01)   # must stay below min_pos
+    recommended_tau = max(recommended_tau, max_neg + 0.01)  # must stay above max_neg
+    recommended_tau = min(recommended_tau, min_pos - 0.01)  # must stay below min_pos
     recommended_tau = round(recommended_tau, 4)
 
     print("\n" + "-" * 76)
@@ -392,12 +395,14 @@ if __name__ == "__main__":
         )
     )
     parser.add_argument(
-        "--verbose", "-v",
+        "--verbose",
+        "-v",
         action="store_true",
         help="Print rationale and visual bar chart for each pair.",
     )
     parser.add_argument(
-        "--domain", "-d",
+        "--domain",
+        "-d",
         type=str,
         default=None,
         metavar="DOMAIN",

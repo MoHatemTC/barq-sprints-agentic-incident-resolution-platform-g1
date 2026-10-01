@@ -15,7 +15,8 @@ import json
 import math
 import threading
 import time
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 from uuid import UUID, uuid4
 
 import structlog
@@ -23,8 +24,6 @@ import structlog
 from app.models.semantic_cluster import (
     AdmissionMode,
     AdmissionResult,
-    ClusterRole,
-    ClusterSolution,
     ClusterStatus,
 )
 from app.services.clustering.signature import (
@@ -111,15 +110,11 @@ class CachedClusterAnchor:
 
     @property
     def is_active(self) -> bool:
-        return (
-            not self.is_expired
-            and self.status
-            in (
-                ClusterStatus.CREATING,
-                ClusterStatus.RUNNING,
-                ClusterStatus.AWAITING_APPROVAL,
-                ClusterStatus.RESOLVED,
-            )
+        return not self.is_expired and self.status in (
+            ClusterStatus.CREATING,
+            ClusterStatus.RUNNING,
+            ClusterStatus.AWAITING_APPROVAL,
+            ClusterStatus.RESOLVED,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -164,7 +159,7 @@ class AdmissionLockTimeoutError(Exception):
 
 
 class SemanticCache:
-    """Coordinates semantic clustering, single-flight pipeline execution, and shared resolution reuse.
+    """Coordinates clustering, single-flight execution, and shared resolution reuse.
 
     Employs the Double-Search Distributed Lock Pattern across Redis and PostgreSQL to
     guarantee that concurrent Celery worker processes cannot elect duplicate leaders
@@ -198,7 +193,9 @@ class SemanticCache:
         return res.dense
 
     @contextlib.contextmanager
-    def _distributed_lock(self, service: str | None, ttl_seconds: float = 5.0, timeout: float = 3.0):
+    def _distributed_lock(
+        self, service: str | None, ttl_seconds: float = 5.0, timeout: float = 3.0
+    ):
         """Acquire a distributed Redis lock or local fallback lock with Lua token release."""
         if self.redis_client is None:
             with self._local_lock:
@@ -244,7 +241,7 @@ class SemanticCache:
                 logger.warning("redis_lock_release_failed", error=str(exc))
 
     def _get_active_anchors(self, service: str | None = None) -> list[CachedClusterAnchor]:
-        """Fetch active cluster anchors from Redis, PostgreSQL, and local memory, purging expired ones."""
+        """Fetch active cluster anchors from Redis, Postgres, and memory, purging expired."""
         active: dict[UUID, CachedClusterAnchor] = {}
 
         # 1. Fetch shared anchors from Redis across all worker processes
@@ -274,14 +271,15 @@ class SemanticCache:
             try:
                 db_active_clusters = self.repo.list_active_clusters(service=service)
                 for c in db_active_clusters:
-                    if c.cluster_id not in active and getattr(c, "anchor_vector", None):
+                    vec = getattr(c, "anchor_vector", None)
+                    if c.cluster_id not in active and vec is not None:
                         rehydrated = CachedClusterAnchor(
                             cluster_id=c.cluster_id,
                             anchor_incident_sys_id=c.anchor_incident_sys_id,
                             anchor_incident_number=c.anchor_incident_number,
                             anchor_execution_id=c.anchor_execution_id,
                             pipeline_execution_id=c.pipeline_execution_id,
-                            vector=c.anchor_vector,
+                            vector=vec,
                             service=c.service,
                             category=c.category,
                             status=ClusterStatus(c.status),
@@ -295,7 +293,9 @@ class SemanticCache:
                         if self.redis_client is not None:
                             try:
                                 cid_str = str(c.cluster_id)
-                                remaining_ttl = max(10, int((c.expires_at - _utcnow()).total_seconds()))
+                                remaining_ttl = max(
+                                    10, int((c.expires_at - _utcnow()).total_seconds())
+                                )
                                 self.redis_client.setex(
                                     f"{REDIS_ANCHOR_PREFIX}{cid_str}",
                                     remaining_ttl,
@@ -458,7 +458,7 @@ class SemanticCache:
         Flow:
         1. Eligibility check (inactive, closed, locked, or empty text -> INDEPENDENT).
         2. Vector embedding via FastEmbed.
-        3. FIRST SEARCH (Uncontended): Check shared active anchors. If match >= tau, join as FOLLOWER.
+        3. FIRST SEARCH (Uncontended): Check active anchors. If match >= tau, join as FOLLOWER.
         4. CRITICAL SECTION: Acquire Redis distributed lock.
         5. DOUBLE SEARCH (Inside Lock): Re-read shared anchors to ensure another worker didn't
            just create a cluster while waiting for the lock.
@@ -491,7 +491,9 @@ class SemanticCache:
 
         # 4. FIRST SEARCH: Uncontended check across active anchors
         anchors = self._get_active_anchors(service=norm_service)
-        best_candidate, best_similarity = self._find_matching_candidate(vector, norm_service, anchors)
+        best_candidate, best_similarity = self._find_matching_candidate(
+            vector, norm_service, anchors
+        )
 
         logger.info(
             "semantic_cache_first_search",
@@ -510,7 +512,7 @@ class SemanticCache:
         # 5. CRITICAL SECTION: Acquire Distributed Admission Lock
         with self._distributed_lock(norm_service):
             # 6. DOUBLE SEARCH (Inside Lock):
-            # Re-read active anchors from shared Redis / DB to check if another worker created a cluster
+            # Re-read active anchors to check if another worker created a cluster
             anchors_in_lock = self._get_active_anchors(service=norm_service)
             second_candidate, second_similarity = self._find_matching_candidate(
                 vector, norm_service, anchors_in_lock

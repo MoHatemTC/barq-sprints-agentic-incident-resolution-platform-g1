@@ -133,6 +133,7 @@ EXPECTED_COLUMNS = {
         "status",
         "solution",
         "failure_reason",
+        "anchor_vector",
         "created_at",
         "completed_at",
         "expires_at",
@@ -179,6 +180,7 @@ NULLABLE_COLUMNS = {
         "solution",
         "failure_reason",
         "completed_at",
+        "anchor_vector",
     },
     "semantic_cluster_members": {
         "applied_at",

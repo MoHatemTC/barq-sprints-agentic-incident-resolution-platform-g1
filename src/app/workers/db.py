@@ -655,7 +655,9 @@ class PostgresRepo:
         with self._session_factory() as session:
             now = _utcnow()
             stmt = select(SemanticCluster).where(
-                SemanticCluster.status.in_(("creating", "running", "awaiting_approval", "resolved")),
+                SemanticCluster.status.in_(
+                    ("creating", "running", "awaiting_approval", "resolved")
+                ),
                 SemanticCluster.expires_at > now,
             )
             if service:
@@ -1022,7 +1024,10 @@ class InMemoryRepo:
         now = _utcnow()
         res = []
         for c in self.clusters.values():
-            if c.status in ("creating", "running", "awaiting_approval", "resolved") and c.expires_at > now:
+            if (
+                c.status in ("creating", "running", "awaiting_approval", "resolved")
+                and c.expires_at > now
+            ):
                 if service and c.service and c.service != service.strip().lower():
                     continue
                 res.append(c)
@@ -1036,7 +1041,8 @@ class InMemoryRepo:
                     cluster = self.clusters.get(cluster_id)
                     if (
                         cluster
-                        and cluster.status in ("creating", "running", "awaiting_approval", "resolved")
+                        and cluster.status
+                        in ("creating", "running", "awaiting_approval", "resolved")
                         and cluster.expires_at > now
                     ):
                         return cluster
