@@ -36,7 +36,14 @@ from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.sql import func
 
-from app.db.models import Event, Execution, Failure, RetryState
+from app.db.models import (
+    Event,
+    Execution,
+    Failure,
+    RetryState,
+    SemanticCluster,
+    SemanticClusterMember,
+)
 from app.workers.sync_engine import (
     SyncPostgreSQLSettings,
     SyncSessionFactory,
@@ -178,6 +185,63 @@ class WorkerRepo(Protocol):
     def get_event_payload(self, event_id: str) -> dict | None:
         """Rebuild the contract-v1 webhook payload from the immutable events
         row — replay re-enqueues the ORIGINAL event, not the DLQ copy."""
+        ...
+
+    def create_cluster(
+        self,
+        cluster_id: UUID,
+        anchor_incident_sys_id: str,
+        anchor_incident_number: str,
+        anchor_execution_id: UUID,
+        pipeline_execution_id: UUID,
+        similarity_threshold: float,
+        embedding_model: str,
+        *,
+        service: str | None = None,
+        category: str | None = None,
+        expires_at: dt.datetime | None = None,
+        anchor_vector: list[float] | None = None,
+    ) -> SemanticCluster:
+        """Create a semantic cluster and register its anchor member."""
+        ...
+
+    def update_cluster_status(
+        self,
+        cluster_id: UUID,
+        status: str,
+        *,
+        solution: dict[str, Any] | None = None,
+        failure_reason: str | None = None,
+    ) -> None:
+        """Update a cluster's status and optionally its solution or failure reason."""
+        ...
+
+    def add_cluster_member(
+        self,
+        cluster_id: UUID,
+        execution_id: UUID,
+        incident_sys_id: str,
+        incident_number: str,
+        similarity_score: float,
+        role: str = "follower",
+    ) -> SemanticClusterMember:
+        """Admit a member incident into an existing cluster."""
+        ...
+
+    def get_cluster(self, cluster_id: UUID) -> SemanticCluster | None:
+        """Fetch a cluster by its primary key ID."""
+        ...
+
+    def list_active_clusters(self, service: str | None = None) -> list[SemanticCluster]:
+        """Fetch all active, non-expired clusters optionally filtered by service."""
+        ...
+
+    def get_active_cluster_for_execution(self, execution_id: UUID) -> SemanticCluster | None:
+        """Fetch the active, non-expired cluster associated with an execution."""
+        ...
+
+    def mark_member_applied(self, cluster_id: UUID, execution_id: UUID) -> None:
+        """Mark when a shared solution was applied to a cluster member."""
         ...
 
 
@@ -525,6 +589,141 @@ class PostgresRepo:
             "contract_version": row.contract_version,
         }
 
+    def create_cluster(
+        self,
+        cluster_id: UUID,
+        anchor_incident_sys_id: str,
+        anchor_incident_number: str,
+        anchor_execution_id: UUID,
+        pipeline_execution_id: UUID,
+        similarity_threshold: float,
+        embedding_model: str,
+        *,
+        service: str | None = None,
+        category: str | None = None,
+        expires_at: dt.datetime | None = None,
+        anchor_vector: list[float] | None = None,
+    ) -> SemanticCluster:
+        ttl_expires = expires_at or (_utcnow() + dt.timedelta(minutes=10))
+        cluster = SemanticCluster(
+            cluster_id=cluster_id,
+            anchor_incident_sys_id=anchor_incident_sys_id,
+            anchor_incident_number=anchor_incident_number,
+            anchor_execution_id=anchor_execution_id,
+            pipeline_execution_id=pipeline_execution_id,
+            similarity_threshold=similarity_threshold,
+            embedding_model=embedding_model,
+            service=service,
+            category=category,
+            status="creating",
+            expires_at=ttl_expires,
+            anchor_vector=anchor_vector,
+        )
+        anchor_member = SemanticClusterMember(
+            cluster_id=cluster_id,
+            execution_id=anchor_execution_id,
+            incident_sys_id=anchor_incident_sys_id,
+            incident_number=anchor_incident_number,
+            similarity_score=1.0,
+            role="anchor",
+        )
+        with self._session_factory() as session, session.begin():
+            session.add(cluster)
+            session.add(anchor_member)
+            session.flush()
+            return cluster
+
+    def update_cluster_status(
+        self,
+        cluster_id: UUID,
+        status: str,
+        *,
+        solution: dict[str, Any] | None = None,
+        failure_reason: str | None = None,
+    ) -> None:
+        values: dict[str, Any] = {"status": status}
+        if status in ("resolved", "failed"):
+            values["completed_at"] = _utcnow()
+        if solution is not None:
+            values["solution"] = solution
+        if failure_reason is not None:
+            values["failure_reason"] = failure_reason
+        with self._session_factory() as session, session.begin():
+            session.execute(
+                update(SemanticCluster)
+                .where(SemanticCluster.cluster_id == cluster_id)
+                .values(**values)
+            )
+
+    def add_cluster_member(
+        self,
+        cluster_id: UUID,
+        execution_id: UUID,
+        incident_sys_id: str,
+        incident_number: str,
+        similarity_score: float,
+        role: str = "follower",
+    ) -> SemanticClusterMember:
+        member = SemanticClusterMember(
+            cluster_id=cluster_id,
+            execution_id=execution_id,
+            incident_sys_id=incident_sys_id,
+            incident_number=incident_number,
+            similarity_score=similarity_score,
+            role=role,
+        )
+        with self._session_factory() as session, session.begin():
+            session.add(member)
+            session.flush()
+            return member
+
+    def get_cluster(self, cluster_id: UUID) -> SemanticCluster | None:
+        with self._session_factory() as session:
+            stmt = select(SemanticCluster).where(SemanticCluster.cluster_id == cluster_id)
+            return session.scalar(stmt)
+
+    def list_active_clusters(self, service: str | None = None) -> list[SemanticCluster]:
+        with self._session_factory() as session:
+            now = _utcnow()
+            stmt = select(SemanticCluster).where(
+                SemanticCluster.status.in_(
+                    ("creating", "running", "awaiting_approval", "resolved")
+                ),
+                SemanticCluster.expires_at > now,
+            )
+            if service:
+                stmt = stmt.where(SemanticCluster.service == service.strip().lower())
+            return list(session.scalars(stmt).all())
+
+    def get_active_cluster_for_execution(self, execution_id: UUID) -> SemanticCluster | None:
+        with self._session_factory() as session:
+            stmt = (
+                select(SemanticCluster)
+                .join(
+                    SemanticClusterMember,
+                    SemanticCluster.cluster_id == SemanticClusterMember.cluster_id,
+                )
+                .where(
+                    SemanticClusterMember.execution_id == execution_id,
+                    SemanticCluster.status.in_(
+                        ("creating", "running", "awaiting_approval", "resolved")
+                    ),
+                    SemanticCluster.expires_at > _utcnow(),
+                )
+            )
+            return session.scalar(stmt)
+
+    def mark_member_applied(self, cluster_id: UUID, execution_id: UUID) -> None:
+        with self._session_factory() as session, session.begin():
+            session.execute(
+                update(SemanticClusterMember)
+                .where(
+                    SemanticClusterMember.cluster_id == cluster_id,
+                    SemanticClusterMember.execution_id == execution_id,
+                )
+                .values(applied_at=_utcnow())
+            )
+
 
 class InMemoryRepo:
     """Unit-test stand-in mirroring the database CHECK constraints."""
@@ -535,6 +734,8 @@ class InMemoryRepo:
         self.failures: list[dict] = []
         self.event_index: dict[str, UUID] = {}
         self.event_payloads: dict[str, dict] = {}
+        self.clusters: dict[UUID, SemanticCluster] = {}
+        self.cluster_members: dict[UUID, list[SemanticClusterMember]] = {}
 
     # -- test seeding -------------------------------------------------------
     def seed_execution(
@@ -762,6 +963,139 @@ class InMemoryRepo:
 
     def get_event_payload(self, event_id: str) -> dict | None:
         return self.event_payloads.get(event_id)
+
+    def create_cluster(
+        self,
+        cluster_id: UUID,
+        anchor_incident_sys_id: str,
+        anchor_incident_number: str,
+        anchor_execution_id: UUID,
+        pipeline_execution_id: UUID,
+        similarity_threshold: float,
+        embedding_model: str,
+        *,
+        service: str | None = None,
+        category: str | None = None,
+        expires_at: dt.datetime | None = None,
+        anchor_vector: list[float] | None = None,
+    ) -> SemanticCluster:
+        ttl_expires = expires_at or (_utcnow() + dt.timedelta(minutes=10))
+        cluster = SemanticCluster(
+            cluster_id=cluster_id,
+            anchor_incident_sys_id=anchor_incident_sys_id,
+            anchor_incident_number=anchor_incident_number,
+            anchor_execution_id=anchor_execution_id,
+            pipeline_execution_id=pipeline_execution_id,
+            similarity_threshold=similarity_threshold,
+            embedding_model=embedding_model,
+            service=service,
+            category=category,
+            status="creating",
+            expires_at=ttl_expires,
+            anchor_vector=anchor_vector,
+            created_at=_utcnow(),
+        )
+        anchor_member = SemanticClusterMember(
+            id=uuid4(),
+            cluster_id=cluster_id,
+            execution_id=anchor_execution_id,
+            incident_sys_id=anchor_incident_sys_id,
+            incident_number=anchor_incident_number,
+            similarity_score=1.0,
+            role="anchor",
+            joined_at=_utcnow(),
+        )
+        self.clusters[cluster_id] = cluster
+        self.cluster_members[cluster_id] = [anchor_member]
+        return cluster
+
+    def update_cluster_status(
+        self,
+        cluster_id: UUID,
+        status: str,
+        *,
+        solution: dict[str, Any] | None = None,
+        failure_reason: str | None = None,
+    ) -> None:
+        cluster = self.clusters.get(cluster_id)
+        if cluster is not None:
+            cluster.status = status
+            if status in ("resolved", "failed"):
+                cluster.completed_at = _utcnow()
+            if solution is not None:
+                cluster.solution = solution
+            if failure_reason is not None:
+                cluster.failure_reason = failure_reason
+
+    def add_cluster_member(
+        self,
+        cluster_id: UUID,
+        execution_id: UUID,
+        incident_sys_id: str,
+        incident_number: str,
+        similarity_score: float,
+        role: str = "follower",
+    ) -> SemanticClusterMember:
+        if role not in ("anchor", "follower"):
+            raise ValueError(f"Invalid role: {role}")
+
+        for members in self.cluster_members.values():
+            for m in members:
+                if m.incident_sys_id == incident_sys_id:
+                    raise ValueError(f"Incident {incident_sys_id} is already in a cluster")
+                if m.execution_id == execution_id:
+                    raise ValueError(f"Execution {execution_id} is already in a cluster")
+
+        member = SemanticClusterMember(
+            id=uuid4(),
+            cluster_id=cluster_id,
+            execution_id=execution_id,
+            incident_sys_id=incident_sys_id,
+            incident_number=incident_number,
+            similarity_score=similarity_score,
+            role=role,
+            joined_at=_utcnow(),
+        )
+        self.cluster_members.setdefault(cluster_id, []).append(member)
+        return member
+
+    def get_cluster(self, cluster_id: UUID) -> SemanticCluster | None:
+        return self.clusters.get(cluster_id)
+
+    def list_active_clusters(self, service: str | None = None) -> list[SemanticCluster]:
+        now = _utcnow()
+        res = []
+        for c in self.clusters.values():
+            if (
+                c.status in ("creating", "running", "awaiting_approval", "resolved")
+                and c.expires_at > now
+            ):
+                if service and c.service and c.service != service.strip().lower():
+                    continue
+                res.append(c)
+        return res
+
+    def get_active_cluster_for_execution(self, execution_id: UUID) -> SemanticCluster | None:
+        now = _utcnow()
+        for cluster_id, members in self.cluster_members.items():
+            for m in members:
+                if m.execution_id == execution_id:
+                    cluster = self.clusters.get(cluster_id)
+                    if (
+                        cluster
+                        and cluster.status
+                        in ("creating", "running", "awaiting_approval", "resolved")
+                        and cluster.expires_at > now
+                    ):
+                        return cluster
+        return None
+
+    def mark_member_applied(self, cluster_id: UUID, execution_id: UUID) -> None:
+        members = self.cluster_members.get(cluster_id, [])
+        for m in members:
+            if m.execution_id == execution_id:
+                m.applied_at = _utcnow()
+                break
 
 
 def build_worker_repo(settings: SyncPostgreSQLSettings | object) -> WorkerRepo:
