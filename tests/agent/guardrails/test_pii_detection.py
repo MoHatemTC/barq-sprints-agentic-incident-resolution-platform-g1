@@ -9,6 +9,7 @@ from dataclasses import FrozenInstanceError
 from typing import Any
 
 import pytest
+from openai.lib._pydantic import to_strict_json_schema
 from pydantic import ValidationError
 
 from agent.guardrails.pii_detection import (
@@ -63,6 +64,30 @@ def _validated(text: PIIText, *findings: PIIFinding) -> tuple[PIIFinding, ...]:
 
 
 class TestSchemas:
+    def test_provider_schema_is_flat_and_leaves_value_constraints_local(self) -> None:
+        schemas = (
+            PIIDetectionOutput.model_json_schema(),
+            to_strict_json_schema(PIIDetectionOutput),
+        )
+
+        for schema in schemas:
+            serialized = json.dumps(schema)
+            for unsupported in ("$defs", "$ref", "exclusiveMinimum", "minimum", "maxItems"):
+                assert f'"{unsupported}"' not in serialized
+
+            findings = schema["properties"]["findings"]
+            assert findings["type"] == "array"
+            item = findings["items"]
+            assert item["type"] == "object"
+            assert item["required"] == ["field", "start", "end", "category"]
+            assert set(item["properties"]) == {"field", "start", "end", "category"}
+            assert item["properties"]["start"]["type"] == "integer"
+            assert item["properties"]["end"]["type"] == "integer"
+            assert item["properties"]["field"]["enum"] == [field.value for field in PIIField]
+            assert item["properties"]["category"]["enum"] == [
+                category.value for category in PIICategory
+            ]
+
     def test_empty_findings_are_valid_and_findings_are_required(self) -> None:
         assert PIIDetectionOutput(findings=[]).findings == []
         with pytest.raises(ValidationError):
@@ -199,6 +224,24 @@ class TestFindingValidation:
                     field=PIIField.DESCRIPTION,
                     start=True,
                     end=1,
+                    category=PIICategory.PERSON_NAME,
+                ),
+                "strict integers",
+            ),
+            (
+                PIIFinding.model_construct(
+                    field=PIIField.DESCRIPTION,
+                    start=0.0,
+                    end=1,
+                    category=PIICategory.PERSON_NAME,
+                ),
+                "strict integers",
+            ),
+            (
+                PIIFinding.model_construct(
+                    field=PIIField.DESCRIPTION,
+                    start=0,
+                    end="1",
                     category=PIICategory.PERSON_NAME,
                 ),
                 "strict integers",

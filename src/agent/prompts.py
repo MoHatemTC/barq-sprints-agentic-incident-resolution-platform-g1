@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import json
 from enum import StrEnum
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator, model_validator
+from pydantic.json_schema import DEFAULT_REF_TEMPLATE, GenerateJsonSchema, JsonSchemaMode
 
 from agent.state import (
     EvidenceItem,
@@ -22,6 +23,8 @@ from agent.state import (
 
 PROMPT_VERSION = "v1"
 MAX_PII_FINDINGS = 100
+
+_PII_PROVIDER_LOCAL_CONSTRAINTS = frozenset({"exclusiveMinimum", "maxItems", "minimum"})
 
 ClassificationLabel = Literal["hardware", "software", "network", "access", "security", "other"]
 
@@ -164,6 +167,62 @@ class PIIDetectionOutput(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     findings: list[PIIFinding] = Field(max_length=MAX_PII_FINDINGS)
+
+    @classmethod
+    def model_json_schema(
+        cls,
+        by_alias: bool = True,
+        ref_template: str = DEFAULT_REF_TEMPLATE,
+        schema_generator: type[GenerateJsonSchema] = GenerateJsonSchema,
+        mode: JsonSchemaMode = "validation",
+        *,
+        union_format: Literal["any_of", "primitive_type_array"] = "any_of",
+    ) -> dict[str, Any]:
+        """Return the minimal schema sent through LiteLLM to Gemini.
+
+        Pydantic still enforces every declared constraint when parsing the response,
+        and the detector repeats the security-critical checks before masking. The
+        provider only needs the stable output shape, primitive types, and enums.
+        """
+
+        schema = super().model_json_schema(
+            by_alias=by_alias,
+            ref_template=ref_template,
+            schema_generator=schema_generator,
+            mode=mode,
+            union_format=union_format,
+        )
+        definitions = schema.get("$defs")
+        if not isinstance(definitions, dict):
+            definitions = {}
+
+        def simplify(value: Any) -> Any:
+            if isinstance(value, list):
+                return [simplify(item) for item in value]
+            if not isinstance(value, dict):
+                return value
+
+            reference = value.get("$ref")
+            if reference is not None:
+                prefix = "#/$defs/"
+                if not isinstance(reference, str) or not reference.startswith(prefix):
+                    raise ValueError("PII provider schema contains an unsupported reference")
+                definition = definitions.get(reference.removeprefix(prefix))
+                if not isinstance(definition, dict):
+                    raise ValueError("PII provider schema contains an unresolved reference")
+                siblings = {key: item for key, item in value.items() if key != "$ref"}
+                return simplify({**definition, **siblings})
+
+            return {
+                key: simplify(item)
+                for key, item in value.items()
+                if key != "$defs" and key not in _PII_PROVIDER_LOCAL_CONSTRAINTS
+            }
+
+        provider_schema = simplify(schema)
+        if not isinstance(provider_schema, dict):
+            raise TypeError("PII provider schema must be an object")
+        return provider_schema
 
 
 PII_DETECTION_SYSTEM = """You are a residual-PII detector for the BARQ Incident Resolution Platform.
