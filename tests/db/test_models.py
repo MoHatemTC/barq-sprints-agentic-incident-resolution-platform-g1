@@ -27,6 +27,8 @@ from app.db.models import (
     Failure,
     IdempotencyKey,
     RetryState,
+    SemanticCluster,
+    SemanticClusterMember,
 )
 from app.models.execution_log import ExecutionLogEntry
 from app.models.knowledge import WorkflowState as KnowledgeWorkflowState
@@ -40,6 +42,8 @@ EXPECTED_TABLES = {
     "approvals",
     "failures",
     "retry_state",
+    "semantic_clusters",
+    "semantic_cluster_members",
 }
 
 EXPECTED_COLUMNS = {
@@ -116,6 +120,34 @@ EXPECTED_COLUMNS = {
         "created_at",
         "updated_at",
     },
+    "semantic_clusters": {
+        "cluster_id",
+        "anchor_incident_sys_id",
+        "anchor_incident_number",
+        "anchor_execution_id",
+        "pipeline_execution_id",
+        "service",
+        "category",
+        "similarity_threshold",
+        "embedding_model",
+        "status",
+        "solution",
+        "failure_reason",
+        "created_at",
+        "completed_at",
+        "expires_at",
+    },
+    "semantic_cluster_members": {
+        "id",
+        "cluster_id",
+        "execution_id",
+        "incident_sys_id",
+        "incident_number",
+        "similarity_score",
+        "role",
+        "joined_at",
+        "applied_at",
+    },
 }
 
 NULLABLE_COLUMNS = {
@@ -140,6 +172,16 @@ NULLABLE_COLUMNS = {
         "last_attempt_at",
         "last_failure_id",
         "backoff_seconds",
+    },
+    "semantic_clusters": {
+        "service",
+        "category",
+        "solution",
+        "failure_reason",
+        "completed_at",
+    },
+    "semantic_cluster_members": {
+        "applied_at",
     },
 }
 
@@ -221,6 +263,12 @@ def test_meaningful_column_types_and_lengths() -> None:
         RetryState.__table__.c.retry_state_id,
         RetryState.__table__.c.execution_id,
         RetryState.__table__.c.last_failure_id,
+        SemanticCluster.__table__.c.cluster_id,
+        SemanticCluster.__table__.c.anchor_execution_id,
+        SemanticCluster.__table__.c.pipeline_execution_id,
+        SemanticClusterMember.__table__.c.id,
+        SemanticClusterMember.__table__.c.cluster_id,
+        SemanticClusterMember.__table__.c.execution_id,
     ]
     assert all(isinstance(column.type, Uuid) for column in uuid_columns)
 
@@ -230,6 +278,7 @@ def test_meaningful_column_types_and_lengths() -> None:
         ExecutionNodeState.__table__.c.state_snapshot,
         Approval.__table__.c.evidence,
         Failure.__table__.c.details,
+        SemanticCluster.__table__.c.solution,
     ]
     assert all(isinstance(column.type, JSONB) for column in jsonb_columns)
 
@@ -268,6 +317,11 @@ def test_server_defaults_are_complete_and_explicit() -> None:
         ("retry_state", "attempt_count"): "0",
         ("retry_state", "created_at"): "now()",
         ("retry_state", "updated_at"): "now()",
+        ("semantic_clusters", "cluster_id"): "gen_random_uuid()",
+        ("semantic_clusters", "status"): "'creating'",
+        ("semantic_clusters", "created_at"): "now()",
+        ("semantic_cluster_members", "id"): "gen_random_uuid()",
+        ("semantic_cluster_members", "joined_at"): "now()",
     }
     actual_defaults = {
         (table.name, column.name): _server_default(column)
@@ -285,6 +339,8 @@ def test_server_defaults_are_complete_and_explicit() -> None:
         Approval.__table__.c.id,
         Failure.__table__.c.failure_id,
         RetryState.__table__.c.retry_state_id,
+        SemanticCluster.__table__.c.cluster_id,
+        SemanticClusterMember.__table__.c.id,
     ]
     assert all(_server_default(column) == "gen_random_uuid()" for column in uuid_primary_keys)
 
@@ -332,6 +388,11 @@ def test_all_timestamp_columns_are_timezone_aware() -> None:
         ("retry_state", "last_attempt_at"),
         ("retry_state", "created_at"),
         ("retry_state", "updated_at"),
+        ("semantic_clusters", "created_at"),
+        ("semantic_clusters", "completed_at"),
+        ("semantic_clusters", "expires_at"),
+        ("semantic_cluster_members", "joined_at"),
+        ("semantic_cluster_members", "applied_at"),
     }
     timestamps = {
         (table.name, column.name): column
@@ -390,11 +451,20 @@ def test_expected_relationships_are_configured() -> None:
     expected_relationships = {
         Event: {"idempotency_key", "execution"},
         IdempotencyKey: {"event"},
-        Execution: {"event", "node_states", "approvals", "failures", "retry_state"},
+        Execution: {
+            "event",
+            "node_states",
+            "approvals",
+            "failures",
+            "retry_state",
+            "cluster_memberships",
+        },
         ExecutionNodeState: {"execution", "approvals", "failures"},
         Approval: {"execution", "node_state"},
         Failure: {"execution", "node_state", "retry_states"},
         RetryState: {"execution", "last_failure"},
+        SemanticCluster: {"members"},
+        SemanticClusterMember: {"cluster", "execution"},
     }
 
     for model, relationship_names in expected_relationships.items():
@@ -529,6 +599,8 @@ def test_ticket_compatibility_module_reexports_canonical_models() -> None:
     assert compatibility_models.Failure is Failure
     assert compatibility_models.IdempotencyKey is IdempotencyKey
     assert compatibility_models.RetryState is RetryState
+    assert compatibility_models.SemanticCluster is SemanticCluster
+    assert compatibility_models.SemanticClusterMember is SemanticClusterMember
 
 
 def test_existing_pydantic_models_remain_non_orm_models() -> None:

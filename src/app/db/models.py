@@ -10,6 +10,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     DateTime,
+    Float,
     ForeignKey,
     ForeignKeyConstraint,
     Index,
@@ -187,6 +188,9 @@ class Execution(Base):
     failures: Mapped[list[Failure]] = relationship(back_populates="execution", passive_deletes=True)
     retry_state: Mapped[RetryState | None] = relationship(
         back_populates="execution", uselist=False, passive_deletes=True
+    )
+    cluster_memberships: Mapped[list[SemanticClusterMember]] = relationship(
+        back_populates="execution", passive_deletes=True
     )
 
 
@@ -471,6 +475,97 @@ class RetryState(Base):
     )
 
 
+class SemanticCluster(Base):
+    """Authoritative durable cluster grouping semantically similar incidents for single-flight resolution."""
+
+    __tablename__ = "semantic_clusters"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('creating', 'running', 'awaiting_approval', 'resolved', 'failed', 'expired')",
+            name="ck_semantic_clusters_status",
+        ),
+        Index("ix_semantic_clusters_status_expires", "status", "expires_at"),
+        Index("ix_semantic_clusters_service", "service"),
+    )
+
+    cluster_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    anchor_incident_sys_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    anchor_incident_number: Mapped[str] = mapped_column(String(32), nullable=False)
+    anchor_execution_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("executions.execution_id", name="fk_semantic_clusters_execution", ondelete="CASCADE"),
+        nullable=False,
+    )
+    pipeline_execution_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        nullable=False,
+        comment="The execution ID of the shared LangGraph pipeline run (the leader's execution).",
+    )
+    service: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    category: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    similarity_threshold: Mapped[float] = mapped_column(Float, nullable=False)
+    embedding_model: Mapped[str] = mapped_column(String(100), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, server_default=text("'creating'")
+    )
+
+    # Solution payload when resolved
+    solution: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
+    failure_reason: Mapped[str | None] = mapped_column(Text)
+
+    # Timestamps & TTL
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    # Relationships
+    members: Mapped[list[SemanticClusterMember]] = relationship(
+        back_populates="cluster", passive_deletes=True
+    )
+
+
+class SemanticClusterMember(Base):
+    """Membership record tracking an incident associated with a semantic cluster."""
+
+    __tablename__ = "semantic_cluster_members"
+    __table_args__ = (
+        UniqueConstraint("cluster_id", "execution_id", name="uq_cluster_member_cluster_execution"),
+        UniqueConstraint("execution_id", name="uq_cluster_member_execution_unique"),
+        UniqueConstraint("incident_sys_id", name="uq_cluster_member_incident_unique"),
+        CheckConstraint("role IN ('anchor', 'follower')", name="ck_cluster_member_role"),
+        Index("ix_cluster_members_incident_sys_id", "incident_sys_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    cluster_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("semantic_clusters.cluster_id", name="fk_cluster_members_cluster", ondelete="CASCADE"),
+        nullable=False,
+    )
+    execution_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("executions.execution_id", name="fk_cluster_members_execution", ondelete="CASCADE"),
+        nullable=False,
+    )
+    incident_sys_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    incident_number: Mapped[str] = mapped_column(String(32), nullable=False)
+    similarity_score: Mapped[float] = mapped_column(Float, nullable=False)
+    role: Mapped[str] = mapped_column(String(16), nullable=False)
+    joined_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    applied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    cluster: Mapped[SemanticCluster] = relationship(back_populates="members")
+    execution: Mapped[Execution] = relationship(back_populates="cluster_memberships")
+
+
 __all__ = [
     "Approval",
     "Event",
@@ -479,4 +574,6 @@ __all__ = [
     "Failure",
     "IdempotencyKey",
     "RetryState",
+    "SemanticCluster",
+    "SemanticClusterMember",
 ]
