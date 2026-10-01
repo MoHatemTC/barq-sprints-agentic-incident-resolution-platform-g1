@@ -1,14 +1,14 @@
 {
-  "recorded_at": "2026-10-01T05:02:11.352214+00:00",
+  "recorded_at": "2026-10-01T17:05:56.735095+00:00",
   "cases": [
     {
-      "execution_id": "22a00fb2-1301-42c4-bf78-b4bdd2fc8692",
-      "correlation_id": "pr191-5a70ffd7-8078-4592-9a0d-c42302677e18",
-      "derived_trace_id": "3c6fe51a7d2032315a1e7b5b7f77815b",
+      "execution_id": "a4f49eb4-4961-4890-9690-bd06ba5148ce",
+      "correlation_id": "pr191-5177ca98-d865-4b99-a964-ebc8654aac79",
+      "derived_trace_id": "0a3cced9971e254062bb4063e3fcfa4e",
       "trace_ids": [
-        "3c6fe51a7d2032315a1e7b5b7f77815b"
+        "0a3cced9971e254062bb4063e3fcfa4e"
       ],
-      "observation_count": 32,
+      "observation_count": 35,
       "span_names": [
         "agent.critic",
         "agent.diagnostic",
@@ -44,11 +44,11 @@
       "continuous": true
     },
     {
-      "execution_id": "9f36a4b9-a6b9-4a61-b8be-9df086aec349",
-      "correlation_id": "pr191-104f94f8-0a7b-4b71-9b33-36d9fcd8e4b8",
-      "derived_trace_id": "8564d6862e94debf918ce1484ac4abb4",
+      "execution_id": "01145681-677f-4a2c-bf9a-e8991ae68baf",
+      "correlation_id": "pr191-b38d9834-526e-46af-8108-0cb1d9c602d6",
+      "derived_trace_id": "fadb3faec8408deadf147497301db4e9",
       "trace_ids": [
-        "8564d6862e94debf918ce1484ac4abb4"
+        "fadb3faec8408deadf147497301db4e9"
       ],
       "observation_count": 17,
       "span_names": [

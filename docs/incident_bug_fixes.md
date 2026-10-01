@@ -26,7 +26,7 @@ the operator's structured decision, not the brief, drives resumption.
 
 ## Verification
 
-Local gates: Ruff lint/format and mypy passed. The unit run passed 1,443 tests;
+Local gates: Ruff lint/format and mypy passed. The unit run passed 1,478 tests;
 its 41 database-dependent cases were then run separately and all passed. All
 22 integration tests and 62 real-PDF/manual parser tests passed. OpenAPI matches
 the application. No test or CI gate was disabled.
@@ -59,9 +59,11 @@ the other refuses an empty pre-retrieval approval, then rejects the same paused
 execution. ServiceNow reaches `complete` and `failed` respectively, PostgreSQL
 agrees, exactly one approval row exists per execution and duplicate decisions
 return 409. `pr191_trace_continuity.json` independently reads Langfuse and
-records observations under each original trace ID,
-including worker and resumed ServiceNow write spans. No UI screenshot or EC2
-verification is claimed by these artifacts.
+records 35 and 17 observations under each original trace ID,
+including worker and resumed ServiceNow write spans. The refreshed runs include the merged semantic-cache code with its default
+enabled switch; both fixtures were classified ineligible for clustering and
+followed the graph. They do not prove cache-hit or follower behavior. No UI
+screenshot or EC2 verification is claimed by these artifacts.
 
 Retrieval quality and limitations are documented separately in
 `retrieval_query_rewrite_and_reranking.md`, with original and synthetic-noise

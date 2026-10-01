@@ -40,7 +40,9 @@ necessary. A successful focused query does **not** append the noisy source again
 The source incident remains in the workflow audit.
 
 Rewriting has a dedicated five-second transport timeout and zero SDK retries.
-Invalid/blank output, timeouts and other failures use the original query. Trace
+Invalid/blank output, timeouts and other failures use the original query. The final
+focused query plus complete anchors is capped at 600 characters; if all anchors
+cannot fit, the original query is retained without cutting a negation or literal. Trace
 metadata records status and exception type without provider exception text.
 Existing redaction is used; this does not implement Ahmed's second PII layer.
 The feature remains opt-in because it adds model latency and the demonstrated
@@ -158,9 +160,9 @@ multi-issue labels support a benefit. Hybrid+MMR is a promising lower-cost candi
 not a declared universal winner. Relevance reranking and diversity selection solve
 different problems, so a larger relevance model is not automatically necessary.
 
-The live reproducer now enables MMR. Its approved PDI incident `INC0010039` records
+The live reproducer now enables MMR. Its approved PDI incident `INC0010041` records
 `mmr_applied=true`, lambda 0.8 in PostgreSQL and completes via stored-draft approval.
-The separate high-risk incident `INC0010040` never reaches retrieval; its empty
+The separate high-risk incident `INC0010042` never reaches retrieval; its empty
 approval returns 409 and rejection closes it as failed. Both retain single-trace
 Langfuse evidence through resumed ServiceNow writes. These artifacts prove operation,
 not improved production resolution accuracy.
