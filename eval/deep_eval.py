@@ -58,7 +58,6 @@ from deepeval.models import DeepEvalBaseLLM  # noqa: E402
 from deepeval.models.llms.utils import trim_and_load_json  # noqa: E402
 from deepeval.test_case import LLMTestCase  # noqa: E402
 from deepeval.test_case import SingleTurnParams as P  # noqa: E402
-
 from scripts.smoke_eval_retrieval import search  # noqa: E402
 
 GROUNDING_SYSTEM_PROMPT = """\
