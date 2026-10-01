@@ -498,6 +498,10 @@ def test_worker_task_leader_publishes_and_follower_reuses() -> None:
     assert res2["cluster_id"] == str(leader_cluster.cluster_id)
     assert res2["result"] == leader_cluster.solution
     assert repo.get_status(exec2) == "succeeded"
+    follower_member = next(
+        m for m in repo.cluster_members[leader_cluster.cluster_id] if m.execution_id == exec2
+    )
+    assert follower_member.applied_at is not None
 
 
 def test_worker_task_follower_yields_when_leader_running() -> None:

@@ -274,6 +274,8 @@ def _run_incident(
             cluster_status = cache.get_cluster_status(cluster_id)
             if cluster_status == ClusterStatus.RESOLVED:
                 solution = cache.get_cluster_solution(cluster_id) or {}
+                if repo is not None:
+                    repo.mark_member_applied(cluster_id, execution_uuid)
                 repo.mark_succeeded(execution_uuid, **_execution_summary(solution))
                 logger.info(
                     "incident_follower_resolved_from_cluster",
