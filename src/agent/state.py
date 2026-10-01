@@ -54,12 +54,13 @@ class EventPayload(_Section):
     authenticated PATCH at a different table.
     """
 
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="ignore", populate_by_name=True)
 
     event_id: str
     sys_id: str = Field(..., pattern=r"^[0-9a-fA-F]{32}$")
     number: str = Field(..., pattern=r"^INC\d{7,}$", max_length=32)
     event_type: Literal["incident.created", "incident.updated"] = "incident.created"
+    prefetched_incident: dict[str, Any] | None = Field(None, alias="_prefetched_incident")
 
 
 class IncidentSnapshot(_Section):
