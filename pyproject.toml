@@ -84,6 +84,7 @@ select = [
     "B",
 ]
 ignore = []
+per-file-ignores = { "eval/*" = ["E501"] }
 
 [tool.ruff.format]
 quote-style = "double"
