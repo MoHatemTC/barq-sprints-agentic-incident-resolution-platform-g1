@@ -26,7 +26,7 @@ the operator's structured decision, not the brief, drives resumption.
 
 ## Verification
 
-Local gates: Ruff lint/format and mypy passed. The unit run passed 1,478 tests;
+Local gates: Ruff lint/format and mypy passed. The final locked unit run passed 1,479 tests;
 its 41 database-dependent cases were then run separately and all passed. All
 22 integration tests and 62 real-PDF/manual parser tests passed. OpenAPI matches
 the application. No test or CI gate was disabled.
@@ -59,7 +59,7 @@ the other refuses an empty pre-retrieval approval, then rejects the same paused
 execution. ServiceNow reaches `complete` and `failed` respectively, PostgreSQL
 agrees, exactly one approval row exists per execution and duplicate decisions
 return 409. `pr191_trace_continuity.json` independently reads Langfuse and
-records 35 and 17 observations under each original trace ID,
+records 32 and 17 observations under each original trace ID,
 including worker and resumed ServiceNow write spans. The refreshed runs include the merged semantic-cache code with its default
 enabled switch; both fixtures were classified ineligible for clustering and
 followed the graph. They do not prove cache-hit or follower behavior. No UI
@@ -72,17 +72,20 @@ before those results can be generalized to it.
 
 ## Dependency PR assessment
 
-The current GitHub mapping is #185 Langfuse 4.15.6, #186 OpenAI 3.19.2,
-#187 Ruff 0.16.9 and #188 CodeQL action 4.38.2. Their Python/integration checks
-passed; #188's CodeQL checks passed. The failed ServiceNow SDK job was inspected:
-it fails on the existing brace-expansion high-severity advisory. The compatible
-lockfile patch is already included in this PR; no threshold is weakened.
+Ali authorized reviewing and merging the dependency updates. #185 (Langfuse
+4.15.6), #186 (OpenAI 3.19.2), #187 (Ruff 0.16.9), #188 (CodeQL action 4.38.2),
+#206 (urllib3 2.8.0) and #207 (virtualenv 21.7.12) were merged separately after
+incorporating current main, passing current-head checks and receiving review.
+The earlier SDK failure was an existing brace-expansion advisory; main's
+compatible lockfile repair cleared it without weakening the audit threshold.
+This branch now incorporates those merges and the merged semantic-cache work.
 
-The three Python patches were also exercised together against the changed unit
-suite in a temporary uv environment. They were not folded into this PR's lockfile
-or merged. The bot branches need to incorporate the main lockfile repair, rerun
-all checks, and receive current-head review before merge. Source releases:
-[Langfuse](https://github.com/langfuse/langfuse-python/releases),
+All five Python upgrades were also exercised together in a temporary uv
+environment: 1,478 unit tests passed. The SDK remains pinned at 4.8.0; Node
+22.23.3 passed the frozen-key build, 28 tests and exported-record comparison.
+Source releases: [Langfuse](https://github.com/langfuse/langfuse-python/releases),
 [OpenAI](https://github.com/openai/openai-python/releases/tag/v3.19.2),
 [Ruff](https://github.com/astral-sh/ruff/releases/tag/0.16.9),
-[CodeQL action](https://github.com/github/codeql-action/releases/tag/v4.38.2).
+[CodeQL action](https://github.com/github/codeql-action/releases/tag/v4.38.2),
+[urllib3](https://github.com/urllib3/urllib3/releases/tag/2.8.0),
+[virtualenv](https://github.com/pypa/virtualenv/releases/tag/21.7.12).
