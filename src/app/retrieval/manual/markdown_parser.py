@@ -366,14 +366,60 @@ def parse_markdown_manual(
     # ---- Pass 2: build ManualSection objects ------------------------------
     sections: list[ManualSection] = []
     appendix_e_body: str | None = None
+    front_group: list[_RawParsedSection] = []
+
+    def _flush_front_group() -> None:
+        """Emit consecutive front-matter sections (Document control, Version
+        history, Ownership and review) as ONE retrievable pseudo-section.
+
+        Dropping them left cover-page metadata — classification, owner,
+        edition history — permanently unsearchable, and the Stage A eval
+        references this block as "Document control".
+        """
+        parts = []
+        for raw in front_group:
+            raw_body = "\n".join(raw.body_lines).strip()
+            if raw_body:
+                parts.append(f"{raw.title}\n\n{raw_body}")
+        combined = "\n\n".join(parts)
+        if not combined:
+            return
+        table_count = sum(
+            len(re.findall(r"<table>", "\n".join(raw.body_lines))) for raw in front_group
+        )
+        if table_count:
+            report.tables_converted += table_count
+        blocks = _parse_blocks_from_body(combined)
+        if not blocks:
+            return
+        try:
+            sections.append(
+                ManualSection(
+                    section_id=ManualSection.build_section_id("Document control"),
+                    section_number="Document control",
+                    title="Document control",
+                    blocks=blocks,
+                    content_type=ManualSectionType.TABLE
+                    if any(raw.has_tables for raw in front_group)
+                    else ManualSectionType.PROSE,
+                    pages=tuple(sorted({p for raw in front_group for p in raw.pages})),
+                )
+            )
+        except Exception as exc:
+            report.warnings.append(f"front matter: validation failed: {exc}")
 
     for raw in raw_sections:
         body = "\n".join(raw.body_lines).strip()
 
-        # Skip front-matter sections (document control, version history).
+        # Collect front-matter sections (document control, version history);
+        # flush them as one pseudo-section before the first numbered section.
         if raw.section_number.startswith("front-"):
             report.front_matter_sections += 1
+            front_group.append(raw)
             continue
+        if front_group:
+            _flush_front_group()
+            front_group = []
 
         # Capture Appendix E body BEFORE block parsing — relationship
         # extraction needs the raw HTML table structure.
@@ -417,6 +463,9 @@ def parse_markdown_manual(
             report.warnings.append(
                 f"section {raw.section_number} ({raw.title!r}): validation failed: {exc}"
             )
+
+    if front_group:
+        _flush_front_group()
 
     report.total_sections = len(sections)
 
