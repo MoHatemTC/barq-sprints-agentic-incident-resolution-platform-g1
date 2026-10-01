@@ -160,10 +160,11 @@ multi-issue labels support a benefit. Hybrid+MMR is a promising lower-cost candi
 not a declared universal winner. Relevance reranking and diversity selection solve
 different problems, so a larger relevance model is not automatically necessary.
 
-The live reproducer now enables MMR. Its approved PDI incident `INC0010043` records
+The live reproducer now enables MMR. Its approved PDI incident `INC0010045` records
 `mmr_applied=true`, lambda 0.8 in PostgreSQL and completes via stored-draft approval.
-The separate high-risk incident `INC0010044` never reaches retrieval; its empty
-approval returns 409 and rejection closes it as failed. Both retain single-trace
+The separate high-risk incident `INC0010047` never reaches retrieval; its empty
+approval returns 409 and rejection closes it as failed. The cache follower `INC0010046` reuses the draft while retaining its own
+graph checks, approval and write. All three retain single-trace
 Langfuse evidence through resumed ServiceNow writes. These artifacts prove operation,
 not improved production resolution accuracy.
 

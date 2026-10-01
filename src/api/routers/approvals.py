@@ -27,7 +27,7 @@ from api.schemas.approvals import (
 )
 from api.schemas.errors import ErrorResponse
 from app.api.dependencies import get_db_session
-from app.db.models import Approval, Execution, RetryState
+from app.db.models import Approval, Execution, RetryState, SemanticCluster, SemanticClusterMember
 from app.exceptions.app_errors import (
     ConflictError,
     ResourceNotFoundError,
@@ -452,6 +452,26 @@ async def _close_resumed_execution(
     await db.execute(
         update(Execution).where(Execution.execution_id == execution_id).values(**values)
     )
+    # The API and worker are different processes. Resolve the leader's cluster
+    # in the SAME transaction as its immutable decision; maintenance will durably
+    # dispatch its waiters. A human approval never authorizes another incident.
+    reusable = bool(resumed.get("cache_draft") and resumed.get("processing_state") == "complete")
+    await db.execute(
+        update(SemanticCluster)
+        .where(SemanticCluster.anchor_execution_id == execution_id)
+        .values(
+            status="resolved" if reusable else "failed",
+            solution=resumed if reusable else None,
+            failure_reason=None if reusable else "leader_has_no_reusable_draft",
+            completed_at=ended_at,
+        )
+    )
+    if resumed.get("processing_state") == "complete" and resumed.get("write_back") == "written":
+        await db.execute(
+            update(SemanticClusterMember)
+            .where(SemanticClusterMember.execution_id == execution_id)
+            .values(applied_at=ended_at)
+        )
     await db.execute(
         update(RetryState)
         .where(RetryState.execution_id == execution_id)

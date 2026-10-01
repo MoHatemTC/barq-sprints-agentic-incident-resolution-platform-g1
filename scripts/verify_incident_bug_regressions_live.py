@@ -32,6 +32,7 @@ def main() -> None:
         AGENT_QUERY_REWRITE_ENABLED="true",
         RETRIEVAL_MODE="hybrid_reranked",
         RETRIEVAL_MMR_ENABLED="true",
+        ENABLE_SEMANTIC_CACHE="true",
     )
     url = URL.create(
         "postgresql+psycopg",
@@ -87,6 +88,7 @@ def main() -> None:
                     "--pool=threads",
                     "--concurrency=1",
                     "--loglevel=INFO",
+                    "--queues=barq:incident:events,barq:incident:maintenance",
                 ],
                 env=env,
                 stdout=log,
@@ -191,6 +193,68 @@ def main() -> None:
                     (pending.json()["facts"].get("draft") or {}).get("steps", [])
                 ),
             }
+            follower = None
+            if priority == 3:
+                # Submit another minimal webhook while the leader is paused.
+                fixture = admin.post(
+                    "/api/now/table/incident",
+                    json={
+                        key: record[key]
+                        for key in (
+                            "short_description",
+                            "description",
+                            "category",
+                            "priority",
+                            "impact",
+                            "urgency",
+                            "active",
+                            f"{P}_ai_enabled",
+                            f"{P}_ai_human_lock",
+                        )
+                    }
+                    | {f"{P}_ai_processing_state": "pending"},
+                )
+                fixture.raise_for_status()
+                follower_record = fixture.json()["result"]
+                follower_event = {
+                    **event,
+                    "event_id": str(uuid.uuid4()),
+                    "sys_id": follower_record["sys_id"],
+                    "number": follower_record["number"],
+                }
+                follower_correlation = "pr191-follower-" + follower_event["event_id"]
+                response = httpx.post(
+                    base + "/api/v1/webhook/incident",
+                    headers={**webhook, "X-Correlation-ID": follower_correlation},
+                    json=follower_event,
+                    timeout=20,
+                )
+                response.raise_for_status()
+                lookup = create_engine(url.set(database=env["POSTGRES_DB"]))
+                try:
+                    for _ in range(90):
+                        with lookup.connect() as conn:
+                            follower = (
+                                conn.execute(
+                                    text(
+                                        "SELECT e.execution_id,e.status,e.node_reached "
+                                        "FROM executions e JOIN events v ON e.event_record_id=v.id "
+                                        "WHERE v.event_id=:event"
+                                    ),
+                                    {"event": follower_event["event_id"]},
+                                )
+                                .mappings()
+                                .one()
+                            )
+                        if follower["node_reached"] == "semantic_cluster_wait":
+                            break
+                        time.sleep(1)
+                    else:
+                        raise RuntimeError("Live follower did not enter durable cluster wait")
+                    assert follower["status"] == "queued"
+                    follower = {**follower, "execution_id": str(follower["execution_id"])}
+                finally:
+                    lookup.dispose()
             decision = {
                 "decision": "approved" if priority == 3 else "rejected",
                 "reason": "PR191 controlled integration verification.",
@@ -285,6 +349,72 @@ def main() -> None:
             assert case["approval_rows"] == 1
             report["cases"].append(case)
             print(scenario + ": PASS " + record["number"], flush=True)
+            if follower:
+                subprocess.run(
+                    [
+                        "uv",
+                        "run",
+                        "python",
+                        "-c",
+                        "from app.workers.tasks import reap_stale_executions; "
+                        "reap_stale_executions.delay()",
+                    ],
+                    env=env,
+                    stdout=log,
+                    stderr=log,
+                    check=True,
+                )
+                follower_id = follower["execution_id"]
+                for _ in range(120):
+                    pending_follower = httpx.get(
+                        base + "/api/v1/approvals/pending/" + follower_id,
+                        headers=operator,
+                        timeout=10,
+                    )
+                    if pending_follower.status_code == 200:
+                        break
+                    time.sleep(2)
+                else:
+                    raise RuntimeError("Live follower did not wake and reach its own approval")
+                lookup = create_engine(url.set(database=env["POSTGRES_DB"]))
+                with lookup.connect() as conn:
+                    candidate = conn.execute(
+                        text(
+                            "SELECT decision FROM workflow_state WHERE execution_id=:id "
+                            "AND node_name='generate' ORDER BY sequence_number DESC LIMIT 1"
+                        ),
+                        {"id": follower_id},
+                    ).scalar_one()
+                lookup.dispose()
+                assert candidate["cache_draft_used"]
+                before = admin.get("/api/now/table/incident/" + follower_record["sys_id"])
+                before.raise_for_status()
+                assert not before.json()["result"][f"{P}_ai_resolution"]
+                follower_decision = httpx.post(
+                    base + "/api/v1/approvals/" + follower_id + "/decide",
+                    headers=operator,
+                    json=decision,
+                    timeout=150,
+                )
+                follower_decision.raise_for_status()
+                after = admin.get("/api/now/table/incident/" + follower_record["sys_id"])
+                after.raise_for_status()
+                assert after.json()["result"][f"{P}_ai_processing_state"] == "complete"
+                assert after.json()["result"][f"{P}_ai_resolution"]
+                report["cases"].append(
+                    {
+                        "scenario": "cached_follower_own_approval_and_write",
+                        "incident": follower_record["number"],
+                        "execution_id": follower_id,
+                        "correlation_id": follower_correlation,
+                        "wait_status": follower["status"],
+                        "cache_draft_used": True,
+                        "own_pending_http": pending_follower.status_code,
+                        "own_decision_http": follower_decision.status_code,
+                        "processing_state": "complete",
+                    }
+                )
+                print("cached_follower_own_approval_and_write: PASS", flush=True)
         admin.close()
         report["result"] = "passed"
     finally:

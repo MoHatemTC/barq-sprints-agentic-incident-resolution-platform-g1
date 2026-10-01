@@ -92,8 +92,8 @@ class TestScenarioACleanPass:
         body = payload.to_table_api_body()
         assert sys_id == VPN["sys_id"]
         assert "x_2215032_ai_inc_0_ai_suggestion" in body
-        assert body["x_2215032_ai_inc_0_ai_human_review_required"] == "true"
-        assert body["x_2215032_ai_inc_0_ai_processing_state"] == "awaiting_approval"
+        assert body["x_2215032_ai_inc_0_ai_human_review_required"] == "false"
+        assert body["x_2215032_ai_inc_0_ai_processing_state"] == "complete"
 
 
 class TestScenarioBSuccessfulCorrection:

@@ -226,7 +226,8 @@ def compose(state: AgentState, outcome: Outcome) -> FinalOutput:
     approval = bool(risk and risk.approval_required)
     note = (
         f"{PREFIX} drafted. Confidence {confidence.score:.2f}. "
-        f"Source {'; '.join(draft.sources)}. Human review required before it is applied."
+        f"Source {'; '.join(draft.sources)}. "
+        + ("Human approval required." if approval else "Guarded suggestion completed.")
     )
     if approval and risk:
         note += " Approval required before any action: " + "; ".join(risk.reasons) + "."
@@ -234,11 +235,12 @@ def compose(state: AgentState, outcome: Outcome) -> FinalOutput:
         outcome=outcome,
         summary=note,
         suggestion=draft.rendered,
+        resolution=None if approval else draft.rendered,
         confidence=confidence.score,
         classification=classification,
         work_note=note,
-        human_review_required=True,
-        processing_state=PAUSED,
+        human_review_required=approval,
+        processing_state=PAUSED if approval else AIProcessingState.COMPLETE.value,
         approval_required=approval,
     )
 
@@ -433,7 +435,7 @@ def act(state: AgentState, deps: AgentDependencies) -> dict[str, Any]:
             )
         return {"output": output.model_dump(mode="json")}
 
-    if outcome in INTERRUPT_OUTCOMES:
+    if outcome in INTERRUPT_OUTCOMES or output.approval_required:
         payload = interrupt_payload(state, output, outcome)
         payload["brief"] = render_brief(payload, deps)
         if not deps.audit.get_interrupt(execution_id):

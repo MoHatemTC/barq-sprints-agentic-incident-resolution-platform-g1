@@ -857,7 +857,7 @@ class TestConfidenceCheck:
 
 
 class TestAct:
-    def test_suggestion_is_written_with_review_flag(self) -> None:
+    def test_suggestion_completes_without_an_unresumable_review_flag(self) -> None:
         backend = FakeServiceNow()
         deps = make_deps(servicenow=backend)
         output = act(reasoned_state(incident=snapshot(VPN)), deps)["output"]
@@ -867,9 +867,10 @@ class TestAct:
         body = payload.to_table_api_body()
         assert sys_id == VPN["sys_id"]
         assert body["x_2215032_ai_inc_0_ai_suggestion"].startswith("1. Confirm")
-        assert body["x_2215032_ai_inc_0_ai_human_review_required"] == "true"
-        assert body["x_2215032_ai_inc_0_ai_processing_state"] == "awaiting_approval"
-        assert "x_2215032_ai_inc_0_ai_processing_end" not in body
+        assert body["x_2215032_ai_inc_0_ai_human_review_required"] == "false"
+        assert body["x_2215032_ai_inc_0_ai_processing_state"] == "complete"
+        assert body["x_2215032_ai_inc_0_ai_resolution"] == body["x_2215032_ai_inc_0_ai_suggestion"]
+        assert body["x_2215032_ai_inc_0_ai_processing_end"]
         assert body["x_2215032_ai_inc_0_ai_processing_start"].startswith("2026-09-08")
         assert output["approval_required"] is False
         assert body["x_2215032_ai_inc_0_ai_confidence"] == "0.82"
@@ -879,7 +880,7 @@ class TestAct:
         log = backend.execution_logs[0]
         assert log.execution_id == EXECUTION_ID
         assert log.action.value == "propose"
-        assert log.status.value == "awaiting_approval"
+        assert log.status.value == "succeeded"
         # Nothing outside §11.6 is ever called.
         assert backend.calls == ["write_ai_fields", "write_execution_log"]
         assert "comments" not in body
@@ -1132,7 +1133,7 @@ def test_compose_survives_the_state_that_selected_the_outcome(missing: str) -> N
     assert output.outcome is outcome
     if outcome is not Outcome.SKIPPED_INELIGIBLE:
         assert output.work_note, "an escalation must still leave a work note"
-        assert output.human_review_required is True
+        assert output.human_review_required is (outcome is not Outcome.SUGGESTED)
 
 
 # -- policy helpers -------------------------------------------------------------------------

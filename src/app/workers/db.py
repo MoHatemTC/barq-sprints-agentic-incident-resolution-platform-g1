@@ -25,14 +25,17 @@ docs/sprint2_worker_topology.md):
 
 from __future__ import annotations
 
+import contextlib
 import datetime as dt
+import hashlib
 import os
 import socket
+from collections.abc import Iterator
 from functools import lru_cache
 from typing import Any, Protocol
 from uuid import UUID, uuid4
 
-from sqlalchemy import select, update
+from sqlalchemy import select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.sql import func
 
@@ -236,6 +239,8 @@ class WorkerRepo(Protocol):
         """Fetch all active, non-expired clusters optionally filtered by service."""
         ...
 
+    def get_cluster_for_execution(self, execution_id: UUID) -> SemanticCluster | None: ...
+
     def get_active_cluster_for_execution(self, execution_id: UUID) -> SemanticCluster | None:
         """Fetch the active, non-expired cluster associated with an execution."""
         ...
@@ -243,6 +248,10 @@ class WorkerRepo(Protocol):
     def mark_member_applied(self, cluster_id: UUID, execution_id: UUID) -> None:
         """Mark when a shared solution was applied to a cluster member."""
         ...
+
+    def mark_cluster_waiting(self, execution_id: UUID, correlation_id: str) -> None: ...
+
+    def ready_cluster_waiters(self) -> list[dict[str, Any]]: ...
 
 
 class PostgresRepo:
@@ -255,6 +264,22 @@ class PostgresRepo:
     def from_settings(cls, settings: SyncPostgreSQLSettings) -> PostgresRepo:
         engine = create_sync_engine(build_sync_database_url(settings))
         return cls(create_sync_session_factory(engine))
+
+    @contextlib.contextmanager
+    def execution_guard(self, execution_id: UUID) -> Iterator[bool]:
+        # Dedicated session lock survives short repository transactions and is
+        # released by PostgreSQL if the worker dies. Repeated waiter dispatches
+        # cannot concurrently run the same checkpoint/write receipt.
+        key = int.from_bytes(
+            hashlib.sha256(("worker:" + str(execution_id)).encode()).digest()[:8], signed=True
+        )
+        with self._session_factory() as session:
+            acquired = bool(session.scalar(text("SELECT pg_try_advisory_lock(:key)"), {"key": key}))
+            try:
+                yield acquired
+            finally:
+                if acquired:
+                    session.execute(text("SELECT pg_advisory_unlock(:key)"), {"key": key})
 
     def claim_for_running(self, execution_id: UUID) -> bool:
         stmt = (
@@ -695,6 +720,17 @@ class PostgresRepo:
                 stmt = stmt.where(SemanticCluster.service == service.strip().lower())
             return list(session.scalars(stmt).all())
 
+    def get_cluster_for_execution(self, execution_id: UUID) -> SemanticCluster | None:
+        with self._session_factory() as session:
+            return session.scalar(
+                select(SemanticCluster)
+                .join(
+                    SemanticClusterMember,
+                    SemanticClusterMember.cluster_id == SemanticCluster.cluster_id,
+                )
+                .where(SemanticClusterMember.execution_id == execution_id)
+            )
+
     def get_active_cluster_for_execution(self, execution_id: UUID) -> SemanticCluster | None:
         with self._session_factory() as session:
             stmt = (
@@ -724,6 +760,69 @@ class PostgresRepo:
                 .values(applied_at=_utcnow())
             )
 
+    def mark_cluster_waiting(self, execution_id: UUID, correlation_id: str) -> None:
+        with self._session_factory() as session, session.begin():
+            session.execute(
+                update(Execution)
+                .where(Execution.execution_id == execution_id)
+                .values(
+                    status="queued",
+                    node_reached="semantic_cluster_wait",
+                    ended_at=None,
+                    termination_cause=None,
+                )
+            )
+            session.execute(
+                update(SemanticClusterMember)
+                .where(SemanticClusterMember.execution_id == execution_id)
+                .values(correlation_id=correlation_id)
+            )
+
+    def ready_cluster_waiters(self) -> list[dict[str, Any]]:
+        """Durable dispatch: keep accepted waiters visible until a worker claims them.
+
+        A crash or broker outage between this transaction and enqueue is recovered
+        by the next maintenance sweep. Duplicate deliveries share the atomic claim.
+        Human-interrupted graph threads are excluded by the distinct node marker.
+        """
+        with self._session_factory() as session, session.begin():
+            rows = session.execute(
+                select(Execution, Event, SemanticClusterMember)
+                .join(Event, Execution.event_record_id == Event.id)
+                .join(
+                    SemanticClusterMember,
+                    SemanticClusterMember.execution_id == Execution.execution_id,
+                )
+                .join(
+                    SemanticCluster, SemanticCluster.cluster_id == SemanticClusterMember.cluster_id
+                )
+                .where(
+                    Execution.status.in_(("queued", "accepted")),
+                    Execution.node_reached.in_(("semantic_cluster_wait", "semantic_cluster_ready")),
+                    (SemanticCluster.status.in_(("resolved", "failed", "expired")))
+                    | (SemanticCluster.expires_at <= _utcnow()),
+                )
+                .with_for_update(of=Execution, skip_locked=True)
+                .limit(100)
+            ).all()
+            result = []
+            for execution, event, member in rows:
+                execution.status = "accepted"
+                execution.node_reached = "semantic_cluster_ready"
+                result.append(
+                    {
+                        "execution_id": str(execution.execution_id),
+                        "correlation_id": member.correlation_id or str(execution.execution_id),
+                        "payload": {
+                            "event_id": event.event_id,
+                            "sys_id": event.incident_sys_id,
+                            "number": event.incident_number,
+                            "event_type": event.event_type,
+                        },
+                    }
+                )
+            return result
+
 
 class InMemoryRepo:
     """Unit-test stand-in mirroring the database CHECK constraints."""
@@ -752,6 +851,7 @@ class InMemoryRepo:
             "termination_cause": None,
         }
         if event_id is not None:
+            self.executions[execution_id]["event_id"] = event_id
             self.event_index[event_id] = execution_id
             if payload is not None:
                 self.event_payloads[event_id] = payload
@@ -1041,8 +1141,6 @@ class InMemoryRepo:
 
         for members in self.cluster_members.values():
             for m in members:
-                if m.incident_sys_id == incident_sys_id:
-                    raise ValueError(f"Incident {incident_sys_id} is already in a cluster")
                 if m.execution_id == execution_id:
                     raise ValueError(f"Execution {execution_id} is already in a cluster")
 
@@ -1075,6 +1173,12 @@ class InMemoryRepo:
                 res.append(c)
         return res
 
+    def get_cluster_for_execution(self, execution_id: UUID) -> SemanticCluster | None:
+        for cluster_id, members in self.cluster_members.items():
+            if any(member.execution_id == execution_id for member in members):
+                return self.clusters.get(cluster_id)
+        return None
+
     def get_active_cluster_for_execution(self, execution_id: UUID) -> SemanticCluster | None:
         now = _utcnow()
         for cluster_id, members in self.cluster_members.items():
@@ -1096,6 +1200,38 @@ class InMemoryRepo:
             if m.execution_id == execution_id:
                 m.applied_at = _utcnow()
                 break
+
+    def mark_cluster_waiting(self, execution_id: UUID, correlation_id: str) -> None:
+        self.executions[execution_id].update(status="queued", node_reached="semantic_cluster_wait")
+        self.executions[execution_id]["correlation_id"] = correlation_id
+
+    def ready_cluster_waiters(self) -> list[dict[str, Any]]:
+        result = []
+        for cluster_id, members in self.cluster_members.items():
+            cluster = self.clusters[cluster_id]
+            if (
+                cluster.status not in ("resolved", "failed", "expired")
+                and cluster.expires_at > _utcnow()
+            ):
+                continue
+            for member in members:
+                row = self.executions.get(member.execution_id, {})
+                if row.get("status") not in ("queued", "accepted") or row.get(
+                    "node_reached"
+                ) not in ("semantic_cluster_wait", "semantic_cluster_ready"):
+                    continue
+                payload = self.event_payloads.get(row.get("event_id", ""))
+                if payload is None:
+                    continue
+                row.update(status="accepted", node_reached="semantic_cluster_ready")
+                result.append(
+                    {
+                        "execution_id": str(member.execution_id),
+                        "correlation_id": row.get("correlation_id") or str(member.execution_id),
+                        "payload": payload,
+                    }
+                )
+        return result
 
 
 def build_worker_repo(settings: SyncPostgreSQLSettings | object) -> WorkerRepo:

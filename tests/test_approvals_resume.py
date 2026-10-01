@@ -364,4 +364,6 @@ async def test_rejected_resume_closes_database_as_failed(app_with_db) -> None:
     )
     statements = [call.args[0].compile().params for call in session.execute.call_args_list]
     assert statements[0]["status"] == "failed"
-    assert statements[1]["state"] == "cancelled"
+    assert (
+        next(statement for statement in statements if "state" in statement)["state"] == "cancelled"
+    )

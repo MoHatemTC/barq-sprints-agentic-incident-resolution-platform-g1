@@ -26,6 +26,7 @@ from agent.state import (
     DraftStep,
     EvidenceItem,
     GateResult,
+    IncidentSnapshot,
     InvalidCitation,
     RetrievalResult,
     UnsupportedClaim,
@@ -157,6 +158,10 @@ def verify_evidence(state: AgentState, deps: AgentDependencies) -> dict[str, Any
                 f"Step {idx}: {step.text} [Citation: {step.article_id} §{step.section}]"
                 for idx, step in valid_step_pairs
             )
+            current_incident_text = None
+            if state.get("cache_draft_used"):
+                incident = IncidentSnapshot.model_validate(state["incident"])
+                current_incident_text = incident.short_description + "\n" + incident.description
             # Filter evidence to chunks cited by these steps (exact article_id and section)
             cited_sections = {(s.article_id, s.section) for _, s in valid_step_pairs}
             relevant_evidence = [
@@ -169,6 +174,7 @@ def verify_evidence(state: AgentState, deps: AgentDependencies) -> dict[str, Any
                 prompt=critic_prompt(
                     steps_text=steps_text,
                     evidence_text=evidence_block(relevant_evidence),
+                    incident_text=current_incident_text,
                 ),
                 schema=CriticOutput,
             )

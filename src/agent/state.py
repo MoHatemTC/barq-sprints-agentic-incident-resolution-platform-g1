@@ -230,6 +230,8 @@ class AgentState(TypedDict, total=False):
     retrieval: dict[str, Any]
     diagnosis: dict[str, Any]
     draft: dict[str, Any]
+    cached_draft: dict[str, Any]
+    cache_draft_used: bool
     # multi-agent revision loop
     critic_feedback: dict[str, Any] | None
     revision_count: int

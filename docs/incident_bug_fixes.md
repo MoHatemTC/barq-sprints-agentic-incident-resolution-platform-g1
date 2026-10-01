@@ -15,7 +15,7 @@ covered by tests; confirmed failures are repaired at their owning boundaries.
 | #197 — citation identity | Diagnosis, generation and verification share evidence-based identity resolution. A base article number resolves only when one retrieved version exists. Unknown explicit versions and ambiguous base IDs stay invalid. Section spelling/case aliases resolve only to a section actually present in that article's retrieved evidence. |
 | #198 — diagnostic matching | The prompt explicitly accepts grounded issue descriptions from Cause or Resolution; a literal Symptoms heading is unnecessary. Topic-only matches remain insufficient. The mismatch penalty is retained for a genuine lack of symptom support. |
 | #199 — lost tail steps | Generation keeps every grounded step. A redundant source footer may be omitted, but procedure steps are never chopped to fit. Overflow fails verification and requests a bounded revision; if revision fails, the full draft remains in the interrupt audit for review. Oversized drafts cannot be accepted without a fitting operator solution. |
-| #200 — approval deadlock | A paused draft approved without replacement text is applied from the checkpoint and completes. A pre-retrieval pause has no draft: empty approval returns 409 without recording a decision or consuming the pause. An operator can supply a resolution or reject it. Straight-through drafts already have the `/suggestions/{execution_id}/decide` route; that acceptance path completes the incident and remains tested. No automatic-write setting exists in the checked implementation, and none is invented here. |
+| #200 — approval deadlock | A paused draft approved without replacement text is applied from the checkpoint and completes. A pre-retrieval pause has no draft: empty approval returns 409 without recording a decision or consuming the pause. An operator can supply a resolution or reject it. A guarded, high-confidence straight-through suggestion now writes complete with the same cited resolution and a processing end timestamp, rather than displaying an approval that has no interrupted thread. This completes AI processing, not the ServiceNow incident lifecycle. Elevated policy approval also creates a real interrupt instead of only setting a review flag. The separate suggestion decision route remains available and tested. |
 | #201 — rejection outcomes | A rejected paused execution closes PostgreSQL as failed/cancelled with a human-rejection cause. Both decision routes clear stale AI suggestion/resolution text and record the refusal in ServiceNow. A human-supplied resolution still completes the incident even when the AI draft was rejected. |
 | #202 — tool authorizations | Unscoped workflow approval rows no longer invalidate a valid approval for the requested tool. Only matching execution/tool decisions grant permission. The newest matching rejection/revocation still wins; tied or malformed matching decisions fail closed. |
 | #203 — DLQ visibility | The authenticated DLQ inspection API and operator replay already existed. Redis inspection failure now returns 503 instead of an empty successful list. Records expose execution ID, original correlation ID and failure type; PostgreSQL failure details retain a redacted, bounded traceback. Replay carries the original trace context and only removes snapshotted old records after enqueue. Enqueue failure keeps DLQ visibility and restores the parked DB state/budget/timestamp only if no worker claimed it; ServiceNow is marked failed again on a best-effort basis. Historical failure rows are retained. |
@@ -26,8 +26,8 @@ the operator's structured decision, not the brief, drives resumption.
 
 ## Verification
 
-Local gates: Ruff lint/format and mypy passed. The final locked unit run passed 1,479 tests;
-its 41 database-dependent cases were then run separately and all passed. All
+Local gates: Ruff lint/format and mypy passed. The final locked unit run passed 1,487 tests;
+its 44 database-dependent cases were then run separately and all passed. All
 22 integration tests and 62 real-PDF/manual parser tests passed. OpenAPI matches
 the application. No test or CI gate was disabled.
 
@@ -54,16 +54,53 @@ only identifiers, HTTP/status results and field lengths. It never deploys EC2.
 
 `docs/evidence/pr191_live_approval_regressions.json` records the real stack:
 FastAPI → Redis/Celery → LangGraph/PostgreSQL → Qdrant/Gemini → ServiceNow.
-One run approves the complete checkpointed draft without a replacement solution;
-the other refuses an empty pre-retrieval approval, then rejects the same paused
-execution. ServiceNow reaches `complete` and `failed` respectively, PostgreSQL
-agrees, exactly one approval row exists per execution and duplicate decisions
-return 409. `pr191_trace_continuity.json` independently reads Langfuse and
-records 32 and 17 observations under each original trace ID,
-including worker and resumed ServiceNow write spans. The refreshed runs include the merged semantic-cache code with its default
-enabled switch; both fixtures were classified ineligible for clustering and
-followed the graph. They do not prove cache-hit or follower behavior. No UI
-screenshot or EC2 verification is claimed by these artifacts.
+The leader approves its complete checkpointed draft without replacement text.
+A second minimal webhook waits durably for that leader, then reuses its candidate
+procedure while running its own graph gates and low-confidence approval. Only its
+own operator decision completes its own ServiceNow write. A separate high-risk
+execution refuses an empty approval, then rejects the same paused execution.
+`pr191_trace_continuity.json` independently reads Langfuse for each original
+correlation ID, including the follower's redispatched worker and resume spans (33, 34 and 18 observations). The follower trace contains `agent.resolution_cache` and no `llm.generate`, proving actual reuse.
+No UI screenshot or EC2 execution of this branch is claimed by these artifacts.
+
+## Semantic-cache integration repair
+
+Ali explicitly included these repairs in #191 after verification of merged #204:
+
+- Minimal webhook events contain identifiers, not incident text. The worker now
+  reads the actual incident through the registered integration tool before admission;
+  signatures are redacted. Ineligible/locked incidents still follow their normal graph gates.
+- Cache hits share a structured procedure candidate, never an approval or final
+  execution result. Every follower runs its own input, eligibility, risk, retrieval,
+  diagnosis, citation, critic, safety and confidence checks. Reuse skips draft
+  generation only when every cited version and section exists in current evidence.
+  The critic receives the current sanitized incident to check applicability.
+- Running/paused leader followers park as queued `semantic_cluster_wait`, distinct
+  from genuine human interrupts. The existing maintenance sweep dispatches resolved,
+  failed or expired waiters using their immutable event and original correlation ID.
+  A failed broker enqueue leaves ready rows recoverable without spending Celery retries.
+- The approval API updates the leader cluster in the same database transaction as
+  its execution closure. PostgreSQL takes precedence over stale worker/Redis anchors.
+  Rejection or an operator replacement without the original reusable draft releases
+  waiters to independent generation; a leader decision never authorizes followers.
+- A PostgreSQL session advisory lock excludes concurrent deliveries of the same
+  execution and releases after a worker disconnect. Membership is unique per execution;
+  a later event for the same incident can join again. Applied timestamps follow real writes.
+- Database publication happens before disposable Redis publication; database failure
+  cannot advertise a resolved cache hit.
+
+Migration `0005_cluster_waiters` adds member correlation IDs and removes the global
+incident-membership uniqueness rule. Deployment already runs migrations before
+starting new services. Downgrade restores the old uniqueness constraint and fails
+visibly if later events have produced duplicate incident memberships; preserve the
+history rather than silently deleting it. Existing stranded follower rows from the
+old implementation are not automatically converted into new graph interrupts.
+
+This is deliberately less aggressive than the original single-pipeline-per-cluster
+proposal. No 90% end-to-end cost saving is claimed: fresh evidence, governance and
+writes cost work on each incident. Tests demonstrate one fewer generation call on a
+valid reuse, regeneration for stale citations, preserved high-risk approval,
+broker recovery, current database status and concurrent worker exclusion.
 
 Retrieval quality and limitations are documented separately in
 `retrieval_query_rewrite_and_reranking.md`, with original and synthetic-noise

@@ -52,16 +52,16 @@ def test_inmemory_repo_cluster_lifecycle() -> None:
     assert follower.similarity_score == 0.94
     assert len(repo.cluster_members[cluster_id]) == 2
 
-    # 3. Duplicate incident or execution rejection
-    with pytest.raises(ValueError, match="already in a cluster"):
-        repo.add_cluster_member(
-            cluster_id=cluster_id,
-            execution_id=uuid4(),
-            incident_sys_id="sys_inc_002",  # Duplicate sys_id
-            incident_number="INC002_DUP",
-            similarity_score=0.91,
-        )
-
+    # A later event for the same incident keeps a separate execution membership.
+    later = repo.add_cluster_member(
+        cluster_id=cluster_id,
+        execution_id=uuid4(),
+        incident_sys_id="sys_inc_002",
+        incident_number="INC002",
+        similarity_score=0.91,
+    )
+    assert later.execution_id != follower_exec_id
+    # The same execution cannot join twice.
     with pytest.raises(ValueError, match="already in a cluster"):
         repo.add_cluster_member(
             cluster_id=cluster_id,

@@ -148,6 +148,7 @@ EXPECTED_COLUMNS = {
         "role",
         "joined_at",
         "applied_at",
+        "correlation_id",
     },
 }
 
@@ -184,6 +185,7 @@ NULLABLE_COLUMNS = {
     },
     "semantic_cluster_members": {
         "applied_at",
+        "correlation_id",
     },
 }
 
