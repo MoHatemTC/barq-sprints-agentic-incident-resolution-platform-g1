@@ -60,6 +60,7 @@ class EventPayload(_Section):
     sys_id: str = Field(..., pattern=r"^[0-9a-fA-F]{32}$")
     number: str = Field(..., pattern=r"^INC\d{7,}$", max_length=32)
     event_type: Literal["incident.created", "incident.updated"] = "incident.created"
+    prefetched_incident: dict[str, Any] | None = None
 
 
 class IncidentSnapshot(_Section):

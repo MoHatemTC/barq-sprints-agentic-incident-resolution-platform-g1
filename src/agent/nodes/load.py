@@ -23,16 +23,19 @@ from observability.redaction import redact_text_with_count
 
 def load(state: AgentState, deps: AgentDependencies) -> dict[str, Any]:
     event = EventPayload.model_validate(state["event"])
-    raw = asyncio.run(
-        deps.tools.invoke(
-            "read_incident",
-            context=ToolCallContext(
-                execution_id=state["execution_id"],
-                correlation_id=state.get("correlation_id"),
-            ),
-            arguments={"sys_id": event.sys_id},
+    if event.prefetched_incident is not None:
+        raw = event.prefetched_incident
+    else:
+        raw = asyncio.run(
+            deps.tools.invoke(
+                "read_incident",
+                context=ToolCallContext(
+                    execution_id=state["execution_id"],
+                    correlation_id=state.get("correlation_id"),
+                ),
+                arguments={"sys_id": event.sys_id},
+            )
         )
-    )
     incident = snapshot_incident(raw)
     sanitized_incident, gate = _run_input_guardrails(incident, deps)
     return {
