@@ -121,3 +121,14 @@ def test_rewrite_keeps_plain_numeric_error_code_without_reintroducing_chatter() 
     result = rewrite_query(original, deps)
     assert result == "VPN authentication failure\nerror 691"
     assert "weekly reports" not in result
+
+
+def test_complete_anchors_that_exceed_rewrite_budget_keep_original_query() -> None:
+    original = "VPN failure; " + "; ".join(
+        "not service " + str(i) + " " + "x" * 75 for i in range(7)
+    )
+    deps = make_deps(
+        llm=FakeLLM({"query_rewrite": QueryRewriteOutput(query="VPN authentication failure")}),
+        agent_query_rewrite_enabled=True,
+    )
+    assert rewrite_query(original, deps) == original

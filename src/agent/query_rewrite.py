@@ -79,5 +79,10 @@ def rewrite_query(original: str, deps: AgentDependencies) -> str:
         missing = [
             anchor for anchor in dict.fromkeys(anchors) if anchor.lower() not in focused.lower()
         ]
+        rewritten = "\n".join([focused, *missing])
+        if len(rewritten) > REWRITE_CHARS:
+            # Never cut a negation or literal in half to meet the model-query cap.
+            span.update(metadata={"status": "fallback", "reason": "anchors_exceed_budget"})
+            return original
         span.update(metadata={"status": "rewritten", "preserved_anchors": len(missing)})
-        return "\n".join([focused, *missing])
+        return rewritten
