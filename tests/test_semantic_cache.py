@@ -1252,4 +1252,3 @@ def test_semantic_cache_disabled_by_config_runs_independent() -> None:
     assert res2["status"] == "succeeded"
     assert "cluster_role" not in res2
     assert res2.get("cluster_id") is None
-
