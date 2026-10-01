@@ -1,3 +1,13 @@
+> **Integration correction in PR #191:** The historical design below describes
+> full pipeline reuse, which the merged worker could not safely provide. Production
+> now shares only a structured draft candidate; every follower runs its own graph
+> gates, approval when required, and write. Minimal webhooks are expanded through
+> a governed incident read, waiters are durably redispatched by maintenance, and
+> approval closure updates the authoritative cluster. See
+> [incident_bug_fixes.md](incident_bug_fixes.md#semantic-cache-integration-repair)
+> for implemented behavior, migration and verification limits. Original calibration
+> claims below have not been re-measured by this integration repair.
+
 # Sprint 4 (S4.2) — Semantic Caching & Single-Flight Incident Clustering Design
 
 > **Document Version:** 1.1.0  

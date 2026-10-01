@@ -870,6 +870,8 @@ class TestWorkerWiring:
         """The real task body under Celery's eager ``apply``: headers → graph → success."""
         from celery import Celery
 
+        settings.enable_semantic_cache = False
+
         app = Celery("eager-test")
         app.conf.task_always_eager = True
         repo = InMemoryRepo()
@@ -917,6 +919,8 @@ class TestWorkerWiring:
         state an auditor must not confuse with a finished run.
         """
         from celery import Celery
+
+        settings.enable_semantic_cache = False
 
         from tests.agent_support import ORDER_P1
 

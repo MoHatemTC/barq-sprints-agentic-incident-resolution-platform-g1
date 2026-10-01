@@ -336,3 +336,28 @@ def test_dead_lettered_event_replays_successfully_when_issue_clears() -> None:
     exec_result = _run_incident(clean_task, payload, str(exec_id), CFG, repo)
     assert exec_result["status"] == "succeeded"
     assert repo.get_status(exec_id) == "succeeded"
+
+
+def test_redis_outage_still_persists_traceable_database_failure() -> None:
+    repo = InMemoryRepo()
+    execution_id = uuid4()
+    repo.seed_execution(execution_id, status="queued")
+    repo.ensure_retry_state(execution_id, max_attempts=3)
+    sink = mock.MagicMock()
+    sink.lpush.side_effect = ConnectionError("Redis unavailable")
+    record_dead_letter(
+        repo,
+        sink,
+        PAYLOAD_VALID,
+        str(execution_id),
+        TerminalError("processing failed"),
+        1,
+        correlation_id="original-event-trace",
+    )
+    assert repo.get_status(execution_id) == "failed"
+    assert len(repo.failures) == 1
+    details = repo.failures[0]["details"]
+    assert details["correlation_id"] == "original-event-trace"
+    assert details["execution_id"] == str(execution_id)
+    assert details["failure_type"] == "TerminalError"
+    assert "TerminalError" in details["traceback"]

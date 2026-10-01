@@ -102,7 +102,7 @@ def test_semantic_cache_first_incident_becomes_leader() -> None:
     # Verify cluster state in repo
     cluster_in_repo = repo.get_cluster(res1.cluster_id)
     assert cluster_in_repo is not None
-    assert cluster_in_repo.status == "creating"
+    assert cluster_in_repo.status == "running"
     assert len(repo.cluster_members[res1.cluster_id]) == 1
     assert repo.cluster_members[res1.cluster_id][0].role == "anchor"
 

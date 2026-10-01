@@ -69,3 +69,17 @@ def corpus_file(tmp_path: Path, article_dicts: list[dict]) -> Path:
     path = tmp_path / "articles.json"
     path.write_text(json.dumps(article_dicts), encoding="utf-8")
     return path
+
+
+@pytest.fixture(scope="session", autouse=True)
+def close_shared_agent_test_runner():
+    """Stop the shared test loop before interpreter/native-library teardown."""
+    yield
+    from tests import agent_support
+
+    runner = agent_support._RUNNER
+    if runner is not None:
+        runner.close()
+        if not runner._thread.is_alive():
+            runner._loop.close()
+        agent_support._RUNNER = None

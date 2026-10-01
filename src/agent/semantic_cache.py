@@ -2,9 +2,9 @@
 
 BARQ G1 - Sprint 4 (S4.2)
 Detects semantic similarity among incidents arriving in close temporal proximity,
-groups matching incidents into a cluster, coordinates running the diagnosis and
-resolution pipeline once per cluster, and distributes the resulting solution across
-every incident in the cluster while preserving individual incident records and audit states.
+groups matching incidents into a cluster and shares a resolution candidate. Each
+production follower runs its own diagnosis, evidence and safety gates, approval
+when required, and incident write; cache reuse skips only draft generation.
 """
 
 from __future__ import annotations
@@ -507,6 +507,9 @@ class SemanticCache:
                 )
                 raise
 
+        if self.repo is not None:
+            self.repo.update_cluster_status(cluster_id, "running")
+
         # 2. Record locally and publish to Redis for instant cross-worker coordination
         self._anchors[cluster_id] = new_anchor
         if self.redis_client is not None:
@@ -557,6 +560,26 @@ class SemanticCache:
                 mode=AdmissionMode.INDEPENDENT,
                 reason="incident_ineligible_for_clustering",
             )
+
+        if self.repo is not None:
+            existing = self.repo.get_cluster_for_execution(execution_id)
+            if existing is not None:
+                if existing.expires_at <= _utcnow() or existing.status in ("failed", "expired"):
+                    return AdmissionResult(
+                        mode=AdmissionMode.INDEPENDENT, reason="previous_cluster_unusable"
+                    )
+                return AdmissionResult(
+                    mode=AdmissionMode.LEADER
+                    if existing.anchor_execution_id == execution_id
+                    else AdmissionMode.FOLLOWER,
+                    cluster_id=existing.cluster_id,
+                    similarity_score=1.0,
+                    reason="retrying_leader_execution"
+                    if existing.anchor_execution_id == execution_id
+                    else "existing_follower_execution",
+                    anchor_incident_sys_id=existing.anchor_incident_sys_id,
+                    anchor_incident_number=existing.anchor_incident_number,
+                )
 
         # 2. Build deterministic signature
         signature = build_incident_signature(incident)
@@ -691,110 +714,63 @@ class SemanticCache:
             except Exception as exc:
                 logger.warning("redis_anchor_sync_failed", error=str(exc))
 
-    def publish_solution(
-        self,
-        cluster_id: UUID,
-        solution: dict[str, Any],
-    ) -> None:
-        """Store the durable resolution produced by the leader LangGraph execution."""
+    def publish_solution(self, cluster_id: UUID, solution: dict[str, Any]) -> None:
+        """Commit authoritative state before publishing the disposable Redis copy."""
+        if self.repo is not None:
+            self.repo.update_cluster_status(cluster_id, "resolved", solution=solution)
         anchor = self._anchors.get(cluster_id)
         if anchor is not None:
             anchor.status = ClusterStatus.RESOLVED
             anchor.solution = solution
             self._sync_anchor_to_redis(anchor)
 
+    def mark_cluster_failed(self, cluster_id: UUID, reason: str) -> None:
         if self.repo is not None:
-            try:
-                self.repo.update_cluster_status(
-                    cluster_id=cluster_id,
-                    status="resolved",
-                    solution=solution,
-                )
-            except Exception as exc:
-                logger.error(
-                    "failed_to_publish_cluster_solution_to_repo",
-                    cluster_id=str(cluster_id),
-                    error=str(exc),
-                )
-
-    def mark_cluster_failed(
-        self,
-        cluster_id: UUID,
-        reason: str,
-    ) -> None:
-        """Mark cluster as failed when the leader encounters a fatal error."""
+            self.repo.update_cluster_status(cluster_id, "failed", failure_reason=reason)
         anchor = self._anchors.get(cluster_id)
         if anchor is not None:
             anchor.status = ClusterStatus.FAILED
             anchor.failure_reason = reason
             self._sync_anchor_to_redis(anchor)
-
         if self.redis_client is not None:
-            try:
+            with contextlib.suppress(Exception):
                 self.redis_client.srem(REDIS_ACTIVE_SET, str(cluster_id))
-            except Exception:
-                pass
 
+    def mark_cluster_awaiting_approval(self, cluster_id: UUID) -> None:
         if self.repo is not None:
-            try:
-                self.repo.update_cluster_status(
-                    cluster_id=cluster_id,
-                    status="failed",
-                    failure_reason=reason,
-                )
-            except Exception as exc:
-                logger.error(
-                    "failed_to_mark_cluster_failed_in_repo",
-                    cluster_id=str(cluster_id),
-                    error=str(exc),
-                )
-
-    def mark_cluster_awaiting_approval(
-        self,
-        cluster_id: UUID,
-    ) -> None:
-        """Park cluster when leader execution reaches a human approval interrupt."""
+            self.repo.update_cluster_status(cluster_id, "awaiting_approval")
         anchor = self._anchors.get(cluster_id)
         if anchor is not None:
             anchor.status = ClusterStatus.AWAITING_APPROVAL
             self._sync_anchor_to_redis(anchor)
 
-        if self.repo is not None:
-            try:
-                self.repo.update_cluster_status(
-                    cluster_id=cluster_id,
-                    status="awaiting_approval",
-                )
-            except Exception as exc:
-                logger.error(
-                    "failed_to_mark_cluster_awaiting_approval_in_repo",
-                    cluster_id=str(cluster_id),
-                    error=str(exc),
-                )
-
     def get_cluster_solution(self, cluster_id: UUID) -> dict[str, Any] | None:
-        """Fetch cached resolution for a cluster."""
-        anchor = self._anchors.get(cluster_id)
-        if anchor is not None and anchor.solution is not None:
-            return anchor.solution
-
+        # Approval resumes in the API process. Its database transition must beat
+        # any stale awaiting-approval anchor still resident in a worker process.
         if self.repo is not None:
             cluster = self.repo.get_cluster(cluster_id)
-            if cluster is not None and cluster.solution is not None:
-                return cluster.solution
-        return None
+            return (
+                cluster.solution if cluster is not None and cluster.status == "resolved" else None
+            )
+        anchor = self._anchors.get(cluster_id)
+        return (
+            anchor.solution
+            if anchor is not None and anchor.status == ClusterStatus.RESOLVED
+            else None
+        )
 
     def get_cluster_status(self, cluster_id: UUID) -> ClusterStatus | None:
-        """Fetch current status of a cluster."""
-        anchor = self._anchors.get(cluster_id)
-        if anchor is not None:
-            return anchor.status
-
         if self.repo is not None:
             cluster = self.repo.get_cluster(cluster_id)
-            if cluster is not None:
-                return ClusterStatus(cluster.status)
-        return None
+            if cluster is None:
+                return None
+            return (
+                ClusterStatus.EXPIRED
+                if cluster.expires_at <= _utcnow()
+                else ClusterStatus(cluster.status)
+            )
+        anchor = self._anchors.get(cluster_id)
+        return anchor.status if anchor is not None and not anchor.is_expired else None
 
 
 # Module singleton instance
@@ -809,7 +785,7 @@ def get_semantic_cache(
 ) -> SemanticCache:
     """Access or create the singleton semantic cache."""
     global _cache_instance
-    if _cache_instance is None:
+    if _cache_instance is None or (repo is not None and _cache_instance.repo is not repo):
         _cache_instance = SemanticCache(
             repo=repo,
             redis_client=redis_client,

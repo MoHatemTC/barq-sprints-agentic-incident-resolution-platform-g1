@@ -8,17 +8,12 @@ no worker ever consumes it. PostgreSQL is the durable truth. Replay therefore
    reason and timestamps cleared (refuses Human Lock or a completed incident),
 3. resets the parked state atomically (``reset_for_replay`` is guarded with
    ``WHERE state IN ('exhausted', 'cancelled')`` — 0 rows ⇒ refuse),
-4. removes the event's records from the Redis list, and
-5. re-enqueues through :func:`app.workers.producer.send_incident_event` so the
-   envelope format keeps a single owner.
+4. enqueues with the original correlation id (legacy records use execution id),
+5. removes only the Redis records snapshotted before enqueue.
 
-Order matters: ServiceNow reset → database reset → LREM → enqueue. If replay dies between reset and
-enqueue the event sits in 'queued' without a live message; recovery is the
-documented re-enqueue sweep (``events WHERE status = 'queued'``). Enqueueing
-before LREM instead would race the worker: a fresh failure could push a new
-DLQ record between our LRANGE and our LREM. Exact-string LREM is also safe on
-its own — a new record carries a new ``failed_at``, so it never matches an
-older record's string.
+An enqueue error restores the parked DB state only while the execution is still
+queued. Redis records remain inspectable. A worker already running is never reset.
+PostgreSQL failure history is retained on every replay.
 
 CLI::
 
@@ -41,7 +36,10 @@ import structlog
 from app.core.config import Settings, get_settings
 from app.db.redis.keys import INCIDENT_DLQ_QUEUE
 from app.workers.db import WorkerRepo, build_worker_repo
-from app.workers.incident_state import reset_failed_incident_for_replay
+from app.workers.incident_state import (
+    reset_failed_incident_for_replay,
+    write_final_failure_best_effort,
+)
 from app.workers.producer import send_incident_event
 
 logger = structlog.getLogger(__name__)
@@ -56,6 +54,7 @@ class ReplayOutcome:
     replayed: bool = False
     removed_records: int = 0
     reason: str | None = None
+    correlation_id: str | None = None
 
 
 def load_dead_letters(redis_client: Any) -> list[dict]:
@@ -75,12 +74,15 @@ def load_dead_letters(redis_client: Any) -> list[dict]:
     return records
 
 
-def _remove_event_records(redis_client: Any, event_id: str) -> int:
+def _remove_event_records(
+    redis_client: Any, event_id: str, raw_records: list[Any] | None = None
+) -> int:
     """LREM every record of this event by its exact stored string (count=0).
 
     Uses a single-pass scan and batch pipeline to eliminate repetitive network round-trips.
     """
-    raw_records = redis_client.lrange(INCIDENT_DLQ_QUEUE, 0, -1)
+    if raw_records is None:
+        raw_records = redis_client.lrange(INCIDENT_DLQ_QUEUE, 0, -1)
     if not raw_records:
         return 0
 
@@ -133,7 +135,8 @@ def replay_event(
             event_id=event_id, reason=f"no execution exists for event_id: {event_id}"
         )
 
-    state = (repo.get_retry_state(execution_id) or {}).get("state")
+    previous_retry = dict(repo.get_retry_state(execution_id) or {})
+    state = previous_retry.get("state")
     if state not in {"exhausted", "cancelled"}:
         return ReplayOutcome(
             event_id=event_id,
@@ -141,6 +144,19 @@ def replay_event(
             reason=f"event is not parked (retry_state={state!r}) — "
             "only 'exhausted'/'cancelled' events replay",
         )
+
+    # Snapshot BEFORE enqueue: cleanup may only remove records we inspected,
+    # never a fresh failure published by the replayed worker.
+    raw_records = redis_client.lrange(INCIDENT_DLQ_QUEUE, 0, -1)
+    correlation_id = str(execution_id)
+    for raw in raw_records:
+        try:
+            record = json.loads(raw)
+            if record.get("event_id") == event_id and record.get("correlation_id"):
+                correlation_id = str(record["correlation_id"])
+                break
+        except (ValueError, TypeError, AttributeError):
+            continue
 
     # A terminal failure is visible on the incident. The graph only accepts
     # pending incidents, so reset the ServiceNow fields before resetting the DB
@@ -156,10 +172,24 @@ def replay_event(
             "only 'exhausted'/'cancelled' events replay",
         )
 
-    removed = _remove_event_records(redis_client, event_id)
-    send_incident_event(payload, execution_id)
+    try:
+        send_incident_event(payload, execution_id, correlation_id=correlation_id)
+    except Exception as exc:
+        # Restore only if no worker claimed this replay. A broker response may
+        # have been lost after delivery; never cancel an execution already running.
+        if repo.restore_failed_replay(execution_id, previous_retry):
+            write_final_failure_best_effort(
+                settings or get_settings(),
+                payload,
+                str(execution_id),
+                exc,
+                max(1, int(previous_retry.get("attempt_count", 1))),
+            )
+        raise
+    removed = _remove_event_records(redis_client, event_id, raw_records)
     logger.info(
         "event_replayed",
+        correlation_id=correlation_id,
         event_id=event_id,
         execution_id=str(execution_id),
         removed_records=removed,
@@ -168,6 +198,7 @@ def replay_event(
         event_id=event_id,
         execution_id=execution_id,
         replayed=True,
+        correlation_id=correlation_id,
         removed_records=removed,
     )
 

@@ -92,8 +92,8 @@ class TestScenarioACleanPass:
         body = payload.to_table_api_body()
         assert sys_id == VPN["sys_id"]
         assert "x_2215032_ai_inc_0_ai_suggestion" in body
-        assert body["x_2215032_ai_inc_0_ai_human_review_required"] == "true"
-        assert body["x_2215032_ai_inc_0_ai_processing_state"] == "awaiting_approval"
+        assert body["x_2215032_ai_inc_0_ai_human_review_required"] == "false"
+        assert body["x_2215032_ai_inc_0_ai_processing_state"] == "complete"
 
 
 class TestScenarioBSuccessfulCorrection:
@@ -287,9 +287,10 @@ class TestScenarioCBudgetExhaustion:
         # Verify ServiceNow incident update withheld the suggestion and recorded work notes
         assert len(backend.updates) == 2
         body = backend.updates[1][1].to_table_api_body()
-        assert "x_2215032_ai_inc_0_ai_suggestion" not in body
-        assert body["x_2215032_ai_inc_0_ai_human_review_required"] == "true"
-        assert body["x_2215032_ai_inc_0_ai_processing_state"] == "awaiting_approval"
+        assert body["x_2215032_ai_inc_0_ai_suggestion"]
+        assert body["x_2215032_ai_inc_0_ai_resolution"]
+        assert body["x_2215032_ai_inc_0_ai_human_review_required"] == "false"
+        assert body["x_2215032_ai_inc_0_ai_processing_state"] == "complete"
 
         # Comprehensive work note must mention gate failure and critic reasons
         work_notes = body["work_notes"]

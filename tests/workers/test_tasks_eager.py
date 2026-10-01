@@ -99,6 +99,7 @@ class TestSuccessPath:
     def test_langgraph_prepares_servicenow_retry_before_invocation(self) -> None:
         repo = make_repo()
         settings = MagicMock()
+        settings.enable_semantic_cache = False
         order: list[str] = []
 
         def prepare(*_args):

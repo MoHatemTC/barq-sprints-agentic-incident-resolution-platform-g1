@@ -167,7 +167,14 @@ class LiteLLMClient:
             metadata={"prompt_name": purpose, "prompt_version": settings.agent_prompt_version},
         ) as generation:
             try:
-                raw = self._client.chat.completions.with_raw_response.parse(
+                client = self._client
+                if purpose == "query_rewrite":
+                    # Optional retrieval assistance must not consume the graph's
+                    # general model retry budget before falling back to the source.
+                    client = client.with_options(
+                        timeout=settings.agent_query_rewrite_timeout_seconds, max_retries=0
+                    )
+                raw = client.chat.completions.with_raw_response.parse(
                     model=selected_model,
                     messages=[
                         {"role": "system", "content": system},

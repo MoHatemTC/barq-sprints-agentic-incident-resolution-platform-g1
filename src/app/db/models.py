@@ -541,7 +541,6 @@ class SemanticClusterMember(Base):
     __table_args__ = (
         UniqueConstraint("cluster_id", "execution_id", name="uq_cluster_member_cluster_execution"),
         UniqueConstraint("execution_id", name="uq_cluster_member_execution_unique"),
-        UniqueConstraint("incident_sys_id", name="uq_cluster_member_incident_unique"),
         CheckConstraint("role IN ('anchor', 'follower')", name="ck_cluster_member_role"),
         Index("ix_cluster_members_incident_sys_id", "incident_sys_id"),
     )
@@ -571,6 +570,7 @@ class SemanticClusterMember(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
     applied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    correlation_id: Mapped[str | None] = mapped_column(Text)
 
     cluster: Mapped[SemanticCluster] = relationship(back_populates="members")
     execution: Mapped[Execution] = relationship(back_populates="cluster_memberships")
