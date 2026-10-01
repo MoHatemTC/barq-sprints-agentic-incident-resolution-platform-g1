@@ -1,0 +1,2268 @@
+{
+  "recorded_at": "2026-10-01T01:47:08.110830+00:00",
+  "collection": "incident_knowledge_base",
+  "payload_sha256": "e40b57778d6e913145d7288b6c026356992c4b185e9b8d3bbd79724032f18ff5",
+  "point_count": 47,
+  "dense_model": "BAAI/bge-small-en-v1.5",
+  "sparse_model": "Qdrant/bm25",
+  "rerank_model": "Xenova/ms-marco-MiniLM-L-6-v2",
+  "query_model": "gemini/gemini-3.5-flash",
+  "rewrite_timeout_seconds": 5.0,
+  "top_k": 5,
+  "threshold": 0.55,
+  "max_security_level": "restricted",
+  "excluded_unmapped_stressors": [
+    "stressor-layout-1",
+    "stressor-layout-2",
+    "stressor-ocr-1",
+    "stressor-ocr-2",
+    "stressor-table-1",
+    "stressor-table-2"
+  ],
+  "missing_primary_ids": [],
+  "classification_source": "primary article category from index; other if absent",
+  "latency_scope": "warm models, serial calls, includes one rewrite call where enabled",
+  "variants": {
+    "hybrid_original": {
+      "summary": {
+        "cases": 29,
+        "hit_at_1": 0.9130434782608695,
+        "hit_at_5": 0.9565217391304348,
+        "mean_primary_recall": 0.9565217391304348,
+        "mrr": 0.9347826086956522,
+        "false_evidence_count": 1,
+        "unanswerable_cases": 6,
+        "forbidden_hit_count": 0,
+        "p50_ms": 11.34,
+        "p95_ms": 15.06
+      },
+      "cases": [
+        {
+          "incident_id": "INC0010023",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0001-v2.0",
+            "KB0005-v4.0",
+            "KB0008-v1.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.8345716,
+          "rewrite_changed": false,
+          "latency_ms": 15.54
+        },
+        {
+          "incident_id": "INC0010047",
+          "answerable": false,
+          "returned_article_ids": [
+            "KB0004-v1.0",
+            "KB0007-v2.0",
+            "KB1009-v1.0"
+          ],
+          "hit_at_1": false,
+          "hit_at_5": false,
+          "primary_recall": 0,
+          "reciprocal_rank": 0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.7182516,
+          "rewrite_changed": false,
+          "latency_ms": 9.08
+        },
+        {
+          "incident_id": "INC0010064",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0005-v4.0",
+            "KB0006-v3.0",
+            "KB0001-v2.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.7661743,
+          "rewrite_changed": false,
+          "latency_ms": 13.22
+        },
+        {
+          "incident_id": "INC0010052",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0010-v2.0",
+            "KB0004-v1.0",
+            "KB0003-v2.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.8999161,
+          "rewrite_changed": false,
+          "latency_ms": 13.35
+        },
+        {
+          "incident_id": "INC0010024",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0002-v3.0",
+            "KB0003-v2.0",
+            "KB0009-v2.0",
+            "KB0004-v1.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.76573026,
+          "rewrite_changed": false,
+          "latency_ms": 15.06
+        },
+        {
+          "incident_id": "INC0010025",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0003-v2.0",
+            "KB0002-v3.0",
+            "KB0001-v2.0",
+            "KB0005-v4.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.829388,
+          "rewrite_changed": false,
+          "latency_ms": 12.86
+        },
+        {
+          "incident_id": "INC0010026",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0004-v1.0",
+            "KB0010-v2.0",
+            "KB1009-v1.0",
+            "KB0007-v2.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.7862976,
+          "rewrite_changed": false,
+          "latency_ms": 13.46
+        },
+        {
+          "incident_id": "INC0010027",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0001-v2.0",
+            "KB0005-v4.0",
+            "KB0003-v2.0"
+          ],
+          "hit_at_1": false,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 0.5,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.71754116,
+          "rewrite_changed": false,
+          "latency_ms": 10.38
+        },
+        {
+          "incident_id": "INC0010028",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0006-v3.0",
+            "KB0005-v4.0",
+            "KB0003-v2.0",
+            "KB0001-v2.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.776839,
+          "rewrite_changed": false,
+          "latency_ms": 10.67
+        },
+        {
+          "incident_id": "INC0010029",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0007-v2.0",
+            "KB0009-v2.0",
+            "KB0004-v1.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.781316,
+          "rewrite_changed": false,
+          "latency_ms": 11.09
+        },
+        {
+          "incident_id": "INC0010031",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0008-v1.0",
+            "KB0010-v2.0",
+            "KB0009-v2.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.8803032,
+          "rewrite_changed": false,
+          "latency_ms": 12.67
+        },
+        {
+          "incident_id": "INC0010033",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0009-v2.0",
+            "KB0010-v2.0",
+            "KB0008-v1.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.7988365,
+          "rewrite_changed": false,
+          "latency_ms": 11.37
+        },
+        {
+          "incident_id": "INC0009884",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0010-v2.0",
+            "KB0004-v1.0",
+            "KB0009-v2.0",
+            "KB0002-v3.0",
+            "KB0008-v1.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.8258898,
+          "rewrite_changed": false,
+          "latency_ms": 14.88
+        },
+        {
+          "incident_id": "INC0010091",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0001-v2.0",
+            "KB0005-v4.0",
+            "KB0008-v1.0",
+            "KB0003-v2.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.7502476,
+          "rewrite_changed": false,
+          "latency_ms": 10.45
+        },
+        {
+          "incident_id": "INC0010092",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0003-v2.0",
+            "KB0002-v3.0",
+            "KB0008-v1.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.74009264,
+          "rewrite_changed": false,
+          "latency_ms": 11.11
+        },
+        {
+          "incident_id": "INC0010093",
+          "answerable": false,
+          "returned_article_ids": [
+            "KB0010-v2.0",
+            "KB0009-v2.0",
+            "KB0004-v1.0",
+            "KB0007-v2.0"
+          ],
+          "hit_at_1": false,
+          "hit_at_5": false,
+          "primary_recall": 0,
+          "reciprocal_rank": 0,
+          "forbidden_hit": false,
+          "sufficient": false,
+          "best_relevance": 0.59105504,
+          "rewrite_changed": false,
+          "latency_ms": 6.82
+        },
+        {
+          "incident_id": "INC0010094",
+          "answerable": false,
+          "returned_article_ids": [
+            "KB0002-v3.0",
+            "KB0004-v1.0",
+            "KB0009-v2.0",
+            "KB0008-v1.0"
+          ],
+          "hit_at_1": false,
+          "hit_at_5": false,
+          "primary_recall": 0,
+          "reciprocal_rank": 0,
+          "forbidden_hit": false,
+          "sufficient": false,
+          "best_relevance": 0.6043074,
+          "rewrite_changed": false,
+          "latency_ms": 6.7
+        },
+        {
+          "incident_id": "INC0010095",
+          "answerable": false,
+          "returned_article_ids": [
+            "KB1009-v1.0",
+            "KB1008-v1.0",
+            "KB0004-v1.0",
+            "KB0009-v2.0"
+          ],
+          "hit_at_1": false,
+          "hit_at_5": false,
+          "primary_recall": 0,
+          "reciprocal_rank": 0,
+          "forbidden_hit": false,
+          "sufficient": false,
+          "best_relevance": 0.6173554,
+          "rewrite_changed": false,
+          "latency_ms": 5.96
+        },
+        {
+          "incident_id": "INC0010096",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0006-v3.0",
+            "KB0005-v4.0",
+            "KB0001-v2.0",
+            "KB0008-v1.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.74497056,
+          "rewrite_changed": false,
+          "latency_ms": 13.16
+        },
+        {
+          "incident_id": "INC0010097",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0007-v2.0",
+            "KB0009-v2.0",
+            "KB0010-v2.0",
+            "KB0004-v1.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.7444262,
+          "rewrite_changed": false,
+          "latency_ms": 11.34
+        },
+        {
+          "incident_id": "INC0010098",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0008-v1.0",
+            "KB0001-v2.0",
+            "KB0003-v2.0",
+            "KB0009-v2.0",
+            "KB0005-v4.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.81393325,
+          "rewrite_changed": false,
+          "latency_ms": 14.11
+        },
+        {
+          "incident_id": "INC0010099",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0004-v1.0",
+            "KB0003-v2.0",
+            "KB0007-v2.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.782035,
+          "rewrite_changed": false,
+          "latency_ms": 11.26
+        },
+        {
+          "incident_id": "INC0010100",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0008-v1.0",
+            "KB0007-v2.0",
+            "KB0010-v2.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.7553078,
+          "rewrite_changed": false,
+          "latency_ms": 11.05
+        },
+        {
+          "incident_id": "INC0010101",
+          "answerable": false,
+          "returned_article_ids": [
+            "KB0004-v1.0",
+            "KB0009-v2.0",
+            "KB0007-v2.0"
+          ],
+          "hit_at_1": false,
+          "hit_at_5": false,
+          "primary_recall": 0,
+          "reciprocal_rank": 0,
+          "forbidden_hit": false,
+          "sufficient": false,
+          "best_relevance": 0.5631664,
+          "rewrite_changed": false,
+          "latency_ms": 5.97
+        },
+        {
+          "incident_id": "INC0010102",
+          "answerable": false,
+          "returned_article_ids": [
+            "KB0004-v1.0",
+            "KB0010-v2.0",
+            "KB0005-v4.0",
+            "KB0001-v2.0",
+            "KB0002-v3.0"
+          ],
+          "hit_at_1": false,
+          "hit_at_5": false,
+          "primary_recall": 0,
+          "reciprocal_rank": 0,
+          "forbidden_hit": false,
+          "sufficient": false,
+          "best_relevance": 0.5531526,
+          "rewrite_changed": false,
+          "latency_ms": 5.82
+        },
+        {
+          "incident_id": "SYN_SPARSE_1",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0008-v1.0",
+            "KB0009-v2.0",
+            "KB0010-v2.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.70129406,
+          "rewrite_changed": false,
+          "latency_ms": 11.64
+        },
+        {
+          "incident_id": "SYN_SPARSE_2",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0010-v2.0",
+            "KB0004-v1.0",
+            "KB0009-v2.0",
+            "KB0005-v4.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.74043804,
+          "rewrite_changed": false,
+          "latency_ms": 11.48
+        },
+        {
+          "incident_id": "SYN_SPARSE_3",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0010-v2.0",
+            "KB0006-v3.0",
+            "KB0002-v3.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.6820129,
+          "rewrite_changed": false,
+          "latency_ms": 10.72
+        },
+        {
+          "incident_id": "SYN_SPARSE_4",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0010-v2.0",
+            "KB0001-v2.0",
+            "KB0008-v1.0",
+            "KB0002-v3.0"
+          ],
+          "hit_at_1": false,
+          "hit_at_5": false,
+          "primary_recall": 0.0,
+          "reciprocal_rank": 0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.7875347,
+          "rewrite_changed": false,
+          "latency_ms": 14.18
+        }
+      ]
+    },
+    "hybrid_rewrite": {
+      "summary": {
+        "cases": 29,
+        "hit_at_1": 0.9130434782608695,
+        "hit_at_5": 0.9565217391304348,
+        "mean_primary_recall": 0.9565217391304348,
+        "mrr": 0.9347826086956522,
+        "false_evidence_count": 1,
+        "unanswerable_cases": 6,
+        "forbidden_hit_count": 0,
+        "p50_ms": 2671.9728749972396,
+        "p95_ms": 3342.058040998967
+      },
+      "cases": [
+        {
+          "incident_id": "INC0010023",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0001-v2.0",
+            "KB0005-v4.0",
+            "KB0008-v1.0",
+            "KB0006-v3.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.8592575,
+          "rewrite_changed": true,
+          "latency_ms": 2506.3602080028413
+        },
+        {
+          "incident_id": "INC0010047",
+          "answerable": false,
+          "returned_article_ids": [
+            "KB0004-v1.0",
+            "KB0003-v2.0"
+          ],
+          "hit_at_1": false,
+          "hit_at_5": false,
+          "primary_recall": 0,
+          "reciprocal_rank": 0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.735721,
+          "rewrite_changed": true,
+          "latency_ms": 2998.4917500035094
+        },
+        {
+          "incident_id": "INC0010064",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0006-v3.0",
+            "KB0005-v4.0",
+            "KB0001-v2.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.78980905,
+          "rewrite_changed": true,
+          "latency_ms": 2667.1422079999397
+        },
+        {
+          "incident_id": "INC0010052",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0010-v2.0",
+            "KB0004-v1.0",
+            "KB0003-v2.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.9155442,
+          "rewrite_changed": true,
+          "latency_ms": 2725.5787499978487
+        },
+        {
+          "incident_id": "INC0010024",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0002-v3.0",
+            "KB0003-v2.0",
+            "KB0004-v1.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.76111984,
+          "rewrite_changed": true,
+          "latency_ms": 2706.7412920050438
+        },
+        {
+          "incident_id": "INC0010025",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0003-v2.0",
+            "KB0002-v3.0",
+            "KB0007-v2.0",
+            "KB0001-v2.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.8326373,
+          "rewrite_changed": true,
+          "latency_ms": 2432.0099579997036
+        },
+        {
+          "incident_id": "INC0010026",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0004-v1.0",
+            "KB0007-v2.0",
+            "KB0010-v2.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.7999116,
+          "rewrite_changed": true,
+          "latency_ms": 2807.5895830000354
+        },
+        {
+          "incident_id": "INC0010027",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0001-v2.0",
+            "KB0005-v4.0",
+            "KB0003-v2.0"
+          ],
+          "hit_at_1": false,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 0.5,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.7282268,
+          "rewrite_changed": true,
+          "latency_ms": 2096.3920830015536
+        },
+        {
+          "incident_id": "INC0010028",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0006-v3.0",
+            "KB0005-v4.0",
+            "KB0003-v2.0",
+            "KB0002-v3.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.7847389,
+          "rewrite_changed": true,
+          "latency_ms": 2332.2248750002473
+        },
+        {
+          "incident_id": "INC0010029",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0007-v2.0",
+            "KB0009-v2.0",
+            "KB0004-v1.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.7883415,
+          "rewrite_changed": true,
+          "latency_ms": 2381.6673750036002
+        },
+        {
+          "incident_id": "INC0010031",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0008-v1.0",
+            "KB0009-v2.0",
+            "KB0010-v2.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.8838537,
+          "rewrite_changed": true,
+          "latency_ms": 2994.139624998374
+        },
+        {
+          "incident_id": "INC0010033",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0009-v2.0",
+            "KB0010-v2.0",
+            "KB0008-v1.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.7988365,
+          "rewrite_changed": false,
+          "latency_ms": 3157.1251250010614
+        },
+        {
+          "incident_id": "INC0009884",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0010-v2.0",
+            "KB0004-v1.0",
+            "KB0009-v2.0",
+            "KB0002-v3.0",
+            "KB0008-v1.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.8258898,
+          "rewrite_changed": false,
+          "latency_ms": 2549.7656660002144
+        },
+        {
+          "incident_id": "INC0010091",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0001-v2.0",
+            "KB0005-v4.0",
+            "KB0008-v1.0",
+            "KB0003-v2.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.7692411,
+          "rewrite_changed": true,
+          "latency_ms": 2367.769083004461
+        },
+        {
+          "incident_id": "INC0010092",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0002-v3.0",
+            "KB0003-v2.0",
+            "KB0004-v1.0",
+            "KB0008-v1.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.75925493,
+          "rewrite_changed": true,
+          "latency_ms": 3342.058040998967
+        },
+        {
+          "incident_id": "INC0010093",
+          "answerable": false,
+          "returned_article_ids": [
+            "KB0010-v2.0",
+            "KB0009-v2.0",
+            "KB0002-v3.0",
+            "KB0003-v2.0"
+          ],
+          "hit_at_1": false,
+          "hit_at_5": false,
+          "primary_recall": 0,
+          "reciprocal_rank": 0,
+          "forbidden_hit": false,
+          "sufficient": false,
+          "best_relevance": 0.6193547,
+          "rewrite_changed": true,
+          "latency_ms": 3195.2392079986234
+        },
+        {
+          "incident_id": "INC0010094",
+          "answerable": false,
+          "returned_article_ids": [
+            "KB0002-v3.0",
+            "KB0004-v1.0",
+            "KB0008-v1.0",
+            "KB0009-v2.0"
+          ],
+          "hit_at_1": false,
+          "hit_at_5": false,
+          "primary_recall": 0,
+          "reciprocal_rank": 0,
+          "forbidden_hit": false,
+          "sufficient": false,
+          "best_relevance": 0.64848125,
+          "rewrite_changed": true,
+          "latency_ms": 2545.4436669989745
+        },
+        {
+          "incident_id": "INC0010095",
+          "answerable": false,
+          "returned_article_ids": [
+            "KB0005-v4.0",
+            "KB1008-v1.0",
+            "KB1009-v1.0",
+            "KB0009-v2.0",
+            "KB0004-v1.0"
+          ],
+          "hit_at_1": false,
+          "hit_at_5": false,
+          "primary_recall": 0,
+          "reciprocal_rank": 0,
+          "forbidden_hit": false,
+          "sufficient": false,
+          "best_relevance": 0.6064395,
+          "rewrite_changed": true,
+          "latency_ms": 2022.3862500037555
+        },
+        {
+          "incident_id": "INC0010096",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0006-v3.0",
+            "KB0005-v4.0",
+            "KB0001-v2.0",
+            "KB0008-v1.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.75914437,
+          "rewrite_changed": true,
+          "latency_ms": 2573.377916995194
+        },
+        {
+          "incident_id": "INC0010097",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0007-v2.0",
+            "KB0009-v2.0",
+            "KB0010-v2.0",
+            "KB0004-v1.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.7635062,
+          "rewrite_changed": true,
+          "latency_ms": 3161.2581660017486
+        },
+        {
+          "incident_id": "INC0010098",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0008-v1.0",
+            "KB0001-v2.0",
+            "KB0009-v2.0",
+            "KB0010-v2.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.82242733,
+          "rewrite_changed": true,
+          "latency_ms": 2770.423750001532
+        },
+        {
+          "incident_id": "INC0010099",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0004-v1.0",
+            "KB0003-v2.0",
+            "KB0007-v2.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.782035,
+          "rewrite_changed": false,
+          "latency_ms": 2811.570416002553
+        },
+        {
+          "incident_id": "INC0010100",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0008-v1.0",
+            "KB0007-v2.0",
+            "KB0004-v1.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.7767812,
+          "rewrite_changed": true,
+          "latency_ms": 2671.9728749972396
+        },
+        {
+          "incident_id": "INC0010101",
+          "answerable": false,
+          "returned_article_ids": [
+            "KB0009-v2.0",
+            "KB0005-v4.0",
+            "KB0004-v1.0",
+            "KB0002-v3.0"
+          ],
+          "hit_at_1": false,
+          "hit_at_5": false,
+          "primary_recall": 0,
+          "reciprocal_rank": 0,
+          "forbidden_hit": false,
+          "sufficient": false,
+          "best_relevance": 0.58473027,
+          "rewrite_changed": true,
+          "latency_ms": 2811.9756669989206
+        },
+        {
+          "incident_id": "INC0010102",
+          "answerable": false,
+          "returned_article_ids": [
+            "KB0004-v1.0",
+            "KB0010-v2.0",
+            "KB0005-v4.0",
+            "KB0002-v3.0"
+          ],
+          "hit_at_1": false,
+          "hit_at_5": false,
+          "primary_recall": 0,
+          "reciprocal_rank": 0,
+          "forbidden_hit": false,
+          "sufficient": false,
+          "best_relevance": 0.59228826,
+          "rewrite_changed": true,
+          "latency_ms": 2229.4223330015575
+        },
+        {
+          "incident_id": "SYN_SPARSE_1",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0008-v1.0",
+            "KB0009-v2.0",
+            "KB0010-v2.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.70129406,
+          "rewrite_changed": false,
+          "latency_ms": 2269.501875005043
+        },
+        {
+          "incident_id": "SYN_SPARSE_2",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0010-v2.0",
+            "KB0009-v2.0",
+            "KB0004-v1.0",
+            "KB0003-v2.0",
+            "KB0005-v4.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.763803,
+          "rewrite_changed": true,
+          "latency_ms": 2662.453707999629
+        },
+        {
+          "incident_id": "SYN_SPARSE_3",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0010-v2.0",
+            "KB0002-v3.0",
+            "KB0006-v3.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.6999738,
+          "rewrite_changed": true,
+          "latency_ms": 3782.3992919957986
+        },
+        {
+          "incident_id": "SYN_SPARSE_4",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0010-v2.0",
+            "KB0009-v2.0",
+            "KB0002-v3.0",
+            "KB0008-v1.0"
+          ],
+          "hit_at_1": false,
+          "hit_at_5": false,
+          "primary_recall": 0.0,
+          "reciprocal_rank": 0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.8062779,
+          "rewrite_changed": true,
+          "latency_ms": 3020.098707999778
+        }
+      ]
+    },
+    "hybrid_reranked_original": {
+      "summary": {
+        "cases": 29,
+        "hit_at_1": 0.9130434782608695,
+        "hit_at_5": 1,
+        "mean_primary_recall": 1.0,
+        "mrr": 0.9565217391304348,
+        "false_evidence_count": 1,
+        "unanswerable_cases": 6,
+        "forbidden_hit_count": 0,
+        "p50_ms": 191.25,
+        "p95_ms": 227.95
+      },
+      "cases": [
+        {
+          "incident_id": "INC0010023",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0001-v2.0",
+            "KB0005-v4.0",
+            "KB0006-v3.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.8345716,
+          "rewrite_changed": false,
+          "latency_ms": 196.3
+        },
+        {
+          "incident_id": "INC0010047",
+          "answerable": false,
+          "returned_article_ids": [
+            "KB0004-v1.0",
+            "KB1008-v1.0",
+            "KB1009-v1.0"
+          ],
+          "hit_at_1": false,
+          "hit_at_5": false,
+          "primary_recall": 0,
+          "reciprocal_rank": 0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.7182516,
+          "rewrite_changed": false,
+          "latency_ms": 77.7
+        },
+        {
+          "incident_id": "INC0010064",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0005-v4.0",
+            "KB0006-v3.0",
+            "KB0001-v2.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.7589486,
+          "rewrite_changed": false,
+          "latency_ms": 188.71
+        },
+        {
+          "incident_id": "INC0010052",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0010-v2.0",
+            "KB0008-v1.0",
+            "KB0009-v2.0",
+            "KB0002-v3.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.8999161,
+          "rewrite_changed": false,
+          "latency_ms": 231.82
+        },
+        {
+          "incident_id": "INC0010024",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0002-v3.0",
+            "KB0006-v3.0",
+            "KB0010-v2.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.76573026,
+          "rewrite_changed": false,
+          "latency_ms": 211.76
+        },
+        {
+          "incident_id": "INC0010025",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0003-v2.0",
+            "KB0005-v4.0",
+            "KB0006-v3.0",
+            "KB0008-v1.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.829388,
+          "rewrite_changed": false,
+          "latency_ms": 205.04
+        },
+        {
+          "incident_id": "INC0010026",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0004-v1.0",
+            "KB1008-v1.0",
+            "KB1009-v1.0",
+            "KB0010-v2.0",
+            "KB0003-v2.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.7303816,
+          "rewrite_changed": false,
+          "latency_ms": 195.86
+        },
+        {
+          "incident_id": "INC0010027",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0001-v2.0",
+            "KB0005-v4.0",
+            "KB0002-v3.0"
+          ],
+          "hit_at_1": false,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 0.5,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.71754116,
+          "rewrite_changed": false,
+          "latency_ms": 181.73
+        },
+        {
+          "incident_id": "INC0010028",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0006-v3.0",
+            "KB0005-v4.0",
+            "KB0001-v2.0",
+            "KB0009-v2.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.776839,
+          "rewrite_changed": false,
+          "latency_ms": 186.69
+        },
+        {
+          "incident_id": "INC0010029",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0007-v2.0",
+            "KB0009-v2.0",
+            "KB0005-v4.0",
+            "KB0010-v2.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.61353225,
+          "rewrite_changed": false,
+          "latency_ms": 181.52
+        },
+        {
+          "incident_id": "INC0010031",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0008-v1.0",
+            "KB0010-v2.0",
+            "KB0009-v2.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.8803032,
+          "rewrite_changed": false,
+          "latency_ms": 201.01
+        },
+        {
+          "incident_id": "INC0010033",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0009-v2.0",
+            "KB0008-v1.0",
+            "KB0010-v2.0",
+            "KB0002-v3.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.7988365,
+          "rewrite_changed": false,
+          "latency_ms": 197.01
+        },
+        {
+          "incident_id": "INC0009884",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0010-v2.0",
+            "KB0009-v2.0",
+            "KB0002-v3.0",
+            "KB0008-v1.0",
+            "KB0004-v1.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.8258898,
+          "rewrite_changed": false,
+          "latency_ms": 227.95
+        },
+        {
+          "incident_id": "INC0010091",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0005-v4.0",
+            "KB0001-v2.0",
+            "KB0008-v1.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.7502476,
+          "rewrite_changed": false,
+          "latency_ms": 213.06
+        },
+        {
+          "incident_id": "INC0010092",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0003-v2.0",
+            "KB0005-v4.0",
+            "KB0002-v3.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.74009264,
+          "rewrite_changed": false,
+          "latency_ms": 192.23
+        },
+        {
+          "incident_id": "INC0010093",
+          "answerable": false,
+          "returned_article_ids": [
+            "KB0009-v2.0",
+            "KB1008-v1.0",
+            "KB1009-v1.0",
+            "KB0004-v1.0"
+          ],
+          "hit_at_1": false,
+          "hit_at_5": false,
+          "primary_recall": 0,
+          "reciprocal_rank": 0,
+          "forbidden_hit": false,
+          "sufficient": false,
+          "best_relevance": 0.5643538,
+          "rewrite_changed": false,
+          "latency_ms": 77.96
+        },
+        {
+          "incident_id": "INC0010094",
+          "answerable": false,
+          "returned_article_ids": [
+            "KB0002-v3.0",
+            "KB0009-v2.0",
+            "KB0006-v3.0"
+          ],
+          "hit_at_1": false,
+          "hit_at_5": false,
+          "primary_recall": 0,
+          "reciprocal_rank": 0,
+          "forbidden_hit": false,
+          "sufficient": false,
+          "best_relevance": 0.6043074,
+          "rewrite_changed": false,
+          "latency_ms": 82.68
+        },
+        {
+          "incident_id": "INC0010095",
+          "answerable": false,
+          "returned_article_ids": [
+            "KB1008-v1.0",
+            "KB1009-v1.0",
+            "KB0009-v2.0",
+            "KB0007-v2.0",
+            "KB0006-v3.0"
+          ],
+          "hit_at_1": false,
+          "hit_at_5": false,
+          "primary_recall": 0,
+          "reciprocal_rank": 0,
+          "forbidden_hit": false,
+          "sufficient": false,
+          "best_relevance": 0.6173554,
+          "rewrite_changed": false,
+          "latency_ms": 77.16
+        },
+        {
+          "incident_id": "INC0010096",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0006-v3.0",
+            "KB0005-v4.0",
+            "KB0001-v2.0",
+            "KB0008-v1.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.74497056,
+          "rewrite_changed": false,
+          "latency_ms": 188.48
+        },
+        {
+          "incident_id": "INC0010097",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0009-v2.0",
+            "KB0007-v2.0",
+            "KB0008-v1.0",
+            "KB0002-v3.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.7444262,
+          "rewrite_changed": false,
+          "latency_ms": 175.56
+        },
+        {
+          "incident_id": "INC0010098",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0008-v1.0",
+            "KB0009-v2.0",
+            "KB0005-v4.0",
+            "KB0001-v2.0",
+            "KB0002-v3.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.81393325,
+          "rewrite_changed": false,
+          "latency_ms": 202.46
+        },
+        {
+          "incident_id": "INC0010099",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0004-v1.0",
+            "KB0003-v2.0",
+            "KB0005-v4.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.70901483,
+          "rewrite_changed": false,
+          "latency_ms": 170.09
+        },
+        {
+          "incident_id": "INC0010100",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0008-v1.0",
+            "KB0007-v2.0",
+            "KB0002-v3.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.7553078,
+          "rewrite_changed": false,
+          "latency_ms": 183.34
+        },
+        {
+          "incident_id": "INC0010101",
+          "answerable": false,
+          "returned_article_ids": [
+            "KB0009-v2.0",
+            "KB0010-v2.0",
+            "KB0003-v2.0",
+            "KB0007-v2.0"
+          ],
+          "hit_at_1": false,
+          "hit_at_5": false,
+          "primary_recall": 0,
+          "reciprocal_rank": 0,
+          "forbidden_hit": false,
+          "sufficient": false,
+          "best_relevance": 0.54856443,
+          "rewrite_changed": false,
+          "latency_ms": 72.7
+        },
+        {
+          "incident_id": "INC0010102",
+          "answerable": false,
+          "returned_article_ids": [
+            "KB0005-v4.0",
+            "KB0004-v1.0",
+            "KB0006-v3.0",
+            "KB0010-v2.0"
+          ],
+          "hit_at_1": false,
+          "hit_at_5": false,
+          "primary_recall": 0,
+          "reciprocal_rank": 0,
+          "forbidden_hit": false,
+          "sufficient": false,
+          "best_relevance": 0.5531526,
+          "rewrite_changed": false,
+          "latency_ms": 77.15
+        },
+        {
+          "incident_id": "SYN_SPARSE_1",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0008-v1.0",
+            "KB0005-v4.0",
+            "KB0010-v2.0",
+            "KB0003-v2.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.70129406,
+          "rewrite_changed": false,
+          "latency_ms": 206.84
+        },
+        {
+          "incident_id": "SYN_SPARSE_2",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0010-v2.0",
+            "KB0009-v2.0",
+            "KB0006-v3.0",
+            "KB0008-v1.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.74043804,
+          "rewrite_changed": false,
+          "latency_ms": 193.08
+        },
+        {
+          "incident_id": "SYN_SPARSE_3",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0010-v2.0",
+            "KB0003-v2.0",
+            "KB0006-v3.0",
+            "KB0001-v2.0",
+            "KB0009-v2.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.6820129,
+          "rewrite_changed": false,
+          "latency_ms": 193.43
+        },
+        {
+          "incident_id": "SYN_SPARSE_4",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0010-v2.0",
+            "KB0006-v3.0",
+            "KB0003-v2.0",
+            "KB0009-v2.0",
+            "KB0008-v1.0"
+          ],
+          "hit_at_1": false,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 0.5,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.7875347,
+          "rewrite_changed": false,
+          "latency_ms": 191.25
+        }
+      ]
+    },
+    "hybrid_reranked_rewrite": {
+      "summary": {
+        "cases": 29,
+        "hit_at_1": 0.8695652173913043,
+        "hit_at_5": 0.9565217391304348,
+        "mean_primary_recall": 0.9347826086956522,
+        "mrr": 0.9057971014492754,
+        "false_evidence_count": 1,
+        "unanswerable_cases": 6,
+        "forbidden_hit_count": 0,
+        "p50_ms": 2860.6022079999398,
+        "p95_ms": 3538.738040998967
+      },
+      "cases": [
+        {
+          "incident_id": "INC0010023",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0001-v2.0",
+            "KB0005-v4.0",
+            "KB0008-v1.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.8592575,
+          "rewrite_changed": true,
+          "latency_ms": 2708.490208002841
+        },
+        {
+          "incident_id": "INC0010047",
+          "answerable": false,
+          "returned_article_ids": [
+            "KB0004-v1.0",
+            "KB0010-v2.0"
+          ],
+          "hit_at_1": false,
+          "hit_at_5": false,
+          "primary_recall": 0,
+          "reciprocal_rank": 0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.735721,
+          "rewrite_changed": true,
+          "latency_ms": 3077.1117500035093
+        },
+        {
+          "incident_id": "INC0010064",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0005-v4.0",
+            "KB0006-v3.0",
+            "KB0001-v2.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.7779008,
+          "rewrite_changed": true,
+          "latency_ms": 2860.6022079999398
+        },
+        {
+          "incident_id": "INC0010052",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0010-v2.0",
+            "KB0003-v2.0",
+            "KB0008-v1.0",
+            "KB0002-v3.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.9155442,
+          "rewrite_changed": true,
+          "latency_ms": 2926.4687499978486
+        },
+        {
+          "incident_id": "INC0010024",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0002-v3.0",
+            "KB0010-v2.0",
+            "KB0006-v3.0",
+            "KB0003-v2.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.76111984,
+          "rewrite_changed": true,
+          "latency_ms": 2891.681292005044
+        },
+        {
+          "incident_id": "INC0010025",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0003-v2.0",
+            "KB0005-v4.0",
+            "KB0006-v3.0",
+            "KB0010-v2.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.8326373,
+          "rewrite_changed": true,
+          "latency_ms": 2636.5099579997036
+        },
+        {
+          "incident_id": "INC0010026",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0004-v1.0",
+            "KB0010-v2.0",
+            "KB0003-v2.0",
+            "KB0002-v3.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.7999116,
+          "rewrite_changed": true,
+          "latency_ms": 3035.8395830000354
+        },
+        {
+          "incident_id": "INC0010027",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0001-v2.0",
+            "KB0005-v4.0",
+            "KB0002-v3.0"
+          ],
+          "hit_at_1": false,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 0.5,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.7282268,
+          "rewrite_changed": true,
+          "latency_ms": 2288.3820830015534
+        },
+        {
+          "incident_id": "INC0010028",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0006-v3.0",
+            "KB0003-v2.0",
+            "KB0010-v2.0",
+            "KB0001-v2.0",
+            "KB0005-v4.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.7847389,
+          "rewrite_changed": true,
+          "latency_ms": 2525.284875000247
+        },
+        {
+          "incident_id": "INC0010029",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0007-v2.0",
+            "KB0003-v2.0",
+            "KB0010-v2.0",
+            "KB0009-v2.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.6507138,
+          "rewrite_changed": true,
+          "latency_ms": 2591.3773750036
+        },
+        {
+          "incident_id": "INC0010031",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0008-v1.0",
+            "KB0009-v2.0",
+            "KB0010-v2.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.8838537,
+          "rewrite_changed": true,
+          "latency_ms": 3200.7296249983738
+        },
+        {
+          "incident_id": "INC0010033",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0009-v2.0",
+            "KB0008-v1.0",
+            "KB0010-v2.0",
+            "KB0002-v3.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.7988365,
+          "rewrite_changed": false,
+          "latency_ms": 3336.465125001061
+        },
+        {
+          "incident_id": "INC0009884",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0010-v2.0",
+            "KB0009-v2.0",
+            "KB0002-v3.0",
+            "KB0008-v1.0",
+            "KB0004-v1.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.8258898,
+          "rewrite_changed": false,
+          "latency_ms": 2736.1556660002143
+        },
+        {
+          "incident_id": "INC0010091",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0005-v4.0",
+            "KB0001-v2.0",
+            "KB0003-v2.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.7692411,
+          "rewrite_changed": true,
+          "latency_ms": 2570.6090830044614
+        },
+        {
+          "incident_id": "INC0010092",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0003-v2.0",
+            "KB0005-v4.0",
+            "KB0002-v3.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.75105,
+          "rewrite_changed": true,
+          "latency_ms": 3538.738040998967
+        },
+        {
+          "incident_id": "INC0010093",
+          "answerable": false,
+          "returned_article_ids": [
+            "KB0003-v2.0",
+            "KB0010-v2.0",
+            "KB0009-v2.0",
+            "KB0008-v1.0",
+            "KB0002-v3.0"
+          ],
+          "hit_at_1": false,
+          "hit_at_5": false,
+          "primary_recall": 0,
+          "reciprocal_rank": 0,
+          "forbidden_hit": false,
+          "sufficient": false,
+          "best_relevance": 0.5762776,
+          "rewrite_changed": true,
+          "latency_ms": 3275.6992079986235
+        },
+        {
+          "incident_id": "INC0010094",
+          "answerable": false,
+          "returned_article_ids": [
+            "KB0010-v2.0",
+            "KB0003-v2.0",
+            "KB0002-v3.0",
+            "KB0009-v2.0"
+          ],
+          "hit_at_1": false,
+          "hit_at_5": false,
+          "primary_recall": 0,
+          "reciprocal_rank": 0,
+          "forbidden_hit": false,
+          "sufficient": false,
+          "best_relevance": 0.64848125,
+          "rewrite_changed": true,
+          "latency_ms": 2639.0436669989745
+        },
+        {
+          "incident_id": "INC0010095",
+          "answerable": false,
+          "returned_article_ids": [
+            "KB1008-v1.0",
+            "KB1009-v1.0",
+            "KB0003-v2.0",
+            "KB0009-v2.0",
+            "KB0010-v2.0"
+          ],
+          "hit_at_1": false,
+          "hit_at_5": false,
+          "primary_recall": 0,
+          "reciprocal_rank": 0,
+          "forbidden_hit": false,
+          "sufficient": false,
+          "best_relevance": 0.58751905,
+          "rewrite_changed": true,
+          "latency_ms": 2106.386250003756
+        },
+        {
+          "incident_id": "INC0010096",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0006-v3.0",
+            "KB0001-v2.0",
+            "KB0008-v1.0",
+            "KB0005-v4.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.75914437,
+          "rewrite_changed": true,
+          "latency_ms": 2771.637916995194
+        },
+        {
+          "incident_id": "INC0010097",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0002-v3.0",
+            "KB0008-v1.0",
+            "KB0007-v2.0",
+            "KB0009-v2.0"
+          ],
+          "hit_at_1": false,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 0.3333333333333333,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.72956,
+          "rewrite_changed": true,
+          "latency_ms": 3376.8281660017487
+        },
+        {
+          "incident_id": "INC0010098",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0008-v1.0",
+            "KB0002-v3.0",
+            "KB0009-v2.0",
+            "KB0005-v4.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 0.5,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.82242733,
+          "rewrite_changed": true,
+          "latency_ms": 2985.893750001532
+        },
+        {
+          "incident_id": "INC0010099",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0004-v1.0",
+            "KB0003-v2.0",
+            "KB0005-v4.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.70901483,
+          "rewrite_changed": false,
+          "latency_ms": 2996.220416002553
+        },
+        {
+          "incident_id": "INC0010100",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0008-v1.0",
+            "KB0007-v2.0",
+            "KB0002-v3.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.7767812,
+          "rewrite_changed": true,
+          "latency_ms": 2860.4628749972394
+        },
+        {
+          "incident_id": "INC0010101",
+          "answerable": false,
+          "returned_article_ids": [
+            "KB0009-v2.0",
+            "KB0003-v2.0",
+            "KB0010-v2.0",
+            "KB0008-v1.0",
+            "KB0004-v1.0"
+          ],
+          "hit_at_1": false,
+          "hit_at_5": false,
+          "primary_recall": 0,
+          "reciprocal_rank": 0,
+          "forbidden_hit": false,
+          "sufficient": false,
+          "best_relevance": 0.57893986,
+          "rewrite_changed": true,
+          "latency_ms": 2884.2756669989203
+        },
+        {
+          "incident_id": "INC0010102",
+          "answerable": false,
+          "returned_article_ids": [
+            "KB0003-v2.0",
+            "KB0010-v2.0",
+            "KB0005-v4.0",
+            "KB0004-v1.0",
+            "KB0002-v3.0"
+          ],
+          "hit_at_1": false,
+          "hit_at_5": false,
+          "primary_recall": 0,
+          "reciprocal_rank": 0,
+          "forbidden_hit": false,
+          "sufficient": false,
+          "best_relevance": 0.59228826,
+          "rewrite_changed": true,
+          "latency_ms": 2302.1823330015573
+        },
+        {
+          "incident_id": "SYN_SPARSE_1",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0008-v1.0",
+            "KB0005-v4.0",
+            "KB0010-v2.0",
+            "KB0003-v2.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.70129406,
+          "rewrite_changed": false,
+          "latency_ms": 2441.5518750050433
+        },
+        {
+          "incident_id": "SYN_SPARSE_2",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0010-v2.0",
+            "KB0009-v2.0",
+            "KB0003-v2.0",
+            "KB0008-v1.0",
+            "KB0006-v3.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.763803,
+          "rewrite_changed": true,
+          "latency_ms": 2847.163707999629
+        },
+        {
+          "incident_id": "SYN_SPARSE_3",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0010-v2.0",
+            "KB0003-v2.0",
+            "KB0006-v3.0",
+            "KB0002-v3.0"
+          ],
+          "hit_at_1": true,
+          "hit_at_5": true,
+          "primary_recall": 1.0,
+          "reciprocal_rank": 1.0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.6999738,
+          "rewrite_changed": true,
+          "latency_ms": 3981.0392919957985
+        },
+        {
+          "incident_id": "SYN_SPARSE_4",
+          "answerable": true,
+          "returned_article_ids": [
+            "KB0010-v2.0",
+            "KB0003-v2.0",
+            "KB0008-v1.0",
+            "KB0009-v2.0",
+            "KB0002-v3.0"
+          ],
+          "hit_at_1": false,
+          "hit_at_5": false,
+          "primary_recall": 0.0,
+          "reciprocal_rank": 0,
+          "forbidden_hit": false,
+          "sufficient": true,
+          "best_relevance": 0.8062779,
+          "rewrite_changed": true,
+          "latency_ms": 3217.888707999778
+        }
+      ]
+    }
+  },
+  "payload_snapshot_unchanged": true,
+  "snapshot_scope": "point IDs and payloads; vectors are not fingerprinted"
+}

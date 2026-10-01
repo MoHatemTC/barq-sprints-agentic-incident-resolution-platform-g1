@@ -10,9 +10,9 @@ filtered — reached through :func:`_run_search`, which accepts either
 the same whether or not it is relevant, so they cannot answer "is there evidence at
 all?" (manual §11.4 "Escalated — no evidence"). The retriever therefore also asks
 Qdrant for the dense cosine similarity of the same chunks, under the same mandatory
-filter, and the evidence gate (§11.7 ``threshold``) is applied to that. When S2.4's
-reranker lands (#110), its calibrated score can replace the cosine without changing
-this interface.
+filter, and the evidence gate (§11.7 ``threshold``) is applied to that. Reranker scores only
+order candidates; a sigmoid is not a calibrated probability.
+The dense evidence threshold stays separate from reranker ordering.
 """
 
 from __future__ import annotations
@@ -26,6 +26,7 @@ from qdrant_client.models import Condition, FieldCondition, Filter, MatchAny, Ma
 
 from agent.state import EvidenceItem, RetrievalResult
 from app.clients.qdrant import DENSE_VECTOR_NAME
+from app.core.config import RetrievalMode, get_retrieval_settings
 from app.models.knowledge import (
     CORPUS_CATEGORY_TO_CLASSIFICATION,
     Classification,
@@ -173,6 +174,10 @@ class QdrantRetriever:
         engine = _MemoEngine(self._engine_factory())
         started = time.perf_counter()
         categories = search_categories(classification, incident_category)
+        reranked = get_retrieval_settings().retrieval_mode == RetrievalMode.HYBRID_RERANKED
+
+        def rank_score(item: EvidenceItem) -> float:
+            return item.fused_score if reranked else item.relevance
 
         def result(
             label: str | None,
@@ -197,7 +202,7 @@ class QdrantRetriever:
             # the no-evidence interrupt), so returning early made every article the
             # platform learned unreachable to the incidents that produced it.
             wide, _ = self._one_pass(query, None, top_k=top_k, engine=engine)
-            items = sorted(wide, key=lambda item: item.relevance, reverse=True)[:top_k]
+            items = sorted(wide, key=rank_score, reverse=True)[:top_k]
             sufficient = any(
                 item.relevance >= threshold + OUT_OF_CATEGORY_EVIDENCE_MARGIN for item in items
             )
@@ -224,7 +229,7 @@ class QdrantRetriever:
         for item in [*scoped, *wide]:
             key = (item.article_id, item.chunk_index)
             kept = merged.get(key)
-            if kept is None or item.relevance > kept.relevance:
+            if kept is None or rank_score(item) > rank_score(kept):
                 merged[key] = item
 
         client = self._qdrant()
@@ -237,7 +242,7 @@ class QdrantRetriever:
 
         ranked_articles = sorted(
             by_article.keys(),
-            key=lambda a: max(c.relevance for c in by_article[a]),
+            key=lambda a: max(rank_score(c) for c in by_article[a]),
             reverse=True,
         )
 
@@ -246,7 +251,7 @@ class QdrantRetriever:
 
         for art_id in ranked_articles:
             art_chunks = by_article[art_id]
-            best_chunk = max(art_chunks, key=lambda c: c.relevance)
+            best_chunk = max(art_chunks, key=rank_score)
 
             # Ensure resolution chunk is present for any relevant article
             res_chunk = next(
@@ -281,7 +286,7 @@ class QdrantRetriever:
                     for item in merged.values()
                     if (item.article_id, item.chunk_index) not in seen_keys
                 ],
-                key=lambda x: x.relevance,
+                key=rank_score,
                 reverse=True,
             )
             for item in remaining:
@@ -290,7 +295,7 @@ class QdrantRetriever:
                 if len(bundled_items) >= top_k:
                     break
 
-        items = bundled_items
+        items = bundled_items[:top_k]
 
         sufficient = any(
             item.relevance
