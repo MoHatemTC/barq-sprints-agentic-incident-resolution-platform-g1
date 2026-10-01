@@ -258,7 +258,7 @@ def test_benign_incident_passes_and_reaches_sanitized_state(
     assert llm.prompts_seen  # the classifier did run, since pattern screening passed
 
 
-def test_classifier_timeout_falls_back_to_pattern_screening(
+def test_classifier_timeout_fails_closed(
     dataset: dict[str, Any],
 ) -> None:
     case = dataset["benign_controls"][0]
@@ -268,12 +268,11 @@ def test_classifier_timeout_falls_back_to_pattern_screening(
     result = load(_event_state(), deps)
 
     assert llm.called
-    # Pattern screening passed and the classifier is unavailable -> the run
-    # continues. Unavailability must never be interpreted as is_injection=True.
-    assert result["input_guardrail"]["passed"] is True
+    # Outage withholds processing without labelling the incident an injection.
+    assert result["input_guardrail"]["passed"] is False
 
 
-def test_classifier_exception_falls_back_to_pattern_screening(
+def test_classifier_exception_fails_closed(
     dataset: dict[str, Any],
 ) -> None:
     case = dataset["benign_controls"][1]
@@ -282,10 +281,10 @@ def test_classifier_exception_falls_back_to_pattern_screening(
 
     result = load(_event_state(), deps)
 
-    assert result["input_guardrail"]["passed"] is True
+    assert result["input_guardrail"]["passed"] is False
 
 
-def test_malformed_classifier_output_falls_back_to_pattern_screening(
+def test_malformed_classifier_output_fails_closed(
     dataset: dict[str, Any],
 ) -> None:
     case = dataset["benign_controls"][0]
@@ -294,4 +293,4 @@ def test_malformed_classifier_output_falls_back_to_pattern_screening(
 
     result = load(_event_state(), deps)
 
-    assert result["input_guardrail"]["passed"] is True
+    assert result["input_guardrail"]["passed"] is False

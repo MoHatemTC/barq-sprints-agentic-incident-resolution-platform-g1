@@ -109,7 +109,9 @@ def test_replay_resets_parked_event_and_reenqueues_via_producer() -> None:
     assert outcome.removed_records == 2  # every record of THIS event, others untouched
     remaining = [json.loads(raw)["event_id"] for raw in redis.lrange(INCIDENT_DLQ_QUEUE, 0, -1)]
     assert remaining == ["evt-other"]
-    producer.assert_called_once_with(EVENT_PAYLOAD, outcome.execution_id)
+    producer.assert_called_once_with(
+        EVENT_PAYLOAD, outcome.execution_id, correlation_id=str(outcome.execution_id)
+    )
     execution = repo.executions[outcome.execution_id]
     assert execution["status"] == "queued"
     assert execution["ended_at"] is None
@@ -207,3 +209,53 @@ def test_replay_succeeds_when_redis_has_no_records_for_event() -> None:
     assert outcome.replayed is True
     assert outcome.removed_records == 0  # nothing to clean, that's fine
     producer.assert_called_once()  # event was still re-enqueued
+
+
+def test_enqueue_outage_keeps_dlq_and_restores_retryable_parked_state() -> None:
+    repo = _parked_repo(state="exhausted")
+    redis = FakeListRedis()
+    _dlq_with_event(redis, records_for_event=1)
+    before = redis.lrange(INCIDENT_DLQ_QUEUE, 0, -1)
+    with patch(
+        "app.workers.replay.send_incident_event", side_effect=ConnectionError("broker down")
+    ):
+        with pytest.raises(ConnectionError):
+            replay_event(repo, redis, EVENT_PAYLOAD["event_id"], max_attempts=5)
+    execution_id = repo.find_execution_id(EVENT_PAYLOAD["event_id"])
+    assert repo.get_status(execution_id) == "failed"
+    assert repo.get_retry_state(execution_id)["state"] == "exhausted"
+    assert redis.lrange(INCIDENT_DLQ_QUEUE, 0, -1) == before
+
+
+def test_replay_keeps_original_trace_and_does_not_delete_a_fresh_failure() -> None:
+    repo = _parked_repo(state="cancelled")
+    redis = FakeListRedis()
+    redis.lpush(
+        INCIDENT_DLQ_QUEUE,
+        json.dumps(
+            {
+                "event_id": EVENT_PAYLOAD["event_id"],
+                "correlation_id": "original-webhook-trace",
+                "failed_at": "old",
+            }
+        ),
+    )
+
+    def enqueue(*args, **kwargs):
+        assert kwargs["correlation_id"] == "original-webhook-trace"
+        redis.lpush(
+            INCIDENT_DLQ_QUEUE,
+            json.dumps(
+                {
+                    "event_id": EVENT_PAYLOAD["event_id"],
+                    "correlation_id": "original-webhook-trace",
+                    "failed_at": "new",
+                }
+            ),
+        )
+
+    with patch("app.workers.replay.send_incident_event", side_effect=enqueue):
+        result = replay_event(repo, redis, EVENT_PAYLOAD["event_id"], max_attempts=5)
+    assert result.removed_records == 1
+    remaining = load_dead_letters(redis)
+    assert len(remaining) == 1 and remaining[0]["failed_at"] == "new"

@@ -134,6 +134,7 @@ def run_graph(
     attempt: int,
     deps: AgentDependencies,
     resume: dict[str, Any] | None = None,
+    cached_draft: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run (or resume) one execution and return its final output.
 
@@ -154,6 +155,8 @@ def run_graph(
         started_at=deps.clock().isoformat(),
     )
     resumed = False
+    if cached_draft and isinstance(payload, dict):
+        payload["cached_draft"] = cached_draft
     if graph.checkpointer is not None:
         snapshot = graph.get_state(config)
         if snapshot.values:
@@ -276,6 +279,14 @@ def _result(values: dict[str, Any], *, resumed: bool) -> dict[str, Any]:
         "escalated": parsed.outcome.value.startswith("escalated"),
         "suggested": parsed.outcome is Outcome.SUGGESTED,
         "lifecycle": lifecycle,
+        "cache_draft": (
+            values.get("draft")
+            if parsed.processing_state == "complete"
+            and parsed.write_back == "written"
+            and (values.get("draft") or {}).get("rendered") == parsed.suggestion
+            else None
+        ),
+        "cache_draft_used": bool(values.get("cache_draft_used")),
     }
 
 

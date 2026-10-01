@@ -574,3 +574,30 @@ def test_ensure_retry_state_aligns_drifted_budget_on_untouched_rows(repo, sync_e
     assert snapshot["max_attempts"] == 5, "burned budget history is never rewritten"
     assert snapshot["state"] == "scheduled"
     assert snapshot["attempt_count"] == 1
+
+
+def test_failed_replay_enqueue_restores_parked_budget_against_postgres(repo, sync_engine):
+    execution_id = _seed_event_with_execution(sync_engine, _make_payload("INC" + uuid4().hex[:8]))
+    repo.ensure_retry_state(execution_id, max_attempts=WORKER_MAX_RETRIES)
+    failure_id = repo.log_failure(execution_id, 1, "TerminalError", "test failure", False)
+    repo.mark_cancelled(execution_id, 1, failure_id, "test failure")
+    previous = repo.get_retry_state(execution_id)
+    assert repo.reset_for_replay(execution_id, max_attempts=5)
+    assert repo.restore_failed_replay(execution_id, previous)
+    assert repo.get_status(execution_id) == "failed"
+    restored = repo.get_retry_state(execution_id)
+    assert restored["state"] == "cancelled"
+    assert restored["attempt_count"] == 1
+    assert restored["max_attempts"] == WORKER_MAX_RETRIES
+    assert restored["last_attempt_at"] == previous["last_attempt_at"]
+    assert repo.count_failures(execution_id) == 1
+
+
+def test_replay_enqueue_restore_never_cancels_a_claimed_worker(repo, sync_engine):
+    execution_id = _seed_event_with_execution(sync_engine, _make_payload("INC" + uuid4().hex[:8]))
+    repo.ensure_retry_state(execution_id, max_attempts=WORKER_MAX_RETRIES)
+    assert repo.claim_for_running(execution_id)
+    assert not repo.restore_failed_replay(
+        execution_id, {"state": "cancelled", "attempt_count": 1, "max_attempts": WORKER_MAX_RETRIES}
+    )
+    assert repo.get_status(execution_id) == "running"

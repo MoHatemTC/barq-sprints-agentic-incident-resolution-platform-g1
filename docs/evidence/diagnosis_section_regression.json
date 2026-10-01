@@ -1,0 +1,24 @@
+{
+  "recorded_at": "2026-10-01T02:51:01.017477+00:00",
+  "model": "gemini/gemini-3.5-flash",
+  "source": "real Qdrant KB0001-v2.0",
+  "cases": [
+    {
+      "only_section": "Cause",
+      "symptom_match": true,
+      "confidence": 1.0,
+      "matched_article_ids": [
+        "KB0001-v2.0"
+      ]
+    },
+    {
+      "only_section": "Resolution",
+      "symptom_match": true,
+      "confidence": 0.9,
+      "matched_article_ids": [
+        "KB0001-v2.0"
+      ]
+    }
+  ],
+  "result": "passed"
+}

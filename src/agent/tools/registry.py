@@ -179,7 +179,8 @@ class RegistryRefusalError(TerminalError):
 class PostgreSQLApprovalChecker:
     """Read immutable approval decisions directly from PostgreSQL.
 
-    Rows are restricted to the current execution in SQL.  Tool scope is then
+    Rows are restricted to the current execution in SQL. Unscoped workflow
+    approvals cannot invalidate a valid tool-scoped decision. Tool scope is then
     validated from the JSON evidence object so malformed evidence can be
     distinguished from a genuine absence of a matching approval.
     """
@@ -219,7 +220,7 @@ class PostgreSQLApprovalChecker:
             if scoped_name == tool_name:
                 matching.append(row)
 
-        if malformed_scope:
+        if malformed_scope and not matching:
             return ApprovalCheckResult(False, RefusalReason.APPROVAL_SCOPE_INVALID)
         if not matching:
             return ApprovalCheckResult(False, RefusalReason.APPROVAL_MISSING)

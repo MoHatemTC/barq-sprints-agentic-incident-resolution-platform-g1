@@ -285,6 +285,7 @@ class FakeOpenAISDK:
     generations) run without a network."""
 
     SCHEMA_PURPOSE = {
+        "InjectionClassification": "injection_classifier",
         "ClassifyOutput": "classify",
         "DiagnoseOutput": "diagnose",
         "GenerateOutput": "generate",

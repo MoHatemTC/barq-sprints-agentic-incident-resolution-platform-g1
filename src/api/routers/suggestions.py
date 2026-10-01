@@ -89,7 +89,11 @@ async def review_suggestion(
     execution = await db.get(Execution, execution_id)
     if execution is None:
         raise ResourceNotFoundError(f"No execution '{execution_id}' found")
-    if execution.termination_cause != _DRAFTED:
+    if execution.termination_cause not in {
+        _DRAFTED,
+        "human_rejected:suggested",
+        "human_resolved:suggested",
+    }:
         raise ResourceNotFoundError(
             f"Execution '{execution_id}' finished as "
             f"'{execution.termination_cause}', not '{_DRAFTED}'; it has no draft to "
@@ -164,12 +168,6 @@ async def decide_suggestion(
     # The approval index protects PostgreSQL, but without a decision lock two
     # requests can both PATCH ServiceNow before one loses the insert race.
     await lock_execution_decision(db, execution_id)
-    if execution.termination_cause != _DRAFTED:
-        raise ConflictError(
-            f"Execution '{execution_id}' finished as '{execution.termination_cause}', "
-            f"not '{_DRAFTED}'; there is no draft to decide. A paused escalation is "
-            "decided through /api/v1/approvals/{id}/decide."
-        )
 
     try:
         existing = (
@@ -182,6 +180,13 @@ async def decide_suggestion(
         raise ConflictError(
             f"Execution '{execution_id}' has already been decided "
             f"('{existing.decision}') and decisions are immutable."
+        )
+
+    if execution.termination_cause != _DRAFTED:
+        raise ConflictError(
+            f"Execution '{execution_id}' finished as '{execution.termination_cause}', "
+            f"not '{_DRAFTED}'; there is no draft to decide. A paused escalation is "
+            "decided through /api/v1/approvals/{id}/decide."
         )
 
     incident = await _get_incident(settings, execution.incident_sys_id)
@@ -273,6 +278,8 @@ async def decide_suggestion(
             ai_processing_end=now,
             ai_human_review_required=False,
             ai_suggestion="",
+            ai_resolution="",
+            work_notes=reason[:4000],
         )
         try:
             await _update_incident(settings, execution.incident_sys_id, update)
@@ -302,6 +309,13 @@ async def decide_suggestion(
             decided_at=now,
         )
         db.add(approval)
+        execution.status = "failed" if written["ai_processing_state"] == "failed" else "succeeded"
+        execution.ended_at = now
+        execution.termination_cause = (
+            "human_rejected:suggested"
+            if execution.status == "failed"
+            else "human_resolved:suggested"
+        )
         await db.commit()
         await db.refresh(approval)
     except IntegrityError as exc:

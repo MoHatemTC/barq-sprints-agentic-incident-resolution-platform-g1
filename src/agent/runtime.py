@@ -51,6 +51,7 @@ def invoke_incident_graph(
     attempt: int,
     runtime: AgentRuntime | None = None,
     resume: dict[str, Any] | None = None,
+    cached_draft: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     runtime = runtime or get_runtime()
     try:
@@ -67,6 +68,7 @@ def invoke_incident_graph(
         attempt=attempt,
         deps=runtime.deps,
         resume=resume,
+        cached_draft=cached_draft,
     )
 
 

@@ -221,11 +221,11 @@ class TestWorkflowStateTable:
         assert {r.attempt for r in stored} == {1}
         # A drafted suggestion completed. The row is not 'awaiting_approval' because
         # nothing is paused: this run has no interrupt to approve, so that status
-        # asserted a pause which did not exist. The incident still says it awaits a
-        # person, and that is what processing_state records.
+        # asserted a pause which did not exist. The incident also completes rather
+        # than presenting an approval that cannot be resumed.
         assert stored[-1].status == "succeeded"
         assert stored[-1].decision["outcome"] == "suggested"
-        assert stored[-1].decision["processing_state"] == "awaiting_approval"
+        assert stored[-1].decision["processing_state"] == "complete"
         retrieve_row = next(r for r in stored if r.node_name == "retrieve")
         assert retrieve_row.evidence[0]["article_id"] == "KB0001-v2"
         risk_row = next(r for r in stored if r.node_name == "determine_risk")
@@ -316,7 +316,12 @@ class TestWorkflowStateTable:
             saver,
             execution_id,
             1,
-            resume={"decision": "approved", "decided_by": "lead_ops", "reason": "change window"},
+            resume={
+                "decision": "approved",
+                "decided_by": "lead_ops",
+                "reason": "change window",
+                "solution": "Operator verified the recovery.",
+            },
         )
         assert resumed["paused"] is False
         assert resumed["resumed"] is True
@@ -371,7 +376,12 @@ class TestWorkflowStateTable:
             saver,
             execution_id,
             1,
-            resume={"decision": "approved", "decided_by": "lead_ops", "reason": "change window"},
+            resume={
+                "decision": "approved",
+                "decided_by": "lead_ops",
+                "reason": "change window",
+                "solution": "Operator verified the recovery.",
+            },
         )
         assert resumed["paused"] is False
         assert resumed["resumed"] is True

@@ -53,6 +53,8 @@ class RetrievalSettings(BaseSettings):
     # Retrieval
     retrieval_mode: RetrievalMode = RetrievalMode.HYBRID
     rerank_model: str = "Xenova/ms-marco-MiniLM-L-6-v2"
+    retrieval_mmr_enabled: bool = False
+    retrieval_mmr_lambda: float = Field(default=0.8, ge=0.0, le=1.0)
     rerank_top_k: int = 5
     rerank_candidate_limit: int = 20  # must be larger than rerank_top_k
     rerank_rrf_weight: float = Field(default=0.5, ge=0.0, le=1.0)
@@ -88,7 +90,16 @@ class Settings(RetrievalSettings):
             "dlq_replay": True,
             "eval_benchmarks": False,
             "auto_remediation": False,
+            "semantic_caching": True,
         }
+    )
+    enable_semantic_cache: bool = Field(
+        default=True,
+        description=(
+            "Master toggle for Sprint 4 semantic caching & single-flight clustering. "
+            "Set to False (or ENABLE_SEMANTIC_CACHE=false in .env) in development/testing "
+            "to run every incident through the full LangGraph pipeline."
+        ),
     )
 
     # Host & Network Binding (Security)

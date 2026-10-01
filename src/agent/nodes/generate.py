@@ -9,6 +9,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from pydantic import ValidationError
+
+from agent.citations import resolve_article_id, resolve_section
 from agent.dependencies import AgentDependencies
 from agent.nodes.classify import incident_text
 from agent.prompts import (
@@ -81,6 +84,37 @@ def generate(state: AgentState, deps: AgentDependencies) -> dict[str, Any]:
     prev_draft_raw = state.get("draft")
     revision_count = state.get("revision_count", 0)
 
+    # Reuse only a candidate procedure. Every follower still runs its own load,
+    # eligibility, risk, retrieval, diagnosis, critic, safety and confidence gates.
+    if state.get("cached_draft") and not critic_feedback_raw and revision_count == 0:
+        try:
+            cached = Draft.model_validate(state["cached_draft"])
+        except ValidationError:
+            cached = None
+        if cached and cached.steps and not cached.length_exceeded:
+            candidate_steps: list[DraftStep] = []
+            for cached_step in cached.steps:
+                article = resolve_article_id(cached_step.article_id, evidence)
+                section = (
+                    resolve_section(cached_step.section, str(article), evidence)
+                    if article
+                    else None
+                )
+                if not article or not section:
+                    break
+                candidate_steps.append(
+                    DraftStep(text=cached_step.text, article_id=article, section=section)
+                )
+            else:
+                rendered, sources = render(candidate_steps, evidence)
+                if len(rendered) <= MAX_SUGGESTION_CHARS:
+                    candidate = Draft(steps=candidate_steps, rendered=rendered, sources=sources)
+                    with deps.tracer.span("agent.resolution_cache", as_type="agent") as span:
+                        span.update(
+                            metadata={"cache_draft_used": True, "step_count": len(candidate_steps)}
+                        )
+                    return {"draft": candidate.model_dump(mode="json"), "cache_draft_used": True}
+
     with deps.tracer.span(
         "agent.resolution",
         as_type="agent",
@@ -122,21 +156,29 @@ def generate(state: AgentState, deps: AgentDependencies) -> dict[str, Any]:
             prompt=prompt,
             schema=GenerateOutput,
         )
-        allowed = {item.article_id for item in evidence}
-        steps = [
-            DraftStep(text=s.text, article_id=s.article_id, section=s.section)
-            for s in answer.steps
-            if s.article_id in allowed and s.text.strip()
-        ]
+        steps: list[DraftStep] = []
+        for step in answer.steps:
+            article_id = resolve_article_id(step.article_id, evidence)
+            if article_id and step.text.strip():
+                section = resolve_section(step.section, article_id, evidence)
+                steps.append(
+                    DraftStep(
+                        text=step.text, article_id=article_id, section=section or step.section
+                    )
+                )
         rendered, sources = render(steps, evidence)
-        while len(rendered) > MAX_SUGGESTION_CHARS and steps:
-            steps = steps[:-1]
-            rendered, sources = render(steps, evidence)
+        # Omit the redundant footer before declaring overflow. Every step retains
+        # its citation; never discard the final rollback/restart/validation steps.
+        if len(rendered) > MAX_SUGGESTION_CHARS:
+            footer = "\n\nSources: " + "; ".join(sources)
+            if sources:
+                rendered = rendered[: -len(footer)]
         draft = Draft(
             steps=steps,
             rendered=rendered,
             dropped_steps=len(answer.steps) - len(steps),
             sources=sources,
+            length_exceeded=len(rendered) > MAX_SUGGESTION_CHARS,
             revision_count=new_revision_count,
         )
         result = {

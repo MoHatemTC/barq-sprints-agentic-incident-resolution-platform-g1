@@ -63,6 +63,7 @@ def check_run(name: str, run: dict[str, Any], auth: tuple[str, str]) -> tuple[di
     try:
         observations = fetch(trace_id, auth)
     except httpx.HTTPError as exc:
+        failures.append(f"{name}: trace inspection failed ({type(exc).__name__})")
         return {
             "run": name,
             "trace_id": trace_id,
@@ -96,13 +97,23 @@ def check_run(name: str, run: dict[str, Any], auth: tuple[str, str]) -> tuple[di
         )
     if not observations:
         failures.append(f"{name}: no observations recorded for {trace_id}")
+    if run.get("cache_draft_used"):
+        if "agent.resolution_cache" not in names or "llm.generate" in names:
+            failures.append(f"{name}: trace does not prove cached generation reuse")
+        record["cached_generation_reuse_proven"] = (
+            "agent.resolution_cache" in names and "llm.generate" not in names
+        )
 
     missing_worker = WORKER_SPANS - set(names)
     if missing_worker:
         failures.append(f"{name}: no worker span recorded ({sorted(missing_worker)} missing)")
 
     # Only the interrupt/resume run must show the resume-side ServiceNow spans.
-    if run.get("termination_cause", "").startswith("interrupt_resume"):
+    if (
+        run.get("termination_cause", "").startswith("interrupt_resume")
+        or run.get("own_decision_http") == 200
+        or run.get("decision_http") == 200
+    ):
         missing_resume = RESUME_SPANS - set(names)
         if missing_resume:
             failures.append(
@@ -128,6 +139,8 @@ def main() -> int:
 
     transcript = json.loads(Path(args.evidence).read_text(encoding="utf-8"))
     runs = transcript.get("runs", {})
+    if not runs and transcript.get("cases"):
+        runs = {case["scenario"]: case for case in transcript["cases"]}
     if not runs:
         print(f"no runs in {args.evidence}", file=sys.stderr)
         return 2

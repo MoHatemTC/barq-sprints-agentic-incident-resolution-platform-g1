@@ -23,16 +23,19 @@ from observability.redaction import redact_text_with_count
 
 def load(state: AgentState, deps: AgentDependencies) -> dict[str, Any]:
     event = EventPayload.model_validate(state["event"])
-    raw = asyncio.run(
-        deps.tools.invoke(
-            "read_incident",
-            context=ToolCallContext(
-                execution_id=state["execution_id"],
-                correlation_id=state.get("correlation_id"),
-            ),
-            arguments={"sys_id": event.sys_id},
+    if event.prefetched_incident is not None:
+        raw = event.prefetched_incident
+    else:
+        raw = asyncio.run(
+            deps.tools.invoke(
+                "read_incident",
+                context=ToolCallContext(
+                    execution_id=state["execution_id"],
+                    correlation_id=state.get("correlation_id"),
+                ),
+                arguments={"sys_id": event.sys_id},
+            )
         )
-    )
     incident = snapshot_incident(raw)
     sanitized_incident, gate = _run_input_guardrails(incident, deps)
     return {
@@ -73,8 +76,8 @@ def _run_input_guardrails(
                 blocked = classifier_outcome.is_injection
                 detection_layer = "semantic_classifier" if blocked else "none"
             else:
-                blocked = False
-                detection_layer = "none"
+                blocked = True
+                detection_layer = "classifier_unavailable"
 
         gate = GateResult(
             gate="input_guardrail",
@@ -100,7 +103,13 @@ def _run_input_guardrails(
                     ),
                 },
             ],
-            reason="blocked by input guardrail" if blocked else None,
+            reason=(
+                "semantic input screening unavailable; processing withheld"
+                if detection_layer == "classifier_unavailable"
+                else "blocked by input guardrail"
+                if blocked
+                else None
+            ),
         )
         span.update(
             output={
