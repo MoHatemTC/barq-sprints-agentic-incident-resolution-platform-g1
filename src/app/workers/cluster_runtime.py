@@ -25,7 +25,7 @@ def load_cluster_incident(payload: dict, execution_id: str, correlation_id: str)
             arguments={"sys_id": event.sys_id},
         )
     )
-    payload["_prefetched_incident"] = raw
+    payload["prefetched_incident"] = raw
     incident = snapshot_incident(raw)
     if not incident.ai_enabled or incident.ai_human_lock is not False:
         return {}
