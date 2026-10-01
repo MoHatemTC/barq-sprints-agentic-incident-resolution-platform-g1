@@ -97,7 +97,7 @@ pythonpath = ["src"]
 # clones don't have: deselect by default so `pytest` is green everywhere.
 # Run them explicitly with `just test-integration` (passes -m integration,
 # which overrides this filter).
-addopts = "-m 'not integration'"
+addopts = "-m 'not integration' -p no:deepeval"
 markers = [
     "unit: fast isolated tests using mocks/fakes (default suite)",
     "integration: requires live docker services (redis, postgres); deselect with -m 'not integration'",

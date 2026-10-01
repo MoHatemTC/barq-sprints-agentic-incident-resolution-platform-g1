@@ -25,7 +25,6 @@ from app.retrieval.embedding import FastEmbedEngine
 from app.retrieval.extraction.parse_appendix import AppendixERelationships
 from app.retrieval.manual.manual_chunking import chunk_sections
 from app.retrieval.manual.manual_ingest import ingest_manual_sections
-from app.retrieval.manual.manual_sources import ManualCorpusJSONSource
 
 DEFAULT_SEMANTIC_CORPUS = Path("data/corpus/manual_semantic_sections.json")
 DEFAULT_COLLECTION = "manual_semantic_sections"

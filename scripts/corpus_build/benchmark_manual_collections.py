@@ -24,8 +24,9 @@ from app.core.config import RetrievalMode, get_retrieval_settings  # noqa: E402
 
 QDRANT_URL = get_retrieval_settings().qdrant_url
 
-from app.retrieval.embedding import FastEmbedEngine  # noqa: E402
 from qdrant_client import QdrantClient  # noqa: E402
+
+from app.retrieval.embedding import FastEmbedEngine  # noqa: E402
 
 # The corpus adapter opens barq_rag_eval_dataset.json relative to the CWD.
 os.chdir(REPO / "data" / "corpus")
@@ -52,7 +53,9 @@ def run_cell(client, engine, collection, mode, turns) -> dict:
         retrieved = [h.article_number for h in hits]
         s = A.score_retrieval(retrieved, t)
         if t["expected_behaviour"] == "answer":
-            results.append((s["recall"], s["precision"], mean_reciprocal_rank(retrieved, t), s["clean"]))
+            results.append(
+                (s["recall"], s["precision"], mean_reciprocal_rank(retrieved, t), s["clean"])
+            )
         else:
             results.append((None, None, None, not (set(t["must_not_retrieve"]) & set(retrieved))))
         if i % 20 == 0:
@@ -77,13 +80,20 @@ def main() -> None:
     client = QdrantClient(url=QDRANT_URL)
     print("models loaded — running benchmark cells\n")
 
-    print(f"{'collection':30s} {'mode':17s} {'recall':>6s} {'prec':>5s} {'MRR':>6s}  full-recall  clean")
+    header = (
+        f"{'collection':30s} {'mode':17s} {'recall':>6s} {'prec':>5s} "
+        f"{'MRR':>6s}  full-recall  clean"
+    )
+    print(header)
     for collection, mode in COMBINATIONS:
         stats = run_cell(client, engine, collection, mode, turns)
-        print(f"{collection:30s} {mode.value:17s} "
-              f"{stats['recall']:6.2f} {stats['precision']:5.2f} {stats['mrr']:6.3f}  "
-              f"{stats['full_recall']:3d}/{stats['answered']:3d}      "
-              f"{stats['clean']}/{stats['total']}", flush=True)
+        print(
+            f"{collection:30s} {mode.value:17s} "
+            f"{stats['recall']:6.2f} {stats['precision']:5.2f} {stats['mrr']:6.3f}  "
+            f"{stats['full_recall']:3d}/{stats['answered']:3d}      "
+            f"{stats['clean']}/{stats['total']}",
+            flush=True,
+        )
 
 
 if __name__ == "__main__":

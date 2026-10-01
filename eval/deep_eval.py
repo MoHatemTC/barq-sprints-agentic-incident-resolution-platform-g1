@@ -43,8 +43,9 @@ from app.core.config import RetrievalMode, get_retrieval_settings  # noqa: E402
 QDRANT_URL = get_retrieval_settings().qdrant_url
 AGENT_SETTINGS = AgentSettings()
 
-from app.retrieval.embedding import FastEmbedEngine  # noqa: E402
 from qdrant_client import QdrantClient  # noqa: E402
+
+from app.retrieval.embedding import FastEmbedEngine  # noqa: E402
 
 # The corpus adapter opens barq_rag_eval_dataset.json relative to the CWD.
 os.chdir(REPO / "data" / "corpus")
@@ -52,12 +53,13 @@ sys.path.insert(0, str(REPO / "data" / "corpus"))
 import adapters as A  # noqa: E402
 
 os.chdir(REPO)
-from scripts.smoke_eval_retrieval import search  # noqa: E402
-
 from deepeval.metrics import FaithfulnessMetric, GEval  # noqa: E402
 from deepeval.models import DeepEvalBaseLLM  # noqa: E402
 from deepeval.models.llms.utils import trim_and_load_json  # noqa: E402
-from deepeval.test_case import LLMTestCase, SingleTurnParams as P  # noqa: E402
+from deepeval.test_case import LLMTestCase  # noqa: E402
+from deepeval.test_case import SingleTurnParams as P  # noqa: E402
+
+from scripts.smoke_eval_retrieval import search  # noqa: E402
 
 GROUNDING_SYSTEM_PROMPT = """\
 You answer questions about the BARQ Systems IT Service Desk Operations Manual.
@@ -123,8 +125,9 @@ def build_history_block(history: list[dict]) -> str:
     return "\n".join(lines) + "\n\n"
 
 
-def make_run(qdrant, gen_client, collection: str, engine: FastEmbedEngine,
-             gen_model: str, top_k: int):
+def make_run(
+    qdrant, gen_client, collection: str, engine: FastEmbedEngine, gen_model: str, top_k: int
+):
     """Return run(question, history) -> (answer, retrieved) for the adapter."""
     retrieval_lock = threading.Lock()  # serialize shared ONNX inference
 
@@ -149,13 +152,14 @@ def make_run(qdrant, gen_client, collection: str, engine: FastEmbedEngine,
                         "proxy, then rerun (completed turns are checkpointed and "
                         "skipped)."
                     ) from exc
-                time.sleep(2 ** attempt * 5)
+                time.sleep(2**attempt * 5)
         raise RuntimeError(f"generation failed after retries: {last_exc}")
 
     def run(question: str, history: list[dict]) -> tuple[str, list[dict]]:
         with retrieval_lock:
-            hits = search(qdrant, engine, RetrievalMode.HYBRID_RERANKED,
-                          collection, question, top_k)
+            hits = search(
+                qdrant, engine, RetrievalMode.HYBRID_RERANKED, collection, question, top_k
+            )
         retrieved = [
             {
                 "section": h.article_number,
@@ -171,10 +175,12 @@ def make_run(qdrant, gen_client, collection: str, engine: FastEmbedEngine,
             + build_context_block(retrieved)
             + f"\n\nQUESTION: {question}"
         )
-        answer = generate_with_retry([
-            {"role": "system", "content": GROUNDING_SYSTEM_PROMPT},
-            {"role": "user", "content": user},
-        ])
+        answer = generate_with_retry(
+            [
+                {"role": "system", "content": GROUNDING_SYSTEM_PROMPT},
+                {"role": "user", "content": user},
+            ]
+        )
         return answer, retrieved
 
     return run
@@ -235,25 +241,32 @@ def metrics_for_turn(t: dict, judge, threshold: float) -> dict[str, GEval]:
             if name == "refusal_quality":
                 continue  # answer turns are not judged on refusing
             metrics[name] = GEval(
-                name=name, criteria=criteria, evaluation_params=JUDGE_PARAMS,
-                threshold=threshold, model=judge,
+                name=name,
+                criteria=criteria,
+                evaluation_params=JUDGE_PARAMS,
+                threshold=threshold,
+                model=judge,
             )
         if t.get("geval_criteria"):
             metrics["turn_rubric"] = GEval(
-                name="turn_rubric", criteria=t["geval_criteria"],
-                evaluation_params=JUDGE_PARAMS, threshold=threshold, model=judge,
+                name="turn_rubric",
+                criteria=t["geval_criteria"],
+                evaluation_params=JUDGE_PARAMS,
+                threshold=threshold,
+                model=judge,
             )
     else:
         metrics["refusal_quality"] = GEval(
             name="refusal_quality",
             criteria=(t.get("geval_criteria") or REFUSAL_RUBRIC),
-            evaluation_params=JUDGE_PARAMS, threshold=threshold, model=judge,
+            evaluation_params=JUDGE_PARAMS,
+            threshold=threshold,
+            model=judge,
         )
     return metrics
 
 
-def judge_turn(t: dict, run, judge, threshold: float, index: int,
-               history: list[dict]) -> dict:
+def judge_turn(t: dict, run, judge, threshold: float, index: int, history: list[dict]) -> dict:
     """Retrieve + answer + judge one turn. Metrics run concurrently."""
     answer, retrieved = run(t["standalone_input"], history)
     sections = [r["section"] for r in retrieved]
@@ -273,17 +286,22 @@ def judge_turn(t: dict, run, judge, threshold: float, index: int,
         for attempt in range(4):  # transient 429s / proxy blips
             try:
                 metric.measure(case, _in_component=True)
-                scores[name] = {"score": round(float(metric.score), 3),
-                                "success": bool(metric.is_successful()),
-                                "reason": str(metric.reason)[:400]}
+                scores[name] = {
+                    "score": round(float(metric.score), 3),
+                    "success": bool(metric.is_successful()),
+                    "reason": str(metric.reason)[:400],
+                }
                 return
             except Exception as exc:
                 last_exc = exc
                 if "budget_exceeded" in str(exc):
                     raise
-                time.sleep(2 ** attempt * 5)
-        scores[name] = {"score": None, "success": False,
-                        "reason": f"error after retries: {last_exc}"}
+                time.sleep(2**attempt * 5)
+        scores[name] = {
+            "score": None,
+            "success": False,
+            "reason": f"error after retries: {last_exc}",
+        }
 
     with ThreadPoolExecutor(max_workers=len(metrics)) as pool:
         futures = [pool.submit(_measure, name, metric) for name, metric in metrics.items()]
@@ -309,8 +327,9 @@ def judge_turn(t: dict, run, judge, threshold: float, index: int,
     }
 
 
-def eval_session(session_turns: list[dict], run, judge, threshold: float,
-                 first_index: int, on_turn) -> list[dict]:
+def eval_session(
+    session_turns: list[dict], run, judge, threshold: float, first_index: int, on_turn
+) -> list[dict]:
     """One conversation: turns strictly sequential so coreference history
     builds correctly; each turn's metrics run concurrently inside judge_turn."""
     history: list[dict] = []
@@ -329,8 +348,12 @@ def main() -> int:
     parser.add_argument("--url", default=QDRANT_URL)
     parser.add_argument("--top-k", type=int, default=5)
     parser.add_argument("--limit", type=int, default=0, help="first N turns only (0 = all)")
-    parser.add_argument("--concurrency", type=int, default=6,
-                        help="sessions evaluated in parallel (each stays internally sequential)")
+    parser.add_argument(
+        "--concurrency",
+        type=int,
+        default=6,
+        help="sessions evaluated in parallel (each stays internally sequential)",
+    )
     parser.add_argument("--judge-model", default=AGENT_SETTINGS.agent_llm_model)
     parser.add_argument("--gen-model", default=AGENT_SETTINGS.agent_llm_model)
     parser.add_argument("--threshold", type=float, default=0.7)
@@ -349,7 +372,10 @@ def main() -> int:
         sessions = limited
     total_turns = sum(len(s["turns"]) for s in sessions)
 
-    if AGENT_SETTINGS.litellm_api_key is None or not AGENT_SETTINGS.litellm_api_key.get_secret_value():
+    if (
+        AGENT_SETTINGS.litellm_api_key is None
+        or not AGENT_SETTINGS.litellm_api_key.get_secret_value()
+    ):
         raise SystemExit("LITELLM_API_KEY is not configured")
     gen_client = openai.OpenAI(
         base_url=AGENT_SETTINGS.litellm_base_url,
@@ -360,9 +386,12 @@ def main() -> int:
     client = QdrantClient(url=args.url)
     run = make_run(client, gen_client, args.collection, engine, args.gen_model, args.top_k)
 
-    print(f"turns: {total_turns} in {len(sessions)} sessions | {args.concurrency} sessions "
-          f"in parallel | gen: {args.gen_model} | judge: {args.judge_model} | "
-          f"threshold: {args.threshold}\n", flush=True)
+    print(
+        f"turns: {total_turns} in {len(sessions)} sessions | {args.concurrency} sessions "
+        f"in parallel | gen: {args.gen_model} | judge: {args.judge_model} | "
+        f"threshold: {args.threshold}\n",
+        flush=True,
+    )
 
     output = Path(args.output) if Path(args.output).is_absolute() else REPO / args.output
 
@@ -389,12 +418,23 @@ def main() -> int:
 
     def write_checkpoint() -> None:
         merged = sorted(prev_rows + new_rows, key=_natural_key)
-        output.write_text(json.dumps({
-            "config": {"collection": args.collection, "gen_model": args.gen_model,
-                       "judge_model": args.judge_model, "threshold": args.threshold,
-                       "top_k": args.top_k},
-            "turns": merged,
-        }, indent=2, ensure_ascii=False), encoding="utf-8")
+        output.write_text(
+            json.dumps(
+                {
+                    "config": {
+                        "collection": args.collection,
+                        "gen_model": args.gen_model,
+                        "judge_model": args.judge_model,
+                        "threshold": args.threshold,
+                        "top_k": args.top_k,
+                    },
+                    "turns": merged,
+                },
+                indent=2,
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
 
     def on_turn(row: dict) -> None:
         with print_lock:
@@ -403,10 +443,16 @@ def main() -> int:
             done_count[0] += 1
             flag = "" if row["verdict"] == "PASS" else "  <-- FAIL"
             scores = ", ".join(f"{k}={v['score']}" for k, v in row["metrics"].items())
-            print(f"  [{row['turn_id']}] {row['behaviour']:7s} {scores} "
-                  f"refused={row['refusal_detected']}{flag}", flush=True)
-            print(f"    ... {done_count[0] + len(prev_rows)}/{total_turns} turns "
-                  f"({time.perf_counter() - started:.0f}s)", flush=True)
+            print(
+                f"  [{row['turn_id']}] {row['behaviour']:7s} {scores} "
+                f"refused={row['refusal_detected']}{flag}",
+                flush=True,
+            )
+            print(
+                f"    ... {done_count[0] + len(prev_rows)}/{total_turns} turns "
+                f"({time.perf_counter() - started:.0f}s)",
+                flush=True,
+            )
 
     rows: list[dict] = []
     with ThreadPoolExecutor(max_workers=args.concurrency) as pool:
@@ -414,8 +460,9 @@ def main() -> int:
         for s in sessions:
             remaining = [t for t in s["turns"] if t["turn_id"] not in done_ids]
             if remaining:
-                futures.append(pool.submit(eval_session, remaining, run, judge,
-                                           args.threshold, 0, on_turn))
+                futures.append(
+                    pool.submit(eval_session, remaining, run, judge, args.threshold, 0, on_turn)
+                )
         for f in as_completed(futures):
             rows.extend(f.result())
 
@@ -430,33 +477,53 @@ def main() -> int:
         "per_metric": {
             name: {
                 "avg_score": round(
-                    sum(r["metrics"][name]["score"] for r in rows
-                        if r["metrics"].get(name, {}).get("score") is not None)
-                    / max(1, sum(1 for r in rows
-                                 if r["metrics"].get(name, {}).get("score") is not None)), 3),
+                    sum(
+                        r["metrics"][name]["score"]
+                        for r in rows
+                        if r["metrics"].get(name, {}).get("score") is not None
+                    )
+                    / max(
+                        1,
+                        sum(1 for r in rows if r["metrics"].get(name, {}).get("score") is not None),
+                    ),
+                    3,
+                ),
                 "pass_rate": round(
-                    sum(1 for r in rows if r["metrics"].get(name, {}).get("success")) /
-                    max(1, sum(1 for r in rows if name in r["metrics"])), 3),
+                    sum(1 for r in rows if r["metrics"].get(name, {}).get("success"))
+                    / max(1, sum(1 for r in rows if name in r["metrics"])),
+                    3,
+                ),
             }
             for name in metric_names
         },
-        "behaviour_accuracy": round(
-            sum(1 for r in rows if r["behaviour_ok"]) / len(rows), 3),
+        "behaviour_accuracy": round(sum(1 for r in rows if r["behaviour_ok"]) / len(rows), 3),
     }
     passed_rows = [{"turn_id": r["turn_id"], "passed": r["verdict"] == "PASS"} for r in rows]
     summary["capability_pass_rates"] = A.slice_report(passed_rows)
 
-    output.write_text(json.dumps({
-        "config": {"collection": args.collection, "gen_model": args.gen_model,
-                   "judge_model": args.judge_model, "threshold": args.threshold,
-                   "top_k": args.top_k,
-                   "spend_this_run_usd": round(SPEND["usd"], 4),
-                   "llm_calls_this_run": SPEND["calls"]},
-        "summary": summary,
-        "turns": rows,
-    }, indent=2, ensure_ascii=False), encoding="utf-8")
+    output.write_text(
+        json.dumps(
+            {
+                "config": {
+                    "collection": args.collection,
+                    "gen_model": args.gen_model,
+                    "judge_model": args.judge_model,
+                    "threshold": args.threshold,
+                    "top_k": args.top_k,
+                    "spend_this_run_usd": round(SPEND["usd"], 4),
+                    "llm_calls_this_run": SPEND["calls"],
+                },
+                "summary": summary,
+                "turns": rows,
+            },
+            indent=2,
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
 
-    print(f"\nsummary: {json.dumps(summary['verdicts'])} | behaviour accuracy {summary['behaviour_accuracy']}")
+    verdicts_json = json.dumps(summary["verdicts"])
+    print(f"\nsummary: {verdicts_json} | behaviour accuracy {summary['behaviour_accuracy']}")
     for name, st in summary["per_metric"].items():
         print(f"  {name:18s} avg {st['avg_score']:.3f}  pass {st['pass_rate']:.0%}")
     print(f"spend this run: ${SPEND['usd']:.4f} across {SPEND['calls']} billed calls")

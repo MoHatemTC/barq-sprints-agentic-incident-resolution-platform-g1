@@ -62,8 +62,7 @@ class CrossEncoderReranker:
         rescored = [
             hit.model_copy(
                 update={
-                    "score": (1 - self.rrf_weight) / (RRF_K + enc)
-                    + self.rrf_weight / (RRF_K + fus)
+                    "score": (1 - self.rrf_weight) / (RRF_K + enc) + self.rrf_weight / (RRF_K + fus)
                 }
             )
             for hit, enc, fus in zip(hits, encoder_ranks, fusion_ranks, strict=True)

@@ -244,9 +244,7 @@ def test_rerank_passes_title_plus_chunk_text_as_documents_in_order():
     reranker.rerank("my query", hits, top_n=2)
 
     encoder = _FakeTextCrossEncoder.instances[0]
-    assert encoder.rerank_calls == [
-        ("my query", ["Title\n\nfirst chunk", "Title\n\nsecond chunk"])
-    ]
+    assert encoder.rerank_calls == [("my query", ["Title\n\nfirst chunk", "Title\n\nsecond chunk"])]
 
 
 def test_mismatched_score_count_raises():

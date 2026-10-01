@@ -90,9 +90,7 @@ def main() -> None:
         "sections": output_sections,
         "relationships": raw.get("relationships", {"forward": {}, "reverse": {}}),
     }
-    OUTPUT_PATH.write_text(
-        json.dumps(output, indent=2, ensure_ascii=False), encoding="utf-8"
-    )
+    OUTPUT_PATH.write_text(json.dumps(output, indent=2, ensure_ascii=False), encoding="utf-8")
 
     fields_before = sorted({k for s in raw["sections"] for k in s})
     print(f"wrote {OUTPUT_PATH}")
