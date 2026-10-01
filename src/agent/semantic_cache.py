@@ -24,6 +24,7 @@ from app.models.semantic_cluster import (
     ClusterStatus,
 )
 from app.services.clustering.signature import (
+    _get_field,
     build_incident_signature,
     is_incident_cluster_eligible,
 )
@@ -170,10 +171,10 @@ class SemanticCache:
         # 3. Generate embedding vector
         vector = self._embed(signature)
 
-        inc_sys_id = str(getattr(incident, "sys_id", "") or "")
-        inc_number = str(getattr(incident, "number", "") or "")
-        inc_service = getattr(incident, "service", None)
-        inc_category = getattr(incident, "category", None)
+        inc_sys_id = str(_get_field(incident, "sys_id", "") or "")
+        inc_number = str(_get_field(incident, "number", "") or "")
+        inc_service = _get_field(incident, "service", None)
+        inc_category = _get_field(incident, "category", None)
         norm_service = str(inc_service).strip().lower() if inc_service else None
 
         # 4. Search active anchors in cache

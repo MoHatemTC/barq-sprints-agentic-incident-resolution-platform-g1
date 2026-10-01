@@ -39,9 +39,11 @@ from celery.exceptions import SoftTimeLimitExceeded
 from celery.signals import worker_process_shutdown
 
 from agent.config import get_agent_settings
+from agent.semantic_cache import SemanticCache, get_semantic_cache
 from app.core.config import Settings, get_settings
 from app.core.correlation import clear_correlation_id, set_correlation_id
 from app.db.redis.keys import INCIDENT_DLQ_QUEUE
+from app.models.semantic_cluster import AdmissionMode, ClusterStatus
 from app.workers.celery_app import celery_app
 from app.workers.db import WorkerRepo, build_worker_repo
 from app.workers.incident_state import (
@@ -205,6 +207,7 @@ def _run_incident(
     correlation_id: str | None = None,
     graph_backend: str = "stub",
     settings: Settings | None = None,
+    semantic_cache: SemanticCache | None = None,
 ) -> dict[str, Any]:
     """One delivery attempt. ``task`` is the bound Celery task (or a fake in
     tests) providing ``request.retries`` and ``retry()``."""
@@ -227,6 +230,71 @@ def _run_incident(
         return {"status": "skipped", "execution_id": execution_id}
 
     repo.ensure_retry_state(execution_uuid, max_attempts=cfg.max_retries)
+
+    # Sprint 4 (S4.2): Semantic deduplication & single-flight clustering
+    cache = semantic_cache or get_semantic_cache(repo=repo)
+    admission = cache.admit(payload, execution_id=execution_uuid)
+
+    if admission.mode == AdmissionMode.FOLLOWER and admission.cluster_id is not None:
+        cluster_status = cache.get_cluster_status(admission.cluster_id)
+        if cluster_status == ClusterStatus.RESOLVED:
+            solution = cache.get_cluster_solution(admission.cluster_id) or {}
+            repo.mark_succeeded(execution_uuid, **_execution_summary(solution))
+            logger.info(
+                "incident_follower_resolved_from_cluster",
+                execution_id=execution_id,
+                cluster_id=str(admission.cluster_id),
+                anchor_incident=admission.anchor_incident_number,
+            )
+            return {
+                "status": "succeeded",
+                "execution_id": execution_id,
+                "cluster_id": str(admission.cluster_id),
+                "cluster_role": "follower",
+                "result": solution,
+            }
+
+        if cluster_status == ClusterStatus.AWAITING_APPROVAL:
+            repo.mark_awaiting_approval(execution_uuid)
+            logger.info(
+                "incident_follower_awaiting_cluster_approval",
+                execution_id=execution_id,
+                cluster_id=str(admission.cluster_id),
+                anchor_incident=admission.anchor_incident_number,
+            )
+            return {
+                "status": "awaiting_approval",
+                "execution_id": execution_id,
+                "cluster_id": str(admission.cluster_id),
+                "cluster_role": "follower",
+            }
+
+        if cluster_status == ClusterStatus.RUNNING:
+            logger.info(
+                "incident_follower_yielding_to_leader",
+                execution_id=execution_id,
+                cluster_id=str(admission.cluster_id),
+            )
+            if hasattr(task, "retry"):
+                try:
+                    raise task.retry(countdown=2.0)
+                except Exception as exc:
+                    from celery.exceptions import Retry
+
+                    if isinstance(exc, Retry):
+                        raise
+            logger.warning(
+                "follower_yield_not_handled_falling_back_to_independent",
+                execution_id=execution_id,
+                cluster_id=str(admission.cluster_id),
+            )
+        else:
+            logger.warning(
+                "cluster_leader_decoupled_fallback_to_independent",
+                execution_id=execution_id,
+                cluster_id=str(admission.cluster_id),
+                cluster_status=str(cluster_status),
+            )
 
     try:
         if graph_backend == "langgraph" and settings is not None:
@@ -276,6 +344,8 @@ def _run_incident(
             raise task.retry(exc=exc, countdown=delay) from exc
 
         # Budget consumed: exhausted ⟺ attempt_count == max_attempts.
+        if admission.mode == AdmissionMode.LEADER and admission.cluster_id is not None:
+            cache.mark_cluster_failed(admission.cluster_id, str(exc))
         repo.mark_exhausted(
             execution_id=execution_uuid,
             max_attempts=cfg.max_retries,
@@ -284,6 +354,8 @@ def _run_incident(
         logger.warning("retry_budget_exhausted", execution_id=execution_id, attempts=attempt)
         raise exc from exc
     except TerminalError as exc:
+        if admission.mode == AdmissionMode.LEADER and admission.cluster_id is not None:
+            cache.mark_cluster_failed(admission.cluster_id, str(exc))
         failure_id = repo.log_failure(
             execution_id=execution_uuid,
             attempt=attempt,
@@ -301,6 +373,8 @@ def _run_incident(
         raise
     except Exception as exc:
         # Unknown exception: fail closed. A deterministic bug gets no retries.
+        if admission.mode == AdmissionMode.LEADER and admission.cluster_id is not None:
+            cache.mark_cluster_failed(admission.cluster_id, str(exc))
         failure_id = repo.log_failure(
             execution_id=execution_uuid,
             attempt=attempt,
@@ -318,6 +392,8 @@ def _run_incident(
         raise
 
     if result.get("paused"):
+        if admission.mode == AdmissionMode.LEADER and admission.cluster_id is not None:
+            cache.mark_cluster_awaiting_approval(admission.cluster_id)
         repo.mark_awaiting_approval(
             execution_uuid,
             node_reached=str(result["node_reached"]) if result.get("node_reached") else None,
@@ -325,6 +401,9 @@ def _run_incident(
         )
         logger.info("incident_awaiting_approval", execution_id=execution_id)
         return {"status": "awaiting_approval", "execution_id": execution_id, "result": result}
+
+    if admission.mode == AdmissionMode.LEADER and admission.cluster_id is not None:
+        cache.publish_solution(admission.cluster_id, result)
 
     repo.mark_succeeded(execution_uuid, **_execution_summary(result))
     logger.info("incident_processed", execution_id=execution_id)
@@ -360,6 +439,7 @@ def build_incident_task(
     settings: Settings,
     repo: WorkerRepo | None = None,
     dlq_redis: Any = None,
+    semantic_cache: SemanticCache | None = None,
 ) -> Any:
     """Build the task bound to a specific app/settings — the factory exists so
     tests (and alternative deployments) can inject configuration and backends."""
@@ -427,6 +507,7 @@ def build_incident_task(
                     correlation_id=correlation_id,
                     graph_backend=graph_backend,
                     settings=settings,
+                    semantic_cache=semantic_cache,
                 )
                 span.update(output=result)
                 return result

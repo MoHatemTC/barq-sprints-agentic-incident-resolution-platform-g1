@@ -21,6 +21,13 @@ _INELIGIBLE_STATES = frozenset(
 )
 
 
+def _get_field(obj: Any, field: str, default: Any = None) -> Any:
+    """Safely get a field whether obj is a dict or an object with attributes."""
+    if isinstance(obj, dict):
+        return obj.get(field, default)
+    return getattr(obj, field, default)
+
+
 def is_incident_cluster_eligible(incident: Any) -> bool:
     """Check whether an incident is eligible for semantic clustering.
 
@@ -34,23 +41,23 @@ def is_incident_cluster_eligible(incident: Any) -> bool:
         return False
 
     # Check active flag
-    active = getattr(incident, "active", True)
+    active = _get_field(incident, "active", True)
     if active is False or active == "false" or active == 0:
         return False
 
     # Check state
-    state = str(getattr(incident, "state", "") or "").strip().lower()
+    state = str(_get_field(incident, "state", "") or "").strip().lower()
     if state in _INELIGIBLE_STATES:
         return False
 
     # Check human lock
-    human_lock = getattr(incident, "ai_human_lock", None)
+    human_lock = _get_field(incident, "ai_human_lock", None)
     if human_lock is True:
         return False
 
     # Check text content existence
-    short_desc = str(getattr(incident, "short_description", "") or "").strip()
-    desc = str(getattr(incident, "description", "") or "").strip()
+    short_desc = str(_get_field(incident, "short_description", "") or "").strip()
+    desc = str(_get_field(incident, "description", "") or "").strip()
     if not short_desc and not desc:
         return False
 
@@ -82,29 +89,29 @@ def build_incident_signature(incident: Any) -> str:
     """
     parts: list[str] = []
 
-    service = getattr(incident, "service", None)
+    service = _get_field(incident, "service", None)
     if service and str(service).strip():
         parts.append(f"Service: {str(service).strip().lower()}")
 
-    category = getattr(incident, "category", None)
+    category = _get_field(incident, "category", None)
     if category and str(category).strip():
         parts.append(f"Category: {str(category).strip().lower()}")
 
-    subcategory = getattr(incident, "subcategory", None)
+    subcategory = _get_field(incident, "subcategory", None)
     if subcategory and str(subcategory).strip():
         parts.append(f"Subcategory: {str(subcategory).strip().lower()}")
 
-    short_desc = getattr(incident, "short_description", None)
+    short_desc = _get_field(incident, "short_description", None)
     if short_desc and str(short_desc).strip():
         clean_summary = sanitize_incident_text(str(short_desc))
         if clean_summary:
             parts.append(f"Summary: {clean_summary}")
 
-    desc = getattr(incident, "description", None)
+    desc = _get_field(incident, "description", None)
     if desc and str(desc).strip():
         clean_desc = sanitize_incident_text(str(desc))
         if clean_desc:
-            # Cap at 500 characters to preserve semantic centroid
+            # Caps at 500 characters to preserve semantic centroid
             parts.append(f"Description: {clean_desc[:500]}")
 
     return "\n".join(parts)

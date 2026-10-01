@@ -382,3 +382,215 @@ def test_semantic_cache_real_fastembed_inference() -> None:
     assert res3.mode == AdmissionMode.LEADER
     assert res3.cluster_id != res1.cluster_id
 
+
+def test_worker_task_leader_publishes_and_follower_reuses() -> None:
+    """End-to-end integration test: Celery _run_incident worker with SemanticCache.
+
+    1. First incident runs as LEADER, invokes graph, and publishes solution to the cluster.
+    2. Second similar incident arrives as FOLLOWER, reuses the published solution
+       without invoking graph (pipeline execution count = 1).
+    """
+    from app.workers.retry_policy import RetryConfig
+    from app.workers.tasks import _run_incident
+
+    class FakeTask:
+        def __init__(self) -> None:
+            self.request = SimpleNamespace(retries=0)
+
+        def retry(self, exc=None, countdown=None):
+            raise RuntimeError(f"Unexpected retry with countdown={countdown}")
+
+    repo = InMemoryRepo()
+    cache = SemanticCache(repo=repo, embed_fn=dummy_embed_fn)
+    cfg = RetryConfig(max_retries=3, backoff_base=1.0, backoff_max=60.0, jitter=False)
+
+    exec1 = uuid4()
+    repo.seed_execution(exec1, status="queued")
+    payload1 = {
+        "event_id": "evt-001",
+        "sys_id": "sys_pay_01",
+        "number": "INC001",
+        "service": "payment-gateway",
+        "category": "software",
+        "short_description": "Payment timeout 504 Gateway Timeout",
+        "description": "Checkout service failing with 504 Gateway Timeout on payment API",
+    }
+
+    # 1. Leader incident execution
+    res1 = _run_incident(
+        FakeTask(),
+        payload1,
+        str(exec1),
+        cfg,
+        repo,
+        semantic_cache=cache,
+        graph_backend="stub",
+    )
+
+    assert res1["status"] == "succeeded"
+    assert repo.get_status(exec1) == "succeeded"
+
+    # Verify cluster was created and marked resolved with published solution
+    active_clusters = list(cache._anchors.values())
+    assert len(active_clusters) == 1
+    leader_cluster = active_clusters[0]
+    assert leader_cluster.status == ClusterStatus.RESOLVED
+    assert leader_cluster.solution is not None
+
+    # 2. Follower incident execution (similar issue)
+    exec2 = uuid4()
+    repo.seed_execution(exec2, status="queued")
+    payload2 = {
+        "event_id": "evt-002",
+        "sys_id": "sys_pay_02",
+        "number": "INC002",
+        "service": "payment-gateway",
+        "category": "software",
+        "short_description": "Payment API 504 timeout",
+        "description": "Customers reporting 504 timeout on checkout payment step",
+    }
+
+    res2 = _run_incident(
+        FakeTask(),
+        payload2,
+        str(exec2),
+        cfg,
+        repo,
+        semantic_cache=cache,
+        graph_backend="stub",
+    )
+
+    # Follower immediately resolves from cached solution!
+    assert res2["status"] == "succeeded"
+    assert res2["cluster_role"] == "follower"
+    assert res2["cluster_id"] == str(leader_cluster.cluster_id)
+    assert res2["result"] == leader_cluster.solution
+    assert repo.get_status(exec2) == "succeeded"
+
+
+def test_worker_task_follower_yields_when_leader_running() -> None:
+    """Follower yields non-blockingly via task.retry when cluster is still RUNNING."""
+    from celery.exceptions import Retry
+
+    from app.workers.retry_policy import RetryConfig
+    from app.workers.tasks import _run_incident
+
+    class YieldingTask:
+        def __init__(self) -> None:
+            self.request = SimpleNamespace(retries=0)
+            self.retried_countdown = None
+
+        def retry(self, exc=None, countdown=None):
+            self.retried_countdown = countdown
+            raise Retry(exc=exc, when=None)
+
+    repo = InMemoryRepo()
+    cache = SemanticCache(repo=repo, embed_fn=dummy_embed_fn)
+    cfg = RetryConfig(max_retries=3, backoff_base=1.0, backoff_max=60.0, jitter=False)
+
+    # 1. Admit leader to create active cluster in RUNNING state
+    exec1 = uuid4()
+    repo.seed_execution(exec1, status="queued")
+    payload1 = {
+        "event_id": "evt-001",
+        "sys_id": "sys_db_01",
+        "number": "INC_DB_001",
+        "service": "postgres-cluster",
+        "category": "database",
+        "short_description": "Postgres connection pool exhausted",
+        "description": "FATAL: remaining connection slots are reserved for non-replication superuser connections",
+    }
+    adm1 = cache.admit(payload1, exec1)
+    assert adm1.mode == AdmissionMode.LEADER
+    assert cache.get_cluster_status(adm1.cluster_id) == ClusterStatus.RUNNING
+
+    # 2. Follower arrives while leader is still RUNNING
+    exec2 = uuid4()
+    repo.seed_execution(exec2, status="queued")
+    payload2 = {
+        "event_id": "evt-002",
+        "sys_id": "sys_db_02",
+        "number": "INC_DB_002",
+        "service": "postgres-cluster",
+        "category": "database",
+        "short_description": "Postgres connection pool full",
+        "description": "Database connection pool saturated with FATAL connection slots error",
+    }
+
+    task2 = YieldingTask()
+    with pytest.raises(Retry):
+        _run_incident(
+            task2,
+            payload2,
+            str(exec2),
+            cfg,
+            repo,
+            semantic_cache=cache,
+            graph_backend="stub",
+        )
+
+    assert task2.retried_countdown == 2.0
+
+
+def test_worker_task_follower_falls_back_when_leader_failed() -> None:
+    """Follower decouples and runs independently if cluster failed."""
+    from app.workers.retry_policy import RetryConfig
+    from app.workers.tasks import _run_incident
+
+    class FakeTask:
+        def __init__(self) -> None:
+            self.request = SimpleNamespace(retries=0)
+
+        def retry(self, exc=None, countdown=None):
+            raise RuntimeError("Should not retry")
+
+    repo = InMemoryRepo()
+    cache = SemanticCache(repo=repo, embed_fn=dummy_embed_fn)
+    cfg = RetryConfig(max_retries=3, backoff_base=1.0, backoff_max=60.0, jitter=False)
+
+    # 1. Admit leader and mark cluster as FAILED
+    exec1 = uuid4()
+    repo.seed_execution(exec1, status="queued")
+    payload1 = {
+        "event_id": "evt-001",
+        "sys_id": "sys_db_01",
+        "number": "INC_DB_001",
+        "service": "postgres-cluster",
+        "category": "database",
+        "short_description": "Postgres connection pool exhausted",
+        "description": "FATAL connection slots error",
+    }
+    adm1 = cache.admit(payload1, exec1)
+    assert adm1.mode == AdmissionMode.LEADER
+    cache.mark_cluster_failed(adm1.cluster_id, "LangGraph execution exploded")
+    assert cache.get_cluster_status(adm1.cluster_id) == ClusterStatus.FAILED
+
+    # 2. Similar incident arrives. Because cluster failed, it falls back to independent execution!
+    exec2 = uuid4()
+    repo.seed_execution(exec2, status="queued")
+    payload2 = {
+        "event_id": "evt-002",
+        "sys_id": "sys_db_02",
+        "number": "INC_DB_002",
+        "service": "postgres-cluster",
+        "category": "database",
+        "short_description": "Postgres connection pool exhausted",
+        "description": "FATAL connection slots error",
+    }
+
+    res2 = _run_incident(
+        FakeTask(),
+        payload2,
+        str(exec2),
+        cfg,
+        repo,
+        semantic_cache=cache,
+        graph_backend="stub",
+    )
+
+    # Follower ran independently and succeeded!
+    assert res2["status"] == "succeeded"
+    assert repo.get_status(exec2) == "succeeded"
+
+
+
