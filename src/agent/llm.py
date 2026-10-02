@@ -35,6 +35,18 @@ class ModelRefusalError(TerminalError):
     """The model declined the request (content filter)."""
 
 
+class InvalidModelOutputError(TerminalError):
+    """The model returned missing, truncated, or schema-invalid output."""
+
+
+class ModelTimeoutError(RetryableError):
+    """The model request exceeded the configured timeout."""
+
+
+class UnexpectedModelError(TerminalError):
+    """An unexpected model-client failure, sanitized at a sensitive boundary."""
+
+
 class LLMClient(Protocol):
     @property
     def model_name(self) -> str: ...
@@ -49,6 +61,8 @@ class LLMClient(Protocol):
         prompt: str,
         schema: type[M],
         model: str | None = None,
+        trace_content: bool = True,
+        max_retries: int | None = None,
     ) -> M:
         """Return ``schema`` parsed from the model's answer to ``prompt``."""
         ...
@@ -147,6 +161,8 @@ class LiteLLMClient:
         prompt: str,
         schema: type[M],
         model: str | None = None,
+        trace_content: bool = True,
+        max_retries: int | None = None,
     ) -> M:
         import openai
 
@@ -157,24 +173,46 @@ class LiteLLMClient:
         options: dict[str, Any] = {"max_completion_tokens": settings.agent_llm_max_tokens}
         if settings.agent_llm_reasoning_effort:
             options["reasoning_effort"] = settings.agent_llm_reasoning_effort
+        trace_input = (
+            {"system": system, "prompt": prompt}
+            if trace_content
+            else {
+                "content_suppressed": True,
+                "request_chars": len(system) + len(prompt),
+                "schema": schema.__name__,
+            }
+        )
+        trace_metadata: dict[str, Any] = {
+            "prompt_name": purpose,
+            "prompt_version": settings.agent_prompt_version,
+        }
+        if not trace_content:
+            trace_metadata["content_suppressed"] = True
         with self._tracer.span(
             f"llm.{purpose}",
             as_type="generation",
             model=selected_model,
-            input={"system": system, "prompt": prompt},
+            input=trace_input,
             version=settings.agent_prompt_version,
             model_parameters=options,
-            metadata={"prompt_name": purpose, "prompt_version": settings.agent_prompt_version},
+            metadata=trace_metadata,
+            record_exception_details=trace_content,
         ) as generation:
+            sensitive_error: Exception | None = None
             try:
-                client = self._client
+                request_client = (
+                    self._client
+                    if max_retries is None
+                    else self._client.with_options(max_retries=max_retries)
+                )
                 if purpose == "query_rewrite":
                     # Optional retrieval assistance must not consume the graph's
                     # general model retry budget before falling back to the source.
-                    client = client.with_options(
-                        timeout=settings.agent_query_rewrite_timeout_seconds, max_retries=0
+                    request_client = request_client.with_options(
+                        timeout=settings.agent_query_rewrite_timeout_seconds,
+                        max_retries=0,
                     )
-                raw = client.chat.completions.with_raw_response.parse(
+                raw = request_client.chat.completions.with_raw_response.parse(
                     model=selected_model,
                     messages=[
                         {"role": "system", "content": system},
@@ -184,40 +222,103 @@ class LiteLLMClient:
                     **options,
                 )
                 completion = raw.parse()
+            except openai.APITimeoutError as exc:
+                timeout_error = ModelTimeoutError("model call timed out")
+                if trace_content:
+                    raise timeout_error from exc
+                sensitive_error = timeout_error
             except (openai.RateLimitError, openai.APIConnectionError) as exc:
-                raise RetryableError(
+                transient_error = RetryableError(
                     f"model call failed transiently: {type(exc).__name__}"
-                ) from exc
+                )
+                if trace_content:
+                    raise transient_error from exc
+                sensitive_error = transient_error
             except openai.APIStatusError as exc:
                 if exc.status_code >= 500 or exc.status_code == 408:
-                    raise RetryableError(f"model call failed: HTTP {exc.status_code}") from exc
-                raise TerminalError(f"model call rejected: HTTP {exc.status_code}") from exc
-            except (openai.LengthFinishReasonError, openai.ContentFilterFinishReasonError) as exc:
-                raise TerminalError(f"{purpose} output unusable: {type(exc).__name__}") from exc
+                    status_error: RetryableError | TerminalError = RetryableError(
+                        f"model call failed: HTTP {exc.status_code}"
+                    )
+                else:
+                    status_error = TerminalError(f"model call rejected: HTTP {exc.status_code}")
+                if trace_content:
+                    raise status_error from exc
+                sensitive_error = status_error
+            except openai.LengthFinishReasonError as exc:
+                unusable_error = InvalidModelOutputError(
+                    f"{purpose} output unusable: {type(exc).__name__}"
+                )
+                if trace_content:
+                    raise unusable_error from exc
+                sensitive_error = unusable_error
+            except openai.ContentFilterFinishReasonError as exc:
+                refusal_error = ModelRefusalError(f"model declined the {purpose} request")
+                if trace_content:
+                    raise refusal_error from exc
+                sensitive_error = refusal_error
             except ValueError as exc:  # pydantic: the model broke the schema
-                raise TerminalError(f"{purpose} output failed validation") from exc
+                validation_error = InvalidModelOutputError(f"{purpose} output failed validation")
+                if trace_content:
+                    raise validation_error from exc
+                sensitive_error = validation_error
+            except Exception as exc:
+                if trace_content:
+                    raise
+                sensitive_error = UnexpectedModelError(
+                    f"{purpose} failed unexpectedly: {type(exc).__name__}"
+                )
 
-            choice = completion.choices[0] if completion.choices else None
-            generation.update(
-                model=str(completion.model or settings.agent_llm_model),
-                usage_details=usage_details(completion.usage),
-                cost_details=cost_details(raw.headers.get(COST_HEADER)),
-                metadata={
+            # Raise only after the provider exception handler has exited. This
+            # prevents Python from retaining the original sensitive exception in
+            # ``__context__`` even when a caller inspects the mapped error object.
+            if sensitive_error is not None:
+                raise sensitive_error
+
+            sensitive_processing_error: UnexpectedModelError | None = None
+            try:
+                choice = completion.choices[0] if completion.choices else None
+                completion_metadata = {
                     "finish_reason": getattr(choice, "finish_reason", None),
-                    "request_id": completion.id,
-                },
-            )
-            if choice is None:
-                raise TerminalError(f"{purpose} returned no choices")
-            if choice.finish_reason == "content_filter" or choice.message.refusal:
-                raise ModelRefusalError(f"model declined the {purpose} request")
-            if choice.finish_reason == "length":
-                raise TerminalError(f"{purpose} output was truncated")
-            parsed = choice.message.parsed
-            if parsed is None:
-                raise TerminalError(f"{purpose} returned no structured output")
-            generation.update(output=parsed.model_dump(mode="json"))
-            return parsed
+                    **(
+                        {"request_id": completion.id}
+                        if trace_content
+                        else {"content_suppressed": True}
+                    ),
+                }
+                generation.update(
+                    model=str(completion.model or settings.agent_llm_model),
+                    usage_details=usage_details(completion.usage),
+                    cost_details=cost_details(raw.headers.get(COST_HEADER)),
+                    metadata=completion_metadata,
+                )
+                if choice is None:
+                    raise InvalidModelOutputError(f"{purpose} returned no choices")
+                if choice.finish_reason == "content_filter" or choice.message.refusal:
+                    raise ModelRefusalError(f"model declined the {purpose} request")
+                if choice.finish_reason == "length":
+                    raise InvalidModelOutputError(f"{purpose} output was truncated")
+                parsed = choice.message.parsed
+                if parsed is None:
+                    raise InvalidModelOutputError(f"{purpose} returned no structured output")
+                generation.update(
+                    output=(
+                        parsed.model_dump(mode="json")
+                        if trace_content
+                        else {"content_suppressed": True}
+                    )
+                )
+                return parsed
+            except (RetryableError, TerminalError):
+                raise
+            except Exception as exc:
+                if trace_content:
+                    raise
+                sensitive_processing_error = UnexpectedModelError(
+                    f"{purpose} failed unexpectedly: {type(exc).__name__}"
+                )
+
+            if sensitive_processing_error is not None:
+                raise sensitive_processing_error
 
 
 def bounded(text: str, limit: int) -> str:
@@ -245,9 +346,12 @@ def get_embedding_engine() -> EmbeddingEngine:
 
 __all__ = [
     "COST_HEADER",
+    "InvalidModelOutputError",
     "LLMClient",
     "LiteLLMClient",
     "ModelRefusalError",
+    "ModelTimeoutError",
+    "UnexpectedModelError",
     "bounded",
     "cost_details",
     "get_embedding_engine",

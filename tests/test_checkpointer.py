@@ -263,6 +263,7 @@ class TestWorkflowStateTable:
         # generate ran twice (the failed attempt and the resume); verify_evidence
         # runs once, after the draft the resume produced.
         assert llm.purposes() == [
+            "pii_detection",
             "injection_classifier",
             "classify",
             "diagnose",

@@ -40,9 +40,18 @@ class _ScriptedLLM:
         prompt: str,
         schema: type,
         model: str | None = None,
+        trace_content: bool = True,
+        max_retries: int | None = None,
     ):
         self.calls.append(
-            {"purpose": purpose, "system": system, "prompt": prompt, "schema": schema}
+            {
+                "purpose": purpose,
+                "system": system,
+                "prompt": prompt,
+                "schema": schema,
+                "trace_content": trace_content,
+                "max_retries": max_retries,
+            }
         )
         if isinstance(self._verdict, Exception):
             raise self._verdict
@@ -128,6 +137,8 @@ def test_a_signature_mismatch_degrades_safely_instead_of_raising() -> None:
             prompt: str,
             schema: type,
             model: str | None = None,
+            trace_content: bool = True,
+            max_retries: int | None = None,
         ):
             raise AssertionError("should not be reached with a bad kwarg")
 

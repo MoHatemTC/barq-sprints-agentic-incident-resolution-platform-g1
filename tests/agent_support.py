@@ -24,6 +24,7 @@ from agent.prompts import (
     DiagnoseOutput,
     GenerateOutput,
     InjectionClassification,
+    PIIDetectionOutput,
     StepOutput,
 )
 from agent.servicenow import AsyncRunner, IncidentGateway
@@ -184,7 +185,7 @@ class FakeLLM:
     """Scripted model: one answer (or callable, or exception) per purpose."""
 
     answers: dict[str, Any] = field(default_factory=dict)
-    calls: list[dict[str, str]] = field(default_factory=list)
+    calls: list[dict[str, Any]] = field(default_factory=list)
     model_name: str = "gemini/gemini-3.5-flash"
     last_model_used: str | None = None
     purpose_models: dict[str, str] = field(default_factory=dict)
@@ -200,6 +201,8 @@ class FakeLLM:
         prompt: str,
         schema: type[Any],
         model: str | None = None,
+        trace_content: bool = True,
+        max_retries: int | None = None,
     ) -> Any:
         selected_model = self.model_for_purpose(purpose, model)
         self.last_model_used = selected_model
@@ -209,7 +212,10 @@ class FakeLLM:
                 "purpose": purpose,
                 "system": system,
                 "prompt": prompt,
+                "schema": schema,
                 "model": selected_model,
+                "trace_content": trace_content,
+                "max_retries": max_retries,
             }
         )
         answer = self.answers.get(purpose)
@@ -237,6 +243,7 @@ class FakeLLM:
 
 def vpn_answers(confidence: float = 0.82) -> dict[str, Any]:
     return {
+        "pii_detection": PIIDetectionOutput(findings=[]),
         "injection_classifier": InjectionClassification(
             is_injection=False, reason="ordinary VPN incident, no manipulation attempt"
         ),
@@ -291,6 +298,7 @@ class FakeOpenAISDK:
         "GenerateOutput": "generate",
         "CriticOutput": "verify_evidence",
         "ApprovalBriefOutput": "approval_brief",
+        "PIIDetectionOutput": "pii_detection",
     }
 
     def __init__(
@@ -306,10 +314,20 @@ class FakeOpenAISDK:
         self.refusal = refusal
         self.cost = cost
         self.requests: list[dict[str, Any]] = []
-        raw = SimpleNamespace(parse=self._parse)
+        self.with_options_calls: list[dict[str, Any]] = []
+        self.request_max_retries: list[int | None] = []
+        raw = SimpleNamespace(parse=lambda **request: self._parse(None, **request))
         self.chat = SimpleNamespace(completions=SimpleNamespace(with_raw_response=raw))
 
-    def _parse(self, **request: Any) -> Any:
+    def with_options(self, *, max_retries: int) -> Any:
+        self.with_options_calls.append({"max_retries": max_retries})
+        raw = SimpleNamespace(parse=lambda **request: self._parse(max_retries, **request))
+        return SimpleNamespace(
+            chat=SimpleNamespace(completions=SimpleNamespace(with_raw_response=raw))
+        )
+
+    def _parse(self, max_retries: int | None, **request: Any) -> Any:
+        self.request_max_retries.append(max_retries)
         self.requests.append(request)
         val = self.answers[self.SCHEMA_PURPOSE[request["response_format"].__name__]]
         if isinstance(val, list):
@@ -456,6 +474,7 @@ def make_deps(
     tracer = tracer or Tracer(None)
     backend = servicenow or FakeServiceNow()
     gateway = IncidentGateway(lambda: backend, tracer, runner=shared_runner())
+    settings.setdefault("agent_pii_detection_mode", "enforced")
     return AgentDependencies(
         settings=AgentSettings(_env_file=None, agent_checkpointer_backend="memory", **settings),
         llm=llm or FakeLLM(vpn_answers()),

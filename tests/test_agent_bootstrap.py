@@ -27,10 +27,13 @@ from agent import dependencies as dependencies_module
 from agent import llm as llm_module
 from agent import runtime as runtime_module
 from agent.checkpointer import WorkflowStateSaver, build_checkpointer
-from agent.config import AGENT_VERSION, AgentSettings
+from agent.config import AGENT_VERSION, AgentSettings, PIIDetectionMode
 from agent.llm import (
+    InvalidModelOutputError,
     LiteLLMClient,
     ModelRefusalError,
+    ModelTimeoutError,
+    UnexpectedModelError,
     bounded,
     cost_details,
     usage_details,
@@ -63,6 +66,7 @@ from observability.tracing import Tracer
 from tests.agent_support import (
     EXECUTION_ID,
     VPN,
+    FakeLLM,
     FakeOpenAISDK,
     event_for,
     make_deps,
@@ -85,15 +89,50 @@ class TestSettings:
         assert settings.litellm_base_url == "https://management.sprints.ai/litellm"
         assert settings.agent_graph_backend == "langgraph"
         assert settings.agent_version == AGENT_VERSION
+        assert settings.agent_pii_detection_mode is PIIDetectionMode.DISABLED
+
+    @pytest.mark.parametrize("mode", list(PIIDetectionMode))
+    def test_pii_detection_modes_are_accepted(
+        self, monkeypatch: pytest.MonkeyPatch, mode: PIIDetectionMode
+    ) -> None:
+        monkeypatch.setenv("AGENT_PII_DETECTION_MODE", mode.value)
+        settings = AgentSettings(_env_file=None)
+        assert settings.agent_pii_detection_mode is mode
 
     def test_environment_overrides(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("AGENT_RETRIEVAL_THRESHOLD", "0.6")
         monkeypatch.setenv("AGENT_RISK_PRIORITIES", "[1, 2]")
         monkeypatch.setenv("AGENT_GRAPH_BACKEND", "stub")
+        monkeypatch.setenv("AGENT_PII_DETECTION_MODE", "shadow")
         settings = AgentSettings(_env_file=None)
         assert settings.agent_retrieval_threshold == 0.6
         assert settings.agent_risk_priorities == [1, 2]
         assert settings.agent_graph_backend == "stub"
+        assert settings.agent_pii_detection_mode is PIIDetectionMode.SHADOW
+
+    def test_invalid_pii_detection_mode_is_rejected(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("AGENT_PII_DETECTION_MODE", "invalid")
+        with pytest.raises(ValueError, match="agent_pii_detection_mode"):
+            AgentSettings(_env_file=None)
+
+    def test_legacy_boolean_cannot_override_mode(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("AGENT_PII_DETECTION_MODE", raising=False)
+        monkeypatch.setenv("AGENT_PII_DETECTION_ENABLED", "true")
+
+        settings = AgentSettings(_env_file=None)
+
+        assert settings.agent_pii_detection_mode is PIIDetectionMode.DISABLED
+        assert not hasattr(settings, "agent_pii_detection_enabled")
+
+    def test_legacy_boolean_cannot_override_explicit_mode(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("AGENT_PII_DETECTION_MODE", "enforced")
+        monkeypatch.setenv("AGENT_PII_DETECTION_ENABLED", "false")
+
+        settings = AgentSettings(_env_file=None)
+
+        assert settings.agent_pii_detection_mode is PIIDetectionMode.ENFORCED
 
     def test_out_of_range_values_are_rejected(self) -> None:
         with pytest.raises(ValueError):
@@ -251,6 +290,27 @@ class TestLiteLLMClient:
         assert request["max_completion_tokens"] == 16000
         assert "reasoning_effort" not in request
 
+    def test_shared_fake_records_sensitive_call_options(self) -> None:
+        fake = FakeLLM(
+            {
+                "classify": ClassifyOutput(
+                    label="network",
+                    rationale="synthetic",
+                    confidence=0.9,
+                )
+            }
+        )
+        fake.structured(
+            purpose="classify",
+            system="s",
+            prompt="p",
+            schema=ClassifyOutput,
+            trace_content=False,
+            max_retries=0,
+        )
+        assert fake.calls[0]["trace_content"] is False
+        assert fake.calls[0]["max_retries"] == 0
+
     def test_reasoning_effort_is_passed_when_set(self) -> None:
         sdk = FakeOpenAISDK(vpn_answers())
         llm = LiteLLMClient(
@@ -260,6 +320,22 @@ class TestLiteLLMClient:
         )
         llm.structured(purpose="classify", system="s", prompt="p", schema=ClassifyOutput)
         assert sdk.requests[0]["reasoning_effort"] == "low"
+
+    def test_per_request_retry_override_does_not_leak_to_later_calls(self) -> None:
+        sdk = FakeOpenAISDK(vpn_answers())
+        llm = self._llm(sdk)
+
+        llm.structured(
+            purpose="classify",
+            system="s",
+            prompt="p",
+            schema=ClassifyOutput,
+            max_retries=0,
+        )
+        llm.structured(purpose="classify", system="s", prompt="p", schema=ClassifyOutput)
+
+        assert sdk.with_options_calls == [{"max_retries": 0}]
+        assert sdk.request_max_retries == [0, None]
 
     def test_diagnostic_model_override(self) -> None:
         sdk = FakeOpenAISDK(vpn_answers())
@@ -371,7 +447,7 @@ class TestLiteLLMClient:
         [
             ({"finish_reason": "content_filter"}, ModelRefusalError),
             ({"refusal": "I can't help with that"}, ModelRefusalError),
-            ({"finish_reason": "length"}, TerminalError),
+            ({"finish_reason": "length"}, InvalidModelOutputError),
         ],
     )
     def test_unusable_answers_are_terminal(
@@ -384,7 +460,7 @@ class TestLiteLLMClient:
     def test_missing_structured_output_is_terminal(self) -> None:
         sdk = FakeOpenAISDK({"classify": None})  # type: ignore[dict-item]
         sdk.answers["classify"] = None
-        with pytest.raises(TerminalError):
+        with pytest.raises(InvalidModelOutputError):
             self._llm(sdk).structured(purpose="x", system="s", prompt="p", schema=ClassifyOutput)
 
     @pytest.mark.parametrize(
@@ -410,6 +486,58 @@ class TestLiteLLMClient:
         sdk = FakeOpenAISDK({"classify": exc})
         with pytest.raises(expected):
             self._llm(sdk).structured(purpose="x", system="s", prompt="p", schema=ClassifyOutput)
+
+    @pytest.mark.parametrize(
+        ("exc", "expected"),
+        [
+            (
+                openai.APITimeoutError(
+                    request=httpx.Request("POST", "https://management.sprints.ai/litellm")
+                ),
+                ModelTimeoutError,
+            ),
+            (_status_error(openai.RateLimitError, 429), RetryableError),
+            (_status_error(openai.BadRequestError, 400), TerminalError),
+            (ValueError("synthetic invalid output"), TerminalError),
+            (RuntimeError("synthetic unexpected failure"), UnexpectedModelError),
+        ],
+        ids=["timeout", "retryable", "terminal", "invalid", "unexpected"],
+    )
+    def test_sensitive_error_mapping_is_classified_and_unchained(
+        self, exc: Exception, expected: type[Exception]
+    ) -> None:
+        sdk = FakeOpenAISDK({"classify": exc})
+        with pytest.raises(expected) as raised:
+            self._llm(sdk).structured(
+                purpose="pii_detection",
+                system="sensitive system",
+                prompt="sensitive prompt",
+                schema=ClassifyOutput,
+                trace_content=False,
+                max_retries=0,
+            )
+        assert raised.value.__cause__ is None
+        assert raised.value.__context__ is None
+
+    @pytest.mark.parametrize(
+        ("sdk", "expected"),
+        [
+            (FakeOpenAISDK(vpn_answers(), refusal="synthetic refusal body"), ModelRefusalError),
+            (FakeOpenAISDK({"classify": None}), TerminalError),
+        ],
+        ids=["refusal", "missing-output"],
+    )
+    def test_sensitive_completion_failures_remain_terminal(
+        self, sdk: FakeOpenAISDK, expected: type[Exception]
+    ) -> None:
+        with pytest.raises(expected):
+            self._llm(sdk).structured(
+                purpose="pii_detection",
+                system="sensitive system",
+                prompt="sensitive prompt",
+                schema=ClassifyOutput,
+                trace_content=False,
+            )
 
     def test_missing_key_fails_fast(self) -> None:
         with pytest.raises(TerminalError, match="LITELLM_API_KEY"):

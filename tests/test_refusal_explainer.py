@@ -44,11 +44,22 @@ class RecordingLLM:
         system: str,
         prompt: str,
         schema: type[Any],
+        model: str | None = None,
+        trace_content: bool = True,
+        max_retries: int | None = None,
     ) -> Any:
         if self.order is not None:
             self.order.append("explain")
         self.calls.append(
-            {"purpose": purpose, "system": system, "prompt": prompt, "schema": schema}
+            {
+                "purpose": purpose,
+                "system": system,
+                "prompt": prompt,
+                "schema": schema,
+                "model": model,
+                "trace_content": trace_content,
+                "max_retries": max_retries,
+            }
         )
         if isinstance(self.answer, BaseException):
             raise self.answer
@@ -65,12 +76,18 @@ class SchemaValidatingLLM(RecordingLLM):
         system: str,
         prompt: str,
         schema: type[Any],
+        model: str | None = None,
+        trace_content: bool = True,
+        max_retries: int | None = None,
     ) -> Any:
         answer = super().structured(
             purpose=purpose,
             system=system,
             prompt=prompt,
             schema=schema,
+            model=model,
+            trace_content=trace_content,
+            max_retries=max_retries,
         )
         return schema.model_validate(answer)
 
