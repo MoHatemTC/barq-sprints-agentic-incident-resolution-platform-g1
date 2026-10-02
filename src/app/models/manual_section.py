@@ -3,7 +3,7 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 SECTION_ID_PREFIX = "section-"
 
@@ -69,10 +69,23 @@ class ManualSection(BaseModel):
     )
     title: str = Field(..., min_length=1, max_length=300)
     blocks: list[TextBlock | TableBlock] = Field(
-        ...,
+        default_factory=list,
         description="Structured generic blocks (text or table)",
     )
     content_type: ManualSectionType
+
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_legacy_body(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if "body" in data and ("blocks" not in data or not data.get("blocks")):
+                body_val = data.pop("body")
+                data = dict(data)
+                data["blocks"] = [TextBlock(text=body_val)]
+            elif "body" in data:
+                data = dict(data)
+                data.pop("body")
+        return data
     pages: tuple[int, ...] = Field(..., description="1-indexed page numbers this section spans")
     ocr_confidence: float | None = Field(
         default=None,
