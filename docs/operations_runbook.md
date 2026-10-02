@@ -71,9 +71,14 @@ docker image prune -f                              # dangling images
 These never touch running containers or named volumes. Do **not** run `docker system prune
 --volumes`: that would delete the PostgreSQL, Redis and Qdrant data.
 
-The worker alone uses about 1.2 GB (it holds the embedding and reranker models). With no
-swap, a burst of concurrent incidents can exhaust memory; lower `WORKER_CONCURRENCY` before
-raising load.
+The worker alone uses about 1.2 GB idle (it holds the embedding and reranker models). **This
+is not hypothetical:** on 2026-10-02 six incidents created within ten seconds took the worker
+to 2.4 GiB with about 235 MB of the host's memory left and no swap; four tasks passed the 120 s
+soft time limit, a Celery child was killed with SIGKILL and `docker inspect barq-celery-worker`
+now reports `OOMKilled=true`. The run that was hit was retried and recovered, but a longer burst
+would not be so lucky. Before raising load, lower `WORKER_CONCURRENCY`, add a swap file, or move
+to a larger instance. Check after any burst with
+`docker inspect --format '{{.State.OOMKilled}}' barq-celery-worker`.
 
 ## 5. Runs stuck in `awaiting_approval`
 
@@ -178,6 +183,9 @@ This exercises pattern screening and redaction only (no model call). See
 - No TLS on the API; the approval screen is plain HTTP.
 - `/ready` does not check Qdrant, the model proxy or ServiceNow.
 - No metrics endpoint, no rate limiting and no notifications when an approval is needed.
+- The Tier-1 approval rule cannot fire on the shared instance: the risk policy's service tiers
+  are keyed by names (`order-processing`, `identity`, …) that its service catalogue does not
+  contain, so any incident with a real service set is scored "tier unknown" and low risk.
 - Nothing expires an unanswered approval.
 - No CI evaluation gate (PRD FR-20) and no CI image build; images are built on the host.
 - The shared Qdrant collection (50 points, 16 article versions on 2026-10-02) does not

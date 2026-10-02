@@ -107,7 +107,7 @@ recorded results ([audit](audit_2026-10-02.md)).
 | Evaluation gate in CI that fails the build on a regression (FR-20; "a deliberately regressed prompt fails the CI evaluation gate") | Not built. `ci.yml` still says so; `/api/v1/eval/run` returns 501 |
 | GitHub Actions builds a deployable image on every pull request (NFR-10) | Not built; images are built on the deployment host |
 | Operations runbook, architecture and data-flow pack | [Operations runbook](operations_runbook.md) now exists; the data-flow diagram is the graph diagram only |
-| NFR-02 end-to-end p95 ≤ 90 s measured from traces | Indicative only (p95 72.6 s, n = 9, shared system) |
+| NFR-02 end-to-end p95 ≤ 90 s measured from traces | Met at low load (p95 72.6 s over three days, n = 9; a lone incident takes about 20 s) and **not met under a burst of six** (first completion 151 s, soft time limits exceeded, worker OOM-killed once) |
 | Chatbot tool (S4.1 part 2) and chatbot (S4.4) | Not built |
 
 Where an item here conflicts with the PRD text, the PRD scope is the contract and this
