@@ -241,4 +241,3 @@ def test_follower_resolves_with_zero_llm_calls_and_writes_to_servicenow(monkeypa
     update = service.updates[0][1]
     assert update.ai_processing_state.value == "complete"
     assert update.ai_resolution == "1. Reset VPN profile"
-

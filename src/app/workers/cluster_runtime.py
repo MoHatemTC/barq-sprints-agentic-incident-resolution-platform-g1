@@ -165,4 +165,3 @@ def apply_follower_cluster_resolution(
             )
         except Exception:
             pass
-
