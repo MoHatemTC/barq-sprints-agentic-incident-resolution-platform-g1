@@ -275,7 +275,7 @@ async def submit_message(
             ),
             timeout=chat_settings.chat_turn_timeout_seconds,
         )
-    except asyncio.TimeoutError:
+    except TimeoutError:
         logger.warning("chat_turn_timeout", turn_id=str(turn.id))
         # The worker thread keeps running and persists its own terminal state;
         # report the persisted status instead of a fabricated outcome.

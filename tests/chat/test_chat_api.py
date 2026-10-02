@@ -119,7 +119,8 @@ def _integrity_error(constraint: str) -> IntegrityError:
 def _fake_service(outcome: TurnOutcome | None = None) -> MagicMock:
     service = MagicMock(spec=ChatTurnService)
     service.handle_turn = MagicMock(
-        return_value=outcome or TurnOutcome(status="succeeded", route="knowledge", error_category=None)
+        return_value=outcome
+        or TurnOutcome(status="succeeded", route="knowledge", error_category=None)
     )
     return service
 
@@ -185,7 +186,11 @@ async def test_missing_session_headers_answer_401() -> None:
         resp = await client.get("/api/v1/chat/conversations", headers=_auth())
         wrong = await client.get(
             "/api/v1/chat/conversations",
-            headers={**_auth(), "X-Chat-Session-Id": str(session_row.id), "X-Chat-Session-Secret": "nope"},
+            headers={
+                **_auth(),
+                "X-Chat-Session-Id": str(session_row.id),
+                "X-Chat-Session-Secret": "nope",
+            },
         )
 
     assert resp.status_code == 401
@@ -219,7 +224,10 @@ async def test_create_and_list_conversations() -> None:
 async def test_cross_session_conversation_answers_404() -> None:
     session_row = _session_row()
     other_conversation = _conversation_row(uuid4())  # belongs to another session
-    app = _app(_db_session({ChatSession: session_row, ChatConversation: other_conversation}), _fake_service())
+    app = _app(
+        _db_session({ChatSession: session_row, ChatConversation: other_conversation}),
+        _fake_service(),
+    )
 
     async with await _client(app) as client:
         resp = await client.get(
@@ -234,7 +242,9 @@ async def test_cross_session_conversation_answers_404() -> None:
 async def test_delete_conversation_returns_204() -> None:
     session_row = _session_row()
     conversation = _conversation_row(session_row.id)
-    app = _app(_db_session({ChatSession: session_row, ChatConversation: conversation}), _fake_service())
+    app = _app(
+        _db_session({ChatSession: session_row, ChatConversation: conversation}), _fake_service()
+    )
 
     async with await _client(app) as client:
         resp = await client.delete(
@@ -256,7 +266,9 @@ async def test_submit_message_runs_service_and_returns_turn_with_messages() -> N
         _message_row(conversation.id, turn.id, 1, "user"),
         _message_row(conversation.id, turn.id, 2, "assistant"),
     ]
-    session = _db_session({ChatSession: session_row, ChatConversation: conversation, ChatTurn: turn})
+    session = _db_session(
+        {ChatSession: session_row, ChatConversation: conversation, ChatTurn: turn}
+    )
     session.execute = AsyncMock(return_value=_execute_result(messages))
     service = _fake_service()
     app = _app(session, service)
@@ -283,9 +295,13 @@ async def test_duplicate_request_id_returns_existing_turn_without_rerun() -> Non
     session_row = _session_row()
     conversation = _conversation_row(session_row.id)
     existing_turn = _turn_row(conversation.id)
-    session = _db_session({ChatSession: session_row, ChatConversation: conversation, ChatTurn: existing_turn})
+    session = _db_session(
+        {ChatSession: session_row, ChatConversation: conversation, ChatTurn: existing_turn}
+    )
     # commit #1 is the session last_seen touch; commit #2 is the turn claim.
-    session.commit = AsyncMock(side_effect=[None, _integrity_error("uq_chat_turns_conversation_request")])
+    session.commit = AsyncMock(
+        side_effect=[None, _integrity_error("uq_chat_turns_conversation_request")]
+    )
     claim_select = MagicMock()
     claim_select.scalar_one_or_none.return_value = existing_turn
     empty_messages = MagicMock()
@@ -330,7 +346,9 @@ async def test_turn_timeout_returns_persisted_status() -> None:
     session_row = _session_row()
     conversation = _conversation_row(session_row.id)
     running_turn = _turn_row(conversation.id, status="running")
-    session = _db_session({ChatSession: session_row, ChatConversation: conversation, ChatTurn: running_turn})
+    session = _db_session(
+        {ChatSession: session_row, ChatConversation: conversation, ChatTurn: running_turn}
+    )
     service = MagicMock(spec=ChatTurnService)
     service.handle_turn = MagicMock(side_effect=lambda _req: None)  # returns, but slowly enough
     settings = ChatSettings(
@@ -358,7 +376,9 @@ async def test_get_turn_belongs_to_conversation() -> None:
     session_row = _session_row()
     conversation = _conversation_row(session_row.id)
     turn = _turn_row(conversation.id)
-    session = _db_session({ChatSession: session_row, ChatConversation: conversation, ChatTurn: turn})
+    session = _db_session(
+        {ChatSession: session_row, ChatConversation: conversation, ChatTurn: turn}
+    )
     session.execute = AsyncMock(return_value=_execute_result([]))
     app = _app(session, _fake_service())
 
@@ -380,7 +400,9 @@ async def test_get_turn_belongs_to_conversation() -> None:
 async def test_message_contract_limits_are_enforced() -> None:
     session_row = _session_row()
     conversation = _conversation_row(session_row.id)
-    app = _app(_db_session({ChatSession: session_row, ChatConversation: conversation}), _fake_service())
+    app = _app(
+        _db_session({ChatSession: session_row, ChatConversation: conversation}), _fake_service()
+    )
 
     async with await _client(app) as client:
         too_long = await client.post(

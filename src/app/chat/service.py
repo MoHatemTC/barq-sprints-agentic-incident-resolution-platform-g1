@@ -10,6 +10,7 @@ persisted status.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 from uuid import UUID
 
 import structlog
@@ -92,15 +93,19 @@ class ChatTurnService:
     def handle_turn(self, request: TurnRequest) -> TurnOutcome:
         if not self._settings.budget_configured:
             return self._blocked_turn(
-                request, _UNCONFIGURED_BUDGET_REFUSAL, usage={"blocked_layer": "budget_unconfigured"}
+                request,
+                _UNCONFIGURED_BUDGET_REFUSAL,
+                usage={"blocked_layer": "budget_unconfigured"},
             )
 
-        usage_records: list[dict[str, object]] = []
+        usage_records: list[dict[str, Any]] = []
         try:
             reserve = estimate_turn_reserve(self._settings, len(request.user_message))
             self._budget.reserve(reserve)
         except ChatBudgetExceeded:
-            return self._blocked_turn(request, _RESERVE_BUDGET_REFUSAL, usage={"blocked_layer": "budget_exceeded"})
+            return self._blocked_turn(
+                request, _RESERVE_BUDGET_REFUSAL, usage={"blocked_layer": "budget_exceeded"}
+            )
         except ChatBudgetUnavailable as exc:
             logger.warning("chat_budget_unavailable", error=type(exc).__name__)
             return self._blocked_turn(
@@ -112,7 +117,9 @@ class ChatTurnService:
             "turn_id": str(request.turn_id),
             "operator_subject": request.operator_subject,
             "user_message": request.user_message,
-            "history": self._store.get_history(request.conversation_id, limit=HISTORY_MESSAGE_LIMIT),
+            "history": self._store.get_history(
+                request.conversation_id, limit=HISTORY_MESSAGE_LIMIT
+            ),
         }
         graph = build_chat_graph(
             ChatGraphDeps(
@@ -128,7 +135,9 @@ class ChatTurnService:
         except Exception as exc:
             self._reconcile(usage_records, reserve)
             category = _error_category(exc)
-            logger.warning("chat_turn_failed", turn_id=str(request.turn_id), error_category=category)
+            logger.warning(
+                "chat_turn_failed", turn_id=str(request.turn_id), error_category=category
+            )
             self._store.fail_turn(request.turn_id, error_category=category)
             return TurnOutcome(status="failed", route=None, error_category=category)
 
@@ -165,32 +174,30 @@ class ChatTurnService:
         self._store.record_assistant_message(
             request.conversation_id, request.turn_id, content=refusal, citations=[]
         )
-        self._store.complete_turn(
-            request.turn_id, status="blocked", route=None, usage=usage
-        )
+        self._store.complete_turn(request.turn_id, status="blocked", route=None, usage=usage)
         return TurnOutcome(status="blocked", route=None, error_category=None)
 
-    def _reconcile(self, usage_records: list[dict[str, object]], reserve: float) -> None:
-        actual = actual_usage_cost(self._settings, usage_records)  # type: ignore[arg-type]
+    def _reconcile(self, usage_records: list[dict[str, Any]], reserve: float) -> None:
+        actual = actual_usage_cost(self._settings, usage_records)
         self._budget.reconcile(actual, reserve)
 
 
-def _usage_summary(settings: ChatSettings, usage_records: list[dict[str, object]]) -> dict[str, object]:
+def _usage_summary(settings: ChatSettings, usage_records: list[dict[str, Any]]) -> dict[str, Any]:
     reported = [float(r["cost_usd"]) for r in usage_records if r.get("cost_usd") is not None]
     return {
         "model_calls": len(usage_records),
         "input_tokens": sum(int(r.get("input_tokens", 0)) for r in usage_records),
         "output_tokens": sum(int(r.get("output_tokens", 0)) for r in usage_records),
         "estimated_cost_usd": actual_usage_cost(settings, usage_records),
-        "reported_cost_usd": sum(reported) if reported and len(reported) == len(usage_records) else None,
+        "reported_cost_usd": sum(reported)
+        if reported and len(reported) == len(usage_records)
+        else None,
         "cache_status": "none",
     }
 
 
 def _error_category(exc: Exception) -> str:
-    if isinstance(
-        exc, (RetryableError, TerminalError, InvalidModelOutputError, ModelRefusalError)
-    ):
+    if isinstance(exc, (RetryableError, TerminalError, InvalidModelOutputError, ModelRefusalError)):
         return "model_error"
     return "internal_error"
 

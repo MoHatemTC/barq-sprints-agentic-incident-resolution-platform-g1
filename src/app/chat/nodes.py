@@ -9,8 +9,9 @@ repair attempt first.
 
 from __future__ import annotations
 
-import structlog
 from typing import Any
+
+import structlog
 
 from agent.llm import LLMClient
 from app.chat.citations import Citation, build_citation, chunk_identity

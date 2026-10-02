@@ -6,9 +6,8 @@ workflow_state, whose rows are bound to executions.
 """
 
 import sqlalchemy as sa
-from sqlalchemy.dialects.postgresql import JSONB
-
 from alembic import op
+from sqlalchemy.dialects.postgresql import JSONB
 
 revision = "0006_chat_tables"
 down_revision = "0005_cluster_waiters"
@@ -22,7 +21,9 @@ def upgrade() -> None:
         sa.Column("id", sa.Uuid(), server_default=sa.text("gen_random_uuid()"), nullable=False),
         sa.Column("operator_subject", sa.String(length=255), nullable=False),
         sa.Column("secret_hash", sa.String(length=64), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.Column("last_seen_at", sa.DateTime(timezone=True), nullable=True),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_chat_sessions")),
     )
@@ -38,7 +39,9 @@ def upgrade() -> None:
         ),
         sa.Column("operator_subject", sa.String(length=255), nullable=False),
         sa.Column("title", sa.String(length=200), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.Column(
             "updated_at",
             sa.DateTime(timezone=True),
@@ -64,10 +67,14 @@ def upgrade() -> None:
         sa.Column("conversation_id", sa.Uuid(), nullable=False),
         sa.Column("request_id", sa.String(length=64), nullable=False),
         sa.Column("route", sa.String(length=32), nullable=True),
-        sa.Column("status", sa.String(length=16), server_default=sa.text("'running'"), nullable=False),
+        sa.Column(
+            "status", sa.String(length=16), server_default=sa.text("'running'"), nullable=False
+        ),
         sa.Column("error_category", sa.String(length=64), nullable=True),
         sa.Column("usage", JSONB(none_as_null=True), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
         sa.ForeignKeyConstraint(
             ["conversation_id"],
@@ -76,7 +83,9 @@ def upgrade() -> None:
             ondelete="CASCADE",
         ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_chat_turns")),
-        sa.UniqueConstraint("conversation_id", "request_id", name="uq_chat_turns_conversation_request"),
+        sa.UniqueConstraint(
+            "conversation_id", "request_id", name="uq_chat_turns_conversation_request"
+        ),
         sa.CheckConstraint(
             "route IS NULL OR route IN ('knowledge', 'clarification', 'incident_read', "
             "'work_note', 'unavailable')",
@@ -109,7 +118,9 @@ def upgrade() -> None:
         sa.Column("role", sa.String(length=16), nullable=False),
         sa.Column("content", sa.Text(), nullable=False),
         sa.Column("citations", JSONB(none_as_null=True), server_default=sa.text("'[]'::jsonb")),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.ForeignKeyConstraint(
             ["conversation_id"],
             ["chat_conversations.id"],

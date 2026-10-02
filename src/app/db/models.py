@@ -645,9 +645,15 @@ class ChatConversation(Base):
         onupdate=func.now(),
     )
 
-    session: Mapped[ChatSession] = relationship(back_populates="conversations", passive_deletes=True)
-    messages: Mapped[list[ChatMessage]] = relationship(back_populates="conversation", passive_deletes=True)
-    turns: Mapped[list[ChatTurn]] = relationship(back_populates="conversation", passive_deletes=True)
+    session: Mapped[ChatSession] = relationship(
+        back_populates="conversations", passive_deletes=True
+    )
+    messages: Mapped[list[ChatMessage]] = relationship(
+        back_populates="conversation", passive_deletes=True
+    )
+    turns: Mapped[list[ChatTurn]] = relationship(
+        back_populates="conversation", passive_deletes=True
+    )
 
 
 class ChatTurn(Base):
@@ -662,7 +668,9 @@ class ChatTurn(Base):
 
     __tablename__ = "chat_turns"
     __table_args__ = (
-        UniqueConstraint("conversation_id", "request_id", name="uq_chat_turns_conversation_request"),
+        UniqueConstraint(
+            "conversation_id", "request_id", name="uq_chat_turns_conversation_request"
+        ),
         Index(
             "uq_chat_turns_one_active",
             "conversation_id",
@@ -674,17 +682,13 @@ class ChatTurn(Base):
             "'work_note', 'unavailable')",
             name="route",
         ),
-        CheckConstraint(
-            "status IN ('running', 'succeeded', 'failed', 'blocked')", name="status"
-        ),
+        CheckConstraint("status IN ('running', 'succeeded', 'failed', 'blocked')", name="status"),
         CheckConstraint(
             "(status = 'running' AND completed_at IS NULL) "
             "OR (status <> 'running' AND completed_at IS NOT NULL)",
             name="terminal_state",
         ),
-        CheckConstraint(
-            "usage IS NULL OR jsonb_typeof(usage) = 'object'", name="usage_object"
-        ),
+        CheckConstraint("usage IS NULL OR jsonb_typeof(usage) = 'object'", name="usage_object"),
     )
 
     id: Mapped[UUID] = mapped_column(
@@ -701,7 +705,9 @@ class ChatTurn(Base):
     )
     request_id: Mapped[str] = mapped_column(String(64), nullable=False)
     route: Mapped[str | None] = mapped_column(String(32))
-    status: Mapped[str] = mapped_column(String(16), nullable=False, server_default=text("'running'"))
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default=text("'running'")
+    )
     error_category: Mapped[str | None] = mapped_column(String(64))
     usage: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
     created_at: Mapped[datetime] = mapped_column(

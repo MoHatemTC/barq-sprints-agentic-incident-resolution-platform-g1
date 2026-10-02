@@ -97,7 +97,7 @@ def _evidence_blocks(evidence: list[dict[str, Any]]) -> str:
             "section": item["section"],
         }
         blocks.append(
-            f'<evidence {json.dumps(payload, ensure_ascii=False)}>\n'
+            f"<evidence {json.dumps(payload, ensure_ascii=False)}>\n"
             f"{str(item['chunk_text'])[:EVIDENCE_ITEM_CHARS]}\n</evidence>"
         )
     return "\n\n".join(blocks) if blocks else "(no evidence retrieved)"

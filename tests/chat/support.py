@@ -86,7 +86,10 @@ class FakeChatStore:
         usage: dict[str, object] | None,
     ) -> None:
         self.events.append(
-            ("complete_turn", {"status": status, "route": route, "usage": usage, "turn_id": turn_id})
+            (
+                "complete_turn",
+                {"status": status, "route": route, "usage": usage, "turn_id": turn_id},
+            )
         )
 
     def fail_turn(self, turn_id: UUID, *, error_category: str) -> None:

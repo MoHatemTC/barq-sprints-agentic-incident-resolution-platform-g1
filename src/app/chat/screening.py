@@ -34,9 +34,7 @@ _BLOCKED_MESSAGES = {
         "Your message was withheld because safety screening is unavailable right "
         "now. Please try again later."
     ),
-    "semantic_classifier": (
-        "This message was withheld by input screening. Rephrase the question."
-    ),
+    "semantic_classifier": ("This message was withheld by input screening. Rephrase the question."),
 }
 
 

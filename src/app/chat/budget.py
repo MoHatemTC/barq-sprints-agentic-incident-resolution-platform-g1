@@ -82,7 +82,9 @@ class RedisChatBudget:
                 _RESERVE_LUA, 1, self._key(), self._limit, amount_usd, _BUDGET_KEY_TTL_SECONDS
             )
         except Exception as exc:  # fail closed: no accounting, no paid processing
-            raise ChatBudgetUnavailable(f"budget counter unavailable: {type(exc).__name__}") from exc
+            raise ChatBudgetUnavailable(
+                f"budget counter unavailable: {type(exc).__name__}"
+            ) from exc
         if result == -1:
             raise ChatBudgetExceeded("daily chat budget exhausted")
 

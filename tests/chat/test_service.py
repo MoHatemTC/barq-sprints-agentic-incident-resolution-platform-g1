@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from agent.llm import TerminalError
 from agent.prompts import PIIDetectionOutput
-from tests.agent_support import FakeLLM
-from app.chat.budget import ChatBudget, ChatBudgetExceeded
+from app.chat.budget import ChatBudgetExceeded
 from app.chat.config import ChatSettings
 from app.chat.prompts import AnswerDraft, RouteDecision
 from app.chat.service import ChatTurnService, TurnRequest
 from observability.tracing import get_tracer
+from tests.agent_support import FakeLLM
 from tests.chat.support import FakeChatRetriever, FakeChatStore, new_ids
 
 _SETTINGS = ChatSettings(

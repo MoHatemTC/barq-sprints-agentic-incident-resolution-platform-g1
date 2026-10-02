@@ -43,7 +43,9 @@ def build_chat_graph(deps: ChatGraphDeps) -> CompiledStateGraph:
         "screen_input", _after_screen, {"blocked": "persist_turn", "ok": "route"}
     )
     builder.add_conditional_edges(
-        "route", _after_route, {"knowledge": "retrieve_knowledge", "unavailable": "unavailable_notice"}
+        "route",
+        _after_route,
+        {"knowledge": "retrieve_knowledge", "unavailable": "unavailable_notice"},
     )
     builder.add_edge("retrieve_knowledge", "generate_answer")
     builder.add_edge("generate_answer", "verify_answer")

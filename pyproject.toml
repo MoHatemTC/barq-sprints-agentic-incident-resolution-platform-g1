@@ -63,6 +63,11 @@ dev = [
     "rich>=15.0.0",
     "ruff>=0.16.6",
 ]
+# Optional admin-chatbot UI (Streamlit). Install with `uv sync --group chat`
+# and run with `just chat`; regular API/worker environments never need it.
+chat = [
+    "streamlit>=1.41",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -116,6 +121,16 @@ warn_redundant_casts = true
 # celery ships without py.typed markers
 module = ["celery", "celery.*"]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# streamlit only ships partial stubs and is not installed in default envs
+module = ["streamlit", "streamlit.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# the chat UI is Streamlit glue: session magic defeats precise typing
+module = ["app.chat_ui.*"]
+ignore_errors = true
 
 [tool.coverage.run]
 source = ["src/app", "src/retrieval", "src/agent", "src/observability"]

@@ -24,9 +24,7 @@ logger = structlog.get_logger(__name__)
 class ChatStore(Protocol):
     """Sync persistence seam for the chat graph and turn service."""
 
-    def get_history(
-        self, conversation_id: UUID, *, limit: int
-    ) -> list[dict[str, str]]: ...
+    def get_history(self, conversation_id: UUID, *, limit: int) -> list[dict[str, str]]: ...
 
     def record_user_message(
         self,

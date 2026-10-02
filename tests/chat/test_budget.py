@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import pytest
-from agent.prompts import PIIDetectionOutput
-from tests.agent_support import FakeLLM
+
+from agent.prompts import InjectionClassification, PIIDetectionOutput
 from app.chat.budget import (
     ChatBudgetExceeded,
     ChatBudgetUnavailable,
@@ -14,7 +14,7 @@ from app.chat.budget import (
     estimate_turn_reserve,
 )
 from app.chat.config import ChatSettings
-from agent.prompts import InjectionClassification
+from tests.agent_support import FakeLLM
 
 _CONFIGURED = ChatSettings(
     _env_file=None,
@@ -115,7 +115,9 @@ def test_actual_cost_prefers_proxy_reported_prices() -> None:
 
 def test_actual_cost_estimates_from_rates_when_costs_missing() -> None:
     records = [{"input_tokens": 1000, "output_tokens": 500, "cost_usd": None}]
-    assert actual_usage_cost(_CONFIGURED, records) == pytest.approx((1000 * 0.5 + 500 * 2.0) / 1_000_000)
+    assert actual_usage_cost(_CONFIGURED, records) == pytest.approx(
+        (1000 * 0.5 + 500 * 2.0) / 1_000_000
+    )
 
 
 def test_usage_recording_llm_captures_guardrail_calls() -> None:

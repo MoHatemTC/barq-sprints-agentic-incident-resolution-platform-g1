@@ -21,6 +21,10 @@ from sqlalchemy.sql.schema import Column, Table
 from app.db.base import NAMING_CONVENTION, Base
 from app.db.models import (
     Approval,
+    ChatConversation,
+    ChatMessage,
+    ChatSession,
+    ChatTurn,
     Event,
     Execution,
     ExecutionNodeState,
@@ -44,6 +48,11 @@ EXPECTED_TABLES = {
     "retry_state",
     "semantic_clusters",
     "semantic_cluster_members",
+    # Admin chatbot (0006): separate from the incident-execution tables by design.
+    "chat_sessions",
+    "chat_conversations",
+    "chat_turns",
+    "chat_messages",
 }
 
 EXPECTED_COLUMNS = {
@@ -150,6 +159,42 @@ EXPECTED_COLUMNS = {
         "applied_at",
         "correlation_id",
     },
+    "chat_sessions": {
+        "id",
+        "operator_subject",
+        "secret_hash",
+        "created_at",
+        "last_seen_at",
+    },
+    "chat_conversations": {
+        "id",
+        "session_id",
+        "operator_subject",
+        "title",
+        "created_at",
+        "updated_at",
+    },
+    "chat_turns": {
+        "id",
+        "conversation_id",
+        "request_id",
+        "route",
+        "status",
+        "error_category",
+        "usage",
+        "created_at",
+        "completed_at",
+    },
+    "chat_messages": {
+        "id",
+        "conversation_id",
+        "turn_id",
+        "seq",
+        "role",
+        "content",
+        "citations",
+        "created_at",
+    },
 }
 
 NULLABLE_COLUMNS = {
@@ -187,6 +232,10 @@ NULLABLE_COLUMNS = {
         "applied_at",
         "correlation_id",
     },
+    "chat_sessions": {"last_seen_at"},
+    "chat_conversations": set(),
+    "chat_turns": {"route", "error_category", "usage", "completed_at"},
+    "chat_messages": {"citations"},
 }
 
 
@@ -237,7 +286,7 @@ def _server_default(column: Column) -> str | None:
     return _normalize_sql(column.server_default.arg)
 
 
-def test_metadata_contains_exactly_the_seven_required_tables() -> None:
+def test_metadata_contains_exactly_the_required_tables() -> None:
     assert set(Base.metadata.tables) == EXPECTED_TABLES
 
 
@@ -273,6 +322,14 @@ def test_meaningful_column_types_and_lengths() -> None:
         SemanticClusterMember.__table__.c.id,
         SemanticClusterMember.__table__.c.cluster_id,
         SemanticClusterMember.__table__.c.execution_id,
+        ChatSession.__table__.c.id,
+        ChatConversation.__table__.c.id,
+        ChatConversation.__table__.c.session_id,
+        ChatTurn.__table__.c.id,
+        ChatTurn.__table__.c.conversation_id,
+        ChatMessage.__table__.c.id,
+        ChatMessage.__table__.c.conversation_id,
+        ChatMessage.__table__.c.turn_id,
     ]
     assert all(isinstance(column.type, Uuid) for column in uuid_columns)
 
@@ -283,6 +340,8 @@ def test_meaningful_column_types_and_lengths() -> None:
         Approval.__table__.c.evidence,
         Failure.__table__.c.details,
         SemanticCluster.__table__.c.solution,
+        ChatTurn.__table__.c.usage,
+        ChatMessage.__table__.c.citations,
     ]
     assert all(isinstance(column.type, JSONB) for column in jsonb_columns)
 
@@ -292,6 +351,9 @@ def test_meaningful_column_types_and_lengths() -> None:
     assert isinstance(Execution.__table__.c.termination_cause.type, Text)
     assert isinstance(Failure.__table__.c.retryable.type, Boolean)
     assert isinstance(RetryState.__table__.c.attempt_count.type, Integer)
+    assert isinstance(ChatMessage.__table__.c.content.type, Text)
+    assert isinstance(ChatConversation.__table__.c.title.type, String)
+    assert ChatConversation.__table__.c.title.type.length == 200
 
 
 def test_server_defaults_are_complete_and_explicit() -> None:
@@ -326,6 +388,17 @@ def test_server_defaults_are_complete_and_explicit() -> None:
         ("semantic_clusters", "created_at"): "now()",
         ("semantic_cluster_members", "id"): "gen_random_uuid()",
         ("semantic_cluster_members", "joined_at"): "now()",
+        ("chat_sessions", "id"): "gen_random_uuid()",
+        ("chat_sessions", "created_at"): "now()",
+        ("chat_conversations", "id"): "gen_random_uuid()",
+        ("chat_conversations", "created_at"): "now()",
+        ("chat_conversations", "updated_at"): "now()",
+        ("chat_turns", "id"): "gen_random_uuid()",
+        ("chat_turns", "status"): "'running'",
+        ("chat_turns", "created_at"): "now()",
+        ("chat_messages", "id"): "gen_random_uuid()",
+        ("chat_messages", "citations"): "'[]'::jsonb",
+        ("chat_messages", "created_at"): "now()",
     }
     actual_defaults = {
         (table.name, column.name): _server_default(column)
@@ -397,6 +470,13 @@ def test_all_timestamp_columns_are_timezone_aware() -> None:
         ("semantic_clusters", "expires_at"),
         ("semantic_cluster_members", "joined_at"),
         ("semantic_cluster_members", "applied_at"),
+        ("chat_sessions", "created_at"),
+        ("chat_sessions", "last_seen_at"),
+        ("chat_conversations", "created_at"),
+        ("chat_conversations", "updated_at"),
+        ("chat_turns", "created_at"),
+        ("chat_turns", "completed_at"),
+        ("chat_messages", "created_at"),
     }
     timestamps = {
         (table.name, column.name): column

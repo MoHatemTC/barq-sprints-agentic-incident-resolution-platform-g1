@@ -11,8 +11,8 @@ import pytest
 from app.chat.citations import (
     Citation,
     build_citation,
-    citation_label,
     chunk_identity,
+    citation_label,
     manual_section_for_article_number,
 )
 from app.retrieval.hybrid_search import RetrievalHit
@@ -94,9 +94,7 @@ def test_build_citation_for_manual_article() -> None:
     assert citation.manual_section == "7.4"
     assert citation.excerpt.startswith("The known error register")
     assert citation.article_url is None, "no source-link mapping exists; never fabricate one"
-    assert citation_label(citation) == (
-        "KB0704 — Manual §7.4 — Three symptoms, one cause"
-    )
+    assert citation_label(citation) == ("KB0704 — Manual §7.4 — Three symptoms, one cause")
 
 
 def test_build_citation_for_canonical_article_has_no_manual_section() -> None:

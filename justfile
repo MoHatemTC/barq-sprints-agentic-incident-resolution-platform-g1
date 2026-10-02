@@ -9,6 +9,11 @@ install:
 run:
     uv run uvicorn app.main:app --reload
 
+# Admin chatbot UI (optional dependency group; see docs/admin_chatbot.md).
+# Needs CHAT_ENABLED=true plus the price rates in .env.
+chat:
+    uv run --group chat streamlit run src/app/chat_ui/app.py --server.port 8501 --browser.gatherUsageStats false
+
 test:
     uv run pytest
 
