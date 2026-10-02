@@ -203,6 +203,7 @@ class FakeLLM:
         model: str | None = None,
         trace_content: bool = True,
         max_retries: int | None = None,
+        usage_sink: Any = None,
     ) -> Any:
         selected_model = self.model_for_purpose(purpose, model)
         self.last_model_used = selected_model
@@ -218,6 +219,18 @@ class FakeLLM:
                 "max_retries": max_retries,
             }
         )
+        if usage_sink is not None:
+            # Mirror the FakeOpenAISDK usage shape so chat budget reconciliation
+            # is exercisable without a network.
+            usage_sink(
+                {
+                    "purpose": purpose,
+                    "input_tokens": 900,
+                    "output_tokens": 150,
+                    "cost_usd": None,
+                    "model": selected_model,
+                }
+            )
         answer = self.answers.get(purpose)
         if answer is None and purpose == "approval_brief":
             from agent.prompts import ApprovalBriefOutput

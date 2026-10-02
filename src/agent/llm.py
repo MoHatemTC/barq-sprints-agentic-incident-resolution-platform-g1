@@ -14,6 +14,7 @@ Embeddings stay local (FastEmbed): the S1.4 index was built with them.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from functools import lru_cache
 from typing import Any, Protocol, TypeVar
 
@@ -29,6 +30,10 @@ M = TypeVar("M", bound=BaseModel)
 
 #: Response header in which the LiteLLM proxy reports the USD cost of the call.
 COST_HEADER = "x-litellm-response-cost"
+
+#: Receives one usage record per completed model call: purpose, token counts,
+#: the proxy-reported cost when the header was present, and the model used.
+UsageSink = Callable[[dict[str, Any]], None]
 
 
 class ModelRefusalError(TerminalError):
@@ -63,8 +68,14 @@ class LLMClient(Protocol):
         model: str | None = None,
         trace_content: bool = True,
         max_retries: int | None = None,
+        usage_sink: UsageSink | None = None,
     ) -> M:
-        """Return ``schema`` parsed from the model's answer to ``prompt``."""
+        """Return ``schema`` parsed from the model's answer to ``prompt``.
+
+        ``usage_sink``, when given, receives token/cost metadata for the call
+        (chat budget reconciliation); it is optional so existing callers and
+        fakes are unaffected.
+        """
         ...
 
 
@@ -163,6 +174,7 @@ class LiteLLMClient:
         model: str | None = None,
         trace_content: bool = True,
         max_retries: int | None = None,
+        usage_sink: UsageSink | None = None,
     ) -> M:
         import openai
 
@@ -291,6 +303,18 @@ class LiteLLMClient:
                     cost_details=cost_details(raw.headers.get(COST_HEADER)),
                     metadata=completion_metadata,
                 )
+                if usage_sink is not None:
+                    usage = usage_details(completion.usage)
+                    reported = cost_details(raw.headers.get(COST_HEADER))
+                    usage_sink(
+                        {
+                            "purpose": purpose,
+                            "input_tokens": usage.get("input", 0),
+                            "output_tokens": usage.get("output", 0),
+                            "cost_usd": reported["total"] if reported else None,
+                            "model": str(completion.model or settings.agent_llm_model),
+                        }
+                    )
                 if choice is None:
                     raise InvalidModelOutputError(f"{purpose} returned no choices")
                 if choice.finish_reason == "content_filter" or choice.message.refusal:
@@ -352,6 +376,7 @@ __all__ = [
     "ModelRefusalError",
     "ModelTimeoutError",
     "UnexpectedModelError",
+    "UsageSink",
     "bounded",
     "cost_details",
     "get_embedding_engine",
