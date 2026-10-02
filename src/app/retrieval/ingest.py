@@ -149,6 +149,7 @@ def ingest_articles(
     chunk_overlap: int = 120,
     force_recreate: bool = False,
     purge_unknown_articles: bool = False,
+    split_on_headers: bool = True,
 ) -> int:
     """Chunk, embed, and upsert articles into the Qdrant collection.
 
@@ -188,7 +189,12 @@ def ingest_articles(
 
     chunk_records = []
     for article in articles:
-        chunks = chunk_article(article, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+        chunks = chunk_article(
+            article,
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+            split_on_headers=split_on_headers,
+        )
         for chk in chunks:
             chunk_records.append((article, chk))
 
