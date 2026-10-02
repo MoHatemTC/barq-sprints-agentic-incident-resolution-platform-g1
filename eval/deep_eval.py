@@ -15,8 +15,8 @@ are judged with a refusal rubric instead of the answer rubrics.
 Results are written as a JSON artifact for eval/generate_stage_b_report.py.
 
 Run with:
-  .venv/bin/python eval/stage_b_eval.py --limit 5        # smoke
-  .venv/bin/python eval/stage_b_eval.py                  # full 100 turns
+  .venv/bin/python eval/deep_eval.py --limit 5        # smoke
+  .venv/bin/python eval/deep_eval.py                  # full 100 turns
 """
 
 from __future__ import annotations

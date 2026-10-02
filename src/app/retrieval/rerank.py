@@ -16,10 +16,11 @@ RRF_K = 60  # standard RRF damping constant
 
 class CrossEncoderReranker:
     """
-    Lazily-loaded cross-encoder reranker.
+    Lazily-loaded cross-encoder reranker with reciprocal rank fusion (RRF).
 
-    Cross-encoder logits are normalized with a sigmoid before being stored
-    as RetrievalHit.score so the score remains bounded to [0, 1].
+    Combines the cross-encoder ranking and the incoming retrieval fusion ranking
+    using reciprocal rank fusion. The resulting `RetrievalHit.score` is an RRF
+    rank score used for ordering candidates, not a calibrated relevance probability.
     """
 
     def __init__(self, model_name: str | None = None, rrf_weight: float | None = None) -> None:

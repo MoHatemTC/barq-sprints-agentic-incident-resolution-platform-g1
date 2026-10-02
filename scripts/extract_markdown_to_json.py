@@ -27,7 +27,7 @@ configure_logging(environment=settings.environment, log_level=settings.log_level
 logging.basicConfig(level=logging.WARNING)
 logger = structlog.get_logger("extract_markdown_to_json")
 
-DEFAULT_MARKDOWN = Path("data/corpus/parsed-pdf.md")
+DEFAULT_MARKDOWN = Path("data/corpus/barq_manual.md")
 DEFAULT_OUTPUT = Path("data/corpus/manual_markdown_sections.json")
 
 

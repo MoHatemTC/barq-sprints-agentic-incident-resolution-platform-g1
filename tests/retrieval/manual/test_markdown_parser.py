@@ -212,7 +212,7 @@ class TestHtmlTableToText:
 # Full parse of the actual parsed-pdf.md
 # ---------------------------------------------------------------------------
 
-PARSED_PDF_PATH = Path("data/corpus/parsed-pdf.md")
+PARSED_PDF_PATH = Path("data/corpus/barq_manual.md")
 
 
 @pytest.mark.skipif(
