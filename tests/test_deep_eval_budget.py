@@ -12,30 +12,42 @@ from eval.eval_runtime import BudgetedLLM, BudgetExceeded, Checkpoint
 from eval.generate_stage_b_report import main as report_main
 
 
-@pytest.mark.parametrize("ranked,expected,value", [
-    (["noise", "KB1", "KB1"], ["KB1"], 0.5),
-    (["KB1", "KB2"], ["KB2", "KB1"], 1.0),
-    (["noise"], ["KB1"], 0.0),
-    ([], ["KB1"], 0.0),
-    (["noise"], ["—"], None),
-])
+@pytest.mark.parametrize(
+    "ranked,expected,value",
+    [
+        (["noise", "KB1", "KB1"], ["KB1"], 0.5),
+        (["KB1", "KB2"], ["KB2", "KB1"], 1.0),
+        (["noise"], ["KB1"], 0.0),
+        ([], ["KB1"], 0.0),
+        (["noise"], ["—"], None),
+    ],
+)
 def test_reciprocal_rank_preserves_retrieval_order(ranked, expected, value):
     from data.corpus.adapters import score_retrieval
 
-    result = score_retrieval(iter(ranked), {
-        "turn_id": "test", "expected_sections": expected, "must_not_retrieve": [],
-    })
+    result = score_retrieval(
+        iter(ranked),
+        {
+            "turn_id": "test",
+            "expected_sections": expected,
+            "must_not_retrieve": [],
+        },
+    )
     assert result["reciprocal_rank"] == value
 
 
 def test_appendix_parent_matches_any_child_without_requiring_every_template():
     from data.corpus.adapters import score_retrieval
 
-    result = score_retrieval(["noise", "KB1402"], {
-        "turn_id": "appendices", "expected_sections": ["Appendix B"],
-        "expected_label_groups": {"Appendix B": ["KB1401", "KB1402", "KB1403", "KB1404"]},
-        "must_not_retrieve": [],
-    })
+    result = score_retrieval(
+        ["noise", "KB1402"],
+        {
+            "turn_id": "appendices",
+            "expected_sections": ["Appendix B"],
+            "expected_label_groups": {"Appendix B": ["KB1401", "KB1402", "KB1403", "KB1404"]},
+            "must_not_retrieve": [],
+        },
+    )
     assert result["recall"] == 1.0
     assert result["precision"] == 0.5
     assert result["reciprocal_rank"] == 0.5
@@ -46,10 +58,12 @@ def test_mrr_average_excludes_refusal_turns(tmp_path):
     data = fixture_data(("answer", "refuse"))
     llm, _ = make_llm(tmp_path, auto_client)
     output = tmp_path / "results.json"
-    retrieval = Mock(return_value=[
-        {"section": "noise", "title": "Noise", "chunk_text": "Other", "score": 0.9},
-        {"section": "1.1", "title": "Purpose", "chunk_text": "Evidence", "score": 0.8},
-    ])
+    retrieval = Mock(
+        return_value=[
+            {"section": "noise", "title": "Noise", "chunk_text": "Other", "score": 0.9},
+            {"section": "1.1", "title": "Purpose", "chunk_text": "Evidence", "score": 0.8},
+        ]
+    )
     evaluate_dataset(data, retrieval, llm, args_for_test(), output)
     artifact = json.loads(output.read_text())
     assert artifact["summary"]["retrieval"]["mrr"] == 0.5
@@ -544,10 +558,16 @@ def test_appendix_alias_and_inspection_report(tmp_path):
     turn = data["sessions"][0]["turns"][0]
     turn["expected_sections"] = ["Appendix C"]
     turn["reference_contexts"] = ["Expected worksheet passage"]
-    retrieval = Mock(return_value=[{
-        "section": "KB1500", "title": "Worksheet", "chunk_text": "Retrieved worksheet passage",
-        "score": 0.9,
-    }])
+    retrieval = Mock(
+        return_value=[
+            {
+                "section": "KB1500",
+                "title": "Worksheet",
+                "chunk_text": "Retrieved worksheet passage",
+                "score": 0.9,
+            }
+        ]
+    )
     llm, create = make_llm(tmp_path, auto_client)
     output = tmp_path / "results.json"
     evaluate_dataset(data, retrieval, llm, args_for_test(), output, section_map={"C": "KB1500"})
@@ -611,20 +631,31 @@ def test_valid_independent_metric_thresholds():
 
 
 def test_correct_refusal_passes_despite_retrieved_distractor(tmp_path):
-    data = fixture_data(('refuse',))
-    turn = data['sessions'][0]['turns'][0]
-    turn['expected_sections'] = ['—']
-    turn['must_not_retrieve'] = ['2.1']
-    retrieval = Mock(return_value=[
-        {'section': 'KB0201', 'title': 'Coverage hours', 'chunk_text': 'Coverage hours', 'score': 0.9},
-    ])
+    data = fixture_data(("refuse",))
+    turn = data["sessions"][0]["turns"][0]
+    turn["expected_sections"] = ["—"]
+    turn["must_not_retrieve"] = ["2.1"]
+    retrieval = Mock(
+        return_value=[
+            {
+                "section": "KB0201",
+                "title": "Coverage hours",
+                "chunk_text": "Coverage hours",
+                "score": 0.9,
+            },
+        ]
+    )
     llm, create = make_llm(tmp_path, auto_client)
-    output = tmp_path / 'results.json'
-    assert evaluate_dataset(data, retrieval, llm, args_for_test(), output,
-                            section_map={'2.1': 'KB0201'}) == 0
-    row = json.loads(output.read_text())['turns'][0]
-    assert row['actual_behaviour'] == 'refuse'
-    assert row['retrieval']['forbidden_retrieved'] == ['KB0201']
-    assert 'retrieval_clean' not in row['metrics']
-    assert row['verdict'] == 'PASS'
+    output = tmp_path / "results.json"
+    assert (
+        evaluate_dataset(
+            data, retrieval, llm, args_for_test(), output, section_map={"2.1": "KB0201"}
+        )
+        == 0
+    )
+    row = json.loads(output.read_text())["turns"][0]
+    assert row["actual_behaviour"] == "refuse"
+    assert row["retrieval"]["forbidden_retrieved"] == ["KB0201"]
+    assert "retrieval_clean" not in row["metrics"]
+    assert row["verdict"] == "PASS"
     assert create.call_count == 2

@@ -189,7 +189,8 @@ def score_retrieval(retrieved_sections: Iterable[str], t: dict) -> dict:
         "precision": len(relevant & got) / len(got) if got else 0.0,
         "reciprocal_rank": (
             next((1.0 / rank for rank, label in enumerate(ranked, 1) if label in relevant), 0.0)
-            if want else None
+            if want
+            else None
         ),
         "top_k_contains_all": hit == want if want else None,
         "forbidden_retrieved": sorted(forbidden & got),

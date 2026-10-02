@@ -430,7 +430,13 @@ def evaluate_dataset(data, retrieve, llm, args, output: Path, section_map=None) 
                         if label not in section_map and canonical in section_map:
                             section_map[label] = section_map[canonical]
                         elif label.startswith("Appendix ") and canonical not in section_map:
-                            children = sorted({article for section, article in section_map.items() if section.startswith(canonical + ".")})
+                            children = sorted(
+                                {
+                                    article
+                                    for section, article in section_map.items()
+                                    if section.startswith(canonical + ".")
+                                }
+                            )
                             if children:
                                 label_groups[label] = children
                     report_config["section_map_hash"] = fingerprint(section_map)
@@ -450,7 +456,9 @@ def evaluate_dataset(data, retrieve, llm, args, output: Path, section_map=None) 
                     }
                 row["retrieval"] = score_retrieval(row["retrieved_sections"], scored_turn)
                 row["retrieval"]["expected_labels"] = scored_turn["expected_sections"]
-                row["retrieval"]["expected_label_groups"] = scored_turn.get("expected_label_groups", {})
+                row["retrieval"]["expected_label_groups"] = scored_turn.get(
+                    "expected_label_groups", {}
+                )
                 row["retrieval"]["method"] = "section_label_overlap"
                 # Refusal/clarification turns have no positive retrieval ground truth.
                 if turn["expected_behaviour"] != "answer":
@@ -519,7 +527,11 @@ def parse_args(argv=None):
     parser.add_argument("--corpus-version", default="manual-v4", help="change after re-ingestion")
     parser.add_argument("--top-k", type=positive_int, default=5)
     parser.add_argument("--limit", type=int, default=0, help="first N turns (0 = all)")
-    parser.add_argument("--gen-retry-turn", action="append", help="explicitly retry a turn with twice the generation token limit; repeat for multiple turns, preserving other cached turns")
+    parser.add_argument(
+        "--gen-retry-turn",
+        action="append",
+        help="explicitly retry a turn with twice the generation token limit; repeat for multiple turns, preserving other cached turns",
+    )
     parser.add_argument(
         "--concurrency",
         type=int,
