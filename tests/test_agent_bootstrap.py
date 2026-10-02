@@ -826,12 +826,12 @@ class TestQdrantRetriever:
 
     @staticmethod
     def _category_values(query_filter: object) -> list[str]:
-        """Every ``category`` value the filter tree matches on."""
+        """Every ``category`` value the filter tree matches on (positive constraints)."""
         found: list[str] = []
         stack = [query_filter]
         while stack:
             node = stack.pop()
-            for attr in ("must", "should", "must_not"):
+            for attr in ("must", "should"):
                 stack.extend(getattr(node, attr, None) or [])
             if getattr(node, "key", None) == "category":
                 match = getattr(node, "match", None)

@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import collections
+import json
 import os
 import sys
 import time
@@ -48,21 +49,32 @@ _RERANK_TITLE = os.environ.get("SMOKE_RERANK_TITLE", "1") != "0"
 
 
 def to_hit(point) -> RetrievalHit:
-    """Wrap a manual-section point payload so the production reranker can consume it.
+    """Wrap a point payload so the production reranker can consume it.
 
-    The title field carries "number + title" so the reranker reads the same
-    document text the embedder saw (embedding_text_for_chunk) — see rerank.py.
+    Two payload schemas exist:
+    * the dedicated manual-section collections store ``section_number`` /
+      ``section_title``; the title carries "number + title" so the reranker
+      reads the same document text the embedder saw — see rerank.py;
+    * the main ``incident_knowledge_base`` collection stores the article
+      schema (``article_number`` / ``title``), where production passes the
+      payload title through unchanged — see hybrid_search.to_hit.
     """
     p = point.payload or {}
-    number = p.get("section_number", "")
-    title = f"{number} {p.get('section_title', '')}".strip() if _RERANK_TITLE else ""
+    if p.get("article_number") is not None:
+        number = str(p.get("article_number") or "")
+        doc_title = str(p.get("title") or "")
+        title = doc_title if _RERANK_TITLE else ""
+    else:
+        number = str(p.get("section_number") or "")
+        doc_title = str(p.get("section_title") or "")
+        title = f"{number} {doc_title}".strip() if _RERANK_TITLE else ""
     return RetrievalHit(
         score=float(point.score),
-        article_id=p.get("section_id", ""),
+        article_id=str(p.get("section_id") or p.get("article_id") or ""),
         article_number=number,
         version="4.0",
         title=title,
-        section=p.get("section_title", ""),
+        section=doc_title,
         chunk_index=int(p.get("chunk_index", 0)),
         chunk_text=p.get("chunk_text", ""),
         workflow_state="published",
@@ -137,6 +149,52 @@ def mean_reciprocal_rank(retrieved: list[str], t: dict) -> float | None:
     return 0.0
 
 
+def section_to_article_map() -> dict[str, str]:
+    """Dataset section numbers → KB article numbers in incident_knowledge_base.
+
+    Derived with the exact same logic the ingest pipeline used: a section
+    whose title prints a canonical incident article keeps that article's
+    number (``6.8`` → KB0005), every other section is numbered from itself
+    (``1.1`` → KB0101, ``B.3`` → KB1403). Importing the pipeline module is
+    safe — it only defines constants and functions at import time.
+    """
+    from scripts.manual.pipeline_semantic_ingest import (
+        article_number_for_section,
+        load_latest_incident_articles,
+        match_incident_article,
+    )
+
+    corpus = _CORPUS_DIR / "manual_semantic_sections.json"
+    raw = json.loads(corpus.read_text(encoding="utf-8"))
+    incidents = load_latest_incident_articles()
+    mapping: dict[str, str] = {}
+    for item in raw["sections"]:
+        section_number = str(item["section_number"])
+        incident = match_incident_article(str(item["title"]), incidents)
+        mapping[section_number] = (
+            incident.article_number if incident else article_number_for_section(section_number)
+        )
+    return mapping
+
+
+def align_labels(t: dict, retrieved: list[str], section_map: dict[str, str]) -> dict:
+    """Translate the dataset's section-number labels when comparing.
+
+    The dataset labels ground truth with manual section numbers (``1.1``);
+    the main collection labels its hits with KB article numbers (``KB0101``).
+    When the retriever returned KB numbers, map the expected and forbidden
+    lists into the same space so score_retrieval/mean_reciprocal_rank compare
+    like with like. Section-number collections need no translation.
+    """
+    if not any(r.startswith("KB") for r in retrieved):
+        return t
+    return {
+        **t,
+        "expected_sections": [section_map.get(s, s) for s in t["expected_sections"]],
+        "must_not_retrieve": [section_map.get(s, s) for s in t.get("must_not_retrieve", [])],
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--collection", default="manual_semantic_sections")
@@ -166,13 +224,16 @@ def main() -> int:
     points_count = client.get_collection(collection_name=args.collection).points_count
     print(f"searching '{args.collection}' ({points_count} points) in mode={mode.value}\n")
 
+    section_map = section_to_article_map()
+
     scored_records = []
     t0 = time.perf_counter()
     for i, t in enumerate(turns, start=1):
         hits = search(client, engine, mode, args.collection, t["standalone_input"], TOP_K)
         retrieved = [h.article_number for h in hits]
-        mrr = mean_reciprocal_rank(retrieved, t)
-        s = A.score_retrieval(retrieved, t)
+        t_scored = align_labels(t, retrieved, section_map)
+        mrr = mean_reciprocal_rank(retrieved, t_scored)
+        s = A.score_retrieval(retrieved, t_scored)
 
         if i % 10 == 0:
             print(f"    ... {i}/{len(turns)} ({time.perf_counter() - t0:.0f}s elapsed)", flush=True)
@@ -185,6 +246,7 @@ def main() -> int:
                 "mrr": mrr,
                 "query": t["standalone_input"],
                 "expected": t["expected_sections"],
+                "expected_as_articles": t_scored["expected_sections"],
                 "retrieved": retrieved,
                 "passed": passed,
                 "recall": s["recall"],
@@ -202,7 +264,7 @@ def main() -> int:
                 f"mrr={mrr:.3f} forbidden={s.get('forbidden_retrieved', [])}"
             )
         else:
-            clean = not (set(t.get("must_not_retrieve", [])) & set(retrieved))
+            clean = not (set(t_scored.get("must_not_retrieve", [])) & set(retrieved))
             record = {
                 "turn_id": t["turn_id"],
                 "behaviour": t["expected_behaviour"],

@@ -115,17 +115,6 @@ site/
 # =========================
 # Data
 # =========================
-data/*
-!data/coverage_matrix.csv
-# Re-include the corpus directory itself so the file-level rules below apply.
-!data/corpus/
-data/corpus/*
-!data/corpus/README.md
-!data/corpus/barq_ingestion_report.md
-!data/corpus/barq_articles.json
-!data/adversarial/
-!data/corpus/barq_manual.md
-!data/corpus/adapters.py
 
 src/app/ignored_folder
 .zcode/

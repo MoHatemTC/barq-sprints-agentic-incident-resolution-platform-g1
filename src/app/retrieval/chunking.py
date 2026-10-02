@@ -7,6 +7,7 @@ splitting, and unclosed code fences are automatically balanced across chunk
 boundaries (Option B pipeline).
 """
 
+from langchain_core.documents import Document
 from langchain_text_splitters import (
     Language,
     MarkdownHeaderTextSplitter,
@@ -15,7 +16,7 @@ from langchain_text_splitters import (
 
 from app.models.knowledge import Article, ArticleChunk
 
-DEFAULT_CHUNK_SIZE = 1500
+DEFAULT_CHUNK_SIZE = 2000
 DEFAULT_CHUNK_OVERLAP = 150
 
 HEADERS_TO_SPLIT_ON: list[tuple[str, str]] = [
@@ -75,6 +76,7 @@ def chunk_markdown(
     article_id: str,
     chunk_size: int = DEFAULT_CHUNK_SIZE,
     chunk_overlap: int = DEFAULT_CHUNK_OVERLAP,
+    split_on_headers: bool = True,
 ) -> list[ArticleChunk]:
     """Split canonical Markdown content into structured ArticleChunk pieces.
 
@@ -88,6 +90,11 @@ def chunk_markdown(
         Target maximum character length for each chunk.
     chunk_overlap:
         Overlap character length when recursive splitting is required.
+    split_on_headers:
+        Cut at markdown headings before applying the size limit. Keep True for
+        long free-form articles; pass False for sources that are already
+        semantic units (e.g. one manual section per article) so the section
+        stays a single chunk unless it exceeds ``chunk_size``.
 
     Returns
     -------
@@ -97,11 +104,14 @@ def chunk_markdown(
     if not content or not content.strip():
         return []
 
-    header_splitter = MarkdownHeaderTextSplitter(
-        headers_to_split_on=HEADERS_TO_SPLIT_ON,
-        strip_headers=False,
-    )
-    docs = header_splitter.split_text(content)
+    if split_on_headers:
+        header_splitter = MarkdownHeaderTextSplitter(
+            headers_to_split_on=HEADERS_TO_SPLIT_ON,
+            strip_headers=False,
+        )
+        docs = header_splitter.split_text(content)
+    else:
+        docs = [Document(page_content=content)]
     if not docs:
         return []
 
@@ -148,6 +158,7 @@ def chunk_article(
     article: Article,
     chunk_size: int = DEFAULT_CHUNK_SIZE,
     chunk_overlap: int = DEFAULT_CHUNK_OVERLAP,
+    split_on_headers: bool = True,
 ) -> list[ArticleChunk]:
     """Chunk a validated Article model instance."""
     return chunk_markdown(
@@ -155,6 +166,7 @@ def chunk_article(
         article_id=article.unique_key,
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,
+        split_on_headers=split_on_headers,
     )
 
 

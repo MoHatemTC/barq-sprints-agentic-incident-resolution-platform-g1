@@ -176,15 +176,23 @@ def to_ragas_multiturn(run):
 # ──────────────────────────────────────────────────── retrieval scoring
 def score_retrieval(retrieved_sections: Iterable[str], t: dict) -> dict:
     """Deterministic, no judge required. Feed it the section ids your retriever returned."""
-    got = set(retrieved_sections)
+    ranked = list(retrieved_sections)
+    got = set(ranked)
     want = set(t["expected_sections"]) - {"—"}
+    groups = t.get("expected_label_groups", {})
+    relevant = {label for target in want for label in groups.get(target, [target])}
     forbidden = set(t["must_not_retrieve"])
-    hit = want & got
+    hit = {target for target in want if got.intersection(groups.get(target, [target]))}
     return {
         "turn_id": t["turn_id"],
         "recall": len(hit) / len(want) if want else None,
-        "precision": len(hit) / len(got) if got else 0.0,
-        "top_k_contains_all": want.issubset(got) if want else None,
+        "precision": len(relevant & got) / len(got) if got else 0.0,
+        "reciprocal_rank": (
+            next((1.0 / rank for rank, label in enumerate(ranked, 1) if label in relevant), 0.0)
+            if want
+            else None
+        ),
+        "top_k_contains_all": hit == want if want else None,
         "forbidden_retrieved": sorted(forbidden & got),
         "clean": not (forbidden & got),
     }
