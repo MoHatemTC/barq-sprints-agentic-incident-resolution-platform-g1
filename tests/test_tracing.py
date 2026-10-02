@@ -20,6 +20,8 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
+import httpx
+import openai
 import pytest
 import structlog
 from httpx import ASGITransport, AsyncClient
@@ -28,13 +30,16 @@ from opentelemetry.sdk.trace import ReadableSpan, TracerProvider
 from opentelemetry.sdk.trace.export import SpanExporter, SpanExportResult
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
+from agent.config import AgentSettings
 from agent.graph import build_graph, run_graph
+from agent.llm import LiteLLMClient, UnexpectedModelError
 from agent.nodes import NODE_ORDER
 from agent.runtime import build_runtime, invoke_incident_graph, resume_incident_graph
 from agent.state import EventPayload
 from app.core.config import Environment
 from app.core.logging import configure_logging
 from app.repositories.idempotency import EventAcceptanceResult, EventAcceptanceStatus
+from app.workers.retry_policy import TerminalError
 from observability import tracing as tracing_module
 from observability.redaction import langfuse_mask, redact_text, redact_value
 from observability.tracing import (
@@ -49,6 +54,7 @@ from tests.agent_support import (
     ORDER_P1,
     VPN,
     FakeLLM,
+    FakeOpenAISDK,
     FakeServiceNow,
     event_for,
     make_deps,
@@ -350,6 +356,138 @@ class TestCorrelation:
 
 
 # -- secret scan ---------------------------------------------------------------------------
+
+
+class TestSensitiveGenerationTracing:
+    def test_default_call_still_records_prompt_and_parsed_output(self) -> None:
+        from agent.prompts import ClassifyOutput
+
+        sentinels = {
+            "system": "NORMAL-SYSTEM-SENTINEL-19f2",
+            "prompt": "NORMAL-PROMPT-SENTINEL-28a3",
+            "output": "NORMAL-OUTPUT-SENTINEL-37b4",
+        }
+        tracer, exporter = recording_tracer()
+        llm = sdk_llm(
+            tracer,
+            {
+                "classify": ClassifyOutput(
+                    label="network",
+                    rationale=sentinels["output"],
+                    confidence=0.9,
+                )
+            },
+        )
+        llm.structured(
+            purpose="classify",
+            system=sentinels["system"],
+            prompt=sentinels["prompt"],
+            schema=ClassifyOutput,
+        )
+
+        dumped = everything_exported(finished(tracer, exporter))
+        assert all(value in dumped for value in sentinels.values())
+
+    def test_sensitive_call_exports_only_safe_content_metadata(self) -> None:
+        from agent.prompts import ClassifyOutput
+
+        sentinels = {
+            "system": "SENSITIVE-SYSTEM-SENTINEL-41c5",
+            "prompt": "SENSITIVE-PROMPT-SENTINEL-52d6",
+            "output": "SENSITIVE-OUTPUT-SENTINEL-63e7",
+        }
+        tracer, exporter = recording_tracer()
+        llm = sdk_llm(
+            tracer,
+            {
+                "classify": ClassifyOutput(
+                    label="network",
+                    rationale=sentinels["output"],
+                    confidence=0.9,
+                )
+            },
+        )
+        result = llm.structured(
+            purpose="pii_detection",
+            system=sentinels["system"],
+            prompt=sentinels["prompt"],
+            schema=ClassifyOutput,
+            trace_content=False,
+        )
+
+        assert result.rationale == sentinels["output"]
+        span = next(s for s in finished(tracer, exporter) if s.name == "llm.pii_detection")
+        attrs = span.attributes or {}
+        dumped = everything_exported([span])
+        assert all(value not in dumped for value in sentinels.values())
+        assert "content_suppressed" in dumped
+        assert "ClassifyOutput" in dumped
+        assert str(len(sentinels["system"]) + len(sentinels["prompt"])) in dumped
+        assert json.loads(str(attrs["langfuse.observation.usage_details"])) == {
+            "input": 900,
+            "output": 150,
+            "reasoning_tokens": 40,
+        }
+        assert json.loads(str(attrs["langfuse.observation.cost_details"])) == {
+            "total": pytest.approx(0.0016455)
+        }
+
+    @pytest.mark.parametrize(
+        ("failure", "expected"),
+        [
+            (
+                openai.BadRequestError(
+                    "PROVIDER-ERROR-SENTINEL-74f8",
+                    response=httpx.Response(
+                        400,
+                        request=httpx.Request(
+                            "POST", "https://management.sprints.ai/litellm/chat/completions"
+                        ),
+                    ),
+                    body={"error": "PROVIDER-BODY-SENTINEL-85a9"},
+                ),
+                TerminalError,
+            ),
+            (RuntimeError("UNEXPECTED-ERROR-SENTINEL-96ba"), UnexpectedModelError),
+        ],
+        ids=["provider", "unexpected"],
+    )
+    def test_sensitive_failures_export_no_message_or_exception_chain(
+        self, failure: Exception, expected: type[Exception]
+    ) -> None:
+        from agent.prompts import ClassifyOutput
+
+        system = "FAILURE-SYSTEM-SENTINEL-a7cb"
+        prompt = "FAILURE-PROMPT-SENTINEL-b8dc"
+        tracer, exporter = recording_tracer()
+        sdk = FakeOpenAISDK({"classify": failure})
+        llm = LiteLLMClient(AgentSettings(_env_file=None), tracer, client=sdk)
+
+        with pytest.raises(expected) as raised:
+            llm.structured(
+                purpose="pii_detection",
+                system=system,
+                prompt=prompt,
+                schema=ClassifyOutput,
+                trace_content=False,
+                max_retries=0,
+            )
+
+        span = next(s for s in finished(tracer, exporter) if s.name == "llm.pii_detection")
+        dumped = everything_exported([span])
+        for sentinel in (
+            system,
+            prompt,
+            "PROVIDER-ERROR-SENTINEL-74f8",
+            "PROVIDER-BODY-SENTINEL-85a9",
+            "UNEXPECTED-ERROR-SENTINEL-96ba",
+        ):
+            assert sentinel not in dumped
+        assert raised.value.__cause__ is None
+        assert raised.value.__context__ is None
+        assert "content_suppressed" in dumped
+        assert (span.attributes or {}).get("langfuse.observation.level") == "ERROR"
+        assert sdk.request_max_retries == [0]
 
 
 class TestSecretScan:
