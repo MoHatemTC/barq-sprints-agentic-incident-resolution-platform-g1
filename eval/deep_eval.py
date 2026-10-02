@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import collections
 import json
+import os
 import re
 import sys
 import threading
@@ -86,7 +87,8 @@ REFUSAL_RUBRIC = (
 
 JUDGE_PARAMS = [P.INPUT, P.ACTUAL_OUTPUT, P.EXPECTED_OUTPUT, P.RETRIEVAL_CONTEXT]
 
-# USD spend captured from the LiteLLM proxy's x-litellm-response-cost header.
+# USD spend captured from the LiteLLM proxy's x-litellm-response-cost header
+# or OpenRouter's usage.cost response field.
 SPEND = {"usd": 0.0, "calls": 0}
 _SPEND_LOCK = threading.Lock()
 
@@ -98,6 +100,24 @@ def record_cost(headers) -> None:
     try:
         with _SPEND_LOCK:
             SPEND["usd"] += float(raw)
+            SPEND["calls"] += 1
+    except (TypeError, ValueError):
+        pass
+
+
+def record_completion_cost(completion) -> None:
+    """Capture OpenRouter's per-response cost (needs usage: {include: true})."""
+    usage = getattr(completion, "usage", None)
+    if usage is None:
+        return
+    cost = getattr(usage, "cost", None)
+    if cost is None:
+        cost = (getattr(usage, "model_extra", None) or {}).get("cost")
+    if cost is None:
+        return
+    try:
+        with _SPEND_LOCK:
+            SPEND["usd"] += float(cost)
             SPEND["calls"] += 1
     except (TypeError, ValueError):
         pass
@@ -121,7 +141,13 @@ def build_history_block(history: list[dict]) -> str:
 
 
 def make_run(
-    qdrant, gen_client, collection: str, engine: FastEmbedEngine, gen_model: str, top_k: int
+    qdrant,
+    gen_client,
+    collection: str,
+    engine: FastEmbedEngine,
+    gen_model: str,
+    top_k: int,
+    usage_extra: dict | None = None,
 ):
     """Return run(question, history) -> (answer, retrieved) for the adapter."""
     retrieval_lock = threading.Lock()  # serialize shared ONNX inference
@@ -136,9 +162,12 @@ def make_run(
                     model=gen_model,
                     temperature=0,
                     messages=messages,
+                    extra_body=usage_extra or {},
                 )
                 record_cost(raw.headers)
-                return raw.parse().choices[0].message.content.strip()
+                completion = raw.parse()
+                record_completion_cost(completion)
+                return completion.choices[0].message.content.strip()
             except openai.RateLimitError as exc:
                 last_exc = exc
                 if "budget_exceeded" in str(exc):
@@ -182,17 +211,20 @@ def make_run(
 
 
 class GeminiProxyJudge(DeepEvalBaseLLM):
-    """DeepEval judge model speaking to the Sprints LiteLLM proxy.
+    """DeepEval judge model speaking to an OpenAI-compatible endpoint.
 
-    DeepEval's own LiteLLMModel strips the "gemini/" provider prefix
-    (parse_model_name), which the proxy then rejects ("team can only access
-    models=['gemini/*']"). This custom model calls the proxy through the same
-    OpenAI-compatible path as the generator, keeping the full model name.
+    Named for where it started: DeepEval's own LiteLLMModel strips the
+    "gemini/" provider prefix (parse_model_name), which the Sprints proxy
+    then rejects ("team can only access models=['gemini/*']"). This custom
+    model calls the endpoint through the same OpenAI-compatible path as the
+    generator, keeping the full model name — which also makes it work
+    unchanged against OpenRouter (google/… names).
     """
 
-    def __init__(self, model: str, client) -> None:
+    def __init__(self, model: str, client, usage_extra: dict | None = None) -> None:
         self._model_name = model
         self._client = client
+        self._usage_extra = usage_extra or {}
 
     def load_model(self):
         return self._client
@@ -203,10 +235,13 @@ class GeminiProxyJudge(DeepEvalBaseLLM):
             model=self._model_name,
             temperature=0,
             messages=[{"role": "user", "content": prompt}],
+            extra_body=self._usage_extra,
             **kwargs,
         )
         record_cost(raw.headers)
-        text = raw.parse().choices[0].message.content
+        completion = raw.parse()
+        record_completion_cost(completion)
+        text = completion.choices[0].message.content
         if schema is not None:
             return schema(**json.loads(trim_and_load_json(text)))
         return text
@@ -220,11 +255,32 @@ class GeminiProxyJudge(DeepEvalBaseLLM):
         return self._model_name
 
 
-def judge_model(args, gen_client) -> GeminiProxyJudge:
-    api_key = AGENT_SETTINGS.litellm_api_key
-    if api_key is None or not api_key.get_secret_value():
-        raise SystemExit("LITELLM_API_KEY is not configured (needed for the judge)")
-    return GeminiProxyJudge(model=args.judge_model, client=gen_client)
+def resolve_api_key(args) -> str:
+    """--api-key → OPENROUTER_API_KEY (env or .env) → the Sprints LiteLLM key."""
+    if args.api_key:
+        return args.api_key
+    env = os.environ.get("OPENROUTER_API_KEY")
+    if env:
+        return env
+    try:
+        from dotenv import dotenv_values
+
+        env_file = dotenv_values(REPO / ".env").get("OPENROUTER_API_KEY")
+        if env_file:
+            return env_file
+    except ImportError:
+        pass
+    settings_key = AGENT_SETTINGS.litellm_api_key
+    if settings_key is not None and settings_key.get_secret_value():
+        return settings_key.get_secret_value()
+    raise SystemExit(
+        "no API key found: pass --api-key, set OPENROUTER_API_KEY (env or .env), "
+        "or configure LITELLM_API_KEY"
+    )
+
+
+def judge_model(args, gen_client, usage_extra: dict | None = None) -> GeminiProxyJudge:
+    return GeminiProxyJudge(model=args.judge_model, client=gen_client, usage_extra=usage_extra)
 
 
 def metrics_for_turn(t: dict, judge, threshold: float) -> dict[str, GEval]:
@@ -357,6 +413,17 @@ def main() -> int:
     )
     parser.add_argument("--judge-model", default=AGENT_SETTINGS.agent_llm_model)
     parser.add_argument("--gen-model", default=AGENT_SETTINGS.agent_llm_model)
+    parser.add_argument(
+        "--base-url",
+        default=None,
+        help="OpenAI-compatible endpoint override (e.g. https://openrouter.ai/api/v1). "
+        "Defaults to LITELLM_BASE_URL.",
+    )
+    parser.add_argument(
+        "--api-key",
+        default=None,
+        help="API key override; else OPENROUTER_API_KEY (env or .env), else LITELLM_API_KEY.",
+    )
     parser.add_argument("--threshold", type=float, default=0.7)
     parser.add_argument("--output", default="eval/deepeval_results.json")
     args = parser.parse_args()
@@ -373,19 +440,21 @@ def main() -> int:
         sessions = limited
     total_turns = sum(len(s["turns"]) for s in sessions)
 
-    if (
-        AGENT_SETTINGS.litellm_api_key is None
-        or not AGENT_SETTINGS.litellm_api_key.get_secret_value()
-    ):
-        raise SystemExit("LITELLM_API_KEY is not configured")
-    gen_client = openai.OpenAI(
-        base_url=AGENT_SETTINGS.litellm_base_url,
-        api_key=AGENT_SETTINGS.litellm_api_key.get_secret_value(),
-    )
-    judge = judge_model(args, gen_client)
+    if args.gen_model.startswith("gemini/") and args.base_url and "openrouter" in args.base_url:
+        raise SystemExit(
+            f"{args.gen_model} is a LiteLLM-style name; OpenRouter expects "
+            "'google/…' (e.g. google/gemini-3.5-flash)"
+        )
+    api_key = resolve_api_key(args)
+    base_url = args.base_url or AGENT_SETTINGS.litellm_base_url
+    usage_extra = {"usage": {"include": True}} if "openrouter" in base_url else {}
+    gen_client = openai.OpenAI(base_url=base_url, api_key=api_key)
+    judge = judge_model(args, gen_client, usage_extra)
     engine = FastEmbedEngine()
     client = QdrantClient(url=args.url)
-    run = make_run(client, gen_client, args.collection, engine, args.gen_model, args.top_k)
+    run = make_run(
+        client, gen_client, args.collection, engine, args.gen_model, args.top_k, usage_extra
+    )
 
     print(
         f"turns: {total_turns} in {len(sessions)} sessions | {args.concurrency} sessions "
@@ -405,6 +474,7 @@ def main() -> int:
         "judge_model": args.judge_model,
         "threshold": args.threshold,
         "top_k": args.top_k,
+        "base_url": base_url,
     }
     if output.exists():
         try:
@@ -539,6 +609,7 @@ def main() -> int:
                     "judge_model": args.judge_model,
                     "threshold": args.threshold,
                     "top_k": args.top_k,
+                    "base_url": base_url,
                     "spend_this_run_usd": round(SPEND["usd"], 4),
                     "llm_calls_this_run": SPEND["calls"],
                 },
