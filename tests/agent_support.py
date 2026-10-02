@@ -473,7 +473,7 @@ def make_deps(
     tracer = tracer or Tracer(None)
     backend = servicenow or FakeServiceNow()
     gateway = IncidentGateway(lambda: backend, tracer, runner=shared_runner())
-    settings.setdefault("agent_pii_detection_enabled", True)
+    settings.setdefault("agent_pii_detection_mode", "enforced")
     return AgentDependencies(
         settings=AgentSettings(_env_file=None, agent_checkpointer_backend="memory", **settings),
         llm=llm or FakeLLM(vpn_answers()),

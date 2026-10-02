@@ -10,6 +10,7 @@ variable under change control.
 
 from __future__ import annotations
 
+from enum import StrEnum
 from functools import lru_cache
 from typing import Literal
 
@@ -17,6 +18,14 @@ from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 AGENT_VERSION = "s3.4-graph-1.0.0"
+
+
+class PIIDetectionMode(StrEnum):
+    """Deployment state for residual-PII detection."""
+
+    DISABLED = "disabled"
+    SHADOW = "shadow"
+    ENFORCED = "enforced"
 
 
 class AgentSettings(BaseSettings):
@@ -132,11 +141,11 @@ class AgentSettings(BaseSettings):
         gt=0,
         description="Length bound on incident text sent to the model (manual §11.6).",
     )
-    agent_pii_detection_enabled: bool = Field(
-        default=False,
+    agent_pii_detection_mode: PIIDetectionMode = Field(
+        default=PIIDetectionMode.DISABLED,
         description=(
-            "Authorization gate for sending regex-redacted incident text to the residual-PII "
-            "model. Keep false until the configured provider is approved; false fails closed."
+            "Residual-PII deployment mode: disabled preserves the pre-detector pipeline, "
+            "shadow evaluates without enforcement, and enforced masks or fails closed."
         ),
     )
 
@@ -160,4 +169,4 @@ def get_agent_settings() -> AgentSettings:
     return AgentSettings()
 
 
-__all__ = ["AGENT_VERSION", "AgentSettings", "get_agent_settings"]
+__all__ = ["AGENT_VERSION", "AgentSettings", "PIIDetectionMode", "get_agent_settings"]

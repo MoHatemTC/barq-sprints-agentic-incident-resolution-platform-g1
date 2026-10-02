@@ -27,7 +27,7 @@ from agent import dependencies as dependencies_module
 from agent import llm as llm_module
 from agent import runtime as runtime_module
 from agent.checkpointer import WorkflowStateSaver, build_checkpointer
-from agent.config import AGENT_VERSION, AgentSettings
+from agent.config import AGENT_VERSION, AgentSettings, PIIDetectionMode
 from agent.llm import (
     InvalidModelOutputError,
     LiteLLMClient,
@@ -89,18 +89,50 @@ class TestSettings:
         assert settings.litellm_base_url == "https://management.sprints.ai/litellm"
         assert settings.agent_graph_backend == "langgraph"
         assert settings.agent_version == AGENT_VERSION
-        assert settings.agent_pii_detection_enabled is False
+        assert settings.agent_pii_detection_mode is PIIDetectionMode.DISABLED
+
+    @pytest.mark.parametrize("mode", list(PIIDetectionMode))
+    def test_pii_detection_modes_are_accepted(
+        self, monkeypatch: pytest.MonkeyPatch, mode: PIIDetectionMode
+    ) -> None:
+        monkeypatch.setenv("AGENT_PII_DETECTION_MODE", mode.value)
+        settings = AgentSettings(_env_file=None)
+        assert settings.agent_pii_detection_mode is mode
 
     def test_environment_overrides(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("AGENT_RETRIEVAL_THRESHOLD", "0.6")
         monkeypatch.setenv("AGENT_RISK_PRIORITIES", "[1, 2]")
         monkeypatch.setenv("AGENT_GRAPH_BACKEND", "stub")
-        monkeypatch.setenv("AGENT_PII_DETECTION_ENABLED", "true")
+        monkeypatch.setenv("AGENT_PII_DETECTION_MODE", "shadow")
         settings = AgentSettings(_env_file=None)
         assert settings.agent_retrieval_threshold == 0.6
         assert settings.agent_risk_priorities == [1, 2]
         assert settings.agent_graph_backend == "stub"
-        assert settings.agent_pii_detection_enabled is True
+        assert settings.agent_pii_detection_mode is PIIDetectionMode.SHADOW
+
+    def test_invalid_pii_detection_mode_is_rejected(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("AGENT_PII_DETECTION_MODE", "invalid")
+        with pytest.raises(ValueError, match="agent_pii_detection_mode"):
+            AgentSettings(_env_file=None)
+
+    def test_legacy_boolean_cannot_override_mode(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("AGENT_PII_DETECTION_MODE", raising=False)
+        monkeypatch.setenv("AGENT_PII_DETECTION_ENABLED", "true")
+
+        settings = AgentSettings(_env_file=None)
+
+        assert settings.agent_pii_detection_mode is PIIDetectionMode.DISABLED
+        assert not hasattr(settings, "agent_pii_detection_enabled")
+
+    def test_legacy_boolean_cannot_override_explicit_mode(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("AGENT_PII_DETECTION_MODE", "enforced")
+        monkeypatch.setenv("AGENT_PII_DETECTION_ENABLED", "false")
+
+        settings = AgentSettings(_env_file=None)
+
+        assert settings.agent_pii_detection_mode is PIIDetectionMode.ENFORCED
 
     def test_out_of_range_values_are_rejected(self) -> None:
         with pytest.raises(ValueError):

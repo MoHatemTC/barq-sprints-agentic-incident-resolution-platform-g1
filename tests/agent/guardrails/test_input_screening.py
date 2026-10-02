@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from agent.config import AgentSettings
+from agent.config import AgentSettings, PIIDetectionMode
 from agent.dependencies import AgentDependencies
 from agent.guardrails.input_screening import InjectionCategory, screen_text
 from agent.llm import ModelTimeoutError
@@ -207,7 +207,7 @@ def _make_deps(
     llm: Any,
     raw_incident: dict[str, Any],
     *,
-    pii_detection_enabled: bool = True,
+    pii_detection_mode: PIIDetectionMode | str = PIIDetectionMode.ENFORCED,
     max_incident_chars: int = 6000,
 ) -> AgentDependencies:
     from unittest.mock import AsyncMock, Mock
@@ -217,7 +217,7 @@ def _make_deps(
     return AgentDependencies(
         settings=AgentSettings(
             _env_file=None,
-            agent_pii_detection_enabled=pii_detection_enabled,
+            agent_pii_detection_mode=pii_detection_mode,
             agent_max_incident_chars=max_incident_chars,
         ),
         llm=llm,
@@ -262,12 +262,17 @@ def test_raw_secret_never_reaches_the_llm(dataset: dict[str, Any]) -> None:
     assert "Sup3rS3cret!" not in json.dumps(result)
 
 
-def test_pattern_flagged_incident_blocks_without_calling_the_classifier(
-    dataset: dict[str, Any],
+@pytest.mark.parametrize("mode", list(PIIDetectionMode))
+def test_pattern_flagged_incident_blocks_without_calling_either_model(
+    dataset: dict[str, Any], mode: PIIDetectionMode
 ) -> None:
     case = dataset["pattern_injections"][0]
     llm = _RecordingLLM()
-    deps = _make_deps(llm, _incident_payload(description=case["description"]))
+    deps = _make_deps(
+        llm,
+        _incident_payload(description=case["description"]),
+        pii_detection_mode=mode,
+    )
 
     result = load(_event_state(), deps)
 
@@ -429,6 +434,7 @@ def test_regex_then_pii_then_semantic_masks_both_fields() -> None:
     pii_check = result["input_guardrail"]["checks"][1]
     assert pii_check == {
         "layer": "residual_pii",
+        "mode": "enforced",
         "ran": True,
         "available": True,
         "finding_count": 3,
@@ -501,32 +507,224 @@ def test_oversized_input_blocks_without_either_model_call() -> None:
     assert result["input_guardrail"]["checks"][1]["failure_category"] == "input_too_large"
 
 
-def test_default_off_authorization_gate_blocks_without_model_calls() -> None:
-    sensitive = "Synthetic Person lives on Private Street"
-    llm = _RecordingLLM()
+def test_disabled_mode_restores_regex_then_semantic_pipeline() -> None:
+    raw_email = "jane.doe@example.com"
+    description = f"Mona cannot sign in; contact {raw_email}"
+    llm = _RecordingLLM(pii_result=AssertionError("PII detector must not run"))
     deps = _make_deps(
         llm,
-        _incident_payload(description=sensitive),
-        pii_detection_enabled=False,
+        _incident_payload(description=description),
+        pii_detection_mode=PIIDetectionMode.DISABLED,
     )
 
     result = load(_event_state(), deps)
 
-    assert llm.calls == []
-    assert result["input_guardrail"]["passed"] is False
-    assert result["incident"]["short_description"] == REDACTED
-    assert result["incident"]["description"] == REDACTED
+    assert [call["purpose"] for call in llm.calls] == ["injection_classifier"]
+    assert result["input_guardrail"]["passed"] is True
+    assert result["incident"]["description"] == f"Mona cannot sign in; contact {REDACTED_EMAIL}"
+    classifier_prompt = str(llm.calls[0]["prompt"])
+    assert "Mona" in classifier_prompt
+    assert raw_email not in classifier_prompt
+    assert REDACTED_EMAIL in classifier_prompt
     pii_check = result["input_guardrail"]["checks"][1]
     assert pii_check == {
         "layer": "residual_pii",
+        "mode": "disabled",
         "ran": False,
+        "available": None,
+        "finding_count": None,
+        "categories": None,
+        "failure_category": None,
+    }
+    assert result["input_guardrail"]["checks"][2]["ran"] is True
+
+
+def test_disabled_mode_preserves_semantic_injection_blocking() -> None:
+    llm = _RecordingLLM(
+        pii_result=AssertionError("PII detector must not run"),
+        classifier_result=InjectionClassification(
+            is_injection=True,
+            reason="synthetic semantic manipulation",
+        ),
+    )
+    result = load(
+        _event_state(),
+        _make_deps(
+            llm,
+            _incident_payload(),
+            pii_detection_mode=PIIDetectionMode.DISABLED,
+        ),
+    )
+
+    assert [call["purpose"] for call in llm.calls] == ["injection_classifier"]
+    assert result["input_guardrail"]["passed"] is False
+    assert result["incident"]["short_description"] == REDACTED
+    assert result["incident"]["description"] == REDACTED
+
+
+def test_shadow_findings_are_reported_but_not_applied() -> None:
+    raw_email = "jane.doe@example.com"
+    description = f"Mona cannot sign in; contact {raw_email}"
+    llm = _RecordingLLM(
+        pii_result=PIIDetectionOutput(
+            findings=[
+                PIIFinding(
+                    field=PIIField.DESCRIPTION,
+                    start=0,
+                    end=4,
+                    category=PIICategory.PERSON_NAME,
+                )
+            ]
+        )
+    )
+    result = load(
+        _event_state(),
+        _make_deps(
+            llm,
+            _incident_payload(description=description),
+            pii_detection_mode=PIIDetectionMode.SHADOW,
+        ),
+    )
+
+    assert [call["purpose"] for call in llm.calls] == [
+        "pii_detection",
+        "injection_classifier",
+    ]
+    assert llm.calls[0]["trace_content"] is False
+    assert llm.calls[0]["max_retries"] == 0
+    assert result["input_guardrail"]["passed"] is True
+    assert result["incident"]["description"] == f"Mona cannot sign in; contact {REDACTED_EMAIL}"
+    classifier_prompt = str(llm.calls[1]["prompt"])
+    assert "Mona" in classifier_prompt
+    assert raw_email not in classifier_prompt
+    assert REDACTED_EMAIL in classifier_prompt
+    pii_check = result["input_guardrail"]["checks"][1]
+    assert pii_check == {
+        "layer": "residual_pii",
+        "mode": "shadow",
+        "ran": True,
+        "available": True,
+        "finding_count": 1,
+        "categories": ["person_name"],
+        "failure_category": None,
+    }
+    assert "Mona" not in json.dumps(pii_check)
+    assert "start" not in pii_check
+    assert "end" not in pii_check
+
+
+def test_shadow_detector_failure_does_not_block_or_change_payload() -> None:
+    sensitive = "Synthetic Person lives on Private Street"
+    llm = _RecordingLLM(pii_result=ModelTimeoutError("private provider detail"))
+    result = load(
+        _event_state(),
+        _make_deps(
+            llm,
+            _incident_payload(description=sensitive),
+            pii_detection_mode=PIIDetectionMode.SHADOW,
+        ),
+    )
+
+    assert [call["purpose"] for call in llm.calls] == [
+        "pii_detection",
+        "injection_classifier",
+    ]
+    assert result["input_guardrail"]["passed"] is True
+    assert result["incident"]["description"] == sensitive
+    assert sensitive in str(llm.calls[1]["prompt"])
+    pii_check = result["input_guardrail"]["checks"][1]
+    assert pii_check == {
+        "layer": "residual_pii",
+        "mode": "shadow",
+        "ran": True,
         "available": False,
         "finding_count": None,
         "categories": None,
-        "failure_category": "detector_disabled",
+        "failure_category": "timeout",
     }
-    assert result["input_guardrail"]["checks"][2]["ran"] is False
-    assert sensitive not in json.dumps(result)
+    assert sensitive not in json.dumps(pii_check)
+    assert "private provider detail" not in json.dumps(pii_check)
+
+
+@pytest.mark.parametrize("mode", list(PIIDetectionMode))
+def test_pan_and_iban_are_layer_one_redacted_in_every_mode(mode: PIIDetectionMode) -> None:
+    raw_pan = "4111 1111 1111 1111"
+    raw_iban = "GB82 WEST 1234 5698 7654 32"
+    description = f"Mona paid with {raw_pan} to {raw_iban}"
+    layer_one = (
+        f"Mona paid with {PII_REDACTION_MARKERS['payment_card']} "
+        f"to {PII_REDACTION_MARKERS['financial_account']}"
+    )
+    llm = _RecordingLLM(
+        pii_result=PIIDetectionOutput(
+            findings=[
+                PIIFinding(
+                    field=PIIField.DESCRIPTION,
+                    start=0,
+                    end=4,
+                    category=PIICategory.PERSON_NAME,
+                )
+            ]
+        )
+    )
+
+    result = load(
+        _event_state(),
+        _make_deps(
+            llm,
+            _incident_payload(description=description),
+            pii_detection_mode=mode,
+        ),
+    )
+
+    expected_purposes = (
+        ["injection_classifier"]
+        if mode is PIIDetectionMode.DISABLED
+        else ["pii_detection", "injection_classifier"]
+    )
+    assert [call["purpose"] for call in llm.calls] == expected_purposes
+    assert all(raw_pan not in str(call["prompt"]) for call in llm.calls)
+    assert all(raw_iban not in str(call["prompt"]) for call in llm.calls)
+
+    if mode is not PIIDetectionMode.DISABLED:
+        detector_prompt = str(llm.calls[0]["prompt"])
+        assert layer_one in detector_prompt
+        assert llm.calls[0]["trace_content"] is False
+        assert llm.calls[0]["max_retries"] == 0
+
+    semantic_prompt = str(llm.calls[-1]["prompt"])
+    if mode is PIIDetectionMode.ENFORCED:
+        protected = layer_one.replace("Mona", PII_REDACTION_MARKERS["person_name"])
+        assert protected in semantic_prompt
+        assert result["incident"]["description"] == protected
+    else:
+        assert layer_one in semantic_prompt
+        assert result["incident"]["description"] == layer_one
+
+
+def test_shadow_mode_semantic_injection_still_blocks() -> None:
+    llm = _RecordingLLM(
+        classifier_result=InjectionClassification(
+            is_injection=True,
+            reason="synthetic semantic manipulation",
+        )
+    )
+    result = load(
+        _event_state(),
+        _make_deps(
+            llm,
+            _incident_payload(),
+            pii_detection_mode=PIIDetectionMode.SHADOW,
+        ),
+    )
+
+    assert [call["purpose"] for call in llm.calls] == [
+        "pii_detection",
+        "injection_classifier",
+    ]
+    assert result["input_guardrail"]["passed"] is False
+    assert result["incident"]["short_description"] == REDACTED
+    assert result["incident"]["description"] == REDACTED
 
 
 def test_semantic_injection_wholly_redacts_protected_fields() -> None:

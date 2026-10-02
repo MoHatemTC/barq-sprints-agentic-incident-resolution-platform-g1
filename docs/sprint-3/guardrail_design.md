@@ -54,19 +54,24 @@ Concretely:
 1. Run deterministic prompt-injection pattern screening on the raw short
    description and description.
 2. Regex-redact both fields with the shared observability redactor.
-3. If the pattern screen passed and residual-PII detection is authorized, send
-   both complete regex-redacted fields in one structured LLM request.
-4. Validate every returned offset atomically and deterministically replace each
-   valid range with a category-specific PII marker.
-5. Run the semantic injection classifier on the resulting protected text.
-6. Persist only the protected text when the gate passes. On a pattern finding,
-   unavailable/disabled residual detector, invalid detector output, or semantic
-   injection finding, persist `***REDACTED***` for both fields and route through
-   the existing blocked/escalated outcome.
+3. Apply the configured residual-PII mode:
+   - `disabled` skips the detector and keeps the regex-redacted fields.
+   - `shadow` sends the regex-redacted fields to the detector and validates its
+     response, but findings and failures do not change the fields or gate decision.
+   - `enforced` sends the regex-redacted fields to the detector, validates every
+     returned offset atomically, and deterministically replaces valid ranges with
+     category-specific PII markers. Detector failures block the incident.
+4. Run the semantic injection classifier on regex-redacted text in `disabled` and
+   `shadow`, or PII-protected text in `enforced`.
+5. Persist the text appropriate to the selected mode when the gate passes. On a
+   pattern finding, enforced detector failure, or semantic injection finding,
+   persist `***REDACTED***` for both fields and route through the existing
+   blocked/escalated outcome.
 
-Pattern-blocked inputs do not call either LLM guardrail. The semantic classifier
-is called only after residual-PII protection succeeds, so it never receives the
-unprotected incident strings.
+Pattern-blocked inputs do not call either LLM guardrail. Disabled and shadow modes
+do not guarantee residual-PII protection: the semantic classifier receives the
+regex-redacted text, which may still contain contextual PII. In enforced mode it
+runs only after residual-PII protection succeeds and receives the protected text.
 
 ### Pattern screening — `agent/guardrails/input_screening.py`
 
@@ -91,11 +96,10 @@ the payload was never in the result to begin with.
 
 ### Semantic classifier — `agent/guardrails/semantic_injection_classifier.py`
 
-A narrow-purpose LLM call run only after pattern screening passes and
-residual-PII protection succeeds. If deterministic screening already caught an
-attack, or residual-PII protection is disabled or unavailable, there is no
-classifier call. The classifier therefore receives category-masked text rather
-than the regex-redacted-but-still-contextual text sent to the residual detector.
+A narrow-purpose LLM call run after pattern screening passes. In `disabled` and
+`shadow` it receives regex-redacted text; in `enforced` it receives the
+category-masked text after residual-PII protection succeeds. There is no classifier
+call after deterministic screening blocks or after an enforced detector failure.
 
 The output schema (`InjectionClassification`, in `agent/prompts.py` alongside
 every other structured-output schema in this project) is intentionally tiny:
@@ -201,25 +205,29 @@ override.
 
 ### Authorization gate and failure policy
 
-`AGENT_PII_DETECTION_ENABLED` is the explicit authorization gate and defaults
-to `false`. Set it to `true` only after the organization has approved the
-configured provider, model, account, region, retention terms, and data-handling
-path for regex-redacted incident text that may still contain PII. This repository
-does not assert that any provider has received that approval.
+`AGENT_PII_DETECTION_MODE` is the single deployment control and accepts
+`disabled`, `shadow`, or `enforced`. It defaults to `disabled`; the former
+`AGENT_PII_DETECTION_ENABLED` boolean is not read.
 
-The default-off state is deliberately fail-closed: `load()` records
-`detector_disabled`, replaces both incident fields with `***REDACTED***`, skips
-both LLM guardrails, and routes the incident to the existing blocked/escalated
-path. This protects confidentiality, but it also means applicable automated
-incident processing is unavailable until authorization is granted and the flag
-is enabled.
+- `disabled` does not call the residual-PII detector. It preserves the
+  pre-detector pipeline: pattern screening, regex redaction, then semantic
+  injection classification.
+- `shadow` calls and validates the detector, but findings do not alter the
+  incident or workflow decision and failures do not block. Only safe summary
+  metadata is retained.
+- `enforced` applies validated masking. Timeouts, provider errors, refusal,
+  invalid output/findings, unexpected failures, and oversized input fail closed.
 
-When enabled, timeouts, transient or terminal provider errors, model refusal,
-invalid structured output, invalid findings, unexpected failures, and oversized
-input also fail closed. Failure outcomes contain only a stable category and do
-not retain protected text, finding counts, or finding categories. By contrast,
-the pre-existing semantic injection classifier retains its documented safe-
-degradation policy after PII protection has succeeded: classifier
+Shadow and enforced modes may be selected only after the organization has
+approved the configured provider, model, account, region, retention terms, and
+data-handling path. This repository does not assert that approval exists.
+
+Security caveat: in both disabled and shadow modes, the existing semantic
+classifier still receives regex-redacted incident text, which may contain
+residual PII. That matches the pre-feature behavior but does not provide the new
+residual-PII guarantee. Only enforced mode masks validated findings and fails
+closed when residual-PII protection is unavailable. The semantic classifier
+retains its existing safe-degradation policy in every mode: its own
 unavailability does not by itself block the incident.
 
 ### Execution audit trail
@@ -227,7 +235,8 @@ unavailability does not by itself block the incident.
 Each guardrail decision is recorded on the execution record without exposing
 what it caught: which layer made the call (`pattern_screening`, `residual_pii`,
 `semantic_classifier`, or neither), whether each model guardrail ran and was
-available, stable failure categories, residual-PII finding/category summaries,
+available, the configured PII mode, stable failure categories, residual-PII
+finding/category summaries,
 and how many regex-redaction spans were touched. These are counts and category
 labels rather than raw strings. `load()`'s Langfuse span
 (`guardrail.input_screening`, `as_type="guardrail"`) carries the same
@@ -328,23 +337,20 @@ Deployment procedure:
    regex-redacted incident text that may contain residual PII. Provider and
    model selection, tenant/region, retention, and observability access must all
    be in scope.
-2. Deploy the code with `AGENT_PII_DETECTION_ENABLED=false` and run the normal
-   unit/static checks. Expect applicable incidents to take the blocked/escalated
-   path while the detector is disabled.
-3. In an approved non-production environment, set
-   `AGENT_PII_DETECTION_ENABLED=true`, restart the API/workers so cached settings
-   are reloaded, and run synthetic canaries covering clean text, each approved
-   PII category, provider failure, and oversized input.
-4. Confirm traces are metadata-only and retries are zero, then enable production
-   only after the guardrail and LLM/observability owners accept the results and
-   the operational availability trade-off.
+2. Deploy with `AGENT_PII_DETECTION_MODE=disabled` and run the normal unit/static
+   checks. This preserves the pre-detector pipeline and does not call the detector.
+3. In an approved non-production environment, select `shadow`, restart the
+   API/workers so cached settings are reloaded, and run synthetic canaries covering
+   clean text, each approved PII category, provider failure, and oversized input.
+4. Confirm traces are metadata-only, retries are zero, and shadow results are safe
+   before selecting `enforced`.
+5. Enable production enforcement only after the guardrail and LLM/observability
+   owners accept the results and the operational availability trade-off.
 
-Rollback is configuration-first: set `AGENT_PII_DETECTION_ENABLED=false` and
-restart the API/workers. This stops residual-PII model disclosure immediately,
-but intentionally blocks and escalates every otherwise pattern-clean incident
-at `load()`. If automated processing availability must be restored, rolling
-back the code requires the normal release process and a separately approved
-privacy control; do not bypass the fail-closed gate ad hoc.
+Rollback is configuration-first: select `shadow` to stop fail-closed enforcement
+while retaining approved evaluation, or `disabled` to stop detector calls entirely,
+then restart the API/workers. Neither mode provides enforced residual-PII masking;
+both continue the pre-existing semantic classifier on regex-redacted text.
 
 ## Testing
 
@@ -387,7 +393,7 @@ processing while the detector is unavailable.
 Before production enablement, the team must approve the provider/data path and
 the provisional PII taxonomy, agree on acceptable model-quality criteria using
 an approved representative evaluation set, confirm retention/region/access
-controls, and accept the default-off/fail-closed availability impact. Those are
+controls, and accept the enforced-mode fail-closed availability impact. Those are
 deployment prerequisites, not behavior implemented or proven by this change.
 
 ## Adversarial seed set — `data/adversarial/sprint3_seed_set.json`

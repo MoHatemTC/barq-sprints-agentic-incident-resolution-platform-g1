@@ -256,7 +256,7 @@ class TestRoutes:
         assert sensitive_name not in exposed
         assert sensitive_address not in exposed
 
-    def test_default_off_pii_detector_blocks_before_guardrail_model_calls(self) -> None:
+    def test_disabled_pii_detector_restores_pre_detector_graph_path(self) -> None:
         sensitive_name = "ZyxAuthorizationSentinel"
         record = {
             **VPN,
@@ -268,17 +268,20 @@ class TestRoutes:
         deps = make_deps(
             llm=llm,
             servicenow=backend,
-            agent_pii_detection_enabled=False,
+            agent_pii_detection_mode="disabled",
         )
 
         result = run(record, deps, checkpointer=InMemorySaver())
 
-        assert result["paused"] is True
-        assert result["outcome"] == "escalated_blocked"
-        assert llm.purposes() == ["approval_brief"]
-        assert sensitive_name not in llm.calls[0]["prompt"]
-        assert result["interrupt_payload"]["incident"]["short_description"] == REDACTED
-        assert result["interrupt_payload"]["incident"]["description"] == REDACTED
+        assert result["outcome"] == "suggested"
+        assert result["path"] == FULL_PATH
+        assert llm.purposes() == [
+            "injection_classifier",
+            "classify",
+            "diagnose",
+            "generate",
+            "verify_evidence",
+        ]
 
 
 class TestEdgeConditions:

@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
+from agent.config import PIIDetectionMode
 from agent.dependencies import AgentDependencies
 from agent.guardrails.input_screening import screen_text
 from agent.guardrails.pii_detection import PIIProtectionOutcome, protect_residual_pii
@@ -60,8 +61,10 @@ def _run_input_guardrails(
         sanitized_description, description_count = redact_text_with_count(incident.description)
         redaction_count = short_count + description_count
 
-        # 3. Residual-PII detection, then 4. semantic classification. Neither
-        # model is called after deterministic screening has already blocked.
+        # 3. Residual-PII detection when shadowed or enforced, then 4. semantic
+        # classification. Neither model is called after deterministic screening
+        # has already blocked.
+        pii_mode = deps.settings.agent_pii_detection_mode
         pii_ran = False
         pii_outcome: PIIProtectionOutcome | None = None
         classifier_ran = False
@@ -71,34 +74,36 @@ def _run_input_guardrails(
             detection_layer = "pattern_screening"
             protected_short = REDACTED
             protected_description = REDACTED
-        elif not deps.settings.agent_pii_detection_enabled:
-            pii_outcome = PIIProtectionOutcome(
-                available=False,
-                failure_category="detector_disabled",
-            )
-            blocked = True
-            detection_layer = "residual_pii"
-            protected_short = REDACTED
-            protected_description = REDACTED
         else:
-            pii_ran = True
-            pii_outcome = protect_residual_pii(
-                deps.llm,
-                PIIText(
-                    short_description=sanitized_short,
-                    description=sanitized_description,
-                ),
-                max_chars=deps.settings.agent_max_incident_chars,
-            )
-            pii_protected = pii_outcome.protected
-            if not pii_outcome.available or pii_protected is None:
+            protected_short = sanitized_short
+            protected_description = sanitized_description
+            blocked = False
+            detection_layer = "none"
+
+            if pii_mode is not PIIDetectionMode.DISABLED:
+                pii_ran = True
+                pii_outcome = protect_residual_pii(
+                    deps.llm,
+                    PIIText(
+                        short_description=sanitized_short,
+                        description=sanitized_description,
+                    ),
+                    max_chars=deps.settings.agent_max_incident_chars,
+                )
+
+            if pii_mode is PIIDetectionMode.ENFORCED and (
+                pii_outcome is None or not pii_outcome.available or pii_outcome.protected is None
+            ):
                 blocked = True
                 detection_layer = "residual_pii"
                 protected_short = REDACTED
                 protected_description = REDACTED
             else:
-                protected_short = pii_protected.short_description
-                protected_description = pii_protected.description
+                if pii_mode is PIIDetectionMode.ENFORCED:
+                    assert pii_outcome is not None and pii_outcome.protected is not None
+                    protected_short = pii_outcome.protected.short_description
+                    protected_description = pii_outcome.protected.description
+
                 classifier_ran = True
                 protected_text = f"{protected_short}\n{protected_description}"
                 classifier_outcome = classify_injection(deps.llm, protected_text)
@@ -124,6 +129,7 @@ def _run_input_guardrails(
                 },
                 {
                     "layer": "residual_pii",
+                    "mode": pii_mode.value,
                     "ran": pii_ran,
                     "available": pii_outcome.available if pii_outcome else None,
                     "finding_count": (
@@ -157,6 +163,7 @@ def _run_input_guardrails(
                 "passed": gate.passed,
                 "detection_layer": detection_layer,
                 "pattern_categories": [c.value for c in pattern_result.categories],
+                "pii_mode": pii_mode.value,
                 "pii_ran": pii_ran,
                 "pii_available": pii_outcome.available if pii_outcome else None,
                 "pii_finding_count": (
