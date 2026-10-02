@@ -32,7 +32,8 @@ Concretely:
   ever fully closes that gap — natural language paraphrasing is unbounded, and
   chasing it with more patterns is exactly the "enormous regex framework" this
   design avoids on purpose.
-- Regex redaction removes known secret, email, and phone shapes without a model.
+- Regex redaction removes known secret, email, phone, payment-card PAN, and IBAN
+  shapes without a model.
   The residual detector is a second PII layer for contextual values that regex
   may miss; it is not a replacement for deterministic redaction.
 - Redaction and masking run before protected incident text is persisted to
@@ -134,11 +135,12 @@ merits, not something that rides in here by accident.
 
 ### Redaction — `observability/redaction.py`
 
-`redact_text_with_count()` extends the existing rule set rather than
-duplicating it — it runs the exact same pattern tables as `redact_text()`, via
-`re.subn`, and additionally returns how many spans it touched, which feeds the
-"redaction count" metadata the audit trail records. If the credential patterns
-in `redact_text` change later, this changes with them automatically.
+`redact_text_with_count()` extends the existing rule set rather than duplicating
+it: it runs the same patterns and validators as `redact_text()`, using `re.subn`
+for direct replacements and marker deltas for validated callback replacements.
+It additionally returns how many spans it touched, which feeds the "redaction
+count" metadata the audit trail records. If the credential patterns in
+`redact_text` change later, this changes with them automatically.
 
 Two properties are tested explicitly because they're easy to silently break in
 a future "quick fix" to the regexes:
@@ -154,8 +156,8 @@ a future "quick fix" to the regexes:
 
 Coverage includes credential-shaped strings (`Authorization: Bearer/Basic`,
 JWTs, provider API keys, database connection strings with embedded
-user:pass@host), plus email and phone PII, all before anything reaches a model
-prompt or a trace.
+user:pass@host), plus email, phone, Luhn-valid payment-card PAN, and checksum-valid
+IBAN PII, all before anything reaches a model prompt or a trace.
 
 ### Residual-PII detector — `agent/guardrails/pii_detection.py`
 

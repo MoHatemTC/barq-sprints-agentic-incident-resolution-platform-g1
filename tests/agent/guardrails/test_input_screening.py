@@ -19,7 +19,13 @@ from agent.prompts import (
     PIIFinding,
 )
 from agent.state import EventPayload
-from observability.redaction import REDACTED, REDACTED_EMAIL, redact_text, redact_text_with_count
+from observability.redaction import (
+    PII_REDACTION_MARKERS,
+    REDACTED,
+    REDACTED_EMAIL,
+    redact_text,
+    redact_text_with_count,
+)
 from observability.tracing import get_tracer
 
 DATASET_PATH = (
