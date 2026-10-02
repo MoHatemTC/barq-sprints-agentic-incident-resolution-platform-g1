@@ -9,8 +9,11 @@ does not need an LLM judge at all.
     python adapters.py --slice image_ocr
 """
 from __future__ import annotations
-import json, argparse, collections
-from typing import Callable, Iterable
+
+import argparse
+import collections
+import json
+from collections.abc import Callable, Iterable
 
 DATA = json.load(open("barq_rag_eval_dataset.json", encoding="utf-8"))
 
@@ -126,7 +129,7 @@ def to_ragas(run, standalone: bool = True):
 
 def to_ragas_multiturn(run):
     """Multi-turn form: one sample per session with the full message list."""
-    from ragas.messages import HumanMessage, AIMessage
+    from ragas.messages import AIMessage, HumanMessage
 
     samples = []
     for s in DATA["sessions"]:
