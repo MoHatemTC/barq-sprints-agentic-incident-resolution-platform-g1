@@ -97,15 +97,28 @@ async def create_chat_session(
     claims: Annotated[dict, Depends(verify_bearer_token)],
     _operator: Annotated[str, Depends(require_role("operator"))],
 ) -> ChatSessionCreatedResponse:
-    """Issue a browser chat session bound to the token's operator subject."""
+    """Issue a browser chat session bound to the token's operator subject.
+
+    Conversations are owned by one session at a time; creating a new session
+    re-parents the operator's previous conversations to it so history survives
+    a page refresh / re-login (the last login owns the history — acceptable
+    for the single shared operator account).
+    """
+    subject = str(claims.get("sub") or "")
     secret = secrets.token_urlsafe(32)
     session_row = ChatSession(
         id=uuid4(),
-        operator_subject=str(claims.get("sub") or ""),
+        operator_subject=subject,
         secret_hash=hashlib.sha256(secret.encode("utf-8")).hexdigest(),
     )
     try:
         db.add(session_row)
+        await db.flush()
+        await db.execute(
+            update(ChatConversation)
+            .where(ChatConversation.operator_subject == subject)
+            .values(session_id=session_row.id)
+        )
         await db.commit()
     except SQLAlchemyError as exc:
         logger.exception("chat_session_create_failed", error=str(exc))

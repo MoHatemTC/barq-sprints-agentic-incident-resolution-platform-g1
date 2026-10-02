@@ -11,6 +11,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import Update
 from sqlalchemy.exc import IntegrityError
 
 import tests.helpers as h
@@ -88,6 +89,7 @@ def _db_session(get_values: dict) -> MagicMock:
     session.get = AsyncMock(side_effect=lambda model, pk: get_values.get(model))
     session.execute = AsyncMock(return_value=_execute_result([]))
     session.add = MagicMock()
+    session.flush = AsyncMock()
     session.commit = AsyncMock()
     session.rollback = AsyncMock()
 
@@ -176,6 +178,24 @@ async def test_create_session_returns_secret_once() -> None:
     body = resp.json()
     assert body["chat_secret"]
     UUID(body["session_id"])
+
+
+@pytest.mark.asyncio
+async def test_new_session_adopts_the_operators_previous_conversations() -> None:
+    """History survives re-login: the new session re-parents old conversations."""
+    db = _db_session({})
+    app = _app(db, _fake_service())
+    async with await _client(app) as client:
+        resp = await client.post("/api/v1/chat/sessions", headers=_auth())
+
+    assert resp.status_code == 201, resp.text
+    updates = [
+        call.args[0]
+        for call in db.execute.await_args_list
+        if isinstance(call.args[0], Update) and call.args[0].table.name == "chat_conversations"
+    ]
+    assert updates, "session creation must re-parent the operator's conversations"
+    assert "session_id" in updates[0].compile().params
 
 
 @pytest.mark.asyncio
