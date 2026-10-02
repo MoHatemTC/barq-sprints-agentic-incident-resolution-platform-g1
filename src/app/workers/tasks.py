@@ -51,6 +51,7 @@ from app.db.redis.keys import INCIDENT_DLQ_QUEUE
 from app.models.semantic_cluster import AdmissionMode, AdmissionResult, ClusterStatus
 from app.workers.celery_app import celery_app
 from app.workers.cluster_runtime import (
+    apply_follower_cluster_resolution,
     cacheable_result,
     dispatch_cluster_waiters,
     load_cluster_incident,
@@ -344,27 +345,15 @@ def _run_incident(
                 )
             else:
                 cluster_status = cache.get_cluster_status(cluster_id)
-                if cluster_status == ClusterStatus.RESOLVED and graph_backend == "langgraph":
+                if cluster_status == ClusterStatus.RESOLVED:
                     solution = cache.get_cluster_solution(cluster_id) or {}
-                    candidate_draft = solution.get("cache_draft")
-                elif (
-                    cluster_status
-                    in (
-                        ClusterStatus.RUNNING,
-                        ClusterStatus.CREATING,
-                        ClusterStatus.AWAITING_APPROVAL,
-                    )
-                    and graph_backend == "langgraph"
-                ):
-                    repo.mark_cluster_waiting(execution_uuid, correlation_id or execution_id)
-                    return {
-                        "status": "cluster_waiting",
-                        "execution_id": execution_id,
-                        "cluster_id": str(cluster_id),
-                        "cluster_role": "follower",
-                    }
-                elif cluster_status == ClusterStatus.RESOLVED:
-                    solution = cache.get_cluster_solution(cluster_id) or {}
+                    if graph_backend == "langgraph":
+                        apply_follower_cluster_resolution(
+                            payload,
+                            solution,
+                            execution_id=execution_id,
+                            correlation_id=correlation_id or execution_id,
+                        )
                     if repo is not None:
                         repo.mark_member_applied(cluster_id, execution_uuid)
                     repo.mark_succeeded(execution_uuid, **_execution_summary(solution))
@@ -380,6 +369,22 @@ def _run_incident(
                         "cluster_id": str(cluster_id),
                         "cluster_role": "follower",
                         "result": solution,
+                    }
+                elif (
+                    cluster_status
+                    in (
+                        ClusterStatus.RUNNING,
+                        ClusterStatus.CREATING,
+                        ClusterStatus.AWAITING_APPROVAL,
+                    )
+                    and graph_backend == "langgraph"
+                ):
+                    repo.mark_cluster_waiting(execution_uuid, correlation_id or execution_id)
+                    return {
+                        "status": "cluster_waiting",
+                        "execution_id": execution_id,
+                        "cluster_id": str(cluster_id),
+                        "cluster_role": "follower",
                     }
 
                 if cluster_status == ClusterStatus.AWAITING_APPROVAL:
