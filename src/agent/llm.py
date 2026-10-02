@@ -205,6 +205,13 @@ class LiteLLMClient:
                     if max_retries is None
                     else self._client.with_options(max_retries=max_retries)
                 )
+                if purpose == "query_rewrite":
+                    # Optional retrieval assistance must not consume the graph's
+                    # general model retry budget before falling back to the source.
+                    request_client = request_client.with_options(
+                        timeout=settings.agent_query_rewrite_timeout_seconds,
+                        max_retries=0,
+                    )
                 raw = request_client.chat.completions.with_raw_response.parse(
                     model=selected_model,
                     messages=[

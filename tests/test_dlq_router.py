@@ -149,7 +149,9 @@ async def test_replay_dlq_correlation_id_propagated(app_instance) -> None:
 
     assert resp.status_code == 202
     assert resp.headers.get("X-Correlation-ID") == custom_corr
-    assert resp.json()["correlation_id"] == custom_corr
+    assert resp.json()["correlation_id"] == str(
+        app_instance.state.sync_worker_repo.find_execution_id.return_value
+    )
 
 
 @pytest.mark.asyncio
@@ -273,3 +275,42 @@ async def test_replay_dlq_live_event_returns_409(app_instance) -> None:
     assert resp.status_code == 409
     body = resp.json()
     assert body["error"]["code"] == "RESOURCE_CONFLICT"
+
+
+@pytest.mark.asyncio
+async def test_dlq_outage_is_not_reported_as_an_empty_queue(app_instance) -> None:
+    app_instance.state.redis.lrange = AsyncMock(side_effect=ConnectionError("offline"))
+    async with AsyncClient(
+        transport=ASGITransport(app=app_instance), base_url="http://test"
+    ) as client:
+        response = await client.get("/api/v1/dlq", headers=AUTH_HEADERS)
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "SERVICE_UNAVAILABLE"
+
+
+@pytest.mark.asyncio
+async def test_dlq_listing_preserves_execution_and_original_trace(app_instance) -> None:
+    app_instance.state.redis.lrange = AsyncMock(
+        return_value=[
+            json.dumps(
+                {
+                    "event_id": "evt-traced",
+                    "execution_id": str(uuid4()),
+                    "correlation_id": "original-trace",
+                    "failure_type": "TimeoutError",
+                    "payload": {},
+                    "failure_reason": "timeout",
+                    "retry_count": 3,
+                    "failed_at": datetime.now(UTC).isoformat(),
+                }
+            )
+        ]
+    )
+    async with AsyncClient(
+        transport=ASGITransport(app=app_instance), base_url="http://test"
+    ) as client:
+        response = await client.get("/api/v1/dlq", headers=AUTH_HEADERS)
+    assert response.status_code == 200
+    assert response.json()[0]["execution_id"]
+    assert response.json()[0]["correlation_id"] == "original-trace"
+    assert response.json()[0]["failure_type"] == "TimeoutError"

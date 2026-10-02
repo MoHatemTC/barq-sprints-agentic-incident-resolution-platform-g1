@@ -26,6 +26,7 @@ logging never reuses the session that died with the work.
 
 from __future__ import annotations
 
+import contextlib
 import datetime as dt
 import json
 import time
@@ -35,14 +36,26 @@ from uuid import UUID
 import redis as redis_lib
 import structlog
 from celery import Task
-from celery.exceptions import SoftTimeLimitExceeded
+from celery.exceptions import Retry, SoftTimeLimitExceeded
 from celery.signals import worker_process_shutdown
 
 from agent.config import get_agent_settings
+from agent.semantic_cache import (
+    AdmissionLockTimeoutError,
+    SemanticCache,
+    get_semantic_cache,
+)
 from app.core.config import Settings, get_settings
-from app.core.correlation import clear_correlation_id, set_correlation_id
+from app.core.correlation import clear_correlation_id, get_correlation_id, set_correlation_id
 from app.db.redis.keys import INCIDENT_DLQ_QUEUE
+from app.models.semantic_cluster import AdmissionMode, AdmissionResult, ClusterStatus
 from app.workers.celery_app import celery_app
+from app.workers.cluster_runtime import (
+    apply_follower_cluster_resolution,
+    cacheable_result,
+    dispatch_cluster_waiters,
+    load_cluster_incident,
+)
 from app.workers.db import WorkerRepo, build_worker_repo
 from app.workers.incident_state import (
     prepare_servicenow_retry_sync,
@@ -81,6 +94,7 @@ def invoke_graph(
     execution_id: str | None = None,
     attempt: int = 1,
     correlation_id: str | None = None,
+    cached_draft: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """The graph seam: the S2.5 LangGraph state machine, or S2.3's stub.
 
@@ -91,11 +105,15 @@ def invoke_graph(
     if backend == "langgraph":
         from agent.runtime import invoke_incident_graph
 
+        cache_options: dict[str, Any] = {}
+        if cached_draft is not None:
+            cache_options["cached_draft"] = cached_draft
         return invoke_incident_graph(
             payload,
             execution_id=str(execution_id),
             correlation_id=correlation_id or str(execution_id),
             attempt=attempt,
+            **cache_options,
         )
     return _stub_graph(payload)
 
@@ -121,28 +139,40 @@ def record_dead_letter(
     execution_id: str,
     exc: Exception,
     attempt: int,
+    correlation_id: str | None = None,
 ) -> None:
     """Persist the DLQ record. Redis FIRST (it survives a Postgres outage —
     they are separate dependencies), stderr second, then a best-effort DB
     reconciliation for any state the in-body handlers could not record."""
-    reason = str(exc)
+    from observability.redaction import redact_text
+
+    reason = redact_text(str(exc))[:4000]
     record: dict[str, Any] = {
+        "execution_id": execution_id,
+        "correlation_id": correlation_id or get_correlation_id() or execution_id,
+        "failure_type": _failure_type(exc),
         "event_id": str(payload.get("event_id", "")),
         "payload": payload,
         "failure_reason": reason,
         "retry_count": attempt,
         "failed_at": dt.datetime.now(dt.UTC).isoformat(),
     }
+    log_context = {
+        "event_id": record["event_id"],
+        "execution_id": execution_id,
+        "correlation_id": record["correlation_id"],
+        "failure_type": record["failure_type"],
+    }
     try:
         redis_sink.lpush(INCIDENT_DLQ_QUEUE, json.dumps(record))
     except Exception:  # noqa: BLE001 — Redis down must not prevent DB reconciliation
         logger.error(
             "dead_letter_redis_push_failed",
-            event_id=record["event_id"],
+            **log_context,
             reason=reason,
         )
     else:
-        logger.warning("dead_lettered", event_id=record["event_id"], reason=reason)
+        logger.warning("dead_lettered", **log_context, reason=reason)
 
     try:
         execution_uuid = UUID(execution_id)
@@ -156,6 +186,7 @@ def record_dead_letter(
                 failure_type="unhandled_on_failure",
                 message=reason,
                 retryable=False,
+                details={**record, **_failure_details(exc, execution_id, record["correlation_id"])},
             )
             repo.mark_cancelled(
                 execution_id=execution_uuid,
@@ -164,7 +195,7 @@ def record_dead_letter(
                 termination_cause=reason,
             )
     except Exception:  # noqa: BLE001 — the DLQ write already succeeded
-        logger.error("dead_letter_db_reconciliation_failed", event_id=record["event_id"])
+        logger.error("dead_letter_db_reconciliation_failed", **log_context)
 
 
 class IncidentTask(Task):
@@ -185,8 +216,31 @@ class IncidentTask(Task):
         payload = (args or (None,))[0] or {}
         execution_id = str((args or (None, None))[1] or "")
         attempt = int(getattr(self.request, "retries", 0)) + 1
-        record_dead_letter(self.repo, self.dlq_redis, payload, execution_id, exc, attempt)
+        record_dead_letter(
+            self.repo,
+            self.dlq_redis,
+            payload,
+            execution_id,
+            exc,
+            attempt,
+            correlation_id=correlation_id_from(self.request),
+        )
         write_final_failure_best_effort(self.settings, payload, execution_id, exc, attempt)
+
+
+def _failure_details(
+    exc: BaseException, execution_id: str, correlation_id: str | None
+) -> dict[str, Any]:
+    import traceback
+
+    from observability.redaction import redact_text
+
+    return {
+        "execution_id": execution_id,
+        "correlation_id": correlation_id or execution_id,
+        "failure_type": _failure_type(exc),
+        "traceback": redact_text("".join(traceback.format_exception(exc)))[:12000],
+    }
 
 
 def _failure_type(exc: BaseException) -> str:
@@ -205,6 +259,7 @@ def _run_incident(
     correlation_id: str | None = None,
     graph_backend: str = "stub",
     settings: Settings | None = None,
+    semantic_cache: SemanticCache | None = None,
 ) -> dict[str, Any]:
     """One delivery attempt. ``task`` is the bound Celery task (or a fake in
     tests) providing ``request.retries`` and ``retry()``."""
@@ -228,7 +283,150 @@ def _run_incident(
 
     repo.ensure_retry_state(execution_uuid, max_attempts=cfg.max_retries)
 
+    admission = AdmissionResult(mode=AdmissionMode.INDEPENDENT, reason="not_admitted")
+    candidate_draft = None
     try:
+        # Sprint 4 (S4.2): Semantic deduplication & single-flight clustering
+        active_settings = settings or getattr(task, "settings", None)
+        enable_cache = (
+            getattr(active_settings, "enable_semantic_cache", True)
+            if active_settings is not None
+            else True
+        )
+
+        if enable_cache:
+            redis_client = getattr(task, "dlq_redis", None)
+            cache = semantic_cache or get_semantic_cache(repo=repo, redis_client=redis_client)
+            try:
+                incident = (
+                    load_cluster_incident(payload, execution_id, correlation_id or execution_id)
+                    if graph_backend == "langgraph"
+                    else payload
+                )
+                admission = cache.admit(incident, execution_id=execution_uuid)
+            except AdmissionLockTimeoutError as exc:
+                logger.warning(
+                    "admission_lock_timeout_yielding_retry",
+                    execution_id=execution_id,
+                    error=str(exc),
+                )
+                if hasattr(task, "retry"):
+                    raise task.retry(countdown=1.0) from exc
+                admission = AdmissionResult(
+                    mode=AdmissionMode.INDEPENDENT,
+                    reason="admission_lock_timeout_fallback",
+                )
+        else:
+            logger.info(
+                "semantic_cache_disabled_by_config",
+                execution_id=execution_id,
+            )
+            admission = AdmissionResult(
+                mode=AdmissionMode.INDEPENDENT,
+                reason="semantic_cache_disabled_by_config",
+            )
+
+        if admission.mode == AdmissionMode.FOLLOWER and admission.cluster_id is not None:
+            cluster_id = admission.cluster_id
+            cluster = repo.get_cluster(cluster_id) if repo is not None else None
+            if cluster is not None and cluster.anchor_execution_id == execution_uuid:
+                logger.info(
+                    "retrying_leader_resuming_execution",
+                    execution_id=execution_id,
+                    cluster_id=str(cluster_id),
+                )
+                admission = AdmissionResult(
+                    mode=AdmissionMode.LEADER,
+                    cluster_id=cluster_id,
+                    similarity_score=1.0,
+                    reason="retrying_leader_execution",
+                    anchor_incident_sys_id=admission.anchor_incident_sys_id,
+                    anchor_incident_number=admission.anchor_incident_number,
+                )
+            else:
+                cluster_status = cache.get_cluster_status(cluster_id)
+                if cluster_status == ClusterStatus.RESOLVED:
+                    solution = cache.get_cluster_solution(cluster_id) or {}
+                    if graph_backend == "langgraph":
+                        apply_follower_cluster_resolution(
+                            payload,
+                            solution,
+                            execution_id=execution_id,
+                            correlation_id=correlation_id or execution_id,
+                        )
+                    if repo is not None:
+                        repo.mark_member_applied(cluster_id, execution_uuid)
+                    repo.mark_succeeded(execution_uuid, **_execution_summary(solution))
+                    logger.info(
+                        "incident_follower_resolved_from_cluster",
+                        execution_id=execution_id,
+                        cluster_id=str(cluster_id),
+                        anchor_incident=admission.anchor_incident_number,
+                    )
+                    return {
+                        "status": "succeeded",
+                        "execution_id": execution_id,
+                        "cluster_id": str(cluster_id),
+                        "cluster_role": "follower",
+                        "result": solution,
+                    }
+                elif (
+                    cluster_status
+                    in (
+                        ClusterStatus.RUNNING,
+                        ClusterStatus.CREATING,
+                        ClusterStatus.AWAITING_APPROVAL,
+                    )
+                    and graph_backend == "langgraph"
+                ):
+                    repo.mark_cluster_waiting(execution_uuid, correlation_id or execution_id)
+                    return {
+                        "status": "cluster_waiting",
+                        "execution_id": execution_id,
+                        "cluster_id": str(cluster_id),
+                        "cluster_role": "follower",
+                    }
+
+                if cluster_status == ClusterStatus.AWAITING_APPROVAL:
+                    repo.mark_awaiting_approval(execution_uuid)
+                    logger.info(
+                        "incident_follower_awaiting_cluster_approval",
+                        execution_id=execution_id,
+                        cluster_id=str(cluster_id),
+                        anchor_incident=admission.anchor_incident_number,
+                    )
+                    return {
+                        "status": "awaiting_approval",
+                        "execution_id": execution_id,
+                        "cluster_id": str(cluster_id),
+                        "cluster_role": "follower",
+                    }
+
+                if cluster_status in (ClusterStatus.RUNNING, ClusterStatus.CREATING):
+                    logger.info(
+                        "incident_follower_yielding_to_leader",
+                        execution_id=execution_id,
+                        cluster_id=str(cluster_id),
+                    )
+                    if hasattr(task, "retry"):
+                        try:
+                            raise task.retry(countdown=2.0)
+                        except Exception as exc:
+                            if isinstance(exc, Retry):
+                                raise
+                    logger.warning(
+                        "follower_yield_not_handled_falling_back_to_independent",
+                        execution_id=execution_id,
+                        cluster_id=str(cluster_id),
+                    )
+                else:
+                    logger.warning(
+                        "cluster_leader_decoupled_fallback_to_independent",
+                        execution_id=execution_id,
+                        cluster_id=str(cluster_id),
+                        cluster_status=str(cluster_status),
+                    )
+
         if graph_backend == "langgraph" and settings is not None:
             # S1.3 emits a fresh event on a failed transition. Its incident is
             # still marked failed; clear that state before the graph's pending
@@ -239,14 +437,33 @@ def _run_incident(
                 from agent.servicenow import translate_error
 
                 raise translate_error(exc) from exc
+        graph_options: dict[str, Any] = {}
+        if candidate_draft is not None:
+            graph_options["cached_draft"] = candidate_draft
         result = invoke_graph(
             payload,
             backend=graph_backend,
             execution_id=execution_id,
             attempt=attempt,
             correlation_id=correlation_id,
+            **graph_options,
         )
+        if admission.mode == AdmissionMode.LEADER and admission.cluster_id is not None:
+            if result.get("paused"):
+                cache.mark_cluster_awaiting_approval(admission.cluster_id)
+            elif graph_backend == "stub" or cacheable_result(result):
+                cache.publish_solution(admission.cluster_id, result)
+            else:
+                cache.mark_cluster_failed(admission.cluster_id, "leader_has_no_reusable_draft")
+        elif (
+            admission.mode == AdmissionMode.FOLLOWER
+            and admission.cluster_id is not None
+            and cacheable_result(result)
+        ):
+            repo.mark_member_applied(admission.cluster_id, execution_uuid)
 
+    except Retry:
+        raise
     except (RetryableError, SoftTimeLimitExceeded) as exc:
         if isinstance(exc, SoftTimeLimitExceeded):
             wrapped = RetryableError(f"soft time limit exceeded after {soft_time_limit_seconds}s")
@@ -260,6 +477,7 @@ def _run_incident(
             failure_type=_failure_type(exc),
             message=str(exc),
             retryable=True,
+            details=_failure_details(exc, execution_id, correlation_id),
         )
 
         if attempt < cfg.max_retries:
@@ -276,6 +494,8 @@ def _run_incident(
             raise task.retry(exc=exc, countdown=delay) from exc
 
         # Budget consumed: exhausted ⟺ attempt_count == max_attempts.
+        if admission.mode == AdmissionMode.LEADER and admission.cluster_id is not None:
+            cache.mark_cluster_failed(admission.cluster_id, str(exc))
         repo.mark_exhausted(
             execution_id=execution_uuid,
             max_attempts=cfg.max_retries,
@@ -284,12 +504,15 @@ def _run_incident(
         logger.warning("retry_budget_exhausted", execution_id=execution_id, attempts=attempt)
         raise exc from exc
     except TerminalError as exc:
+        if admission.mode == AdmissionMode.LEADER and admission.cluster_id is not None:
+            cache.mark_cluster_failed(admission.cluster_id, str(exc))
         failure_id = repo.log_failure(
             execution_id=execution_uuid,
             attempt=attempt,
             failure_type=_failure_type(exc),
             message=str(exc),
             retryable=False,
+            details=_failure_details(exc, execution_id, correlation_id),
         )
         repo.mark_cancelled(
             execution_id=execution_uuid,
@@ -301,12 +524,15 @@ def _run_incident(
         raise
     except Exception as exc:
         # Unknown exception: fail closed. A deterministic bug gets no retries.
+        if admission.mode == AdmissionMode.LEADER and admission.cluster_id is not None:
+            cache.mark_cluster_failed(admission.cluster_id, str(exc))
         failure_id = repo.log_failure(
             execution_id=execution_uuid,
             attempt=attempt,
             failure_type=_failure_type(exc),
             message=str(exc),
             retryable=False,
+            details=_failure_details(exc, execution_id, correlation_id),
         )
         repo.mark_cancelled(
             execution_id=execution_uuid,
@@ -328,7 +554,10 @@ def _run_incident(
 
     repo.mark_succeeded(execution_uuid, **_execution_summary(result))
     logger.info("incident_processed", execution_id=execution_id)
-    return {"status": "succeeded", "execution_id": execution_id, "result": result}
+    response = {"status": "succeeded", "execution_id": execution_id, "result": result}
+    if admission.cluster_id is not None:
+        response.update(cluster_role=admission.mode.value, cluster_id=str(admission.cluster_id))
+    return response
 
 
 def _execution_summary(result: dict[str, Any]) -> dict[str, Any]:
@@ -360,6 +589,7 @@ def build_incident_task(
     settings: Settings,
     repo: WorkerRepo | None = None,
     dlq_redis: Any = None,
+    semantic_cache: SemanticCache | None = None,
 ) -> Any:
     """Build the task bound to a specific app/settings — the factory exists so
     tests (and alternative deployments) can inject configuration and backends."""
@@ -417,17 +647,24 @@ def build_incident_task(
                     execution_id=execution_id,
                 ),
             ):
-                result = _run_incident(
-                    self,
-                    payload,
-                    execution_id,
-                    cfg=cfg,
-                    repo=repo,
-                    soft_time_limit_seconds=settings.worker_soft_time_limit,
-                    correlation_id=correlation_id,
-                    graph_backend=graph_backend,
-                    settings=settings,
-                )
+                guard = getattr(repo, "execution_guard", None)
+                with (
+                    guard(UUID(execution_id)) if guard else contextlib.nullcontext(True) as acquired
+                ):
+                    if not acquired:
+                        return {"status": "already_running", "execution_id": execution_id}
+                    result = _run_incident(
+                        self,
+                        payload,
+                        execution_id,
+                        cfg=cfg,
+                        repo=repo,
+                        soft_time_limit_seconds=settings.worker_soft_time_limit,
+                        correlation_id=correlation_id,
+                        graph_backend=graph_backend,
+                        settings=settings,
+                        semantic_cache=semantic_cache,
+                    )
                 span.update(output=result)
                 return result
         finally:
@@ -478,7 +715,12 @@ def reap_stale_executions() -> dict[str, Any]:
             count=len(report.reclaimed),
             execution_ids=[str(e) for e in report.reclaimed],
         )
-    return {"reclaimed": len(report.reclaimed), "examined": report.examined}
+    dispatched = dispatch_cluster_waiters(build_worker_repo(settings))
+    return {
+        "reclaimed": len(report.reclaimed),
+        "examined": report.examined,
+        "cluster_waiters_dispatched": dispatched,
+    }
 
 
 process_incident = build_incident_task(celery_app, get_settings())

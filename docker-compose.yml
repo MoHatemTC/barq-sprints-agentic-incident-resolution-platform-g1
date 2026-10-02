@@ -200,6 +200,40 @@ services:
     networks:
       - barq-network
 
+  # ---------------------------------------------------------------------------
+  # 6. PostgreSQL Web UI (pgweb)
+  # ---------------------------------------------------------------------------
+  pgweb:
+    image: sosedoff/pgweb:latest
+    container_name: barq-pgweb
+    restart: unless-stopped
+    ports:
+      - "${BIND_IP:-127.0.0.1}:${PGWEB_PORT:-8081}:8081"
+    environment:
+      PGWEB_DATABASE_URL: "postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@barq-postgres:5432/${POSTGRES_DB:-barq_incident_dev}?sslmode=disable"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - barq-network
+
+  # ---------------------------------------------------------------------------
+  # 7. Redis Web UI (redis-commander)
+  # ---------------------------------------------------------------------------
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: barq-redis-commander
+    restart: unless-stopped
+    ports:
+      - "${BIND_IP:-127.0.0.1}:${REDIS_COMMANDER_PORT:-8082}:8081"
+    environment:
+      REDIS_HOSTS: "local:barq-redis:6379:0:${REDIS_PASSWORD:-}"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - barq-network
+
 # -----------------------------------------------------------------------------
 # Networks
 # -----------------------------------------------------------------------------

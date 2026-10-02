@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from agent.citations import resolve_article_id, resolve_section
 from agent.dependencies import AgentDependencies
 from agent.prompts import (
     CRITIC_SYSTEM,
@@ -25,6 +26,7 @@ from agent.state import (
     DraftStep,
     EvidenceItem,
     GateResult,
+    IncidentSnapshot,
     InvalidCitation,
     RetrievalResult,
     UnsupportedClaim,
@@ -37,14 +39,15 @@ def validate_citation(
     hits: list[EvidenceItem],
 ) -> InvalidCitation | None:
     """Deterministic citation check: confirms article_id and section exist in retrieved hits."""
-    matching = [hit for hit in hits if hit.article_id == step.article_id]
+    article_id = resolve_article_id(step.article_id, hits)
+    matching = [hit for hit in hits if hit.article_id == article_id]
     if not matching:
         return InvalidCitation(
             step_index=step_index,
             citation=f"{step.article_id} §{step.section}",
             reason=f"Article ID '{step.article_id}' was not found in retrieved evidence.",
         )
-    if not any(hit.section == step.section for hit in matching):
+    if resolve_section(step.section, str(article_id), hits) is None:
         return InvalidCitation(
             step_index=step_index,
             citation=f"{step.article_id} §{step.section}",
@@ -78,6 +81,25 @@ def verify_evidence(state: AgentState, deps: AgentDependencies) -> dict[str, Any
         }
 
     draft = Draft.model_validate(draft_raw)
+    if draft.length_exceeded or len(draft.rendered) > 4000:
+        overflow_reason = (
+            "Full procedure exceeds the 4000-character field limit; "
+            "no partial procedure is allowed."
+        )
+        feedback = CriticFeedback(
+            passed=False,
+            attempt=attempt,
+            feedback_instructions=overflow_reason
+            + " Condense wording while preserving every recovery and validation step.",
+        )
+        gate = GateResult(
+            gate="verify_evidence", passed=False, implemented=True, reason=overflow_reason
+        )
+        return {
+            "verification": gate.model_dump(mode="json"),
+            "critic_feedback": feedback.model_dump(mode="json"),
+        }
+
     retrieval = RetrievalResult.model_validate(retrieval_raw)
     diagnosis = Diagnosis.model_validate(diagnosis_raw)
 
@@ -104,7 +126,19 @@ def verify_evidence(state: AgentState, deps: AgentDependencies) -> dict[str, Any
             if inv is not None:
                 deterministic_invalid.append(inv)
             else:
-                valid_step_pairs.append((idx, step))
+                article_id = resolve_article_id(step.article_id, retrieval.hits)
+                section = resolve_section(step.section, str(article_id), retrieval.hits)
+                valid_step_pairs.append(
+                    (
+                        idx,
+                        step.model_copy(
+                            update={
+                                "article_id": article_id,
+                                "section": section,
+                            }
+                        ),
+                    )
+                )
 
         # If any deterministic citations failed, construct failure feedback immediately
         # (Still run semantic verification on valid steps if any, or report citation errors)
@@ -124,6 +158,10 @@ def verify_evidence(state: AgentState, deps: AgentDependencies) -> dict[str, Any
                 f"Step {idx}: {step.text} [Citation: {step.article_id} §{step.section}]"
                 for idx, step in valid_step_pairs
             )
+            current_incident_text = None
+            if state.get("cache_draft_used"):
+                incident = IncidentSnapshot.model_validate(state["incident"])
+                current_incident_text = incident.short_description + "\n" + incident.description
             # Filter evidence to chunks cited by these steps (exact article_id and section)
             cited_sections = {(s.article_id, s.section) for _, s in valid_step_pairs}
             relevant_evidence = [
@@ -136,6 +174,7 @@ def verify_evidence(state: AgentState, deps: AgentDependencies) -> dict[str, Any
                 prompt=critic_prompt(
                     steps_text=steps_text,
                     evidence_text=evidence_block(relevant_evidence),
+                    incident_text=current_incident_text,
                 ),
                 schema=CriticOutput,
             )

@@ -118,6 +118,7 @@ def summarize(
         draft_summary = {
             "steps": len(draft.get("steps", [])),
             "dropped_steps": draft.get("dropped_steps"),
+            "cache_draft_used": bool(values.get("cache_draft_used")),
         }
         return "succeeded", draft_summary, evidence
     if node == "act":
@@ -142,9 +143,8 @@ def summarize(
             # a pause that did not exist: 24 act rows sat at awaiting_approval with
             # zero matching approvals (dev407364, 2026-09-28).
             #
-            # "Waiting for a person" is still true and is still recorded where it
-            # belongs: ``processing_state`` on the incident is awaiting_approval, and
-            # the draft is offered for review via the suggestion review route.
+            # The incident's processing state also completes when no gate requires
+            # approval; genuine interrupts retain their resumable parked state.
             status = "succeeded"
         output_keys = ("outcome", "processing_state", "confidence", "classification", "write_back")
         return status, {k: output.get(k) for k in output_keys}, []

@@ -169,9 +169,11 @@ class TestRoutes:
     def test_elevated_risk_drafts_and_awaits_approval(self) -> None:
         llm = FakeLLM(vpn_answers() | label("access"))
         result = run(MFA, make_deps(llm=llm))
-        assert result["path"] == FULL_PATH
+        assert result["path"] == FULL_PATH[:-1]
         assert result["outcome"] == "suggested"
         assert result["processing_state"] == "awaiting_approval"
+        assert result["paused"]
+        assert result["interrupt_payload"]["draft"]["steps"]
 
     def test_failed_gate_routes_to_act(self) -> None:
         def failing_safety(state: Any, deps: Any) -> dict[str, Any]:

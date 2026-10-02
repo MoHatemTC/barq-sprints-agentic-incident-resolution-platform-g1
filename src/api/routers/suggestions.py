@@ -89,7 +89,11 @@ async def review_suggestion(
     execution = await db.get(Execution, execution_id)
     if execution is None:
         raise ResourceNotFoundError(f"No execution '{execution_id}' found")
-    if execution.termination_cause != _DRAFTED:
+    if execution.termination_cause not in {
+        _DRAFTED,
+        "human_rejected:suggested",
+        "human_resolved:suggested",
+    }:
         raise ResourceNotFoundError(
             f"Execution '{execution_id}' finished as "
             f"'{execution.termination_cause}', not '{_DRAFTED}'; it has no draft to "
@@ -164,12 +168,6 @@ async def decide_suggestion(
     # The approval index protects PostgreSQL, but without a decision lock two
     # requests can both PATCH ServiceNow before one loses the insert race.
     await lock_execution_decision(db, execution_id)
-    if execution.termination_cause != _DRAFTED:
-        raise ConflictError(
-            f"Execution '{execution_id}' finished as '{execution.termination_cause}', "
-            f"not '{_DRAFTED}'; there is no draft to decide. A paused escalation is "
-            "decided through /api/v1/approvals/{id}/decide."
-        )
 
     try:
         existing = (
@@ -182,6 +180,13 @@ async def decide_suggestion(
         raise ConflictError(
             f"Execution '{execution_id}' has already been decided "
             f"('{existing.decision}') and decisions are immutable."
+        )
+
+    if execution.termination_cause != _DRAFTED:
+        raise ConflictError(
+            f"Execution '{execution_id}' finished as '{execution.termination_cause}', "
+            f"not '{_DRAFTED}'; there is no draft to decide. A paused escalation is "
+            "decided through /api/v1/approvals/{id}/decide."
         )
 
     incident = await _get_incident(settings, execution.incident_sys_id)
@@ -260,10 +265,32 @@ async def decide_suggestion(
             "request supplied no solution. Nothing would be written."
         )
     else:
-        # Declined with no resolution offered. Record the decision and stop. The
-        # incident is deliberately not marked complete — there is no resolution to
-        # record, and claiming one would be a fabrication. The human closes it in
-        # ServiceNow, which is the correct outcome for a rejected suggestion.
+        # A refusal ends this AI attempt without inventing a human resolution.
+        reason = f"Human rejected AI suggestion: {(payload.reason or 'no reason supplied').strip()}"
+        if incident.ai_processing_state != AIProcessingState.AWAITING_APPROVAL:
+            raise ConflictError(
+                f"Incident is '{incident.ai_processing_state}', not awaiting approval; "
+                "a stale draft cannot change its state."
+            )
+        update = IncidentUpdatePayload(
+            ai_processing_state=AIProcessingState.FAILED,
+            ai_failure_reason=reason[:4000],
+            ai_processing_end=now,
+            ai_human_review_required=False,
+            ai_suggestion="",
+            ai_resolution="",
+            work_notes=reason[:4000],
+        )
+        try:
+            await _update_incident(settings, execution.incident_sys_id, update)
+        except ServiceNowError as exc:
+            logger.exception("suggestion_rejection_write_failed", execution_id=str(execution_id))
+            raise ServiceUnavailableError(f"ServiceNow refused the rejection write: {exc}") from exc
+        written = {
+            "ai_resolution_written": False,
+            "ai_processing_end": now.isoformat(),
+            "ai_processing_state": AIProcessingState.FAILED.value,
+        }
         logger.info(
             "suggestion_rejected",
             execution_id=str(execution_id),
@@ -282,6 +309,13 @@ async def decide_suggestion(
             decided_at=now,
         )
         db.add(approval)
+        execution.status = "failed" if written["ai_processing_state"] == "failed" else "succeeded"
+        execution.ended_at = now
+        execution.termination_cause = (
+            "human_rejected:suggested"
+            if execution.status == "failed"
+            else "human_resolved:suggested"
+        )
         await db.commit()
         await db.refresh(approval)
     except IntegrityError as exc:

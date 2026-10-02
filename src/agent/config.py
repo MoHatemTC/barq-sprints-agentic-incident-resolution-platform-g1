@@ -103,6 +103,12 @@ class AgentSettings(BaseSettings):
         return value
 
     # -- manual §11.7: search ------------------------------------------------------
+    agent_query_rewrite_enabled: bool = Field(
+        default=False,
+        description="Add a focused, structured search query to the original sanitized incident. "
+        "Enable after evaluating the deployed KB; False restores the baseline query.",
+    )
+    agent_query_rewrite_timeout_seconds: float = Field(default=5.0, gt=0, le=60)
     agent_retrieval_top_k: int = Field(default=5, gt=0)
     agent_retrieval_threshold: float = Field(
         default=0.55,

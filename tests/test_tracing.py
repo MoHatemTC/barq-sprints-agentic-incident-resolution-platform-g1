@@ -158,7 +158,11 @@ class TestCorrelation:
             request_trace = tracer.current_trace_id()
             resumed = resume_incident_graph(
                 execution_id=EXECUTION_ID,
-                decision={"decision": "approved", "decided_by": "operator"},
+                decision={
+                    "decision": "approved",
+                    "decided_by": "operator",
+                    "solution": "Verified recovery.",
+                },
                 correlation_id=correlation_id,
                 runtime=runtime,
             )

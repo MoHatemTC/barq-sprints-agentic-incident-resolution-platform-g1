@@ -226,7 +226,8 @@ def compose(state: AgentState, outcome: Outcome) -> FinalOutput:
     approval = bool(risk and risk.approval_required)
     note = (
         f"{PREFIX} drafted. Confidence {confidence.score:.2f}. "
-        f"Source {'; '.join(draft.sources)}. Human review required before it is applied."
+        f"Source {'; '.join(draft.sources)}. "
+        + ("Human approval required." if approval else "Guarded suggestion completed.")
     )
     if approval and risk:
         note += " Approval required before any action: " + "; ".join(risk.reasons) + "."
@@ -234,11 +235,12 @@ def compose(state: AgentState, outcome: Outcome) -> FinalOutput:
         outcome=outcome,
         summary=note,
         suggestion=draft.rendered,
+        resolution=None if approval else draft.rendered,
         confidence=confidence.score,
         classification=classification,
         work_note=note,
-        human_review_required=True,
-        processing_state=PAUSED,
+        human_review_required=approval,
+        processing_state=PAUSED if approval else AIProcessingState.COMPLETE.value,
         approval_required=approval,
     )
 
@@ -316,7 +318,10 @@ def _apply_human_decision(output: FinalOutput, decision: dict[str, Any]) -> Fina
     solution = str(decision.get("solution") or "").strip() or None
     if verdict == "approved":
         if solution:
-            note = f"{PREFIX}: human resolution approved by {who}. {why}. Resolution: {solution}"
+            note = (
+                f"{PREFIX}: human resolution approved by {who}. {why}. "
+                f"Original review: {output.summary}. Resolution: {solution}"
+            )
             return output.model_copy(
                 update={
                     "summary": note,
@@ -337,8 +342,12 @@ def _apply_human_decision(output: FinalOutput, decision: dict[str, Any]) -> Fina
         update={
             "summary": note,
             "work_note": note,
-            "suggestion": None,
-            "approval_required": True,
+            "suggestion": "",
+            "resolution": "",
+            "approval_required": False,
+            "human_review_required": False,
+            "processing_state": AIProcessingState.FAILED.value,
+            "processing_end": datetime.now(UTC).isoformat(),
         }
     )
 
@@ -426,13 +435,23 @@ def act(state: AgentState, deps: AgentDependencies) -> dict[str, Any]:
             )
         return {"output": output.model_dump(mode="json")}
 
-    if outcome in INTERRUPT_OUTCOMES:
+    if outcome in INTERRUPT_OUTCOMES or output.approval_required:
         payload = interrupt_payload(state, output, outcome)
         payload["brief"] = render_brief(payload, deps)
         if not deps.audit.get_interrupt(execution_id):
             _write_escalation_to_servicenow(state, deps, output)
         deps.audit.save_interrupt(execution_id, payload)
         decision = _request_human_decision(payload)
+        if (
+            decision.get("decision") == "approved"
+            and not decision.get("solution")
+            and decision.get("source") != "no_graph"
+        ):
+            draft = Draft.model_validate(state["draft"]) if state.get("draft") else None
+            if draft and draft.steps and not draft.length_exceeded and len(draft.rendered) <= 4000:
+                decision = {**decision, "solution": draft.rendered}
+            elif decision.get("source") != "no_graph":
+                raise ValueError("Approval requires a complete draft or an operator solution.")
         output = _apply_human_decision(output, decision)
 
     return _perform_write(state, deps, output)
@@ -456,13 +475,15 @@ def _perform_write(
         "ai_agent_version": deps.settings.agent_version,
         "ai_human_review_required": output.human_review_required,
     }
-    if output.resolution:
+    if output.resolution is not None:
         fields["ai_resolution"] = output.resolution
     if output.processing_end:
         fields["ai_processing_end"] = _parse_ts(output.processing_end)
     elif output.processing_state == AIProcessingState.COMPLETE.value:
         fields["ai_processing_end"] = datetime.now(UTC)
     started = _parse_ts(state.get("started_at"))
+    if output.processing_state == AIProcessingState.FAILED.value:
+        fields["ai_failure_reason"] = f"Human rejected AI action: {output.summary}"[:4000]
     if started is not None:
         # The S1.1 model rejects an explicit None timestamp, so it is omitted instead.
         fields["ai_processing_start"] = started
@@ -546,6 +567,8 @@ def _perform_write(
     log_status = (
         ExecutionStatus.SUCCEEDED
         if output.processing_state == AIProcessingState.COMPLETE.value
+        else ExecutionStatus.FAILED
+        if output.processing_state == AIProcessingState.FAILED.value
         else ExecutionStatus.AWAITING_APPROVAL
     )
     _write_execution_log(

@@ -51,12 +51,15 @@ async def list_dlq_events(
     """List dead-letter events currently accumulated in the DLQ."""
     logger.info("dlq_events_queried")
     raw_events: list[Any] = []
+    if redis_client is None:
+        raise ServiceUnavailableError("DLQ queue service unavailable.")
     if redis_client is not None:
         try:
             res = redis_client.lrange(INCIDENT_DLQ_QUEUE, 0, -1)
             raw_events = (await res) if hasattr(res, "__await__") else (res or [])
         except Exception as exc:
-            logger.warning("dlq_redis_read_failed", error=str(exc))
+            logger.warning("dlq_redis_read_failed", error_type=type(exc).__name__)
+            raise ServiceUnavailableError("DLQ queue service unavailable.") from exc
 
     events: list[DLQEventResponse] = []
     if isinstance(raw_events, list):
@@ -92,6 +95,9 @@ async def list_dlq_events(
 
                 events.append(
                     DLQEventResponse(
+                        execution_id=data.get("execution_id"),
+                        correlation_id=data.get("correlation_id"),
+                        failure_type=data.get("failure_type"),
                         event_id=event_id,
                         payload=payload,
                         failure_reason=str(data.get("failure_reason", "unknown")),
@@ -157,6 +163,6 @@ def replay_dlq_event(
     return DLQReplayResponse(
         event_id=event_id,
         status="accepted",
-        correlation_id=correlation_id,
+        correlation_id=outcome.correlation_id or correlation_id,
         message=f"Event '{event_id}' replayed from DLQ into active queue.",
     )

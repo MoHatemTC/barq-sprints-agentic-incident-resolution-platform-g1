@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.models.manual_section import ManualSection, ManualSectionType
+from app.models.manual_section import ManualSection, ManualSectionType, TextBlock
 from app.retrieval.extraction.parse_appendix import AppendixERelationships
 from app.retrieval.manual.manual_chunking import chunk_section, chunk_sections
 
@@ -16,7 +16,7 @@ def _section(
         section_id=section_id,
         section_number=section_number,
         title=title,
-        body=body,
+        blocks=[TextBlock(text=body)],
         content_type=ManualSectionType.PROSE,
         pages=pages,
     )

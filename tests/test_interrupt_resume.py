@@ -354,7 +354,12 @@ def test_resume_with_approval() -> None:
         deps,
         ORDER_P1,
         saver,
-        resume={"decision": "approved", "decided_by": "ops_analyst_1", "reason": "P1 window"},
+        resume={
+            "decision": "approved",
+            "decided_by": "ops_analyst_1",
+            "reason": "P1 window",
+            "solution": "Operator verified the approved recovery.",
+        },
     )
 
     assert resumed["resumed"] is True
@@ -362,7 +367,7 @@ def test_resume_with_approval() -> None:
     assert resumed["outcome"] == "escalated_high_risk"
     assert len(backend.updates) == 2
     body = backend.updates[1][1].to_table_api_body()
-    assert body["x_2215032_ai_inc_0_ai_human_review_required"] == "true"
+    assert body["x_2215032_ai_inc_0_ai_human_review_required"] == "false"
 
     receipt = deps.audit.get_receipt(EXECUTION_ID)
     assert receipt is not None
@@ -423,7 +428,12 @@ def test_resume_with_rejection() -> None:
     assert resumed["suggested"] is False
     assert len(backend.updates) == 2
     body = backend.updates[1][1].to_table_api_body()
-    assert "x_2215032_ai_inc_0_ai_suggestion" not in body
+    assert body["x_2215032_ai_inc_0_ai_suggestion"] == ""
+    assert body["x_2215032_ai_inc_0_ai_resolution"] == ""
+    assert body["x_2215032_ai_inc_0_ai_processing_state"] == "failed"
+    assert body["x_2215032_ai_inc_0_ai_failure_reason"].startswith("Human rejected")
+    assert body["x_2215032_ai_inc_0_ai_processing_end"]
+    assert body["x_2215032_ai_inc_0_ai_human_review_required"] == "false"
     assert "human rejected by security" in body["work_notes"].lower()
 
 
@@ -489,7 +499,12 @@ def test_resume_routing_ignores_the_approval_brief_entirely() -> None:
         deps,
         ORDER_P1,
         saver,
-        resume={"decision": "approved", "decided_by": "ops_analyst_1", "reason": "P1 window"},
+        resume={
+            "decision": "approved",
+            "decided_by": "ops_analyst_1",
+            "reason": "P1 window",
+            "solution": "Operator verified the approved recovery.",
+        },
     )
 
     # The operator's decision wins; the brief's contrary text is inert.
@@ -540,3 +555,20 @@ def test_graph_invoke_raising_graph_interrupt_is_handled_cleanly(monkeypatch: An
     assert result["outcome"] == "escalated_no_evidence"
     assert result["summary"] == "no matching knowledge article found"
     assert len(backend.updates) == 1
+
+
+def test_approval_without_replacement_applies_the_complete_checkpointed_draft() -> None:
+    backend = FakeServiceNow()
+    deps = make_deps(llm=FakeLLM(vpn_answers()), servicenow=backend, agent_confidence_floor=0.99)
+    saver = InMemorySaver()
+    _, paused = _run(deps, VPN, saver)
+    assert paused["paused"]
+    stored = deps.audit.get_interrupt(EXECUTION_ID)
+    assert stored["draft"]["steps"]
+    _, resumed = _run(deps, VPN, saver, resume={"decision": "approved", "decided_by": "operator"})
+    assert resumed["processing_state"] == "complete"
+    assert not resumed["paused"]
+    body = backend.updates[-1][1].to_table_api_body()
+    assert body["x_2215032_ai_inc_0_ai_resolution"] == stored["draft"]["rendered"]
+    assert body["x_2215032_ai_inc_0_ai_human_review_required"] == "false"
+    assert body["x_2215032_ai_inc_0_ai_processing_end"]

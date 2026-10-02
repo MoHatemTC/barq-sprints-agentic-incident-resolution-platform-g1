@@ -1,0 +1,164 @@
+{
+  "generated_at": "2026-10-01T18:23:38.788282+00:00",
+  "source_transcript": "docs/evidence/pr191_live_approval_regressions.json",
+  "method": "trace_id_for(correlation_id) is the same derivation production uses; observations are read from GET /api/public/v2/observations?traceId=... because the legacy /api/public/traces/{id} endpoint returns 410 on this org.",
+  "runs": [
+    {
+      "run": "approve_checkpointed_draft",
+      "incident": "INC0010045",
+      "execution_id": "f717f0fa-e2d8-4511-b15c-ac1678b0b27c",
+      "correlation_id": "pr191-6ae27d4f-64ca-4c31-8a0b-b7f21e6d561d",
+      "derived_trace_id": "514adf9001897751ae44adfbff004eee",
+      "distinct_trace_ids_in_observations": [
+        "514adf9001897751ae44adfbff004eee"
+      ],
+      "observation_count": 33,
+      "observation_names": [
+        "agent.critic",
+        "agent.diagnostic",
+        "agent.resolution",
+        "approval.resume",
+        "guardrail.input_screening",
+        "guardrail.safety_check",
+        "llm.classify",
+        "llm.diagnose",
+        "llm.generate",
+        "llm.injection_classifier",
+        "llm.query_rewrite",
+        "llm.verify_evidence",
+        "node.act",
+        "node.classify",
+        "node.confidence_check",
+        "node.determine_risk",
+        "node.diagnose",
+        "node.generate",
+        "node.load",
+        "node.retrieve",
+        "node.safety_check",
+        "node.validate",
+        "node.verify_evidence",
+        "queue.enqueue",
+        "retrieval.query_rewrite",
+        "servicenow.read_incident",
+        "servicenow.write_ai_fields",
+        "servicenow.write_execution_log",
+        "webhook.receipt",
+        "worker.pickup"
+      ],
+      "observation_types": [
+        "AGENT",
+        "CHAIN",
+        "GENERATION",
+        "GUARDRAIL",
+        "RETRIEVER",
+        "SPAN",
+        "TOOL"
+      ],
+      "window": {
+        "start": "2026-10-01T18:18:53.007Z",
+        "end": "2026-10-01T18:20:40.985Z"
+      },
+      "resume_spans_present": true
+    },
+    {
+      "run": "cached_follower_own_approval_and_write",
+      "incident": "INC0010046",
+      "execution_id": "6a1654d4-e82d-4655-83c2-0d689de03b0d",
+      "correlation_id": "pr191-follower-af826301-72a7-4802-af45-a06397ba4b7d",
+      "derived_trace_id": "75ebc3d2186e48fffc94f0268531897c",
+      "distinct_trace_ids_in_observations": [
+        "75ebc3d2186e48fffc94f0268531897c"
+      ],
+      "observation_count": 34,
+      "observation_names": [
+        "agent.critic",
+        "agent.diagnostic",
+        "agent.resolution_cache",
+        "approval.resume",
+        "guardrail.input_screening",
+        "guardrail.safety_check",
+        "llm.classify",
+        "llm.diagnose",
+        "llm.injection_classifier",
+        "llm.query_rewrite",
+        "llm.verify_evidence",
+        "node.act",
+        "node.classify",
+        "node.confidence_check",
+        "node.determine_risk",
+        "node.diagnose",
+        "node.generate",
+        "node.load",
+        "node.retrieve",
+        "node.safety_check",
+        "node.validate",
+        "node.verify_evidence",
+        "queue.enqueue",
+        "retrieval.query_rewrite",
+        "servicenow.read_incident",
+        "servicenow.write_ai_fields",
+        "servicenow.write_execution_log",
+        "webhook.receipt",
+        "worker.pickup"
+      ],
+      "observation_types": [
+        "AGENT",
+        "CHAIN",
+        "GENERATION",
+        "GUARDRAIL",
+        "RETRIEVER",
+        "SPAN",
+        "TOOL"
+      ],
+      "window": {
+        "start": "2026-10-01T18:20:22.983Z",
+        "end": "2026-10-01T18:21:19.409Z"
+      },
+      "cached_generation_reuse_proven": true,
+      "resume_spans_present": true
+    },
+    {
+      "run": "reject_pre_retrieval",
+      "incident": "INC0010047",
+      "execution_id": "cf7748a9-cb7b-4d12-be8a-ff01904c1278",
+      "correlation_id": "pr191-cd4437f2-ec15-4aa8-b992-8f8e53405d8a",
+      "derived_trace_id": "e829dbe03506b0d27fc8419ce2bbf508",
+      "distinct_trace_ids_in_observations": [
+        "e829dbe03506b0d27fc8419ce2bbf508"
+      ],
+      "observation_count": 18,
+      "observation_names": [
+        "approval.resume",
+        "guardrail.input_screening",
+        "llm.classify",
+        "llm.injection_classifier",
+        "node.act",
+        "node.classify",
+        "node.determine_risk",
+        "node.load",
+        "node.validate",
+        "queue.enqueue",
+        "servicenow.read_incident",
+        "servicenow.write_ai_fields",
+        "servicenow.write_execution_log",
+        "webhook.receipt",
+        "worker.pickup"
+      ],
+      "observation_types": [
+        "AGENT",
+        "CHAIN",
+        "GENERATION",
+        "GUARDRAIL",
+        "SPAN",
+        "TOOL"
+      ],
+      "window": {
+        "start": "2026-10-01T18:21:24.476Z",
+        "end": "2026-10-01T18:21:58.646Z"
+      },
+      "resume_spans_present": true
+    }
+  ],
+  "failures": [],
+  "verdict": "one trace id per execution"
+}
