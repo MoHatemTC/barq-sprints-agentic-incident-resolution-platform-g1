@@ -16,12 +16,13 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import secrets
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 from uuid import UUID, uuid4
 
 import structlog
 from fastapi import APIRouter, Depends, Query, status
-from sqlalchemy import select
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -56,6 +57,12 @@ logger = structlog.getLogger("api.chat")
 _IDEMPOTENCY_CONSTRAINT = "uq_chat_turns_conversation_request"
 _ACTIVE_TURN_CONSTRAINT = "uq_chat_turns_one_active"
 
+#: A turn left 'running' by a crash (e.g. the process died between claim and
+#: completion) must not wedge the conversation forever: claims older than the
+#: turn timeout plus this grace are reclaimed as failed. There is no chat
+#: reaper; this runs inline at claim time.
+_STALE_TURN_GRACE_SECONDS = 60.0
+
 router = APIRouter(
     prefix="/api/v1/chat",
     tags=["Chat"],
@@ -63,10 +70,6 @@ router = APIRouter(
     # still reject anonymous requests as anonymous.
     dependencies=[Depends(verify_bearer_token), Depends(require_chat_enabled)],
 )
-
-_Dependencies = {
-    "session": require_chat_session,
-}
 
 
 # -- sessions -------------------------------------------------------------------
@@ -256,7 +259,12 @@ async def submit_message(
 ) -> ChatTurnResponse:
     conversation = await _owned_conversation(db, conversation_id, session)
 
-    turn, claimed = await _claim_turn(db, conversation, payload.request_id)
+    turn, claimed = await _claim_turn(
+        db,
+        conversation,
+        payload.request_id,
+        stale_grace_seconds=chat_settings.chat_turn_timeout_seconds + _STALE_TURN_GRACE_SECONDS,
+    )
     if not claimed:
         # Idempotent resubmission: return the existing turn untouched, whether
         # it already finished or is still running on the first request.
@@ -279,11 +287,8 @@ async def submit_message(
         logger.warning("chat_turn_timeout", turn_id=str(turn.id))
         # The worker thread keeps running and persists its own terminal state;
         # report the persisted status instead of a fabricated outcome.
-        recovered = await db.get(ChatTurn, turn.id)
-        if recovered is not None:
-            return await _turn_response(db, recovered)
 
-    refreshed = await db.get(ChatTurn, turn.id)
+    refreshed = await _fresh_turn(db, turn.id)
     if refreshed is None:  # pragma: no cover - the row was just created
         raise ResourceNotFoundError(f"Turn '{turn.id}' not found")
     return await _turn_response(db, refreshed)
@@ -326,15 +331,28 @@ async def _owned_conversation(
 
 
 async def _claim_turn(
-    db: AsyncSession, conversation: ChatConversation, request_id: str
+    db: AsyncSession,
+    conversation: ChatConversation,
+    request_id: str,
+    *,
+    stale_grace_seconds: float,
 ) -> tuple[ChatTurn, bool]:
     """Insert the running turn; the database arbitrates duplicates and focus.
 
     Returns the turn and whether THIS request owns executing it. Losing the
     (conversation, request_id) race means an identical submission exists — the
     caller returns that row instead of running the model twice. Losing the
-    one-active-turn race is a 409.
+    one-active-turn race is a 409. A running turn stale beyond
+    ``stale_grace_seconds`` (crashed request) is reclaimed as failed first.
     """
+    stale_before = datetime.now(UTC) - timedelta(seconds=stale_grace_seconds)
+    await db.execute(
+        update(ChatTurn)
+        .where(ChatTurn.conversation_id == conversation.id)
+        .where(ChatTurn.status == "running")
+        .where(ChatTurn.created_at < stale_before)
+        .values(status="failed", error_category="stale_reclaimed", completed_at=func.now())
+    )
     turn = ChatTurn(
         id=uuid4(),
         conversation_id=conversation.id,
@@ -368,6 +386,21 @@ async def _claim_turn(
         logger.exception("chat_turn_claim_failed", error=str(exc))
         raise ServiceUnavailableError("Database unavailable to claim the turn.") from exc
     return turn, True
+
+
+async def _fresh_turn(db: AsyncSession, turn_id: UUID) -> ChatTurn | None:
+    """Re-read the turn row, bypassing the identity map.
+
+    The request session inserted this row (status 'running') and the session
+    keeps objects usable across commits (expire_on_commit=False), so ``db.get``
+    would hand back that stale in-memory snapshot instead of the terminal
+    status the worker thread just persisted.
+    """
+    return (
+        await db.execute(
+            select(ChatTurn).where(ChatTurn.id == turn_id).execution_options(populate_existing=True)
+        )
+    ).scalar_one_or_none()
 
 
 async def _turn_response(db: AsyncSession, turn: ChatTurn) -> ChatTurnResponse:

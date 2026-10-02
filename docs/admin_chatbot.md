@@ -61,10 +61,28 @@ model confidence value is never treated as proof.
 
 ## Setup
 
+### Option A — everything in Docker (compose)
+
 ```bash
-docker compose up -d                     # postgres, redis, qdrant
+docker compose build api chat-ui          # ui is a separate image stage (Streamlit only there)
+docker compose up -d qdrant postgres redis api
+docker compose exec api alembic upgrade head   # applies 0006_chat_tables
+docker compose --profile ui up -d chat-ui      # Streamlit on :8501
+```
+
+The `chat-ui` service sits behind the `ui` profile, so the regular
+`docker compose up -d` (api + worker) never starts or requires it. Inside the
+compose network the UI reaches the API at `http://barq-api:8000`
+(`CHAT_UI_API_BASE` is set for you). `.env` must contain `CHAT_ENABLED=true`
+and the chat price rates — the api service inherits them via `env_file`.
+
+### Option B — API in Docker, UI on host
+
+```bash
+docker compose up -d qdrant postgres redis api
+docker compose exec api alembic upgrade head
 uv sync --group chat                     # runtime deps + Streamlit (optional group)
-uv run alembic upgrade head              # applies 0006_chat_tables
+just chat                                # Streamlit UI on :8501
 ```
 
 In `.env` (see `.env.example` → "Admin chatbot"):
@@ -137,7 +155,7 @@ answer 404.
 - No answer cache yet (milestone 3); every knowledge answer costs model calls.
 - Incident reads (milestone 4) and work notes with human confirmation
   (milestone 5) are refused with explicit messages.
-- The Streamlit run is host-local (`just chat`); a Compose UI profile lands
-  with the milestone 6 integration work.
+- The Streamlit run is host-local (`just chat`) or the containerized `chat-ui`
+  compose profile; both are optional and never required by api/worker images.
 - Source links are shown only when a valid mapping exists; none exists today,
   so none are fabricated.

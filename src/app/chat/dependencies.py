@@ -98,15 +98,16 @@ async def require_chat_session(
 
 def get_chat_store(settings: Annotated[Settings, Depends(get_app_settings)]) -> SQLAlchemyChatStore:
     """Sync chat store over its own small engine (checkpointer precedent)."""
-    return _chat_store_singleton(settings)
+    return _chat_store_singleton()
 
 
 def get_chat_budget(
     app_settings: Annotated[Settings, Depends(get_app_settings)],
     chat_settings: Annotated[ChatSettings, Depends(get_chat_settings)],
 ) -> RedisChatBudget:
+    # A thin per-request wrapper; the Redis client underneath is a singleton.
     return RedisChatBudget(
-        _sync_redis_singleton(app_settings),
+        _sync_redis_singleton(),
         daily_limit_usd=chat_settings.chat_daily_budget_usd,
     )
 
@@ -114,24 +115,32 @@ def get_chat_budget(
 def get_chat_service(
     request: Request,
     settings: Annotated[ChatSettings, Depends(require_chat_enabled)],
-    store: Annotated[SQLAlchemyChatStore, Depends(get_chat_store)],
-    budget: Annotated[RedisChatBudget, Depends(get_chat_budget)],
 ) -> ChatTurnService:
-    """Assemble the turn service from process-wide singletons."""
-    return _service_singleton(settings, store, budget)
+    """Assemble the turn service from process-wide singletons.
+
+    Note: pydantic settings instances are unhashable, so the singletons below
+    must never be ``lru_cache``d *through* a settings argument — they build
+    from the process-wide cached settings instead.
+    """
+    return _service_singleton()
 
 
 # -- singletons -----------------------------------------------------------------
 
 
 @lru_cache
-def _chat_store_singleton(settings: Settings) -> SQLAlchemyChatStore:
-    engine = create_sync_engine(build_sync_database_url(settings))
+def _chat_store_singleton() -> SQLAlchemyChatStore:
+    from app.core.config import get_settings
+
+    engine = create_sync_engine(build_sync_database_url(get_settings()))
     return SQLAlchemyChatStore(create_sync_session_factory(engine))
 
 
 @lru_cache
-def _sync_redis_singleton(settings: Settings) -> redis_sync.Redis:
+def _sync_redis_singleton() -> redis_sync.Redis:
+    from app.core.config import get_settings
+
+    settings = get_settings()
     password = settings.redis_password.get_secret_value() if settings.redis_password else None
     return redis_sync.Redis(
         host=settings.redis_host,
@@ -142,15 +151,17 @@ def _sync_redis_singleton(settings: Settings) -> redis_sync.Redis:
 
 
 @lru_cache
-def _service_singleton(
-    settings: ChatSettings, store: SQLAlchemyChatStore, budget: RedisChatBudget
-) -> ChatTurnService:
+def _service_singleton() -> ChatTurnService:
     from observability.tracing import get_tracer
 
+    settings = _cached_chat_settings()
+    budget = RedisChatBudget(
+        _sync_redis_singleton(), daily_limit_usd=settings.chat_daily_budget_usd
+    )
     return ChatTurnService(
         llm=get_llm(),
         retriever=build_chat_retriever(settings),
-        store=store,
+        store=_chat_store_singleton(),
         budget=budget,
         settings=settings,
         tracer=get_tracer(),

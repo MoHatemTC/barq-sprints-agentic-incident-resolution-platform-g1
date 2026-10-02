@@ -8,12 +8,15 @@ before submission so a Streamlit rerun cannot double-charge a turn.
 
 from __future__ import annotations
 
+import os
 import uuid
 
 import httpx
 import streamlit as st
 
-DEFAULT_API_BASE = "http://localhost:8000"
+#: Compose sets CHAT_UI_API_BASE so the containerized UI reaches barq-api
+#: over the internal network; local runs default to the localhost API.
+DEFAULT_API_BASE = os.environ.get("CHAT_UI_API_BASE", "http://localhost:8000")
 MAX_MESSAGE_CHARS = 6000
 
 st.set_page_config(page_title="BARQ Admin Chat", page_icon=":speech_balloon:", layout="centered")

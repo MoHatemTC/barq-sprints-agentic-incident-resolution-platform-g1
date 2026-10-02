@@ -269,7 +269,10 @@ async def test_submit_message_runs_service_and_returns_turn_with_messages() -> N
     session = _db_session(
         {ChatSession: session_row, ChatConversation: conversation, ChatTurn: turn}
     )
-    session.execute = AsyncMock(return_value=_execute_result(messages))
+    # execute order: stale-turn reclaim, fresh turn re-read, turn messages.
+    fresh_turn = MagicMock()
+    fresh_turn.scalar_one_or_none.return_value = turn
+    session.execute = AsyncMock(side_effect=[MagicMock(), fresh_turn, _execute_result(messages)])
     service = _fake_service()
     app = _app(session, service)
 
@@ -302,11 +305,12 @@ async def test_duplicate_request_id_returns_existing_turn_without_rerun() -> Non
     session.commit = AsyncMock(
         side_effect=[None, _integrity_error("uq_chat_turns_conversation_request")]
     )
+    reclaim_update = MagicMock()  # stale-turn reclamation; no rows consumed
     claim_select = MagicMock()
     claim_select.scalar_one_or_none.return_value = existing_turn
     empty_messages = MagicMock()
     empty_messages.scalars.return_value.all.return_value = []
-    session.execute = AsyncMock(side_effect=[claim_select, empty_messages])
+    session.execute = AsyncMock(side_effect=[reclaim_update, claim_select, empty_messages])
     service = _fake_service()
     app = _app(session, service)
 
@@ -351,6 +355,13 @@ async def test_turn_timeout_returns_persisted_status() -> None:
     )
     service = MagicMock(spec=ChatTurnService)
     service.handle_turn = MagicMock(side_effect=lambda _req: None)  # returns, but slowly enough
+    # execute order: stale-turn reclaim, then the fresh turn re-read that the
+    # timeout path reports instead of a fabricated outcome.
+    fresh_turn = MagicMock()
+    fresh_turn.scalar_one_or_none.return_value = running_turn
+    empty_messages = MagicMock()
+    empty_messages.scalars.return_value.all.return_value = []
+    session.execute = AsyncMock(side_effect=[MagicMock(), fresh_turn, empty_messages])
     settings = ChatSettings(
         _env_file=None,
         chat_enabled=True,
