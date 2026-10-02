@@ -75,6 +75,14 @@ class ChatStore(Protocol):
         usage: dict[str, object] | None,
     ) -> None: ...
 
+    def get_summary(self, conversation_id: UUID) -> tuple[str, int]: ...
+
+    def save_summary(self, conversation_id: UUID, *, summary: str, through_seq: int) -> None: ...
+
+    def unsummarized_messages(
+        self, conversation_id: UUID, *, after_seq: int, history_limit: int
+    ) -> list[dict[str, str]]: ...
+
     def fail_turn(self, turn_id: UUID, *, error_category: str) -> None: ...
 
 
@@ -228,6 +236,44 @@ class SQLAlchemyChatStore:
                 .values(status=status, route=route, usage=usage, completed_at=func.now())
             )
             session.commit()
+
+    def get_summary(self, conversation_id: UUID) -> tuple[str, int]:
+        with sync_session_scope(self._factory) as session:
+            conversation = session.get(ChatConversation, conversation_id)
+            if conversation is None:
+                return "", 0
+            return conversation.history_summary or "", int(conversation.summary_seq or 0)
+
+    def save_summary(self, conversation_id: UUID, *, summary: str, through_seq: int) -> None:
+        with sync_session_scope(self._factory) as session:
+            session.execute(
+                update(ChatConversation)
+                .where(ChatConversation.id == conversation_id)
+                .values(history_summary=summary, summary_seq=through_seq, updated_at=func.now())
+            )
+            session.commit()
+
+    def unsummarized_messages(
+        self, conversation_id: UUID, *, after_seq: int, history_limit: int
+    ) -> list[dict[str, str]]:
+        """Sanitized messages older than the recent window and not yet summarized."""
+        with sync_session_scope(self._factory) as session:
+            newest = session.scalar(
+                select(func.max(ChatMessage.seq)).where(
+                    ChatMessage.conversation_id == conversation_id
+                )
+            )
+            boundary = (newest or 0) - history_limit
+            if boundary <= after_seq:
+                return []
+            rows = session.scalars(
+                select(ChatMessage)
+                .where(ChatMessage.conversation_id == conversation_id)
+                .where(ChatMessage.seq > after_seq)
+                .where(ChatMessage.seq <= boundary)
+                .order_by(ChatMessage.seq)
+            ).all()
+            return [{"role": row.role, "content": row.content} for row in rows]
 
     def fail_turn(self, turn_id: UUID, *, error_category: str) -> None:
         with sync_session_scope(self._factory) as session:

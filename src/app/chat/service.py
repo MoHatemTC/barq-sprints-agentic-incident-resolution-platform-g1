@@ -33,6 +33,11 @@ from app.chat.budget import (
 from app.chat.config import ChatSettings
 from app.chat.graph import build_chat_graph
 from app.chat.nodes import ChatGraphDeps
+from app.chat.prompts import (
+    CHAT_SUMMARIZE_SYSTEM,
+    HistorySummary,
+    chat_summarize_prompt,
+)
 from app.chat.retrieval import ChatRetriever
 from app.chat.state import ChatState
 from app.chat.store import ChatStore
@@ -115,18 +120,20 @@ class ChatTurnService:
                 request, _UNCONFIGURED_BUDGET_REFUSAL, usage={"blocked_layer": "budget_unavailable"}
             )
 
+        recorder = UsageRecordingLLM(self._llm, usage_records)
+        history = self._store.get_history(request.conversation_id, limit=HISTORY_MESSAGE_LIMIT)
+        summary = self._refresh_summary(request.conversation_id, history, recorder)
         state: ChatState = {
             "conversation_id": str(request.conversation_id),
             "turn_id": str(request.turn_id),
             "operator_subject": request.operator_subject,
             "user_message": request.user_message,
-            "history": self._store.get_history(
-                request.conversation_id, limit=HISTORY_MESSAGE_LIMIT
-            ),
+            "history": history,
+            "history_summary": summary,
         }
         graph = build_chat_graph(
             ChatGraphDeps(
-                llm=UsageRecordingLLM(self._llm, usage_records),
+                llm=recorder,
                 retriever=self._retriever,
                 store=self._store,
                 settings=self._settings,
@@ -156,6 +163,46 @@ class ChatTurnService:
             usage=_usage_summary(self._settings, usage_records),
         )
         return TurnOutcome(status=status, route=final.get("route"), error_category=None)
+
+    def _refresh_summary(
+        self,
+        conversation_id: UUID,
+        history: list[dict[str, str]],
+        llm: UsageRecordingLLM,
+    ) -> str:
+        """Extend the persisted rolling summary with messages that aged out.
+
+        One bounded model call, made only when messages older than the recent
+        window are not covered by the stored summary yet; failures never block
+        the turn — the turn just runs without the older context.
+        """
+        try:
+            summary, summary_seq = self._store.get_summary(conversation_id)
+            older = self._store.unsummarized_messages(
+                conversation_id, after_seq=summary_seq, history_limit=HISTORY_MESSAGE_LIMIT
+            )
+            if not older:
+                return summary
+            prompt = chat_summarize_prompt(summary, older)
+            result = llm.structured(
+                purpose="chat_summarize",
+                system=CHAT_SUMMARIZE_SYSTEM,
+                prompt=prompt,
+                schema=HistorySummary,
+                model=self._settings.chat_model,
+                max_completion_tokens=self._settings.chat_max_output_tokens,
+            )
+            new_summary = result.summary.strip() or summary
+            # seq of the newest message just summarized: all messages minus the
+            # recent window (and never below what was already covered).
+            newest = summary_seq + len(older)
+            self._store.save_summary(
+                conversation_id, summary=new_summary, through_seq=max(newest, summary_seq)
+            )
+            return new_summary
+        except Exception as exc:  # noqa: BLE001 — memory is best-effort context
+            logger.warning("chat_summary_refresh_failed", error=type(exc).__name__)
+            return self._store.get_summary(conversation_id)[0]
 
     def _blocked_turn(
         self, request: TurnRequest, refusal: str, *, usage: dict[str, object]

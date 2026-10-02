@@ -30,12 +30,12 @@ BUDGET_KEY_PREFIX = "barq:chat:budget:"
 #: Keys outlive the UTC day they cover so a late reconciliation still lands.
 _BUDGET_KEY_TTL_SECONDS = 172800
 
-#: Reserved for one turn: screening (PII + classifier), routing, answering and
-#: one bounded repair. Input size is estimated at ~4 chars/token on top of the
-#: bounded worst case: system prompts, the evidence block
-#: (``chat_max_evidence_chars``) and up to 6 history messages of 6,000 chars
-#: each — 12,000 + 36,000 + ~4,000 chars of prompt overhead.
-_EXPECTED_MODEL_CALLS = 5
+#: Reserved for one turn: screening (PII + classifier), routing, answering,
+#: one bounded repair and one older-history summarization. Input size is
+#: estimated at ~4 chars/token on top of the bounded worst case: system
+#: prompts, the evidence block (``chat_max_evidence_chars``) and up to 6
+#: history messages of 6,000 chars each — 12,000 + 36,000 + ~4,000 chars.
+_EXPECTED_MODEL_CALLS = 6
 _PROMPT_OVERHEAD_CHARS = 52_000
 _CHARS_PER_TOKEN = 4.0
 

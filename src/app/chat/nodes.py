@@ -93,13 +93,24 @@ def route(state: ChatState, deps: ChatGraphDeps) -> dict[str, Any]:
     decision = deps.llm.structured(
         purpose="chat_route",
         system=CHAT_ROUTE_SYSTEM,
-        prompt=chat_route_prompt(state["sanitized_message"], state.get("history", [])),
+        prompt=chat_route_prompt(
+            state["sanitized_message"],
+            state.get("history", []),
+            summary=state.get("history_summary") or None,
+        ),
         schema=RouteDecision,
         model=deps.settings.chat_model,
         max_completion_tokens=deps.settings.chat_max_output_tokens,
     )
     if decision.request_type == "knowledge":
-        return {"route": "knowledge", "route_reason": decision.reason}
+        # Reference resolution: the rewritten, self-contained question drives
+        # retrieval; a topic change or standalone question keeps the raw text.
+        search_query = (decision.search_question or "").strip()
+        return {
+            "route": "knowledge",
+            "route_reason": decision.reason,
+            "search_query": search_query or state["sanitized_message"],
+        }
     return {
         "route": "unavailable",
         "route_reason": decision.reason,
@@ -108,9 +119,8 @@ def route(state: ChatState, deps: ChatGraphDeps) -> dict[str, Any]:
 
 
 def retrieve_knowledge(state: ChatState, deps: ChatGraphDeps) -> dict[str, Any]:
-    hits = deps.retriever.search(
-        state["sanitized_message"], limit=deps.settings.chat_evidence_chunk_limit
-    )
+    query = state.get("search_query") or state["sanitized_message"]
+    hits = deps.retriever.search(query, limit=deps.settings.chat_evidence_chunk_limit)
     evidence = []
     for hit in hits:
         citation = build_citation(hit)
@@ -134,7 +144,10 @@ def generate_answer(state: ChatState, deps: ChatGraphDeps) -> dict[str, Any]:
         purpose="chat_answer",
         system=CHAT_ANSWER_SYSTEM,
         prompt=chat_answer_prompt(
-            state["sanitized_message"], state.get("evidence", []), state.get("history", [])
+            state.get("search_query") or state["sanitized_message"],
+            state.get("evidence", []),
+            state.get("history", []),
+            summary=state.get("history_summary") or None,
         ),
         schema=AnswerDraft,
         model=deps.settings.chat_model,

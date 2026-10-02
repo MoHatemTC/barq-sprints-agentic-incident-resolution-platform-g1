@@ -179,3 +179,49 @@ def test_unavailable_route_completes_blocked() -> None:
 
     assert outcome.status == "blocked"
     assert outcome.route == "unavailable"
+
+
+def test_older_history_is_summarized_and_persisted() -> None:
+    from app.chat.prompts import HistorySummary
+
+    llm = FakeLLM(
+        answers={
+            **_answers(),
+            "chat_summarize": HistorySummary(summary="The operator asked what a KER is."),
+        }
+    )
+    older = [
+        {"role": "user", "content": "What is a KER?"},
+        {"role": "assistant", "content": "A known error record."},
+    ]
+    store = FakeChatStore(unsummarized=older)
+    budget = FakeBudget()
+
+    outcome = _service(llm, store, budget).handle_turn(_request())
+
+    assert outcome.status == "succeeded"
+    assert [c["purpose"] for c in llm.calls].count("chat_summarize") == 1
+    assert store.saved_summary is not None and store.saved_summary[1] == 2
+    summarize_call = next(c for c in llm.calls if c["purpose"] == "chat_summarize")
+    assert "known error record" in summarize_call["prompt"]
+
+
+def test_summary_failure_never_blocks_the_turn() -> None:
+    llm = FakeLLM(answers={**_answers(), "chat_summarize": TerminalError("model down")})
+    store = FakeChatStore(unsummarized=[{"role": "user", "content": "What is a KER?"}])
+    budget = FakeBudget()
+
+    outcome = _service(llm, store, budget).handle_turn(_request())
+
+    assert outcome.status == "succeeded"
+    assert store.calls_named("publish_turn")[0]["status"] == "succeeded"
+
+
+def test_no_older_history_skips_the_summarize_call() -> None:
+    llm = FakeLLM(answers=_answers())
+    store = FakeChatStore(history=[{"role": "user", "content": "earlier question"}])
+    budget = FakeBudget()
+
+    _service(llm, store, budget).handle_turn(_request())
+
+    assert "chat_summarize" not in llm.purposes()

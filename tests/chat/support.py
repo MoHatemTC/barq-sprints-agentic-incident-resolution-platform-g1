@@ -42,9 +42,35 @@ class FakeChatRetriever:
 class FakeChatStore:
     """ChatStore stand-in recording every persistence call in order."""
 
-    def __init__(self, history: list[dict[str, str]] | None = None) -> None:
+    def __init__(
+        self,
+        history: list[dict[str, str]] | None = None,
+        *,
+        summary: tuple[str, int] = ("", 0),
+        unsummarized: list[dict[str, str]] | None = None,
+    ) -> None:
         self._history = history or []
+        self._summary = summary
+        self._unsummarized = unsummarized or []
+        self.saved_summary: tuple[str, int] | None = None
         self.events: list[tuple[str, dict[str, Any]]] = []
+
+    def get_summary(self, conversation_id: UUID) -> tuple[str, int]:
+        return self._summary
+
+    def save_summary(self, conversation_id: UUID, *, summary: str, through_seq: int) -> None:
+        self.saved_summary = (summary, through_seq)
+        self.events.append(
+            (
+                "save_summary",
+                {"summary": summary, "through_seq": through_seq, "turn_id": conversation_id},
+            )
+        )
+
+    def unsummarized_messages(
+        self, conversation_id: UUID, *, after_seq: int, history_limit: int
+    ) -> list[dict[str, str]]:
+        return list(self._unsummarized)
 
     def get_history(self, conversation_id: UUID, *, limit: int) -> list[dict[str, str]]:
         self.events.append(("get_history", {"limit": limit}))

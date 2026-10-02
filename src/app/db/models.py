@@ -633,8 +633,10 @@ class ChatConversation(Base):
     )
     operator_subject: Mapped[str] = mapped_column(String(255), nullable=False)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
-    # Phase 2: rolling summary of older messages and the explicitly selected
-    # incident reference live here once memory lands.
+    # Rolling summary of messages that aged out of the recent-history window;
+    # summary_seq is the newest message seq the summary covers.
+    history_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    summary_seq: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

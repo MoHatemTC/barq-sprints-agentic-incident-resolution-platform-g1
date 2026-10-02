@@ -235,3 +235,90 @@ def test_history_flows_into_route_and_answer_prompts() -> None:
 
     answer_call = next(call for call in llm.calls if call["purpose"] == "chat_answer")
     assert "known error register" in answer_call["prompt"]
+
+
+def test_follow_up_searches_the_rewritten_self_contained_question() -> None:
+    llm = FakeLLM(
+        answers=_answers(
+            AnswerDraft(
+                answer_markdown="The KER owner is the problem manager.",
+                cited_chunk_ids=["KB0704-v1.0::chunk::0"],
+                sufficient_evidence=True,
+            ),
+            route="knowledge",
+        )
+        | {
+            "chat_route": RouteDecision(
+                request_type="knowledge",
+                reason="follow-up",
+                search_question="Who owns the known error register?",
+            )
+        }
+    )
+    store = FakeChatStore()
+    retriever = FakeChatRetriever([hit_for("KB0704")])
+    graph = build_chat_graph(
+        _deps(llm, retriever, store),
+    )
+
+    state = _state(user_message="why?", history=[{"role": "user", "content": "Explain the KER."}])
+    graph.invoke(state)
+
+    assert retriever.calls[0]["query"] == "Who owns the known error register?"
+    answer_call = next(call for call in llm.calls if call["purpose"] == "chat_answer")
+    assert "Who owns the known error register?" in answer_call["prompt"]
+
+
+def test_topic_change_searches_the_raw_message_unchanged() -> None:
+    llm = FakeLLM(
+        answers=_answers(
+            AnswerDraft(
+                answer_markdown="Escalate within 30 minutes.",
+                cited_chunk_ids=["KB0704-v1.0::chunk::0"],
+                sufficient_evidence=True,
+            ),
+            route="knowledge",
+        )
+        | {
+            "chat_route": RouteDecision(
+                request_type="knowledge",
+                reason="new topic",
+                search_question=None,
+            )
+        }
+    )
+    store = FakeChatStore()
+    retriever = FakeChatRetriever([hit_for("KB0704")])
+    graph = build_chat_graph(
+        _deps(llm, retriever, store),
+    )
+
+    graph.invoke(
+        _state(
+            user_message="Who is responsible for escalating a P1?",
+            history=[{"role": "user", "content": "Explain the KER."}],
+        )
+    )
+
+    assert retriever.calls[0]["query"] == "Who is responsible for escalating a P1?"
+
+
+def test_summary_flows_into_route_and_answer_prompts() -> None:
+    llm = FakeLLM(
+        answers=_answers(
+            AnswerDraft(
+                answer_markdown="Answer.",
+                cited_chunk_ids=["KB0704-v1.0::chunk::0"],
+                sufficient_evidence=True,
+            )
+        )
+    )
+    store = FakeChatStore()
+    graph = build_chat_graph(_deps(llm, FakeChatRetriever([hit_for("KB0704")]), store))
+
+    graph.invoke(_state(history_summary="Earlier: the operator asked about the KER."))
+
+    route_call = next(call for call in llm.calls if call["purpose"] == "chat_route")
+    assert "the operator asked about the KER" in route_call["prompt"]
+    answer_call = next(call for call in llm.calls if call["purpose"] == "chat_answer")
+    assert "the operator asked about the KER" in answer_call["prompt"]

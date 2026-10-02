@@ -12,12 +12,19 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+#: Char caps keeping the rehydrated context near the ~4k-token budget.
 HISTORY_MESSAGE_CHARS = 500
+HISTORY_SUMMARY_CHARS = 2000
 EVIDENCE_ITEM_CHARS = 4000
+
+CHAT_SUMMARIZE_SYSTEM = """You compress an earlier internal-admin chat conversation into
+a short summary for later turns. Keep the topics, concrete article numbers, incident
+numbers and any decision or answer that was given. Drop pleasantries. Write at most
+120 words. Answer with the schema only."""
 
 
 class RouteDecision(BaseModel):
-    """Classification of one chat message."""
+    """Classification of one chat message, with follow-up resolution."""
 
     request_type: Literal["knowledge", "incident_read", "work_note"] = Field(
         description=(
@@ -27,6 +34,22 @@ class RouteDecision(BaseModel):
         )
     )
     reason: str = Field(description="Short rationale for the classification.")
+    search_question: str | None = Field(
+        default=None,
+        description=(
+            "For knowledge requests only: the question to search the knowledge base "
+            "with. Rewrite follow-up messages (pronouns, ellipses like 'why?' or "
+            "'and for P2?') into a self-contained question using the conversation; "
+            "leave the message unchanged when it is already self-contained or starts "
+            "a new topic. Always set for knowledge."
+        ),
+    )
+
+
+class HistorySummary(BaseModel):
+    """Compressed older conversation used as memory for later turns."""
+
+    summary: str = Field(description="Compact summary of the earlier conversation.")
 
 
 class AnswerDraft(BaseModel):
@@ -52,7 +75,12 @@ Choose request_type:
   service catalogue or anything answerable from the knowledge base or the conversation.
 - "incident_read": the user asks to find, search or show current ServiceNow incidents.
 - "work_note": the user asks to draft or post a work note on an incident.
-Only "knowledge" is served in this release; the others receive a clear refusal.
+For "knowledge" also set search_question: the question to search the knowledge base
+with. When the latest message is a follow-up (pronouns, ellipses like "why?" or
+"and for P2?"), rewrite it into a self-contained question using the conversation.
+When it is already self-contained or starts a new topic, copy it unchanged — never
+mix in the older topic. Only "knowledge" is served in this release; the others
+receive a clear refusal.
 Answer with the schema only."""
 
 CHAT_ANSWER_SYSTEM = """You are the BARQ internal admin assistant. Answer ONLY from the
@@ -70,7 +98,7 @@ Answer with the schema only."""
 
 def _history_lines(history: list[dict[str, str]]) -> str:
     if not history:
-        return "(no earlier conversation)"
+        return "(no messages)"
     lines = []
     for message in history:
         role = "User" if message.get("role") == "user" else "Assistant"
@@ -79,11 +107,27 @@ def _history_lines(history: list[dict[str, str]]) -> str:
     return "\n".join(lines)
 
 
-def chat_route_prompt(message: str, history: list[dict[str, str]]) -> str:
+def _context_lines(history: list[dict[str, str]], summary: str | None) -> str:
+    parts = []
+    if summary:
+        parts.append(f"Summary of the earlier conversation:\n{summary[:HISTORY_SUMMARY_CHARS]}")
+    if history:
+        lines = []
+        for message in history:
+            role = "User" if message.get("role") == "user" else "Assistant"
+            content = str(message.get("content", ""))
+            lines.append(f"{role}: {content[:HISTORY_MESSAGE_CHARS]}")
+        parts.append("Recent conversation:\n" + "\n".join(lines))
+    return "\n\n".join(parts) if parts else "(no earlier conversation)"
+
+
+def chat_route_prompt(
+    message: str, history: list[dict[str, str]], *, summary: str | None = None
+) -> str:
     return (
-        f"Conversation so far:\n{_history_lines(history)}\n\n"
+        f"Conversation so far:\n{_context_lines(history, summary)}\n\n"
         f"Latest user message:\n<message>\n{message}\n</message>\n\n"
-        "Classify the latest user message."
+        "Classify the latest user message and set search_question."
     )
 
 
@@ -107,12 +151,22 @@ def chat_answer_prompt(
     question: str,
     evidence: list[dict[str, Any]],
     history: list[dict[str, str]],
+    *,
+    summary: str | None = None,
 ) -> str:
     return (
-        f"Conversation so far:\n{_history_lines(history)}\n\n"
+        f"Conversation so far:\n{_context_lines(history, summary)}\n\n"
         f"Evidence:\n{_evidence_blocks(evidence)}\n\n"
         f"User question:\n<question>\n{question}\n</question>\n\n"
         "Answer the question from the evidence."
+    )
+
+
+def chat_summarize_prompt(previous_summary: str, messages: list[dict[str, str]]) -> str:
+    return (
+        f"Previous summary (may be empty):\n{previous_summary[:HISTORY_SUMMARY_CHARS]}\n\n"
+        f"Conversation to fold into the summary:\n{_history_lines(messages)}\n\n"
+        "Produce the updated summary."
     )
 
 
@@ -120,7 +174,10 @@ __all__ = [
     "AnswerDraft",
     "CHAT_ANSWER_SYSTEM",
     "CHAT_ROUTE_SYSTEM",
+    "CHAT_SUMMARIZE_SYSTEM",
+    "HistorySummary",
     "RouteDecision",
     "chat_answer_prompt",
     "chat_route_prompt",
+    "chat_summarize_prompt",
 ]

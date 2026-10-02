@@ -26,11 +26,13 @@ class ChatState(TypedDict, total=False):
 
     # load_context
     history: list[dict[str, str]]  # [{"role": "user"|"assistant", "content": ...}] oldest→newest
+    history_summary: str  # rolling summary of messages older than the window
 
     # resolve_and_route
     route: str  # "knowledge" | "unavailable" | "blocked"
     route_reason: str
     unavailable_message: str
+    search_query: str  # reference-resolved question actually sent to retrieval
 
     # retrieve_knowledge
     evidence: list[dict[str, Any]]
