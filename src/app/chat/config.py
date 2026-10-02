@@ -13,10 +13,14 @@ from typing import Literal
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Single source of truth with the core settings: None under pytest so unit
+# tests never read a developer .env (the #77 isolation rule).
+from app.core.config import _ENV_FILE
+
 
 class ChatSettings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=_ENV_FILE,
         env_file_encoding="utf-8",
         extra="ignore",
         hide_input_in_errors=True,
