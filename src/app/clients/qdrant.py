@@ -29,6 +29,7 @@ MANUAL_PAYLOAD_KEYWORD_INDEXES: tuple[str, ...] = (
     "related_known_error_ids",
     "related_change_ids",
     "related_mir_ids",
+    "related_ritm_ids",
 )
 
 

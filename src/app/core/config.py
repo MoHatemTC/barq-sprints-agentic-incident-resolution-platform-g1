@@ -57,6 +57,7 @@ class RetrievalSettings(BaseSettings):
     retrieval_mmr_lambda: float = Field(default=0.8, ge=0.0, le=1.0)
     rerank_top_k: int = 5
     rerank_candidate_limit: int = 20  # must be larger than rerank_top_k
+    rerank_rrf_weight: float = Field(default=0.5, ge=0.0, le=1.0)
 
     @field_validator("rerank_candidate_limit")
     @classmethod

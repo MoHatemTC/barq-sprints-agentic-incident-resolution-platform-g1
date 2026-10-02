@@ -83,6 +83,7 @@ def _clear_default_reranker_cache():
 def _mock_settings(monkeypatch: pytest.MonkeyPatch):
     settings = MagicMock()
     settings.rerank_model = "test/cross-encoder-model"
+    settings.rerank_rrf_weight = 0.3
     monkeypatch.setattr("app.retrieval.rerank.get_retrieval_settings", lambda: settings)
     yield settings
 
@@ -113,19 +114,71 @@ def test_top_n_negative_raises():
         reranker.rerank("query", hits, top_n=-1)
 
 
-def test_rerank_normalizes_scores_and_sorts_descending():
+def test_rerank_rank_fusion_agrees_with_fusion_order_when_encoder_agrees():
     hits = [
         _make_hit("KB0001-v1.0", 0, 0.9, "irrelevant text"),
         _make_hit("KB0002-v1.0", 0, 0.1, "highly relevant text"),
     ]
-    _FakeTextCrossEncoder.next_scores = [0.1, 0.9]  # cross-encoder disagrees with fused rank
+    _FakeTextCrossEncoder.next_scores = [0.9, 0.1]  # encoder agrees with fusion order
+
+    reranker = CrossEncoderReranker()
+    result = reranker.rerank("query", hits, top_n=2)
+
+    assert [h.article_id for h in result] == ["KB0001-v1.0", "KB0002-v1.0"]
+    # both rankings agree: score collapses to 1/(K+rank)
+    assert result[0].score == pytest.approx(1 / 61)
+    assert result[1].score == pytest.approx(1 / 62)
+
+
+def test_rerank_rank_fusion_edges_fusion_winner_out_on_disagreement():
+    """Encoder ranks KB0002 first; with 0.7 weight on the encoder that barely
+    beats KB0001's fusion-rank-1 vote."""
+    hits = [
+        _make_hit("KB0001-v1.0", 0, 0.9, "irrelevant text"),
+        _make_hit("KB0002-v1.0", 0, 0.1, "highly relevant text"),
+    ]
+    _FakeTextCrossEncoder.next_scores = [0.1, 0.9]
 
     reranker = CrossEncoderReranker()
     result = reranker.rerank("query", hits, top_n=2)
 
     assert [h.article_id for h in result] == ["KB0002-v1.0", "KB0001-v1.0"]
-    assert result[0].score == pytest.approx(0.7109495026)
-    assert result[1].score == pytest.approx(0.5249791875)
+    assert result[0].score == pytest.approx(0.7 / 61 + 0.3 / 62)
+    assert result[1].score == pytest.approx(0.7 / 62 + 0.3 / 61)
+
+
+def test_rerank_ignores_encoder_score_magnitude_only_order_matters():
+    """Rank fusion: a near-tie and a landslide in encoder scores produce the
+    same result — only the encoder's ordering counts."""
+    hits = [
+        _make_hit("KB0001-v1.0", 0, 0.5),
+        _make_hit("KB0002-v1.0", 0, 0.5),
+    ]
+    reranker = CrossEncoderReranker()
+
+    _FakeTextCrossEncoder.next_scores = [-10.03, 10.03]  # landslide
+    landslide = reranker.rerank("query", hits, top_n=2)
+    _FakeTextCrossEncoder.next_scores = [0.499, 0.501]  # near-tie
+    near_tie = reranker.rerank("query", hits, top_n=2)
+
+    assert [h.article_id for h in landslide] == [h.article_id for h in near_tie]
+    assert [h.score for h in landslide] == pytest.approx([h.score for h in near_tie])
+
+
+def test_zero_rrf_weight_restores_full_encoder_authority():
+    """rrf_weight=0 disables the blend: ordering is purely the encoder's."""
+    hits = [
+        _make_hit("KB0001-v1.0", 0, 0.9, "irrelevant text"),
+        _make_hit("KB0002-v1.0", 0, 0.1, "highly relevant text"),
+    ]
+    _FakeTextCrossEncoder.next_scores = [0.1, 0.9]
+
+    reranker = CrossEncoderReranker(rrf_weight=0.0)
+    result = reranker.rerank("query", hits, top_n=2)
+
+    assert [h.article_id for h in result] == ["KB0002-v1.0", "KB0001-v1.0"]
+    assert result[0].score == pytest.approx(1 / 61)
+    assert result[1].score == pytest.approx(1 / 62)
 
 
 def test_rerank_truncates_to_top_n():
@@ -136,8 +189,9 @@ def test_rerank_truncates_to_top_n():
     result = reranker.rerank("query", hits, top_n=2)
 
     assert len(result) == 2
-    assert result[0].score == pytest.approx(0.7109495026)
-    assert result[1].score == pytest.approx(0.6681877722)
+    # encoder ranks: KB0001=1, KB0004=2; fusion ranks 2 and 5 respectively
+    assert result[0].score == pytest.approx(0.7 / 61 + 0.3 / 62)
+    assert result[1].score == pytest.approx(0.7 / 62 + 0.3 / 65)
 
 
 def test_rerank_normalizes_cross_encoder_logits():
@@ -151,13 +205,15 @@ def test_rerank_normalizes_cross_encoder_logits():
     result = reranker.rerank("query", hits, top_n=2)
 
     assert result[0].article_id == "KB0002-v1.0"
-    assert result[0].score == pytest.approx(0.999956)
+    assert result[0].score == pytest.approx(0.7 / 61 + 0.3 / 62)
 
     assert result[1].article_id == "KB0001-v1.0"
-    assert result[1].score == pytest.approx(0.000044, abs=1e-7)
+    assert result[1].score == pytest.approx(0.7 / 62 + 0.3 / 61)
 
 
-def test_rerank_tie_break_uses_article_id_then_chunk_index():
+def test_rerank_preserves_fusion_order_when_encoder_scores_are_tied():
+    """A fully tied encoder makes every encoder rank match its fusion rank,
+    so the final ordering is exactly the fusion order."""
     hits = [
         _make_hit("KB0002-v1.0", 1, 0.5),
         _make_hit("KB0001-v1.0", 0, 0.5),
@@ -169,13 +225,15 @@ def test_rerank_tie_break_uses_article_id_then_chunk_index():
     result = reranker.rerank("query", hits, top_n=3)
 
     assert [(h.article_id, h.chunk_index) for h in result] == [
+        ("KB0002-v1.0", 1),
         ("KB0001-v1.0", 0),
         ("KB0001-v1.0", 2),
-        ("KB0002-v1.0", 1),
     ]
 
 
-def test_rerank_passes_chunk_text_as_documents_in_order():
+def test_rerank_passes_title_plus_chunk_text_as_documents_in_order():
+    """The cross-encoder must read the same composed text the embedder saw:
+    title first, then the chunk body, in candidate order."""
     hits = [
         _make_hit("KB0001-v1.0", 0, 0.5, "first chunk"),
         _make_hit("KB0002-v1.0", 0, 0.5, "second chunk"),
@@ -186,7 +244,7 @@ def test_rerank_passes_chunk_text_as_documents_in_order():
     reranker.rerank("my query", hits, top_n=2)
 
     encoder = _FakeTextCrossEncoder.instances[0]
-    assert encoder.rerank_calls == [("my query", ["first chunk", "second chunk"])]
+    assert encoder.rerank_calls == [("my query", ["Title\n\nfirst chunk", "Title\n\nsecond chunk"])]
 
 
 def test_mismatched_score_count_raises():

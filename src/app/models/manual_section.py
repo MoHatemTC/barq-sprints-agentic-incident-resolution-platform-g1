@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 SECTION_ID_PREFIX = "section-"
 
@@ -15,6 +15,41 @@ class ManualSectionType(StrEnum):
     TABLE = "table"
     OCR = "ocr"
     LAYOUT = "layout"
+
+
+class TextBlock(BaseModel):
+    """A block of text content."""
+
+    type: Literal["text"] = "text"
+    text: str
+
+
+class TableBlock(BaseModel):
+    """A structured table with headers and rows."""
+
+    type: Literal["table"] = "table"
+    headers: list[str] | None = None
+    rows: list[list[str]]
+    row_count: int
+    column_count: int
+    metadata: dict[str, Any] | None = None
+
+    def to_semantic_text(self) -> str:
+        """Convert table to clear semantic text for embedding."""
+        lines = []
+        for row in self.rows:
+            parts = []
+            for i, cell in enumerate(row):
+                cell = cell.strip()
+                if not cell:
+                    continue
+                if self.headers and i < len(self.headers) and self.headers[i].strip():
+                    parts.append(f"{self.headers[i].strip()}: {cell}")
+                else:
+                    parts.append(cell)
+            if parts:
+                lines.append(" | ".join(parts))
+        return "\n".join(lines)
 
 
 class ManualSection(BaseModel):
@@ -33,11 +68,25 @@ class ManualSection(BaseModel):
         ..., description='Numbered ("3.4", "10.1.2") or lettered appendix ("A", "E.2")'
     )
     title: str = Field(..., min_length=1, max_length=300)
-    body: str = Field(
-        ...,
-        description="Extracted section content, ready for chunking",
+    blocks: list[TextBlock | TableBlock] = Field(
+        default_factory=list,
+        description="Structured generic blocks (text or table)",
     )
     content_type: ManualSectionType
+
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_legacy_body(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if "body" in data and ("blocks" not in data or not data.get("blocks")):
+                body_val = data.pop("body")
+                data = dict(data)
+                data["blocks"] = [TextBlock(text=body_val)]
+            elif "body" in data:
+                data = dict(data)
+                data.pop("body")
+        return data
+
     pages: tuple[int, ...] = Field(..., description="1-indexed page numbers this section spans")
     ocr_confidence: float | None = Field(
         default=None,
@@ -63,8 +112,19 @@ class ManualSection(BaseModel):
 
     @classmethod
     def build_section_id(cls, section_number: str) -> str:
-        """Deterministic section id from a section number, e.g. "3.4" -> "section-3.4"."""
-        return f"{SECTION_ID_PREFIX}{section_number}"
+        slug = section_number.strip().lower().replace(" ", "-")
+        return f"{SECTION_ID_PREFIX}{slug}"
+
+    @property
+    def body(self) -> str:
+        """Combine blocks into semantic text representation, primarily for chunking."""
+        parts = []
+        for block in self.blocks:
+            if isinstance(block, TextBlock):
+                parts.append(block.text)
+            elif isinstance(block, TableBlock):
+                parts.append(block.to_semantic_text())
+        return "\n\n".join(parts)
 
 
 class ManualSectionChunk(BaseModel):
@@ -91,6 +151,7 @@ class ManualSectionChunk(BaseModel):
     related_known_error_ids: tuple[str, ...] = Field(default_factory=tuple)
     related_change_ids: tuple[str, ...] = Field(default_factory=tuple)
     related_mir_ids: tuple[str, ...] = Field(default_factory=tuple)
+    related_ritm_ids: tuple[str, ...] = Field(default_factory=tuple)
 
     @classmethod
     def build_chunk_id(cls, section_id: str, chunk_index: int) -> str:
@@ -130,6 +191,7 @@ class ManualSectionPayload(BaseModel):
     related_known_error_ids: list[str] = Field(default_factory=list)
     related_change_ids: list[str] = Field(default_factory=list)
     related_mir_ids: list[str] = Field(default_factory=list)
+    related_ritm_ids: list[str] = Field(default_factory=list)
 
     @classmethod
     def from_chunk(cls, chunk: ManualSectionChunk) -> ManualSectionPayload:
@@ -149,6 +211,7 @@ class ManualSectionPayload(BaseModel):
             related_known_error_ids=list(chunk.related_known_error_ids),
             related_change_ids=list(chunk.related_change_ids),
             related_mir_ids=list(chunk.related_mir_ids),
+            related_ritm_ids=list(chunk.related_ritm_ids),
         )
 
     def to_qdrant_payload(self) -> dict[str, Any]:
