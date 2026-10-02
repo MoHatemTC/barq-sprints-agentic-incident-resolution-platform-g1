@@ -52,8 +52,18 @@ Concretely:
 
 `load()` applies the input controls in this order:
 
+0. **Eligibility pre-check (2026-10-02).** `check_eligibility` runs first because it is
+   deterministic and free. An incident that is already ineligible (human-locked,
+   already processed, AI not enabled, unsupported category, inactive) can never
+   produce AI output, so **no model layer runs**: its text is only regex-redacted, the
+   gate records `eligibility_precheck` / `model_layers_skipped`, and `validate` and
+   `act` end the run as `skipped_ineligible`. Before this, the LLM classifier ran
+   first, spending a call (about 2 s and 800 tokens) on runs that could not produce
+   output and showing a model text from tickets an analyst had taken over. Only
+   eligible incidents continue below.
 1. Run deterministic prompt-injection pattern screening on the raw short
-   description and description.
+   description and description (on a copy folded with NFKC, with zero-width
+   characters removed and Cyrillic/Greek look-alikes mapped to Latin).
 2. Regex-redact both fields with the shared observability redactor.
 3. Apply the configured residual-PII mode:
    - `disabled` skips the detector and keeps the regex-redacted fields.
@@ -69,7 +79,9 @@ Concretely:
    persist `***REDACTED***` for both fields and route through the existing
    blocked/escalated outcome.
 
-Pattern-blocked inputs do not call either LLM guardrail. Disabled and shadow modes
+Only an **unambiguous** pattern hit (`blocking`) blocks without a model, and then neither
+LLM guardrail is called. An ambiguous (soft) hit does not block by itself: it proceeds to
+the semantic classifier, which fails closed. Disabled and shadow modes
 do not guarantee residual-PII protection: the semantic classifier receives the
 regex-redacted text, which may still contain contextual PII. In enforced mode it
 runs only after residual-PII protection succeeds and receives the protected text.
@@ -83,6 +95,23 @@ framing ("act as an unrestricted AI," "developer mode"), delimiter attacks
 `<incident>` tag early), and a couple of "decode this and execute it"
 encoded-payload phrasings, including a check for implausibly long base64 runs.
 
+Patterns are split into two severities (2026-10-02). **Hard** patterns are phrasings whose
+only purpose is to override the assistant ("ignore all previous instructions", "disregard
+the system prompt", "do not follow your instructions", "reveal your system prompt", the
+same override in French, Spanish and Arabic, "act as an unrestricted…", and the
+chat-template tokens `<|im_start|>`, `[INST]`, `<|system|>`); a hit blocks immediately.
+**Soft** patterns also occur in legitimate tickets and are sent to the classifier
+instead of blocking: XML tags named `<system>`, `<incident>` or `<evidence>` (pasted logs
+and configs), "from now on you must…" (a policy memo), "decode this … and run it" (a
+procedure), "DAN mode" (a user called Dan), "developer mode" (a browser setting),
+"end of … block", a `### system` header, an HTML comment `<!-- system:`, and a
+`"role": "system"` JSON key. A regex cannot tell "Ignore the previous instructions in
+KB0001, they are outdated" from the attack with the same words; that sentence is still
+blocked, and is recorded as a known limitation in the red-team corpus.
+
+There is no base64-length heuristic: the earlier text of this section described one, and
+#193 removed it because long certificate and base64 blobs are ordinary incident content.
+
 Every pattern requires a phrase, not a bare keyword, on purpose — IT incidents
 say "ignore," "password," "admin," and "system" constantly in completely
 ordinary ways ("please ignore yesterday's stale alert," "admin rights were
@@ -90,8 +119,8 @@ revoked"). `test_pattern_screening_leaves_benign_incidents_alone` runs the
 benign-control fixtures from the seed set through this and checks none of them
 light up, to keep that constraint honest as the patterns evolve.
 
-`PatternScreeningResult` only ever carries `flagged`, `categories`, and a
-`match_count` — never the matched text itself. That's deliberate: whatever gets
+`PatternScreeningResult` only ever carries `flagged`, `categories`, `match_count` and
+`blocking` — never the matched text itself. That's deliberate: whatever gets
 logged or traced from this result can't leak the payload it just found, because
 the payload was never in the result to begin with.
 
@@ -158,6 +187,20 @@ Coverage includes credential-shaped strings (`Authorization: Bearer/Basic`,
 JWTs, provider API keys, database connection strings with embedded
 user:pass@host), plus email, phone, Luhn-valid payment-card PAN, and checksum-valid
 IBAN PII, all before anything reaches a model prompt or a trace.
+
+Key/value credentials are redacted in every common spelling (2026-10-02): `password=…`,
+JSON and Python-dict forms with a quoted key (`{"password": "…"}`), prefixed names
+(`aws_secret_access_key`, `my_password_is`), `secret_key`, `AccountKey`,
+`SharedAccessKey`, `pass:` / `passcode` / `PIN`, `curl -u user:password`, `Cookie` and
+`Set-Cookie` headers, and "the password for X is …"; full-width characters
+(`password＝…`) are folded first. Before this, any secret inside a pasted JSON body, and
+several of the forms above, reached the model and the traces unredacted. A keyword
+inside a longer word (`bypass`, `compass`) and ordinary sentences ("the token expired")
+are left alone.
+
+Not covered, by decision: obfuscated addresses ("john dot doe at corp dot com") and bare
+IP addresses. The deterministic layer is shape-based; the residual-PII detector is the
+second line for contextual cases.
 
 ### Residual-PII detector — `agent/guardrails/pii_detection.py`
 
@@ -397,6 +440,33 @@ the provisional PII taxonomy, agree on acceptable model-quality criteria using
 an approved representative evaluation set, confirm retention/region/access
 controls, and accept the enforced-mode fail-closed availability impact. Those are
 deployment prerequisites, not behavior implemented or proven by this change.
+
+## Red-team corpus and recorded results — `data/adversarial/redteam_corpus.json`
+
+The seed set below has 11 cases. The red-team corpus extends it to **78**: 33 attacks
+(plain, disguised with homoglyphs / zero-width characters / leetspeak, translated, role
+and JSON injection, tool and field coercion, exfiltration), 15 benign look-alikes (XML
+logs, policy memos, a certificate blob, an Arabic ticket) and 30 secret/PII forms.
+`scripts/run_redteam.py` runs it through pattern screening and redaction and
+`tests/agent/guardrails/test_redteam_corpus.py` pins **the exact recorded outcome of every
+case, including the documented gaps**, so a regression and an improvement both fail until
+the corpus is updated on purpose. Secret-shaped values are stored as fragments joined at
+run time, so the repository's own secret scanner needs no exceptions.
+
+Recorded results (`docs/evidence/redteam_results.json`; deterministic layer only):
+
+| | Before the 2026-10-02 audit | After |
+|---|---|---|
+| Attacks caught by patterns | 15 / 33 | 25 / 33 |
+| Benign texts hard-blocked | 7 / 15 | 1 / 15 (6 more are sent to the classifier) |
+| Secret / PII forms redacted | 19 / 30 (card, IBAN, SSN in #189) | 28 / 30 |
+
+Still not caught by patterns, left to the semantic classifier: leetspeak, polite
+rephrasing, a bare `Assistant:` prefix, tool-call and field coercion, exfiltration
+requests, base64 with no verb, and role-confusion appeals. **The semantic classifier's own
+detection rate has not been measured**: it needs a model call and an approved budget, so
+no figure for the combined system is claimed. Not redacted: obfuscated e-mail and bare
+IP addresses.
 
 ## Adversarial seed set — `data/adversarial/sprint3_seed_set.json`
 

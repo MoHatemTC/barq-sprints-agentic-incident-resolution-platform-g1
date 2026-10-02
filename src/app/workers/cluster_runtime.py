@@ -3,19 +3,27 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
 import structlog
 
+from agent.config import get_agent_settings
 from agent.dependencies import get_agent_dependencies
-from agent.policy import snapshot_incident
-from agent.state import EventPayload
+from agent.errors import HumanLockedError
+from agent.guardrails.input_screening import screen_text
+from agent.policy import assess_risk, check_eligibility, snapshot_incident
+from agent.state import ClassificationResult, EventPayload, RiskLevel
 from agent.tools import ToolCallContext
 from app.models.execution_log import ExecutionAction, ExecutionLogCreatePayload, ExecutionStatus
 from app.models.incident import AIProcessingState, IncidentUpdatePayload
+from app.models.knowledge import Classification
+from app.utils.async_bridge import run_blocking
 from app.workers.db import WorkerRepo
 from app.workers.producer import send_incident_event
+from app.workers.retry_policy import TerminalError
 from observability.redaction import redact_text
 
 logger = structlog.getLogger(__name__)
@@ -62,18 +70,59 @@ def cacheable_result(result: dict) -> bool:
     )
 
 
-def _safe_async_run(coro: Any) -> Any:
+@dataclass(frozen=True, slots=True)
+class ReuseVerdict:
+    """Whether a follower may take a cluster's resolution without running the graph."""
+
+    allowed: bool
+    reason: str
+
+
+def follower_reuse_verdict(
+    raw_incident: Mapping[str, Any], solution: Mapping[str, Any]
+) -> ReuseVerdict:
+    """Decide, with no LLM call, whether this follower may reuse the leader's resolution.
+
+    Clustering only says two incidents *read* alike. It says nothing about the follower's
+    own priority, service tier, eligibility or text, and the PRD's safety rules are per
+    incident: no high-risk action without a recorded approval (NFR-05), no work on an
+    ineligible or locked incident (FR-03), injection screening before anything is applied
+    (FR-18). So the follower is held to the same deterministic gates the graph applies
+    (``check_eligibility``, pattern screening, ``assess_risk``) on its own record, and only
+    a clean, low-risk follower skips the graph. Everything else returns ``allowed=False``
+    and runs the full governed path, which still reuses the cached draft.
+    """
+    settings = get_agent_settings()
     try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        loop = None
+        snapshot = snapshot_incident(raw_incident)
+    except Exception:  # noqa: BLE001 - an unreadable record is never auto-resolved
+        return ReuseVerdict(False, "follower incident could not be read")
 
-    if loop and loop.is_running():
-        import concurrent.futures
+    eligibility = check_eligibility(
+        snapshot,
+        event_number=snapshot.number,
+        supported_categories=settings.agent_supported_categories,
+    )
+    if not eligibility.eligible:
+        return ReuseVerdict(False, "ineligible: " + "; ".join(eligibility.reasons))
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-            return pool.submit(asyncio.run, coro).result()
-    return asyncio.run(coro)
+    if screen_text(f"{snapshot.short_description}\n{snapshot.description}").flagged:
+        return ReuseVerdict(False, "input screening flagged the incident text")
+
+    try:
+        label = Classification(str(solution.get("classification") or ""))
+    except ValueError:
+        return ReuseVerdict(False, "the leader recorded no usable classification")
+    risk = assess_risk(
+        snapshot,
+        ClassificationResult(
+            label=label, rationale="reused from the resolved cluster", model_confidence=1.0
+        ),
+        risk_priorities=settings.agent_risk_priorities,
+    )
+    if risk.level is not RiskLevel.LOW or risk.approval_required:
+        return ReuseVerdict(False, f"risk {risk.level.value}: " + "; ".join(risk.reasons))
+    return ReuseVerdict(True, "follower passed eligibility, screening and risk gates")
 
 
 def apply_follower_cluster_resolution(
@@ -132,20 +181,20 @@ def apply_follower_cluster_resolution(
         },
     ):
         try:
-            _safe_async_run(
+            run_blocking(
                 deps.tools.invoke(
                     "write_ai_fields",
                     context=tool_context,
                     arguments={"sys_id": sys_id, "payload": update_payload},
                 )
             )
-        except Exception as exc:
-            logger.warning(
-                "follower_cluster_write_back_failed",
-                execution_id=execution_id,
-                sys_id=sys_id,
-                error=str(exc),
-            )
+        except HumanLockedError as exc:
+            # Same translation the graph applies: an analyst took over, so this run ends
+            # without a write and without a retry.
+            raise TerminalError(str(exc)) from exc
+        # Any other failure propagates. Swallowing it here marked the follower
+        # ``succeeded`` and its cluster membership applied with nothing written to
+        # ServiceNow.
 
         log_payload = ExecutionLogCreatePayload(
             incident_sys_id=sys_id,
@@ -156,12 +205,17 @@ def apply_follower_cluster_resolution(
             result=str(solution.get("summary") or "Resolved via cluster cache"),
         )
         try:
-            _safe_async_run(
+            run_blocking(
                 deps.tools.invoke(
                     "write_execution_log",
                     context=tool_context,
                     arguments={"sys_id": sys_id, "payload": log_payload},
                 )
             )
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001 - the incident write already landed
+            logger.warning(
+                "follower_cluster_execution_log_failed",
+                execution_id=execution_id,
+                sys_id=sys_id,
+                error=redact_text(str(exc))[:500],
+            )

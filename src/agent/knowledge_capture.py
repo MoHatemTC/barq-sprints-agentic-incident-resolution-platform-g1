@@ -19,7 +19,7 @@ from typing import Any
 
 import structlog
 
-from agent.article_composer import compose_article
+from agent.article_composer import compose_article, faithfulness_verdict
 from agent.dependencies import AgentDependencies
 from agent.state import IncidentSnapshot
 from agent.tools.registry import RegistryRefusalError, ToolCallContext
@@ -103,6 +103,25 @@ async def capture_human_resolution(
         article_number=article_number,
     )
     if article is None:
+        return None
+
+    # 1b. Enforce faithfulness before anything is published. The composer is a model:
+    #     an article that states a number the human never gave, or is mostly words nobody
+    #     supplied, would be re-ingested as *human* knowledge and cited by later runs.
+    verdict = faithfulness_verdict(
+        article,
+        redact_text(solution_text),
+        incident_context=f"{incident.short_description}\n{incident.description}",
+    )
+    if not verdict.ok:
+        logger.error(
+            "knowledge_capture_unfaithful_article",
+            execution_id=execution_id,
+            article_number=article.article_id,
+            ungrounded_count=len(verdict.ungrounded),
+            ungrounded_ratio=round(verdict.ratio, 2),
+            states_unstated_numbers=verdict.states_unstated_numbers,
+        )
         return None
 
     # 2. Publish through the registry — server-enforced and audited. Refusal or

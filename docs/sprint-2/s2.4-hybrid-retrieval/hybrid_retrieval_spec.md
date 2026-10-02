@@ -2,7 +2,7 @@
 
 **Sprint**: Sprint 2 (S2.4) — Hybrid Retrieval: Fusion, Metadata Filtering, Reranking & Baseline Measurement
 **Status**: Implemented; one acceptance gap open (see §8)
-**Read this before touching**: `src/retrieval/hybrid_search.py`, `src/retrieval/filters.py`, `src/retrieval/rerank.py`, `eval/ablation.py`
+**Read this before touching**: `src/app/retrieval/hybrid_search.py`, `src/app/retrieval/filters.py`, `src/app/retrieval/rerank.py`, `eval/ablation.py`
 
 This is the reference doc for anyone extending, debugging, or auditing the retrieval
 layer built in this sprint. `sprint2_retrieval_report.md` (auto-generated, same
@@ -41,10 +41,10 @@ for when you change any of them.
 caller
   │
   ▼
-hybrid_search() / timed_hybrid_search()      [src/retrieval/hybrid_search.py]
+hybrid_search() / timed_hybrid_search()      [src/app/retrieval/hybrid_search.py]
   │
   ├─ 1. Resolve mode: explicit `mode=` arg > RetrievalSettings.retrieval_mode
-  ├─ 2. build_metadata_filter(metadata, extra)  [src/retrieval/filters.py]
+  ├─ 2. build_metadata_filter(metadata, extra)  [src/app/retrieval/filters.py]
   │      → always injects workflow_state + security_level conditions FIRST,
   │        caller's `extra` filter is appended AFTER, never replaces them
   ├─ 3. engine.embed_query(query)              [dense vector + sparse indices/values]
@@ -89,7 +89,7 @@ Two things worth internalizing immediately:
 
 ---
 
-## 3. Metadata filtering (`src/retrieval/filters.py`)
+## 3. Metadata filtering (`src/app/retrieval/filters.py`)
 
 ### 3.1 The two conditions that are never optional
 
@@ -140,7 +140,7 @@ should be a new builder field, not an overload of `max_security_level`.
 
 ---
 
-## 5. Reranking (`src/retrieval/rerank.py`)
+## 5. Reranking (`src/app/retrieval/rerank.py`)
 
 - **Model**: FastEmbed's `TextCrossEncoder`, model name from
   `RetrievalSettings.rerank_model` (overridable per-instance via

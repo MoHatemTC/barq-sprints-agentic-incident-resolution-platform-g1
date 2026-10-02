@@ -139,3 +139,18 @@ async def test_config_retrieval_mode_variants(mode: str) -> None:
     assert resp.status_code == 200
     data = resp.json()
     assert data["retrieval_mode"] == mode
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("enabled", [True, False])
+async def test_config_reports_the_real_semantic_cache_switch(enabled: bool) -> None:
+    """``semantic_caching`` must mirror ENABLE_SEMANTIC_CACHE, the only switch the worker reads."""
+    app = create_app(settings=mock_settings(enable_semantic_cache=enabled))
+    app.state.engine = MagicMock()
+    app.state.session_factory = MagicMock()
+    app.state.redis = MagicMock()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/api/v1/config", headers=AUTH_HEADERS)
+
+    assert resp.json()["active_feature_flags"]["semantic_caching"] is enabled

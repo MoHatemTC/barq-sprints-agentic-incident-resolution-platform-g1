@@ -163,7 +163,9 @@ class TestRoutes:
         result = run(VPN, make_deps(llm=llm, servicenow=backend))
         assert result["path"] == ["load", "validate", "act"]
         assert result["outcome"] == "skipped_ineligible"
-        assert llm.purposes() == ["pii_detection", "injection_classifier"]
+        # A locked incident is an analyst's ticket: no model is shown its text, and no
+        # call is spent on a run that cannot produce AI output.
+        assert llm.purposes() == []
         assert backend.updates == []
 
     def test_elevated_risk_drafts_and_awaits_approval(self) -> None:

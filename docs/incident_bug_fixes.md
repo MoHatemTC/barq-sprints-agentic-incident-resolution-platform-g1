@@ -75,6 +75,11 @@ Ali explicitly included these repairs in #191 after verification of merged #204:
   diagnosis, citation, critic, safety and confidence checks. Reuse skips draft
   generation only when every cited version and section exists in current evidence.
   The critic receives the current sanitized incident to check applicability.
+  **Superseded in part by #210 and the 2026-10-02 audit:** a follower of an already
+  *resolved* cluster is now resolved without the graph (zero LLM calls), but only after
+  `follower_reuse_verdict` — eligibility, pattern screening and `assess_risk` on the
+  follower's own record — passes. Any follower that fails it runs the full governed graph
+  with the cached draft. See [sprint4_semantic_caching_design.md](sprint4_semantic_caching_design.md).
 - Running/paused leader followers park as queued `semantic_cluster_wait`, distinct
   from genuine human interrupts. The existing maintenance sweep dispatches resolved,
   failed or expired waiters using their immutable event and original correlation ID.

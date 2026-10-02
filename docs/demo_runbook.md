@@ -44,8 +44,9 @@ docker exec -e PGPASSWORD="$POSTGRES_PASSWORD" barq-postgres psql -U postgres -d
 ```
 
 You want: three `barq-*` containers up, a Qdrant collection with a few dozen
-points, and seven Postgres tables (`events`, `executions`, `idempotency_keys`,
-`workflow_state`, `approvals`, `failures`, `retry_state`).
+points, and nine Postgres tables (`events`, `executions`, `idempotency_keys`,
+`workflow_state`, `approvals`, `failures`, `retry_state`, `semantic_clusters`,
+`semantic_cluster_members`).
 
 ## 1 · Point the run at the instance you want
 
@@ -94,11 +95,11 @@ curl -s http://127.0.0.1:8099/ready     # {"status":"ready","database":"connecte
 ```
 
 `/ready` checks connectivity, not schema version. Confirm `uv run alembic current`
-prints `0003_execution_lease (head)` before running the demo. An older local
+prints `0005_cluster_waiters (head)` before running the demo. An older local
 database may have the seven Sprint 2 tables but no `alembic_version` row;
 `upgrade head` then tries to recreate `events` and fails. Inspect that schema
 against migration `0001` before stamping it as `0001_postgresql_state_schema`,
-then apply migrations `0002` and `0003`. Never stamp an unknown schema just to
+then apply migrations `0002` through `0005`. Never stamp an unknown schema just to
 silence the error.
 
 ## 3 · Run the demo

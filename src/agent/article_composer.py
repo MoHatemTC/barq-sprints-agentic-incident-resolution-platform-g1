@@ -14,6 +14,7 @@ easily in tests.
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 
 from agent.dependencies import AgentDependencies
 from agent.nodes.classify import incident_text
@@ -99,18 +100,94 @@ def _content_tokens(text: str) -> set[str]:
     }
 
 
+def _stem(token: str) -> str:
+    """Fold a word to a rough stem so "restarted"/"restarting" match "restart".
+
+    Tokens containing a digit are facts (versions, sizes, addresses, ids) and are compared
+    exactly, never stemmed.
+    """
+    if any(ch.isdigit() for ch in token):
+        return token
+    for suffix in ("ing", "ed", "es", "s"):
+        if token.endswith(suffix) and len(token) - len(suffix) >= 3:
+            return token[: -len(suffix)]
+    return token
+
+
+#: Content words a faithful article adds only to structure what the human said.
+_SCAFFOLDING = frozenset(
+    {
+        "apply",
+        "check",
+        "confirm",
+        "ensure",
+        "follow",
+        "following",
+        "issue",
+        "issues",
+        "perform",
+        "problem",
+        "procedure",
+        "resolution",
+        "resolve",
+        "resolved",
+        "steps",
+        "verify",
+    }
+)
+
+#: An article whose content is mostly words nobody supplied is invention, not rewording.
+MAX_UNGROUNDED_RATIO = 0.5
+
+
 def check_faithfulness(
     article: object, solution_text: str, *, incident_context: str = ""
 ) -> list[str]:
     """Return content tokens in the article body that no source text contains.
 
     Deterministic and extractive — deliberately not a second LLM call, so the
-    capture path stays at exactly one model invocation. Stopwords and tokens
-    under ``MIN_TOKEN_LENGTH`` are ignored; numbers are checked (they are facts).
+    capture path stays at exactly one model invocation. Stopwords, structural
+    scaffolding words and tokens under ``MIN_TOKEN_LENGTH`` are ignored, inflections of
+    a source word count as grounded, and numbers are checked exactly (they are facts).
     """
-    allowed = _content_tokens(solution_text) | _content_tokens(incident_context)
+    allowed_tokens = _content_tokens(solution_text) | _content_tokens(incident_context)
+    allowed = allowed_tokens | {_stem(token) for token in allowed_tokens}
     body_tokens = _content_tokens(getattr(article, "body", ""))
-    return sorted(body_tokens - allowed)
+    return sorted(
+        token
+        for token in body_tokens
+        if token not in allowed and _stem(token) not in allowed and token not in _SCAFFOLDING
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class FaithfulnessVerdict:
+    ok: bool
+    ungrounded: tuple[str, ...]
+    ratio: float
+    states_unstated_numbers: bool
+
+
+def faithfulness_verdict(
+    article: object, solution_text: str, *, incident_context: str = ""
+) -> FaithfulnessVerdict:
+    """Decide whether a composed article may be published as human knowledge.
+
+    It fails when the body states a number or identifier the human never gave (MTU 2048
+    where they said 1400), or when most of its content words came from nowhere. Ordinary
+    rewording and structuring pass. This is the enforcement of the backstop the design
+    names; ``check_faithfulness`` alone only reports.
+    """
+    issues = check_faithfulness(article, solution_text, incident_context=incident_context)
+    body_tokens = _content_tokens(getattr(article, "body", ""))
+    ratio = len(issues) / len(body_tokens) if body_tokens else 0.0
+    numbers = any(any(ch.isdigit() for ch in token) for token in issues)
+    return FaithfulnessVerdict(
+        ok=not numbers and ratio <= MAX_UNGROUNDED_RATIO,
+        ungrounded=tuple(issues),
+        ratio=ratio,
+        states_unstated_numbers=numbers,
+    )
 
 
 def _slugify(value: str | None) -> str:

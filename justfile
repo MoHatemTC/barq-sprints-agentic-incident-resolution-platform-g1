@@ -31,12 +31,17 @@ typecheck:
 precommit:
     uv run pre-commit run --all-files  
 
-# Everything CI runs, in the same order.
+# The gate that needs no running services, in the same order CI runs it.
+# CI additionally runs, against real PostgreSQL/Redis: `just test-integration` and the
+# database suite (see the "Database migrations, approvals, audit and idempotency" step in
+# .github/workflows/ci.yml), the ServiceNow SDK build, and CodeQL.
 check:
     uv lock --check
     just lint
     uv run ruff format --check .
     just typecheck
+    uv run python scripts/export_openapi.py --check
+    uv run python scripts/scan_repo_secrets.py
     just test
 
 # ── S2.3 — queue, workers, dead-letter path ────────────────────────────────

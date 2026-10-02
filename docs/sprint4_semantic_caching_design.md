@@ -1,12 +1,26 @@
-> **Integration correction in PR #191:** The historical design below describes
-> full pipeline reuse, which the merged worker could not safely provide. Production
-> now shares only a structured draft candidate; every follower runs its own graph
-> gates, approval when required, and write. Minimal webhooks are expanded through
-> a governed incident read, waiters are durably redispatched by maintenance, and
-> approval closure updates the authoritative cluster. See
-> [incident_bug_fixes.md](incident_bug_fixes.md#semantic-cache-integration-repair)
-> for implemented behavior, migration and verification limits. Original calibration
-> claims below have not been re-measured by this integration repair.
+> **Current behaviour (read this first).** The history of this feature is: the original
+> design reused the leader's full result for every follower (below); PR #191 replaced that
+> with draft-candidate reuse where every follower ran the whole graph; PR #210 then
+> restored direct reuse so a follower costs zero LLM calls. The 2026-10-02 audit found
+> that #210 applied the leader's resolution to any follower **without** eligibility,
+> screening or risk checks, so a priority-1, Tier-1 or MFA-reset incident that merely
+> *read like* the leader could be marked `complete` with no approval. It now works like this:
+>
+> 1. A follower that joins a **resolved** cluster is first checked with
+>    `follower_reuse_verdict` — deterministic, no LLM: `check_eligibility`, pattern
+>    screening of its own text, and `assess_risk` on its own record using the leader's
+>    classification.
+> 2. If it passes (eligible, clean, **low** risk) the leader's resolution is applied with
+>    zero LLM calls, as in #210. A failed ServiceNow write now fails the execution
+>    instead of being logged and reported as success.
+> 3. Otherwise it runs the **full governed graph** (risk routing, approval, critic,
+>    safety, write), still offered the cached draft so only the `generate` call is saved.
+>
+> Minimal webhooks are expanded through a governed incident read, waiters are durably
+> redispatched by maintenance, and approval closure updates the authoritative cluster
+> (see [incident_bug_fixes.md](incident_bug_fixes.md#semantic-cache-integration-repair)).
+> Regression tests: `tests/test_follower_reuse_governance.py`. The audit write-up is
+> [audit_2026-10-02.md](audit_2026-10-02.md).
 
 # Sprint 4 (S4.2) — Semantic Caching & Single-Flight Incident Clustering Design
 
@@ -172,6 +186,18 @@ Separation Gap (Min Positive - Max Negative):
 1. **Zero False Positives:** At $\tau = 0.76$, Precision is $1.0000$ (0 false cluster admissions).
 2. **Zero False Negatives:** Recall is $1.0000$ (all 21 ground-truth duplicate bursts clustered).
 3. **Safety Margin:** Provides a $+0.0202$ margin above the highest negative pair ($0.7398$) while staying comfortably below the positive cluster centroid ($0.8772$).
+
+> **Calibration caveat (2026-10-02 audit).** Points 1–3 are *in-sample*: the threshold was
+> tuned and scored on the same 38 pairs, with only 0.020 between the hardest negative and
+> $\tau$ and 0.008 between $\tau$ and the weakest positive. On an independent labelled set
+> (`eval/evaluation_set.json`: 23 answerable incidents, 220 pairs resolved by *different*
+> articles) **6 pairs score $\ge 0.76$**, the highest 0.838 ("emergency change approval"
+> vs "order service pool emergency change"; "MFA lockout" vs "lost phone, VPN
+> re-authentication", 0.793). Those labels mean "resolved by a different article", not
+> "a different incident", so this is a warning rather than a measured false-positive rate,
+> and it says nothing about missed clusters. The conclusion the system acts on is that
+> similarity is necessary, never sufficient: see the follower gate at the top of this page.
+
 
 To re-run threshold validation:
 ```bash

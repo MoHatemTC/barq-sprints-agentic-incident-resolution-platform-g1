@@ -58,19 +58,20 @@ Retrieval and operational state are deliberately separate: Qdrant holds vectors 
 | `src/app/models/` | Pydantic domain models: `incident.py`, `execution_log.py`, `oauth.py`, `work_note.py` (S1.5) and `knowledge.py` (S1.4) |
 | `src/app/exceptions/` | Typed ServiceNow errors raised by the client (S1.5) |
 | `src/app/publishing/` | S1.4 ServiceNow KB publishing: `servicenow_kb.py` (idempotent upsert over OAuth), `payload.py`, `html.py`, `provisioning.py` |
-| `src/app/retrieval/` | S1.4 knowledge pipeline: `barq_manual.py`, `extraction.py`, `chunking.py`, `embedding.py`, `ingest.py`, `search.py`, `sources.py` |
+| `src/app/retrieval/` | Knowledge pipeline and retrieval: `hybrid_search.py` (dense + sparse fusion), `filters.py`, `rerank.py`, `chunking.py`, `embedding.py`, `ingest.py`, `sources.py`, `html_markdown.py`, plus `extraction/` (OCR, tables, layout, section detection) and `manual/` (the BARQ manual parser, including the Markdown parser). S1.4, S2.4, S2.6 |
 | `src/app/utils/` | Shared helpers, including timezone handling for ServiceNow datetimes |
 | `src/retrieval/` | Re-export shim onto `src/app/retrieval/`. Kept for import paths predating the `app` package; no logic of its own |
 | `src/app/repositories/` | Persistence layer: `audit.py` and `idempotency.py` against PostgreSQL (S2.2) |
-| `src/app/services/` | Intentionally empty — business logic lands here |
+| `src/app/services/` | `clustering/signature.py`: incident eligibility and the canonical signature the semantic cache embeds (S4.2) |
 | `src/app/workers/` | Celery application, producer, replay, retry policy, sync engine and the incident task (S2.3) |
 | `src/workers/` | Compatibility re-export of `src/app/workers/`; no logic of its own |
-| `src/agent/` | The LangGraph state machine: `graph.py`, `nodes/` (load → validate → classify → determine_risk → retrieve → diagnose → generate → verify_evidence → safety_check → confidence_check → act), `llm.py` (Gemini through the LiteLLM proxy), `retrieval.py`, `policy.py` and `checkpointer.py` (S2.4, S2.5, S3.4) |
+| `src/agent/` | The LangGraph state machine: `graph.py`, `nodes/` (load → validate → classify → determine_risk → retrieve → diagnose → generate → verify_evidence → safety_check → confidence_check → act), `llm.py` (Gemini through the LiteLLM proxy), `retrieval.py`, `policy.py` (deterministic eligibility and risk) and `checkpointer.py` (S2.4, S2.5, S3.4); `tools/` (the permissioned `ToolRegistry`, S3.2); `guardrails/` (input screening, residual-PII detection, output validation, and the red-team harness, S3.3); `semantic_cache.py` (clustering and single-flight, S4.2); `knowledge_capture.py` / `article_composer.py` (human-resolution write-back, S3.5) |
+| `src/api/static/` | The same-origin approval screen served at `/review` (strict CSP, token held in memory only) |
 | `src/observability/` | Langfuse tracing and the log/trace redaction helpers |
-| `eval/` | Retrieval ablation and the report generator that writes `docs/sprint-2/s2.4-hybrid-retrieval/` (S2.4) |
+| `eval/` | Retrieval ablation and report generator (S2.4); the semantic-cache threshold calibration (S4.2); the budgeted, cached DeepEval/RAGAS harness (`deep_eval.py`, `eval_runtime.py`, `README.md`) |
 | `migrations/` | Alembic versions for the PostgreSQL state schema (S2.2) |
 | `scripts/` | Operational entry points: `verify_permissions.py` (S1.2 permission harness), `extract_barq_kb.py`, `validate_corpus.py`, `setup_qdrant.py`, `seed_qdrant.py`, `publish_kb.py` (S1.4); `test_client.py` (S1.5 client exercise); `export_openapi.py`, `s2_3_cli_walkthrough.sh` |
-| `data/` | `corpus/` — the knowledge articles and ingestion report; `coverage_matrix.csv` — the incident-to-article ground truth (S1.4) |
+| `data/` | `corpus/` — the knowledge articles, the manual (Markdown and semantic sections) and the RAG evaluation dataset; `coverage_matrix.csv` — the incident-to-article ground truth (S1.4); `adversarial/` — the red-team corpus. The programme PDF is git-ignored |
 | `tests/` | pytest suite. `conftest.py` injects fake ServiceNow settings so tests never depend on a local `.env` |
 | `servicenow/ai_incident_orchestrator/` | Scoped ServiceNow application: exported update-set XML plus the SDK source it was built from |
 | `docs/` | Sprint deliverables, field dictionary, verification records, screenshots |
@@ -86,7 +87,7 @@ Retrieval and operational state are deliberately separate: Qdrant holds vectors 
 | `docs/ROADMAP.md` | The full four-sprint PRD scope, not just what is built so far |
 | `docs/demo_runbook.md` | Step-by-step runbook for driving the end-to-end demo against the real stack, with the prerequisites and the expected output of each phase |
 
-`src/app/services/` is intentionally empty. It marks the agreed structure for work that lands later; every other row above matches the tree as it stands.
+Rows describe the tree as of the 2026-10-02 audit; a row that no longer matches the code is a bug in this table, not in the code.
 
 ---
 
@@ -95,13 +96,19 @@ Retrieval and operational state are deliberately separate: Qdrant holds vectors 
 Requires Python 3.12, [`uv`](https://docs.astral.sh/uv/), and Docker for the datastores.
 
 ```bash
-uv sync                       # install dependencies
-cp .env.example .env          # then fill in your own values
-docker compose up -d          # Qdrant, PostgreSQL, Redis
-just run                      # start the API with reload
+uv sync                                       # install dependencies
+cp .env.example .env                          # then fill in your own values
+docker compose up -d postgres redis qdrant    # the datastores only
+uv run alembic upgrade head                   # PostgreSQL schema (head: 0005_cluster_waiters)
+uv run python scripts/setup_qdrant.py         # create the Qdrant collection (idempotent)
+uv run python scripts/seed_qdrant.py          # embed and load the knowledge corpus
+just run                                      # the API, with reload (http://127.0.0.1:8000)
+just worker                                   # a Celery worker, in a second terminal
 ```
 
-`POSTGRES_PASSWORD` has no default — Compose refuses to start until you set it. `.env` is gitignored; only `.env.example` is committed, and it must never contain a real credential.
+`docker compose up -d` with no service names also starts the `api` and `celery-worker` containers (and the pgweb / redis-commander admin tools), which would collide with `just run` on port 8000 — name the datastores as above, or run the whole stack in containers and skip `just run`. `POSTGRES_PASSWORD` has no default — Compose refuses to start until you set it. `.env` is gitignored; only `.env.example` is committed, and it must never contain a real credential.
+
+On macOS the worker needs `--pool=threads`; the full local walkthrough, including that and the approval screen, is [docs/demo_runbook.md](docs/demo_runbook.md).
 
 ### Quality gate
 
@@ -110,10 +117,10 @@ just lint        # ruff check
 just format      # ruff format
 just typecheck   # mypy src
 just test        # pytest
-just check       # everything CI runs, in the same order
+just check       # the gate that needs no running services, in CI's order
 ```
 
-CI runs the same commands on every pull request. The tests pass on a clean clone with no `.env` present.
+`just check` also verifies `openapi.json` is in sync and runs the repository secret scan. CI additionally runs, against real PostgreSQL and Redis, `just test-integration` and the database suite (migrations, approvals, audit reconstruction, idempotency), the ServiceNow SDK build, and CodeQL; those need Docker, so they are not part of `just check`. The unit tests pass on a clean clone with no `.env` present.
 
 ---
 
@@ -125,13 +132,13 @@ The exported update set is at [`servicenow/ai_incident_orchestrator/ai_incident_
 
 The reproducible source is the official ServiceNow SDK project under [`servicenow/ai_incident_orchestrator/sdk-app/`](servicenow/ai_incident_orchestrator/sdk-app/). It is not a substitute for the exported update set.
 
-All thirteen Incident columns carry the `x_2215032_ai_inc_0_ai_` prefix. **Scripts must use internal choice values (`in_progress`), never display labels.** Field types, permitted values, writing component and intended write permissions are in the [field dictionary](docs/sprint-1/s1.1-scoped-app-and-field-model/field-model.md).
+All fourteen Incident columns carry the `x_2215032_ai_inc_0_ai_` prefix. **Scripts must use internal choice values (`in_progress`), never display labels.** Field types, permitted values, writing component and intended write permissions are in the [field dictionary](docs/sprint-1/s1.1-scoped-app-and-field-model/field-model.md).
 
 ---
 
 ## Sprint 1 — Platform Build
 
-Goal: the platform side exists as a real ServiceNow application, with an audit trail and an identity a risk owner would sign off. Covers FR-01, FR-02 and FR-06. Tracked in the [Sprint 1 milestone](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/milestone/1). Sprints 1–3 have merged code; [the roadmap](docs/ROADMAP.md) records the remaining Sprint 4 PRD scope, for which Airtable has not yet published tasks.
+Goal: the platform side exists as a real ServiceNow application, with an audit trail and an identity a risk owner would sign off. Covers FR-01, FR-02 and FR-06. Tracked in the [Sprint 1 milestone](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/milestone/1). Sprints 1–3 are merged and Sprint 4 is in progress (see [Sprint 4](#sprint-4--stabilization--new-surfaces) below); [the roadmap](docs/ROADMAP.md) records the PRD scope.
 
 | Task | Scope | Owner |
 |---|---|---|
@@ -180,11 +187,28 @@ Goal: an explicit, checkpointed state machine that retrieves well, knows when no
 |---|---|---|---|
 | S3.1 | Multi-agent diagnosis and resolution: diagnostic, resolution and critic/verifier agents | [@MohamedAbdelaiem](https://github.com/MohamedAbdelaiem) | Merged — [#156](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pull/156) |
 | S3.2 | Tool registry, permission classes and server-side allowlist enforcement | [@ahmedtamer101](https://github.com/ahmedtamer101) | Merged — [#157](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pull/157) |
-| S3.3 | Input and output guardrails: injection screening, redaction, schema validation, enforcing `safety_check` | [@Tasneemmohammed0](https://github.com/Tasneemmohammed0) | In progress |
-| S3.4 | True LangGraph interrupt/resume, approval audit trail and crash-recovery completion | [@ali-ezz](https://github.com/ali-ezz) | In review — [#158](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pull/158) |
+| S3.3 | Input and output guardrails: injection screening, redaction, schema validation, enforcing `safety_check` | [@Tasneemmohammed0](https://github.com/Tasneemmohammed0) | Merged — [#168](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pull/168) |
+| S3.4 | True LangGraph interrupt/resume, approval audit trail and crash-recovery completion | [@ali-ezz](https://github.com/ali-ezz) | Merged — [#158](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pull/158) |
 | S3.5 | Human-resolution knowledge capture: KB write-back and Qdrant re-ingestion loop | [@kerolos-mohsen](https://github.com/kerolos-mohsen) | Merged — [#159](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pull/159) |
 
 Design notes: [`docs/sprint3_multi_agent_design.md`](docs/sprint3_multi_agent_design.md), [`docs/sprint3_tool_registry.md`](docs/sprint3_tool_registry.md), [`docs/sprint3_hitl_design.md`](docs/sprint3_hitl_design.md), [`docs/sprint3_recovery_design.md`](docs/sprint3_recovery_design.md) and [`docs/sprint3_knowledge_capture_design.md`](docs/sprint3_knowledge_capture_design.md).
+
+---
+
+## Sprint 4 — Stabilization & New Surfaces
+
+Goal: make the platform operable and add the new surfaces. **Airtable is authoritative for task status; this table records what is merged on `main`.**
+
+| Task | Scope | Owner (Airtable) | Merged on `main` |
+|---|---|---|---|
+| S4.1 | HITL pause/resume fix and a chatbot-usable ServiceNow tool | [@ali-ezz](https://github.com/ali-ezz) | Part 1 (HITL): [#182](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pull/182), [#183](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pull/183), [#184](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pull/184), [#191](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pull/191). Part 2 (chatbot tool): not built |
+| S4.2 | Semantic caching for concurrent similar incidents | [@MohamedAbdelaiem](https://github.com/MohamedAbdelaiem) | [#204](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pull/204), [#208](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pull/208), [#210](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pull/210) |
+| S4.3 | DeepEval and RAGAS evaluation suite | [@ahmedtamer101](https://github.com/ahmedtamer101) | Evaluation harness and dataset: [#190](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pull/190), [#209](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pull/209) (Kerolos and Tasneem, per the 2026-09-29 allocation). The CI evaluation gate (PRD FR-20) is not built |
+| S4.4 | ServiceNow chatbot, frontend and backend | [@kerolos-mohsen](https://github.com/kerolos-mohsen) / [@Tasneemmohammed0](https://github.com/Tasneemmohammed0) | Not built |
+
+Also merged in Sprint 4: query rewriting and article-level diversity ([#191](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pull/191)) and residual-PII detection, default off ([#189](https://github.com/MoHatemTC/barq-sprints-agentic-incident-resolution-platform-g1/pull/189)).
+
+Design and evidence: [`docs/sprint4_semantic_caching_design.md`](docs/sprint4_semantic_caching_design.md), [`docs/incident_bug_fixes.md`](docs/incident_bug_fixes.md), [`docs/retrieval_query_rewrite_and_reranking.md`](docs/retrieval_query_rewrite_and_reranking.md), the [2026-10-02 system audit](docs/audit_2026-10-02.md) and the [operations runbook](docs/operations_runbook.md).
 
 ---
 

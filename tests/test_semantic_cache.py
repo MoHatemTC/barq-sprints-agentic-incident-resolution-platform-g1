@@ -899,6 +899,7 @@ def test_redis_loss_recovery_from_postgresql_authoritative_source() -> None:
     assert "barq:cluster:active_set" in redis_store
 
 
+@pytest.mark.integration
 def test_live_multiprocess_redis_race_prevents_duplicate_leaders() -> None:
     """CRITICAL MULTI-PROCESS INVARIANT TEST:
     Executes across 2 truly separate OS processes against the live Redis instance.

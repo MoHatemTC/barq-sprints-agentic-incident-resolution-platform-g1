@@ -41,6 +41,7 @@ from app.models.execution_log import (
     ExecutionStatus,
 )
 from app.models.incident import AIProcessingState, IncidentUpdatePayload
+from app.utils.async_bridge import run_blocking
 
 PREFIX = "AI Suggested Response"
 logger = structlog.getLogger(__name__)
@@ -352,20 +353,6 @@ def _apply_human_decision(output: FinalOutput, decision: dict[str, Any]) -> Fina
     )
 
 
-def _safe_async_run(coro: Any) -> Any:
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        loop = None
-
-    if loop and loop.is_running():
-        import concurrent.futures
-
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-            return pool.submit(asyncio.run, coro).result()
-    return asyncio.run(coro)
-
-
 def _write_escalation_to_servicenow(
     state: AgentState,
     deps: AgentDependencies,
@@ -389,7 +376,7 @@ def _write_escalation_to_servicenow(
         fields["ai_processing_start"] = started
     payload = IncidentUpdatePayload(**fields)
     try:
-        _safe_async_run(
+        run_blocking(
             deps.tools.invoke(
                 "write_ai_fields",
                 context=_tool_context(state),

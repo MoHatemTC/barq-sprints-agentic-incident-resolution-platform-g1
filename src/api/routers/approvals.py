@@ -287,6 +287,19 @@ async def decide_approval(
         logger.exception("interrupt_read_failed", execution_id=str(id), error=str(exc))
         raise ServiceUnavailableError("Audit store unavailable; decision not applied.") from exc
 
+    if interrupt_payload is None:
+        # ``awaiting_approval`` on the executions row is not proof that a LangGraph
+        # interrupt exists (semantic-cache waiters, runs from before the
+        # interrupt/resume fix and orphaned rows carry it too). Recording an
+        # immutable approval here would assert that a human approved something
+        # nobody was waiting on, leave the execution parked, and be impossible to
+        # correct afterwards because the approvals table is immutable by trigger.
+        logger.warning("approval_without_paused_thread", execution_id=execution_id_str)
+        raise ConflictError(
+            f"Execution '{execution.execution_id}' has no paused interrupt to decide; "
+            "nothing was recorded."
+        )
+
     resumed: dict[str, Any] | None = None
     if interrupt_payload is not None:
         if payload.decision == "approved" and not payload.solution:
@@ -331,7 +344,12 @@ async def decide_approval(
             )
         except Exception as exc:  # noqa: BLE001 — anything failing here must surface as 503
             logger.exception("graph_resume_failed", execution_id=str(id), error=str(exc))
-            raise ServiceUnavailableError(f"Failed to resume graph: {str(exc)}") from exc
+            # The cause is in the log above; the caller gets no internal detail
+            # (database, URL or path text), only that the decision was not applied.
+            raise ServiceUnavailableError(
+                "The decision could not be applied to the paused run; nothing was "
+                "recorded and it can be retried."
+            ) from exc
 
     # 3. Record the decision (immutable) and close the execution row it resumed.
     try:

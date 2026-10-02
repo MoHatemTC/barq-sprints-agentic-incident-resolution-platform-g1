@@ -87,7 +87,31 @@ below-threshold confidence (S3.4, merged in #158), input and output guardrails
 (S3.3), and Langfuse tracing with per-node spans, retrieval, tool calls, generations,
 token usage, latency and cost (S2.5, S3.1).
 
-As checked in Airtable on 2026-09-28, no Sprint 4 task records have been published.
+### Sprint 4 status (checked 2026-10-02)
+
+Airtable now holds the Sprint 4 tasks, due 2026-10-03: S4.1 (HITL pause/resume fix and a
+chatbot-usable ServiceNow tool), S4.2 (semantic caching), S4.3 (DeepEval/RAGAS evaluation
+suite) and S4.4 (ServiceNow chatbot, frontend and backend; listed twice, once for each of its two
+owners). Airtable is authoritative for status; this is what is on `main`.
+
+Built: semantic caching and single-flight clustering (S4.2, #204/#208/#210, with the
+follower governance gate added in the audit); the HITL fixes (#182–#184, #191); the
+evaluation harness and dataset (#190, #209); query rewriting and article-level diversity
+(#191); residual-PII detection, default off (#189); and a 78-case red-team corpus with
+recorded results ([audit](audit_2026-10-02.md)).
+
+**Not built against the PRD's Sprint 4 definition of done:**
+
+| PRD requirement | State |
+|---|---|
+| Evaluation gate in CI that fails the build on a regression (FR-20; "a deliberately regressed prompt fails the CI evaluation gate") | Not built. `ci.yml` still says so; `/api/v1/eval/run` returns 501 |
+| GitHub Actions builds a deployable image on every pull request (NFR-10) | Not built; images are built on the deployment host |
+| Operations runbook, architecture and data-flow pack | [Operations runbook](operations_runbook.md) now exists; the data-flow diagram is the graph diagram only |
+| NFR-02 end-to-end p95 ≤ 90 s measured from traces | Indicative only (p95 72.6 s, n = 9, shared system) |
+| Chatbot tool (S4.1 part 2) and chatbot (S4.4) | Not built |
+
+Where an item here conflicts with the PRD text, the PRD scope is the contract and this
+table is the gap.
 The remaining PRD scope above has no assigned Sprint 4 task owner or deadline yet.
 The repository has an adversarial seed set and a retrieval evaluation set, but the
 PRD's evaluation regression gate and deployable-image build on every pull request

@@ -1011,7 +1011,8 @@
           "reason": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 4000
               },
               {
                 "type": "null"
@@ -1031,7 +1032,7 @@
               }
             ],
             "title": "Evidence",
-            "description": "Optional structured evidence or parameter overrides"
+            "description": "Optional structured evidence or parameter overrides, at most 16384 bytes serialised"
           },
           "solution": {
             "anyOf": [
@@ -2008,7 +2009,7 @@
             },
             "type": "object",
             "title": "Active Feature Flags",
-            "description": "Active platform feature flag statuses"
+            "description": "Feature flag statuses. Only 'eval_benchmarks' (read by /api/v1/eval) and 'semantic_caching' (mirrors ENABLE_SEMANTIC_CACHE) change behaviour; the other entries are informational and toggling them has no effect."
           },
           "langfuse_host": {
             "type": "string",

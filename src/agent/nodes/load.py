@@ -17,11 +17,11 @@ from agent.guardrails.semantic_injection_classifier import (
     ClassifierOutcome,
     classify_injection,
 )
-from agent.policy import snapshot_incident
+from agent.policy import check_eligibility, snapshot_incident
 from agent.prompts import PIIText
 from agent.state import AgentState, EventPayload, GateResult, IncidentSnapshot
 from agent.tools import ToolCallContext
-from observability.redaction import REDACTED, redact_text_with_count
+from observability.redaction import REDACTED, redact_text, redact_text_with_count
 
 
 def load(state: AgentState, deps: AgentDependencies) -> dict[str, Any]:
@@ -40,9 +40,65 @@ def load(state: AgentState, deps: AgentDependencies) -> dict[str, Any]:
             )
         )
     incident = snapshot_incident(raw)
+    # Eligibility is deterministic and free, so it is decided before any model sees the
+    # incident. An ineligible incident (locked by an analyst, already processed, AI not
+    # enabled, unsupported category...) can never produce AI output, so sending its text
+    # to the screening models would only spend a call, and for a human-locked incident
+    # would hand the model text from a ticket an analyst has taken over.
+    eligibility = check_eligibility(
+        incident,
+        event_number=event.number,
+        supported_categories=deps.settings.agent_supported_categories,
+    )
+    if not eligibility.eligible:
+        return _skip_model_layers(incident, deps)
     sanitized_incident, gate = _run_input_guardrails(incident, deps)
     return {
         "incident": sanitized_incident.model_dump(mode="json"),
+        "input_guardrail": gate.model_dump(mode="json"),
+    }
+
+
+def _skip_model_layers(incident: IncidentSnapshot, deps: AgentDependencies) -> dict[str, Any]:
+    """State update for an incident that is already ineligible: no model is called.
+
+    The text is still redacted by the deterministic layer, so the checkpoint never holds
+    raw credentials. ``validate`` and ``act`` then end the run as ``skipped_ineligible``.
+    """
+    with deps.tracer.span(
+        "guardrail.input_screening",
+        as_type="guardrail",
+        input={"stage": "input_guardrail"},
+    ) as span:
+        gate = GateResult(
+            gate="input_guardrail",
+            passed=True,
+            implemented=True,
+            checks=[
+                {
+                    "layer": "eligibility_precheck",
+                    "eligible": False,
+                    "model_layers_skipped": True,
+                }
+            ],
+            reason=None,
+        )
+        span.update(
+            output={
+                "passed": True,
+                "detection_layer": "skipped_ineligible",
+                "classifier_ran": False,
+                "pii_ran": False,
+            }
+        )
+    sanitized = incident.model_copy(
+        update={
+            "short_description": redact_text(incident.short_description),
+            "description": redact_text(incident.description),
+        }
+    )
+    return {
+        "incident": sanitized.model_dump(mode="json"),
         "input_guardrail": gate.model_dump(mode="json"),
     }
 
@@ -72,7 +128,9 @@ def _run_input_guardrails(
         pii_outcome: PIIProtectionOutcome | None = None
         classifier_ran = False
         classifier_outcome: ClassifierOutcome | None = None
-        if pattern_result.flagged:
+        if pattern_result.blocking:
+            # An unambiguous attack phrase. A soft-only hit is not blocked here: it goes
+            # on to the semantic classifier below, which fails closed.
             blocked = True
             detection_layer = "pattern_screening"
             protected_short = REDACTED
@@ -130,6 +188,7 @@ def _run_input_guardrails(
                 {
                     "layer": "pattern_screening",
                     "flagged": pattern_result.flagged,
+                    "blocking": pattern_result.blocking,
                     "categories": [c.value for c in pattern_result.categories],
                 },
                 {

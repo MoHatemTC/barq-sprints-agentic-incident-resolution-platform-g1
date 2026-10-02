@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
 ApprovalDecision = Literal["approved", "rejected", "cancelled", "expired"]
+
+#: Bounds on operator-supplied text that is persisted immutably with a decision.
+MAX_REASON_CHARS = 4000
+MAX_EVIDENCE_BYTES = 16_384
 
 
 class ApprovalResponse(BaseModel):
@@ -81,12 +86,26 @@ class ApprovalDecisionRequest(BaseModel):
     # into the audit record (#148).
     reason: str | None = Field(
         default=None,
+        max_length=MAX_REASON_CHARS,
         description="Optional justification, feedback, or remediation note",
     )
     evidence: dict[str, Any] | None = Field(
         default=None,
-        description="Optional structured evidence or parameter overrides",
+        description=(
+            "Optional structured evidence or parameter overrides, at most "
+            f"{MAX_EVIDENCE_BYTES} bytes serialised"
+        ),
     )
+
+    @field_validator("evidence")
+    @classmethod
+    def _evidence_is_bounded(cls, value: dict[str, Any] | None) -> dict[str, Any] | None:
+        # Approvals are immutable by trigger, so whatever is accepted here is stored
+        # forever; an unbounded JSON document would be an unbounded permanent write.
+        if value is not None and len(json.dumps(value, default=str)) > MAX_EVIDENCE_BYTES:
+            raise ValueError(f"evidence exceeds {MAX_EVIDENCE_BYTES} bytes when serialised")
+        return value
+
     solution: str | None = Field(
         default=None,
         max_length=8000,

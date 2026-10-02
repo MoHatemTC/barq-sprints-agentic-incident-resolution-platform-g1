@@ -88,13 +88,38 @@ _CREDENTIAL_RULES: tuple[tuple[re.Pattern[str], str], ...] = (
     ),
     # scheme://user:password@host
     (re.compile(r"(?<=://)[^/\s:@]+:[^/\s@]+(?=@)"), REDACTED),
-    # password=..., client_secret: ..., api key is ...
+    # curl -u user:password
+    (
+        re.compile(r"(?i)(\bcurl\b[^\n]*?\s--?(?:u|user)[ =]+)[^\s:@]+:\S+"),
+        rf"\1{REDACTED}",
+    ),
+    # Cookie / Set-Cookie header values
+    (re.compile(r"(?i)\b(set-cookie|cookie)(\s*:\s*)[^\n]+"), rf"\1\2{REDACTED}"),
+    # "the password for the VPN is hunter22"
     (
         re.compile(
-            r"(?i)\b(password|passwd|pwd|secret|client_secret|api[_-]?key|access[_-]?token|"
-            r"refresh[_-]?token|token)(\s*[:=]\s*|\s+is\s+)[\"']?[^\s\"',;]{4,}"
+            r"(?i)\b(password|passcode|passwd|pin)(\s+(?:for|of)\s+[^.\n]{1,40}?\s+is\s+)"
+            r"[\"']?[^\s\"',;]{4,}"
         ),
         rf"\1\2{REDACTED}",
+    ),
+    # key = value, in any common spelling: password=..., "password": "...",
+    # aws_secret_access_key = ..., AccountKey=..., SharedAccessKey=..., pass: ...,
+    # X-Api-Key: ..., my_password_is=... A quoted key (JSON, Python dict) is covered by the
+    # optional quote before the separator; the lookbehind keeps a keyword inside a longer
+    # word ("bypass", "compass") from matching.
+    (
+        re.compile(
+            r"(?i)(?<![A-Za-z0-9])"
+            r"((?:[a-z0-9]+[_-])*"
+            r"(?:password|passwd|pwd|passcode|pass|pin|secret|api[_-]?key|"
+            r"(?:access|account|shared[_-]?access|private|auth|refresh|client)[_-]?"
+            r"(?:key|token|secret)|token)"
+            r"(?:[_-][a-z0-9]+)*)"
+            r"([\"']?\s*[:=]\s*|\s+is\s+)"
+            r"([\"']?)[^\s\"',;}]{4,}"
+        ),
+        rf"\1\2\3{REDACTED}",
     ),
 )
 
@@ -265,10 +290,16 @@ def _redact_payment_card(match: re.Match[str]) -> str:
     return PII_REDACTION_MARKERS["payment_card"] if total % 10 == 0 else candidate
 
 
+#: Full-width forms (U+FF01-FF5E) of ASCII punctuation and letters, which render like the
+#: ASCII ones but would slip past every pattern below ("password＝secret").
+_FULLWIDTH = {code: code - 0xFEE0 for code in range(0xFF01, 0xFF5F)}
+
+
 def redact_text(text: str) -> str:
     """Return ``text`` with credentials and personal data replaced by markers."""
     if not text:
         return text
+    text = text.translate(_FULLWIDTH)
     for pattern, replacement in _CREDENTIAL_RULES:
         text = pattern.sub(replacement, text)
     text = _EMAIL.sub(REDACTED_EMAIL, text)
@@ -285,6 +316,7 @@ def redact_text_with_count(text: str) -> tuple[str, int]:
     """
     if not text:
         return text, 0
+    text = text.translate(_FULLWIDTH)
     total = 0
     for pattern, replacement in _CREDENTIAL_RULES:
         text, count = pattern.subn(replacement, text)

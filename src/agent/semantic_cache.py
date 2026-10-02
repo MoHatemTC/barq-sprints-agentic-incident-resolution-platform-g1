@@ -44,9 +44,16 @@ logger = structlog.getLogger(__name__)
 #   Separation gap (min_pos - max_neg)    : +0.0280  (clean, no overlap)
 #
 #   Perfect accuracy band (TP=21, TN=17, FP=0, FN=0) : tau in [0.74, 0.76]
-#   Chosen tau = 0.76 – midpoint of the perfect band, giving:
-#     - 0.028 buffer above max_negative  (0.76 - 0.740 = 0.020 gap)
-#     - 0.008 buffer below min_positive  (0.768 - 0.76 = 0.008 gap)
+#   Chosen tau = 0.76, the top of that band, giving:
+#     - 0.020 above the hardest negative  (0.76 - 0.7398)
+#     - 0.008 below the weakest positive  (0.7677 - 0.76)
+#
+#   CAVEAT: these figures are IN-SAMPLE (the threshold was tuned and scored on the same
+#   38 hand-written pairs). On an independent set (eval/evaluation_set.json, 220
+#   different-article pairs) 6 pairs score >= 0.76, the highest 0.838, so "zero false
+#   positives" does not generalise. Similarity alone must therefore never authorise
+#   an action: a follower reuses a resolution only after passing its own deterministic
+#   gates (app.workers.cluster_runtime.follower_reuse_verdict).
 #   Re-run eval/calibrate_threshold.py to re-validate when pairs are added.
 DEFAULT_SIMILARITY_THRESHOLD: float = 0.76
 DEFAULT_TTL_SECONDS: int = 600  # 10 minutes cache window for outage bursts

@@ -327,8 +327,12 @@ This AST test is an architectural guardrail, not a Python sandbox. Deliberate dy
 access through `importlib`, `__import__`, `object.__setattr__`, or other reflection is
 outside its intended scope.
 
-Legitimate remaining ServiceNow references are outside graph nodes and have bounded
-roles:
+Remaining ServiceNow references are outside graph nodes. The first group is the
+registry's own plumbing; the second group **does not go through the registry** and so has
+no registry enforcement audit — it is listed so the boundary is stated as it is, not as
+it was designed (2026-10-02 audit):
+
+Behind or composing the registry:
 
 - low-level transport in `src/agent/servicenow.py` and
   `src/app/clients/servicenow_client.py`;
@@ -337,7 +341,23 @@ roles:
 - the pre-graph, manual live-script incident-number lookup in
   `scripts/run_agent_live.py`; and
 - the separate KB publishing subsystem under `src/app/publishing` and
-  `scripts/publish_kb.py`.
+  `scripts/publish_kb.py`;
+- `src/app/workers/cluster_runtime.py` — the semantic-cache follower path invokes
+  `write_ai_fields` / `write_execution_log` **through** the registry.
+
+Direct callers that bypass the registry (permission class and enforcement audit do not
+apply; ServiceNow ACLs and the scoped integration user remain the only server-side
+control):
+
+- `src/api/routers/suggestions.py` — the post-hoc accept/reject of a drafted suggestion
+  writes the incident with its own `ServiceNowClient` (two operations: read and
+  update);
+- `src/app/workers/incident_state.py` — marks an incident failed after the retry budget
+  is exhausted and clears a failed state before a replay;
+- `src/agent/approval_capture.py` — builds a KB client and gateway for knowledge capture
+  after an approval (the publish itself is the registered `publish_kb_article` tool).
+
+Moving these behind `ToolRegistry` is a recommended follow-up; it is not done.
 
 ## 11. Least Privilege Rationale
 

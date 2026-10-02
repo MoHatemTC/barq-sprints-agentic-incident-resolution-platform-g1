@@ -3,9 +3,15 @@
 ## Purpose and scope
 
 Sprint 2 task S2.2 introduces the PostgreSQL persistence boundary for accepted
-incident events and their agent executions. The schema has exactly seven tables:
+incident events and their agent executions. The Sprint 2 schema has seven tables:
 `events`, `idempotency_keys`, `executions`, `workflow_state`, `approvals`, `failures`,
 and `retry_state`.
+
+> **Current schema: nine tables.** Sprint 4 (S4.2) added `semantic_clusters` and
+> `semantic_cluster_members` (migrations `0004_semantic_clusters` and
+> `0005_cluster_waiters`); `0003_execution_lease` added worker-lease columns to
+> `executions`. Alembic head is `0005_cluster_waiters`. The rest of this document
+> describes the Sprint 2 baseline and is otherwise unchanged.
 
 This document describes the schema in migration
 `0001_create_postgresql_state_schema.py`, its SQLAlchemy mapping, the atomic event
@@ -232,7 +238,7 @@ The following repository paths were inspected:
 - `src/app/retrieval/ingest.py`: the only Qdrant `PointStruct` construction and upsert
   path;
 - `src/app/clients/qdrant.py`: collection vectors and payload keyword indexes;
-- `src/app/retrieval/search.py`: payload validation and mandatory published/security
+- `src/app/retrieval/hybrid_search.py`: payload validation and mandatory published/security
   filters;
 - `tests/retrieval/test_ingest.py`, `tests/retrieval/test_search.py`, and
   `tests/models/test_knowledge.py`: payload-contract and filtering assertions; and

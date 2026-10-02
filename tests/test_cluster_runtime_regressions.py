@@ -192,16 +192,18 @@ def test_database_failure_cannot_publish_resolved_redis_anchor(monkeypatch):
 
 
 def test_follower_resolves_with_zero_llm_calls_and_writes_to_servicenow(monkeypatch):
-    repo, cache, _, eid, payload, incident, cluster = setup_pair()
-    follower_inc = {**incident, "sys_id": payload["sys_id"], "number": payload["number"]}
+    repo, cache, _, eid, payload, _incident, cluster = setup_pair()
+    # A production-shaped record read through the real loader: the follower is only
+    # reused if it passes its own eligibility, screening and risk gates, which a
+    # minimal dict with no ai_enabled/category/priority fields would not.
+    follower_inc = {
+        **VPN,
+        "sys_id": payload["sys_id"],
+        "number": payload["number"],
+    }
     service = FakeServiceNow({"follower": follower_inc})
     deps = make_deps(servicenow=service, agent_confidence_floor=0.1)
     monkeypatch.setattr(cluster_runtime, "get_agent_dependencies", lambda: deps)
-    monkeypatch.setattr(
-        tasks,
-        "load_cluster_incident",
-        lambda *args: follower_inc,
-    )
     solution = {
         "outcome": "suggested",
         "summary": "AI Suggested Response drafted. Confidence 0.95.",

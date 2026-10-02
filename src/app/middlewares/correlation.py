@@ -1,3 +1,4 @@
+import re
 import time
 import uuid
 from collections.abc import Callable
@@ -8,8 +9,12 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
 from app.core.correlation import clear_correlation_id, set_correlation_id
+from app.middlewares.security_headers import register_security_headers
 
 CORRELATION_ID_HEADER = "X-Correlation-ID"
+#: What a caller-supplied id may look like. It is echoed in a response header and written to
+#: logs and traces, so anything else (control characters, a megabyte of text) is replaced.
+_VALID_CORRELATION_ID = re.compile(r"[A-Za-z0-9._:\-]{1,128}")
 logger = structlog.getLogger("api.access")
 
 
@@ -24,11 +29,9 @@ class CorrelationIdMiddleware(BaseHTTPMiddleware):
         self.header_name = header_name
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        correlation_id = request.headers.get(self.header_name)
-        if not correlation_id or not correlation_id.strip():
+        correlation_id = (request.headers.get(self.header_name) or "").strip()
+        if not _VALID_CORRELATION_ID.fullmatch(correlation_id):
             correlation_id = str(uuid.uuid4())
-        else:
-            correlation_id = correlation_id.strip()
 
         set_correlation_id(correlation_id)
         request.state.correlation_id = correlation_id
@@ -65,3 +68,4 @@ class CorrelationIdMiddleware(BaseHTTPMiddleware):
 def register_middlewares(app: FastAPI, header_name: str = CORRELATION_ID_HEADER) -> None:
     """Register all API middlewares on the FastAPI application."""
     app.add_middleware(CorrelationIdMiddleware, header_name=header_name)
+    register_security_headers(app)

@@ -101,7 +101,11 @@ class RedactedConfigResponse(BaseModel):
     # Feature Flags
     active_feature_flags: dict[str, bool] = Field(
         default_factory=dict,
-        description="Active platform feature flag statuses",
+        description=(
+            "Feature flag statuses. Only 'eval_benchmarks' (read by /api/v1/eval) and "
+            "'semantic_caching' (mirrors ENABLE_SEMANTIC_CACHE) change behaviour; the other "
+            "entries are informational and toggling them has no effect."
+        ),
     )
 
     # Langfuse Tracing
@@ -156,8 +160,20 @@ class RedactedConfigResponse(BaseModel):
             dense_embedding_model=settings.dense_embedding_model,
             sparse_embedding_model=settings.sparse_embedding_model,
             retrieval_mode=getattr(settings, "retrieval_mode", RetrievalMode.HYBRID),
-            active_feature_flags=dict(getattr(settings, "active_feature_flags", {})),
+            active_feature_flags=_reported_flags(settings),
             langfuse_host=settings.langfuse_host,
             langfuse_public_key=settings.langfuse_public_key,
             langfuse_secret_key=REDACTED_SENTINEL,
         )
+
+
+def _reported_flags(settings: Settings) -> dict[str, bool]:
+    """The flag map as served, with ``semantic_caching`` taken from the real switch.
+
+    ``active_feature_flags["semantic_caching"]`` was a separate, decorative value: the
+    worker reads ``enable_semantic_cache``, so the endpoint could report caching on while
+    ``ENABLE_SEMANTIC_CACHE=false`` had turned it off.
+    """
+    flags = dict(getattr(settings, "active_feature_flags", {}))
+    flags["semantic_caching"] = bool(settings.enable_semantic_cache)
+    return flags

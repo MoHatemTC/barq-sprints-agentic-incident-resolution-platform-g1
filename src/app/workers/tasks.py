@@ -51,9 +51,11 @@ from app.db.redis.keys import INCIDENT_DLQ_QUEUE
 from app.models.semantic_cluster import AdmissionMode, AdmissionResult, ClusterStatus
 from app.workers.celery_app import celery_app
 from app.workers.cluster_runtime import (
+    ReuseVerdict,
     apply_follower_cluster_resolution,
     cacheable_result,
     dispatch_cluster_waiters,
+    follower_reuse_verdict,
     load_cluster_incident,
 )
 from app.workers.db import WorkerRepo, build_worker_repo
@@ -130,6 +132,18 @@ def _stub_graph(payload: dict[str, Any]) -> dict[str, Any]:
     if number.startswith("INCBROKEN"):
         raise TerminalError(f"forced terminal failure for {number}")
     return {"draft": f"stub resolution for {number}"}
+
+
+def _safe_text(exc: BaseException, limit: int = 4000) -> str:
+    """``str(exc)`` with credentials and personal data masked, for anything persisted or logged.
+
+    Provider and transport errors can echo request data. The DLQ record and the
+    traceback were already redacted; the failure message, termination cause, cluster
+    failure reason and log reasons were not.
+    """
+    from observability.redaction import redact_text
+
+    return redact_text(str(exc))[:limit]
 
 
 def record_dead_letter(
@@ -347,29 +361,49 @@ def _run_incident(
                 cluster_status = cache.get_cluster_status(cluster_id)
                 if cluster_status == ClusterStatus.RESOLVED:
                     solution = cache.get_cluster_solution(cluster_id) or {}
-                    if graph_backend == "langgraph":
-                        apply_follower_cluster_resolution(
-                            payload,
-                            solution,
+                    # Clustering says two incidents read alike, not that this one may be
+                    # auto-resolved: the follower must pass its own deterministic gates
+                    # (eligibility, screening, risk) first. See follower_reuse_verdict.
+                    verdict = (
+                        follower_reuse_verdict(incident, solution)
+                        if graph_backend == "langgraph"
+                        else ReuseVerdict(True, "stub graph backend")
+                    )
+                    if verdict.allowed:
+                        if graph_backend == "langgraph":
+                            apply_follower_cluster_resolution(
+                                payload,
+                                solution,
+                                execution_id=execution_id,
+                                correlation_id=correlation_id or execution_id,
+                            )
+                        if repo is not None:
+                            repo.mark_member_applied(cluster_id, execution_uuid)
+                        repo.mark_succeeded(execution_uuid, **_execution_summary(solution))
+                        logger.info(
+                            "incident_follower_resolved_from_cluster",
                             execution_id=execution_id,
-                            correlation_id=correlation_id or execution_id,
+                            cluster_id=str(cluster_id),
+                            anchor_incident=admission.anchor_incident_number,
                         )
-                    if repo is not None:
-                        repo.mark_member_applied(cluster_id, execution_uuid)
-                    repo.mark_succeeded(execution_uuid, **_execution_summary(solution))
+                        return {
+                            "status": "succeeded",
+                            "execution_id": execution_id,
+                            "cluster_id": str(cluster_id),
+                            "cluster_role": "follower",
+                            "result": solution,
+                        }
+                    # Declined: run the full governed graph (risk routing, approval,
+                    # critic, safety, write). The cached draft is still offered, so only
+                    # the generate call is saved; every citation is re-checked against
+                    # this incident's own evidence.
                     logger.info(
-                        "incident_follower_resolved_from_cluster",
+                        "follower_cluster_reuse_declined",
                         execution_id=execution_id,
                         cluster_id=str(cluster_id),
-                        anchor_incident=admission.anchor_incident_number,
+                        reason=verdict.reason,
                     )
-                    return {
-                        "status": "succeeded",
-                        "execution_id": execution_id,
-                        "cluster_id": str(cluster_id),
-                        "cluster_role": "follower",
-                        "result": solution,
-                    }
+                    candidate_draft = solution.get("cache_draft")
                 elif (
                     cluster_status
                     in (
@@ -419,7 +453,7 @@ def _run_incident(
                         execution_id=execution_id,
                         cluster_id=str(cluster_id),
                     )
-                else:
+                elif cluster_status != ClusterStatus.RESOLVED:
                     logger.warning(
                         "cluster_leader_decoupled_fallback_to_independent",
                         execution_id=execution_id,
@@ -475,7 +509,7 @@ def _run_incident(
             execution_id=execution_uuid,
             attempt=attempt,
             failure_type=_failure_type(exc),
-            message=str(exc),
+            message=_safe_text(exc),
             retryable=True,
             details=_failure_details(exc, execution_id, correlation_id),
         )
@@ -495,7 +529,7 @@ def _run_incident(
 
         # Budget consumed: exhausted ⟺ attempt_count == max_attempts.
         if admission.mode == AdmissionMode.LEADER and admission.cluster_id is not None:
-            cache.mark_cluster_failed(admission.cluster_id, str(exc))
+            cache.mark_cluster_failed(admission.cluster_id, _safe_text(exc))
         repo.mark_exhausted(
             execution_id=execution_uuid,
             max_attempts=cfg.max_retries,
@@ -505,12 +539,12 @@ def _run_incident(
         raise exc from exc
     except TerminalError as exc:
         if admission.mode == AdmissionMode.LEADER and admission.cluster_id is not None:
-            cache.mark_cluster_failed(admission.cluster_id, str(exc))
+            cache.mark_cluster_failed(admission.cluster_id, _safe_text(exc))
         failure_id = repo.log_failure(
             execution_id=execution_uuid,
             attempt=attempt,
             failure_type=_failure_type(exc),
-            message=str(exc),
+            message=_safe_text(exc),
             retryable=False,
             details=_failure_details(exc, execution_id, correlation_id),
         )
@@ -518,19 +552,19 @@ def _run_incident(
             execution_id=execution_uuid,
             attempt=attempt,
             last_failure_id=failure_id,
-            termination_cause=f"terminal failure: {exc}",
+            termination_cause=f"terminal failure: {_safe_text(exc, 500)}",
         )
-        logger.warning("terminal_failure", execution_id=execution_id, reason=str(exc))
+        logger.warning("terminal_failure", execution_id=execution_id, reason=_safe_text(exc))
         raise
     except Exception as exc:
         # Unknown exception: fail closed. A deterministic bug gets no retries.
         if admission.mode == AdmissionMode.LEADER and admission.cluster_id is not None:
-            cache.mark_cluster_failed(admission.cluster_id, str(exc))
+            cache.mark_cluster_failed(admission.cluster_id, _safe_text(exc))
         failure_id = repo.log_failure(
             execution_id=execution_uuid,
             attempt=attempt,
             failure_type=_failure_type(exc),
-            message=str(exc),
+            message=_safe_text(exc),
             retryable=False,
             details=_failure_details(exc, execution_id, correlation_id),
         )
@@ -538,9 +572,9 @@ def _run_incident(
             execution_id=execution_uuid,
             attempt=attempt,
             last_failure_id=failure_id,
-            termination_cause=f"unclassified failure: {exc}",
+            termination_cause=f"unclassified failure: {_safe_text(exc, 500)}",
         )
-        logger.error("unclassified_failure", execution_id=execution_id, reason=str(exc))
+        logger.error("unclassified_failure", execution_id=execution_id, reason=_safe_text(exc))
         raise
 
     if result.get("paused"):

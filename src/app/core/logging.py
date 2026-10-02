@@ -63,5 +63,9 @@ def configure_logging(
             logging.getLevelNamesMapping()[log_level.upper()]
         ),
         logger_factory=structlog.PrintLoggerFactory(),
-        cache_logger_on_first_use=True,
+        # Caching pins a module-level logger to this configuration for the life of
+        # the process. That is a production-only optimisation: in development and
+        # tests it made structlog's ``capture_logs`` miss loggers that had already
+        # been used, so a log assertion passed or failed depending on test order.
+        cache_logger_on_first_use=environment == Environment.PRODUCTION,
     )

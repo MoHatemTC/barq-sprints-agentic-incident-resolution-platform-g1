@@ -115,6 +115,12 @@ site/
 # =========================
 # Data
 # =========================
+# Programme source documents are never committed. The real-PDF parser tests read
+# data/barq-system-kb.pdf, which each developer supplies locally (see CONTRIBUTING).
+# (A blanket `data/*` rule was removed when corpus JSON/Markdown became tracked; this
+# keeps the one thing that must not be committed by accident out of git.)
+data/**/*.pdf
+data/*.pdf
 
 src/app/ignored_folder
 .zcode/

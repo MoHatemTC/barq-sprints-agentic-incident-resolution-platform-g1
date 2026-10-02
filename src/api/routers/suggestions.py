@@ -241,7 +241,8 @@ async def decide_suggestion(
                     error=str(exc),
                 )
                 raise ServiceUnavailableError(
-                    f"ServiceNow refused the acceptance write: {exc}"
+                    "ServiceNow did not accept the write; the decision was not recorded "
+                    "and can be retried."
                 ) from exc
         written = {
             "ai_resolution_written": True,
@@ -285,7 +286,10 @@ async def decide_suggestion(
             await _update_incident(settings, execution.incident_sys_id, update)
         except ServiceNowError as exc:
             logger.exception("suggestion_rejection_write_failed", execution_id=str(execution_id))
-            raise ServiceUnavailableError(f"ServiceNow refused the rejection write: {exc}") from exc
+            raise ServiceUnavailableError(
+                "ServiceNow did not accept the write; the decision was not recorded "
+                "and can be retried."
+            ) from exc
         written = {
             "ai_resolution_written": False,
             "ai_processing_end": now.isoformat(),
@@ -382,8 +386,10 @@ async def _get_incident(settings: Settings, sys_id: str) -> Any:
         return await client.get_incident(sys_id)
     except ServiceNowError as exc:
         logger.exception("suggestion_incident_read_failed", incident=sys_id, error=str(exc))
+        # The cause is in the log above; upstream error text (URLs, response bodies)
+        # is not returned to the API caller.
         raise ServiceUnavailableError(
-            f"ServiceNow could not return incident {sys_id}: {exc}"
+            f"ServiceNow could not return incident {sys_id}; try again shortly."
         ) from exc
     finally:
         await client.aclose()

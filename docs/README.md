@@ -73,11 +73,26 @@ risk-ordering record for the eleven-node state machine. It has no single owning 
 above: the S2.5 brief named it, and it is indexed here because the graph is Sprint 3's
 subject matter.
 
+## Sprint 4 — Stabilization & New Surfaces
+
+Tasks and owners are in the [root README](../README.md#sprint-4--stabilization--new-surfaces);
+Airtable is authoritative for status.
+
+| Record | Contents |
+|---|---|
+| [sprint4_semantic_caching_design.md](sprint4_semantic_caching_design.md) | S4.2 design, the threshold calibration and its caveat, and the follower governance gate |
+| [incident_bug_fixes.md](incident_bug_fixes.md) | BUG-001–012 (#191) and the semantic-cache integration repair |
+| [retrieval_query_rewrite_and_reranking.md](retrieval_query_rewrite_and_reranking.md) | Query rewriting, reranking order and article-level diversity, with measured trade-offs |
+| [sprint-3/guardrail_design.md](sprint-3/guardrail_design.md) | Guardrails, including the red-team corpus and its recorded results |
+| [audit_2026-10-02.md](audit_2026-10-02.md) | The full system audit: method, findings, what was fixed, what was not, and what was not tested |
+| [operations_runbook.md](operations_runbook.md) | Health checks, deploy and rollback, disk care, parked approvals, the dead-letter queue, switches, traces |
+
 ## Cross-sprint
 
 | Document | Contents |
 |---|---|
 | [demo_runbook.md](demo_runbook.md) | How to drive the end-to-end demo yourself: prerequisites, the script, and the expected result of each phase |
+| [operations_runbook.md](operations_runbook.md) | How to run, check and repair the deployed platform |
 | [ROADMAP.md](ROADMAP.md) | The full four-sprint PRD scope, not just what is built |
 | [../TEAM.md](../TEAM.md) | Who owns which task, and the other project roles |
 

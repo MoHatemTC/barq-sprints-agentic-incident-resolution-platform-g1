@@ -223,3 +223,37 @@ class TestCheckFaithfulness:
 def test_composed_article_schema_is_strict() -> None:
     with pytest.raises(ValidationError):
         ComposedArticle(title="t", short_description="s", category="network")  # body missing
+
+
+class TestFaithfulnessVerdict:
+    def test_inflections_of_a_source_word_are_grounded(self) -> None:
+        from agent.article_composer import check_faithfulness
+
+        article = type("A", (), {"body": "Restarting the service fixed the sessions."})()
+        assert check_faithfulness(article, "restarted the service, fixed session") == []
+
+    def test_a_number_that_was_not_stated_fails_the_verdict(self) -> None:
+        from agent.article_composer import faithfulness_verdict
+
+        article = type("A", (), {"body": "Set MTU 2048 on the tunnel."})()
+        verdict = faithfulness_verdict(article, "set MTU 1400 on the tunnel")
+        assert not verdict.ok and verdict.states_unstated_numbers
+
+    def test_mostly_invented_content_fails_even_without_numbers(self) -> None:
+        from agent.article_composer import faithfulness_verdict
+
+        article = type(
+            "A", (), {"body": "Restart the service. Memory leak in worker pool caused crashes."}
+        )()
+        verdict = faithfulness_verdict(article, "restarted the service")
+        assert not verdict.ok and verdict.ratio > 0.5
+
+    def test_scaffolding_words_do_not_count_against_a_faithful_article(self) -> None:
+        from agent.article_composer import faithfulness_verdict
+
+        article = type(
+            "A",
+            (),
+            {"body": "To resolve the issue, perform the following steps: flush keys, restart."},
+        )()
+        assert faithfulness_verdict(article, "flushed keys then restarted").ok
