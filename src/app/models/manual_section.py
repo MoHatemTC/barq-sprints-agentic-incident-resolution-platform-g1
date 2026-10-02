@@ -86,6 +86,7 @@ class ManualSection(BaseModel):
                 data = dict(data)
                 data.pop("body")
         return data
+
     pages: tuple[int, ...] = Field(..., description="1-indexed page numbers this section spans")
     ocr_confidence: float | None = Field(
         default=None,

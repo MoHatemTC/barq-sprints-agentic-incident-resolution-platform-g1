@@ -12,7 +12,6 @@ Run with: .venv/bin/python scripts/benchmark_manual_collections.py
 
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
 
@@ -28,12 +27,9 @@ from qdrant_client import QdrantClient  # noqa: E402
 
 from app.retrieval.embedding import FastEmbedEngine  # noqa: E402
 
-# The corpus adapter opens barq_rag_eval_dataset.json relative to the CWD.
-os.chdir(REPO / "data" / "corpus")
 sys.path.insert(0, str(REPO / "data" / "corpus"))
 import adapters as A  # noqa: E402
 
-os.chdir(REPO)
 from scripts.smoke_eval_retrieval import mean_reciprocal_rank, search  # noqa: E402
 
 COMBINATIONS = [

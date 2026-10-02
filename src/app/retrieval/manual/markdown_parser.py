@@ -4,7 +4,6 @@ import re
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
 from pathlib import Path
-from typing import Any
 
 import structlog
 
@@ -55,9 +54,9 @@ class _TableBlockExtractor(HTMLParser):
         self._current_cell: list[str] | None = None
         self._in_header_cell = False
         self._depth = 0  # nesting depth for nested tables
-        # Track active rowspans: col_index -> (remaining_rows, text)
-        self._active_rowspans: dict[int, list[Any]] = {}
-        self._current_row_spans: list[tuple[int, int, str]] = []  # (col, span, text)
+        # Track active rowspans: col_index -> (remaining_rows, text, colspan)
+        self._active_rowspans: dict[int, tuple[int, str, int]] = {}
+        self._current_row_spans: list[tuple[int, int, str, int]] = []  # (col, span, text, colspan)
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         attr_dict = dict(attrs)
@@ -76,7 +75,7 @@ class _TableBlockExtractor(HTMLParser):
                 self._in_header_cell = tag == "th"
                 if tag == "td":
                     self._current_row_all_th = False
-                
+
                 # Check for rowspan/colspan
                 rowspan = int(attr_dict.get("rowspan", 1) or 1)
                 colspan = int(attr_dict.get("colspan", 1) or 1)

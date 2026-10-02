@@ -24,7 +24,6 @@ from __future__ import annotations
 import argparse
 import collections
 import json
-import os
 import re
 import sys
 import threading
@@ -47,17 +46,14 @@ from qdrant_client import QdrantClient  # noqa: E402
 
 from app.retrieval.embedding import FastEmbedEngine  # noqa: E402
 
-# The corpus adapter opens barq_rag_eval_dataset.json relative to the CWD.
-os.chdir(REPO / "data" / "corpus")
 sys.path.insert(0, str(REPO / "data" / "corpus"))
 import adapters as A  # noqa: E402
-
-os.chdir(REPO)
 from deepeval.metrics import FaithfulnessMetric, GEval  # noqa: E402
 from deepeval.models import DeepEvalBaseLLM  # noqa: E402
 from deepeval.models.llms.utils import trim_and_load_json  # noqa: E402
 from deepeval.test_case import LLMTestCase  # noqa: E402
 from deepeval.test_case import SingleTurnParams as P  # noqa: E402
+
 from scripts.smoke_eval_retrieval import search  # noqa: E402
 
 GROUNDING_SYSTEM_PROMPT = """\
@@ -327,11 +323,17 @@ def judge_turn(t: dict, run, judge, threshold: float, index: int, history: list[
 
 
 def eval_session(
-    session_turns: list[dict], run, judge, threshold: float, first_index: int, on_turn
+    session_turns: list[dict],
+    run,
+    judge,
+    threshold: float,
+    first_index: int,
+    on_turn,
+    prior_history: list[dict] | None = None,
 ) -> list[dict]:
     """One conversation: turns strictly sequential so coreference history
     builds correctly; each turn's metrics run concurrently inside judge_turn."""
-    history: list[dict] = []
+    history: list[dict] = list(prior_history or [])
     rows = []
     for offset, t in enumerate(session_turns):
         row = judge_turn(t, run, judge, threshold, first_index + offset, history)
@@ -397,12 +399,30 @@ def main() -> int:
     # Resume support: turns already present in a previous artifact are skipped,
     # so a budget-capped or crashed run continues where it stopped.
     prev_rows: list[dict] = []
+    current_cfg = {
+        "collection": args.collection,
+        "gen_model": args.gen_model,
+        "judge_model": args.judge_model,
+        "threshold": args.threshold,
+        "top_k": args.top_k,
+    }
     if output.exists():
         try:
-            prev_rows = json.loads(output.read_text(encoding="utf-8"))["turns"]
+            data = json.loads(output.read_text(encoding="utf-8"))
+            stored_cfg = data.get("config")
+            if stored_cfg is not None and stored_cfg != current_cfg:
+                print(
+                    f"warning: {output.name} has different config {stored_cfg} vs current {current_cfg}; "
+                    "starting clean run.",
+                    flush=True,
+                )
+                prev_rows = []
+            else:
+                prev_rows = data.get("turns", [])
         except (json.JSONDecodeError, KeyError):
             prev_rows = []
     done_ids = {r["turn_id"] for r in prev_rows}
+    prev_answers = {r["turn_id"]: r["answer"] for r in prev_rows}
     if done_ids:
         print(f"resuming: {len(done_ids)} turns already completed in {output.name}\n", flush=True)
 
@@ -420,13 +440,7 @@ def main() -> int:
         output.write_text(
             json.dumps(
                 {
-                    "config": {
-                        "collection": args.collection,
-                        "gen_model": args.gen_model,
-                        "judge_model": args.judge_model,
-                        "threshold": args.threshold,
-                        "top_k": args.top_k,
-                    },
+                    "config": current_cfg,
                     "turns": merged,
                 },
                 indent=2,
@@ -459,8 +473,24 @@ def main() -> int:
         for s in sessions:
             remaining = [t for t in s["turns"] if t["turn_id"] not in done_ids]
             if remaining:
+                prior_history = []
+                for t in s["turns"]:
+                    tid = t["turn_id"]
+                    if tid in prev_answers:
+                        prior_history.append(
+                            {"question": t["standalone_input"], "answer": prev_answers[tid]}
+                        )
                 futures.append(
-                    pool.submit(eval_session, remaining, run, judge, args.threshold, 0, on_turn)
+                    pool.submit(
+                        eval_session,
+                        remaining,
+                        run,
+                        judge,
+                        args.threshold,
+                        0,
+                        on_turn,
+                        prior_history,
+                    )
                 )
         for f in as_completed(futures):
             rows.extend(f.result())

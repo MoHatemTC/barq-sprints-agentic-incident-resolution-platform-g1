@@ -30,42 +30,42 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from app.core.config import get_retrieval_settings  # noqa: E402
+from app.core.config import RetrievalMode, get_retrieval_settings  # noqa: E402
 
 get_retrieval_settings.cache_clear()
 print("Active Retrieval Mode:", get_retrieval_settings().retrieval_mode)
 
-from eval.run_manual_stage_a import RagasJudge, _load_adapters  # noqa: E402
 from qdrant_client import QdrantClient  # noqa: E402
 
-from agent.retrieval import QdrantRetriever  # noqa: E402
-from app.models.knowledge import Classification  # noqa: E402
 from app.retrieval.embedding import FastEmbedEngine  # noqa: E402
+from scripts.smoke_eval_retrieval import mean_reciprocal_rank, search  # noqa: E402
 
-adapters = _load_adapters()
-policy = adapters.load_metric_policy()
-judge = RagasJudge(policy)
-rows = adapters.retrieval_only_rows()
+sys.path.insert(0, str(REPO_ROOT / "data" / "corpus"))
+import adapters as A  # noqa: E402
 
-client = QdrantClient(url="http://127.0.0.1:16333")
-retriever = QdrantRetriever(
-    lambda: client,
-    FastEmbedEngine,
-    collection_name="stage_a_scratch",
-)
+turns = A.turns()
+client = QdrantClient(url=get_retrieval_settings().qdrant_url)
+engine = FastEmbedEngine()
 
 # Test 4 turns
 test_turns = ["S02-T3", "S02-T4", "S03-T1", "S06-T3"]
 
 for tid in test_turns:
-    row = next(r for r in rows if r["turn_id"] == tid)
-    res = retriever.search(
-        row["user_input"], classification=Classification.OTHER, top_k=8, threshold=0.55
+    turn = next(t for t in turns if t["turn_id"] == tid)
+    hits = search(
+        client,
+        engine,
+        RetrievalMode.HYBRID_RERANKED,
+        "manual_semantic_sections",
+        turn["standalone_input"],
+        5,
     )
-    contexts = [h.text for h in res.hits]
-    score = judge.score(row, contexts)
+    retrieved = [h.article_number for h in hits]
+    mrr = mean_reciprocal_rank(retrieved, turn)
+    s = A.score_retrieval(retrieved, turn)
     print("=" * 30)
     print(f"=== {tid} ===")
-    print("Query:", row["user_input"])
-    print(f'Top Hit 1: [{res.hits[0].article_id}] "{res.hits[0].title}"')
-    print(f"RAGAS Result: {score}")
+    print("Query:", turn["standalone_input"])
+    if hits:
+        print(f'Top Hit 1: [{hits[0].article_id}] "{hits[0].title}"')
+    print(f"Retrieval Score: recall={s['recall']}, precision={s['precision']}, mrr={mrr}")
