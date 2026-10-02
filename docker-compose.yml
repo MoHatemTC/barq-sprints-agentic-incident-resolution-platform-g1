@@ -25,6 +25,14 @@ x-app-environment: &app-environment
   WEBHOOK_OAUTH_CLIENT_SECRET: ${WEBHOOK_OAUTH_CLIENT_SECRET:?WEBHOOK_OAUTH_CLIENT_SECRET must be set in .env}
   WEBHOOK_OAUTH_SIGNING_KEY: ${WEBHOOK_OAUTH_SIGNING_KEY:?WEBHOOK_OAUTH_SIGNING_KEY must be set in .env}
 
+# Bounded container logs. Docker's json-file driver has no size limit by default, so a chatty
+# service fills the host disk (the shared EC2 has 19 GB shared with every image it builds).
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   # ---------------------------------------------------------------------------
   # 1. Qdrant — Vector Database (Sprint 1+)
@@ -35,10 +43,13 @@ services:
     # fails if they drift apart.
     image: qdrant/qdrant:v1.14.0
     container_name: barq-qdrant
+    logging: *default-logging
     restart: unless-stopped
+    # Loopback only, whatever BIND_IP says: Qdrant has no API key here, and the services
+    # reach it over the compose network, not through a published port.
     ports:
-      - "${BIND_IP:-127.0.0.1}:${QDRANT_HTTP_PORT:-6333}:6333"
-      - "${BIND_IP:-127.0.0.1}:${QDRANT_GRPC_PORT:-6334}:6334"
+      - "127.0.0.1:${QDRANT_HTTP_PORT:-6333}:6333"
+      - "127.0.0.1:${QDRANT_GRPC_PORT:-6334}:6334"
     volumes:
       - qdrant_data:/qdrant/storage
     environment:
@@ -60,9 +71,11 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: barq-postgres
+    logging: *default-logging
     restart: unless-stopped
+    # Loopback only, whatever BIND_IP says; the services use the compose network.
     ports:
-      - "${BIND_IP:-127.0.0.1}:${POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-barq_incident_dev}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
@@ -84,9 +97,11 @@ services:
   redis:
     image: redis:7-alpine
     container_name: barq-redis
+    logging: *default-logging
     restart: unless-stopped
+    # Loopback only, whatever BIND_IP says; the services use the compose network.
     ports:
-      - "${BIND_IP:-127.0.0.1}:${REDIS_PORT:-6379}:6379"
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
     environment:
@@ -116,6 +131,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: barq-api
+    logging: *default-logging
     restart: unless-stopped
     ports:
       - "${BIND_IP:-127.0.0.1}:${API_PORT:-8000}:8000"
@@ -147,6 +163,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: barq-celery-worker
+    logging: *default-logging
     restart: unless-stopped
     # SIGTERM → warm shutdown finishes the in-flight task; grace period must
     # exceed the worst-case remaining task time (see worker_soft_time_limit).
@@ -204,11 +221,15 @@ services:
   # 6. PostgreSQL Web UI (pgweb)
   # ---------------------------------------------------------------------------
   pgweb:
-    image: sosedoff/pgweb:latest
+    image: sosedoff/pgweb:0.17.0
     container_name: barq-pgweb
+    logging: *default-logging
     restart: unless-stopped
+    # Unauthenticated database admin UI: never part of a plain `docker compose up`.
+    # Start it deliberately with `docker compose --profile tools up -d pgweb`.
+    profiles: ["tools"]
     ports:
-      - "${BIND_IP:-127.0.0.1}:${PGWEB_PORT:-8081}:8081"
+      - "127.0.0.1:${PGWEB_PORT:-8081}:8081"
     environment:
       PGWEB_DATABASE_URL: "postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@barq-postgres:5432/${POSTGRES_DB:-barq_incident_dev}?sslmode=disable"
     depends_on:
@@ -223,9 +244,12 @@ services:
   redis-commander:
     image: rediscommander/redis-commander:latest
     container_name: barq-redis-commander
+    logging: *default-logging
     restart: unless-stopped
+    # Unauthenticated Redis admin UI (publishes no semver tags): opt-in only, loopback only.
+    profiles: ["tools"]
     ports:
-      - "${BIND_IP:-127.0.0.1}:${REDIS_COMMANDER_PORT:-8082}:8081"
+      - "127.0.0.1:${REDIS_COMMANDER_PORT:-8082}:8081"
     environment:
       REDIS_HOSTS: "local:barq-redis:6379:0:${REDIS_PASSWORD:-}"
     depends_on:

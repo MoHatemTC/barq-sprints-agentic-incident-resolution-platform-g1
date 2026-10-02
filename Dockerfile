@@ -3,7 +3,7 @@
 # Unified Container Image for FastAPI Ingestion API & Celery Workers
 # =============================================================================
 
-FROM python:3.12-slim AS base
+FROM python:3.12-slim-bookworm AS base
 
 
 # Prevent Python from writing .pyc files and buffer stdout/stderr
@@ -22,7 +22,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv for fast, reliable dependency resolution
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+# Pinned: `latest` made every build non-reproducible. Bump with `uv self version` in mind.
+COPY --from=ghcr.io/astral-sh/uv:0.12.19 /uv /uvx /bin/
 
 # Copy dependency specifications first for optimal layer caching
 COPY pyproject.toml uv.lock README.md /app/
@@ -51,5 +52,6 @@ EXPOSE 8000
 HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
     CMD curl -f http://127.0.0.1:8000/health || exit 1
 
-# Production ASGI Entrypoint
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips=*"]
+# Production ASGI Entrypoint. X-Forwarded-* is trusted from loopback only (`*` let any client
+# spoof its address in the access log); put a real proxy's address here if one is added.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips=127.0.0.1"]

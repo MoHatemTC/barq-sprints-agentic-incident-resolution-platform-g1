@@ -130,6 +130,15 @@ jobs:
             docker compose exec -T celery-worker \
               celery -A app.workers.celery_app inspect ping --timeout 10
 
+            echo "==> Reclaiming disk from superseded images and build cache..."
+            # Images are built on this host, so each deploy leaves the previous image
+            # and its layers behind (about 17 GB had accumulated). Only dangling images and
+            # build cache older than 72 h are removed: running containers, named volumes and
+            # the images in use are untouched. A failure here must never fail a good deploy.
+            docker image prune -f > /dev/null || true
+            docker builder prune -f --filter "until=72h" > /dev/null || true
+            df -h / | tail -1
+
             docker compose ps api celery-worker
             trap - ERR
             echo "Deployment successful: API and worker are operational at $deploy_sha"
