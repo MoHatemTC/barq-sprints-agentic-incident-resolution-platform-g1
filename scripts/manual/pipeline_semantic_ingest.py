@@ -120,17 +120,25 @@ def match_incident_article(title: str, incidents: dict[str, Article]) -> Article
 def article_number_for_section(section_number: str) -> str:
     """Derive the article number from the section's own number.
 
-    ``3.4`` → KB0304, chapter-only ``6`` → KB0600, ``B.3`` → KB1403. Raises
-    for numbers that cannot fit the model's four-digit contract (a chapter
-    above 99, an appendix past Z) — those must stop the pipeline, not alias
-    an existing article.
+    ``Document control`` → KB0000, ``3.4`` → KB0304, chapter-only ``6`` → KB0600,
+    ``B.3`` → KB1403. Raises for numbers that cannot fit the model's four-digit
+    contract (a chapter above 99, an appendix past Z) — those must stop the pipeline,
+    not alias an existing article.
     """
-    parts = section_number.split(".")
+    cleaned = section_number.strip()
+    if cleaned.lower() in ("document control", "document-control", "0", "0.0"):
+        return "KB0000"
+
+    parts = cleaned.split(".")
     head = parts[0]
     if head.isdigit():
         major = int(head)
-    else:
+    elif len(head) == 1 and head.isalpha():
         major = APPENDIX_BASE + (ord(head.upper()) - ord("A"))
+    else:
+        raise ValueError(
+            f"section {section_number!r} cannot map into the KB\\d{{4}} article-number contract"
+        )
     minor = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 0
 
     number = major * 100 + minor
@@ -207,11 +215,11 @@ def build_articles() -> tuple[list[Article], set[str]]:
     return articles, incident_ids
 
 
-def ingest_to_qdrant(articles: list[Article]) -> int:
+def ingest_to_qdrant(articles: list[Article], qdrant_url: str | None = None) -> int:
     """Chunk, embed, and upsert the articles into the main KB collection."""
     settings = get_retrieval_settings()
     engine = FastEmbedEngine()
-    client = QdrantClient(url=settings.qdrant_url)
+    client = QdrantClient(url=qdrant_url or settings.qdrant_url)
     # force_recreate=False and no purge: the shared incident_knowledge_base
     # keeps every existing article; ingestion is strictly additive per article.
     # Chunking uses chunking.py's constants (not ingest_articles' 700-char
@@ -280,6 +288,21 @@ def main() -> int:
         help="Actually write to Qdrant and ServiceNow. Without this the run is a dry run "
         "that only builds and validates the Articles.",
     )
+    parser.add_argument(
+        "--qdrant-url",
+        default=None,
+        help="Override Qdrant URL (defaults to RETRIEVAL_QDRANT_URL from settings).",
+    )
+    parser.add_argument(
+        "--skip-servicenow",
+        action="store_true",
+        help="Skip publishing to ServiceNow (useful for local Qdrant testing).",
+    )
+    parser.add_argument(
+        "--skip-qdrant",
+        action="store_true",
+        help="Skip ingesting to Qdrant.",
+    )
     args = parser.parse_args()
 
     if not SOURCE_PATH.exists():
@@ -303,21 +326,28 @@ def main() -> int:
         print("Dry run complete — re-run with --allow-writes to ingest and publish.")
         return 0
 
-    print("Ingesting to Qdrant...")
-    upserted = ingest_to_qdrant(articles)
-    print(f"Qdrant ingestion complete: {upserted} chunk points upserted.")
+    if not args.skip_qdrant:
+        print("Ingesting to Qdrant...")
+        upserted = ingest_to_qdrant(articles, qdrant_url=args.qdrant_url)
+        print(f"Qdrant ingestion complete: {upserted} chunk points upserted.")
+    else:
+        print("Skipping Qdrant ingestion (--skip-qdrant).")
 
-    manual_articles = [a for a in articles if a.article_id not in incident_ids]
-    print(
-        f"Publishing {len(manual_articles)} manual-section articles to ServiceNow "
-        f"(skipping {len(incident_ids)} incident articles already published there — "
-        f"published rows are frozen, the manual's rendering is Qdrant-only)..."
-    )
-    failed = asyncio.run(publish_to_servicenow(manual_articles))
-    if failed:
-        print(f"ServiceNow publishing finished with {failed} failure(s).", file=sys.stderr)
-        return 1
-    print("ServiceNow publishing complete.")
+    if not args.skip_servicenow:
+        manual_articles = [a for a in articles if a.article_id not in incident_ids]
+        print(
+            f"Publishing {len(manual_articles)} manual-section articles to ServiceNow "
+            f"(skipping {len(incident_ids)} incident articles already published there — "
+            f"published rows are frozen, the manual's rendering is Qdrant-only)..."
+        )
+        failed = asyncio.run(publish_to_servicenow(manual_articles))
+        if failed:
+            print(f"ServiceNow publishing finished with {failed} failure(s).", file=sys.stderr)
+            return 1
+        print("ServiceNow publishing complete.")
+    else:
+        print("Skipping ServiceNow publishing (--skip-servicenow).")
+
     return 0
 
 
