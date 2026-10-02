@@ -15,7 +15,7 @@ from uuid import UUID
 import structlog
 from sqlalchemy import func, select, update
 
-from app.db.models import ChatMessage, ChatTurn
+from app.db.models import ChatConversation, ChatMessage, ChatTurn
 from app.workers.sync_engine import SyncSessionFactory, sync_session_scope
 
 logger = structlog.get_logger(__name__)
@@ -115,6 +115,10 @@ class SQLAlchemyChatStore:
                     citations=citations or [],
                 )
             )
+            if seq == 1 and role == "user":
+                # Auto-title: the first user message (already sanitized) names
+                # the conversation unless the operator chose an explicit title.
+                _autotitle(session, conversation_id, content)
             session.commit()
 
     def complete_turn(
@@ -148,6 +152,25 @@ def _next_seq(session: Any, conversation_id: UUID) -> int:
         select(func.max(ChatMessage.seq)).where(ChatMessage.conversation_id == conversation_id)
     )
     return (current or 0) + 1
+
+
+#: Auto-titling only replaces the UI's placeholder, never an operator's title.
+_PLACEHOLDER_TITLES = frozenset({"new conversation", "new chat"})
+_AUTOTITLE_MAX_CHARS = 80
+
+
+def _autotitle(session: Any, conversation_id: UUID, first_message: str) -> None:
+    conversation = session.get(ChatConversation, conversation_id)
+    if conversation is None or conversation.title.strip().lower() not in _PLACEHOLDER_TITLES:
+        return
+    stripped = first_message.strip()
+    first_line = stripped.splitlines()[0] if stripped else ""
+    if first_line:
+        conversation.title = (
+            f"{first_line[:_AUTOTITLE_MAX_CHARS]}…"
+            if len(first_line) > _AUTOTITLE_MAX_CHARS
+            else first_line
+        )
 
 
 __all__ = ["ChatStore", "SQLAlchemyChatStore"]

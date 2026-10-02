@@ -254,6 +254,49 @@ async def test_delete_conversation_returns_204() -> None:
     assert resp.status_code == 204
 
 
+@pytest.mark.asyncio
+async def test_rename_conversation_updates_title() -> None:
+    session_row = _session_row()
+    conversation = _conversation_row(session_row.id)
+    app = _app(
+        _db_session({ChatSession: session_row, ChatConversation: conversation}), _fake_service()
+    )
+    headers = _session_headers(session_row)
+
+    async with await _client(app) as client:
+        renamed = await client.patch(
+            f"/api/v1/chat/conversations/{conversation.id}",
+            json={"title": "KER question"},
+            headers=headers,
+        )
+        empty = await client.patch(
+            f"/api/v1/chat/conversations/{conversation.id}", json={"title": "  "}, headers=headers
+        )
+
+    assert renamed.status_code == 200, renamed.text
+    assert renamed.json()["title"] == "KER question"
+    assert empty.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_rename_other_sessions_conversation_answers_404() -> None:
+    session_row = _session_row()
+    other_conversation = _conversation_row(uuid4())
+    app = _app(
+        _db_session({ChatSession: session_row, ChatConversation: other_conversation}),
+        _fake_service(),
+    )
+
+    async with await _client(app) as client:
+        resp = await client.patch(
+            f"/api/v1/chat/conversations/{other_conversation.id}",
+            json={"title": "stolen"},
+            headers=_session_headers(session_row),
+        )
+
+    assert resp.status_code == 404
+
+
 # -- messages & turns ----------------------------------------------------------------
 
 

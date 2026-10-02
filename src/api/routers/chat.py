@@ -32,6 +32,7 @@ from api.schemas.chat import (
     ChatSessionCreatedResponse,
     ChatTurnResponse,
     CreateConversationRequest,
+    RenameConversationRequest,
     SubmitMessageRequest,
 )
 from api.schemas.errors import ErrorResponse
@@ -47,6 +48,7 @@ from app.chat.service import ChatTurnService, TurnRequest
 from app.db.models import ChatConversation, ChatMessage, ChatSession, ChatTurn
 from app.exceptions.app_errors import (
     ConflictError,
+    ContractValidationError,
     ResourceNotFoundError,
     ServiceUnavailableError,
 )
@@ -141,6 +143,36 @@ async def create_conversation(
     except SQLAlchemyError as exc:
         logger.exception("chat_conversation_create_failed", error=str(exc))
         raise ServiceUnavailableError("Database unavailable to create the conversation.") from exc
+    return ChatConversationResponse.model_validate(conversation)
+
+
+@router.patch(
+    "/conversations/{conversation_id}",
+    response_model=ChatConversationResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Rename a conversation",
+    responses={
+        401: {"model": ErrorResponse, "description": "Missing chat session credentials."},
+        404: {"model": ErrorResponse, "description": "No such conversation for this session."},
+    },
+)
+async def rename_conversation(
+    conversation_id: UUID,
+    payload: RenameConversationRequest,
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    session: Annotated[ChatSession, Depends(require_chat_session)],
+) -> ChatConversationResponse:
+    conversation = await _owned_conversation(db, conversation_id, session)
+    title = payload.title.strip()
+    if not title:
+        raise ContractValidationError("Conversation title must not be empty.")
+    conversation.title = title
+    try:
+        await db.commit()
+        await db.refresh(conversation)
+    except SQLAlchemyError as exc:
+        logger.exception("chat_conversation_rename_failed", error=str(exc))
+        raise ServiceUnavailableError("Database unavailable to rename the conversation.") from exc
     return ChatConversationResponse.model_validate(conversation)
 
 

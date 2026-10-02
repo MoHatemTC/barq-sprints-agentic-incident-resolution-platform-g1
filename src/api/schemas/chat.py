@@ -25,6 +25,10 @@ class CreateConversationRequest(BaseModel):
     title: str | None = Field(default=None, max_length=200)
 
 
+class RenameConversationRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+
+
 class ChatConversationResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -74,5 +78,6 @@ __all__ = [
     "ChatSessionCreatedResponse",
     "ChatTurnResponse",
     "CreateConversationRequest",
+    "RenameConversationRequest",
     "SubmitMessageRequest",
 ]

@@ -41,7 +41,7 @@ EXPECTED_ROUTES: dict[str, set[str]] = {
     "/api/v1/config": {"GET"},
     "/api/v1/chat/sessions": {"POST"},
     "/api/v1/chat/conversations": {"GET", "POST"},
-    "/api/v1/chat/conversations/{conversation_id}": {"DELETE"},
+    "/api/v1/chat/conversations/{conversation_id}": {"DELETE", "PATCH"},
     "/api/v1/chat/conversations/{conversation_id}/messages": {"GET", "POST"},
     "/api/v1/chat/conversations/{conversation_id}/turns/{turn_id}": {"GET"},
 }
