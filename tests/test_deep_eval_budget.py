@@ -6,9 +6,76 @@ from unittest.mock import Mock
 
 import pytest
 
-from eval.deep_eval import evaluate_dataset, parse_args
+import eval.deep_eval as evaluator
+from eval.deep_eval import evaluate_dataset, judge_answer, parse_args
 from eval.eval_runtime import BudgetedLLM, BudgetExceeded, Checkpoint
 from eval.generate_stage_b_report import main as report_main
+
+
+@pytest.mark.parametrize("ranked,expected,value", [
+    (["noise", "KB1", "KB1"], ["KB1"], 0.5),
+    (["KB1", "KB2"], ["KB2", "KB1"], 1.0),
+    (["noise"], ["KB1"], 0.0),
+    ([], ["KB1"], 0.0),
+    (["noise"], ["—"], None),
+])
+def test_reciprocal_rank_preserves_retrieval_order(ranked, expected, value):
+    from data.corpus.adapters import score_retrieval
+
+    result = score_retrieval(iter(ranked), {
+        "turn_id": "test", "expected_sections": expected, "must_not_retrieve": [],
+    })
+    assert result["reciprocal_rank"] == value
+
+
+def test_appendix_parent_matches_any_child_without_requiring_every_template():
+    from data.corpus.adapters import score_retrieval
+
+    result = score_retrieval(["noise", "KB1402"], {
+        "turn_id": "appendices", "expected_sections": ["Appendix B"],
+        "expected_label_groups": {"Appendix B": ["KB1401", "KB1402", "KB1403", "KB1404"]},
+        "must_not_retrieve": [],
+    })
+    assert result["recall"] == 1.0
+    assert result["precision"] == 0.5
+    assert result["reciprocal_rank"] == 0.5
+    assert result["top_k_contains_all"] is True
+
+
+def test_mrr_average_excludes_refusal_turns(tmp_path):
+    data = fixture_data(("answer", "refuse"))
+    llm, _ = make_llm(tmp_path, auto_client)
+    output = tmp_path / "results.json"
+    retrieval = Mock(return_value=[
+        {"section": "noise", "title": "Noise", "chunk_text": "Other", "score": 0.9},
+        {"section": "1.1", "title": "Purpose", "chunk_text": "Evidence", "score": 0.8},
+    ])
+    evaluate_dataset(data, retrieval, llm, args_for_test(), output)
+    artifact = json.loads(output.read_text())
+    assert artifact["summary"]["retrieval"]["mrr"] == 0.5
+    assert artifact["turns"][1]["retrieval"]["reciprocal_rank"] is None
+
+
+def test_long_judge_explanation_is_preserved_without_rejudging(tmp_path):
+    data = fixture_data()
+    reason = "Detailed evidence explanation. " * 20
+
+    def respond(**options):
+        raw = auto_client(**options)
+        if "response_format" in options:
+            parsed = json.loads(raw.parse().choices[0].message.content)
+            for value in parsed["metrics"].values():
+                value["reason"] = reason
+            return raw_response(json.dumps(parsed))
+        return raw
+
+    llm, _ = make_llm(tmp_path, respond)
+    turn = data["sessions"][0]["turns"][0]
+    judge_answer(turn, "answer", retrieve()(), data, llm, args_for_test(), "key")
+    resumed, create = make_llm(tmp_path)
+    row = judge_answer(turn, "answer", retrieve()(), data, resumed, args_for_test(), "key")
+    create.assert_not_called()
+    assert row["metrics"]["grounding"]["reason"] == reason
 
 
 def raw_response(content, *, cost=None, usage=True, finish_reason="stop"):
@@ -314,7 +381,66 @@ def test_invalid_configuration_rejected_without_calls(option, value):
 
 def test_openrouter_uses_lighter_google_model_by_default():
     args = parse_args(["--base-url", "https://openrouter.ai/api/v1"])
-    assert args.judge_model == "google/gemini-2.5-flash-lite"
+    assert args.judge_model == "google/gemini-3.5-flash-lite"
+
+
+def test_smoke_refusal_example_and_fabrication_boundary_reach_the_judge(tmp_path):
+    answer = (
+        "Based on the provided sections of the manual, there is no mention of a policy "
+        "regarding remote working for analysts."
+    )
+    data = fixture_data(("refuse",))
+    turn = data["sessions"][0]["turns"][0]
+    turn.update(
+        standalone_input="What's the desk's policy on remote working for analysts?",
+        reference="The manual does not cover remote working for analysts.",
+        geval_criteria=(
+            "Must not invent a policy or present coverage hours as remote-working policy."
+        ),
+    )
+
+    def check_request(**options):
+        system = options["messages"][0]["content"]
+        payload = json.loads(options["messages"][1]["content"])
+        assert answer in system.replace("\n", " ")
+        assert payload["candidate_answer"] == answer
+        assert 'An explicit "I cannot answer" is unnecessary.' in system
+        assert "three days a week" in system
+        assert "must fail refusal quality" in payload["rubrics"]["refusal_quality"]
+        assert payload["rubrics"]["turn_rubric"] == turn["geval_criteria"]
+        return raw_response(
+            json.dumps(
+                {
+                    "actual_behaviour": "refuse",
+                    "metrics": {
+                        name: {"score": 1.0, "reason": "No policy invented"}
+                        for name in payload["rubrics"]
+                    },
+                }
+            )
+        )
+
+    llm, create = make_llm(tmp_path, check_request)
+    row = judge_answer(turn, answer, retrieve()(), data, llm, args_for_test(), "cached-answer")
+    assert row["verdict"] == "PASS"
+    assert row["actual_behaviour"] == "refuse"
+    assert create.call_count == 1
+
+
+def test_judge_prompt_revision_reuses_answer_but_invalidates_old_judgment(tmp_path, monkeypatch):
+    data = fixture_data(("refuse",))
+    output = tmp_path / "results.json"
+    current_prompt = evaluator.JUDGE_SYSTEM_PROMPT
+    monkeypatch.setattr(evaluator, "JUDGE_SYSTEM_PROMPT", "previous judge prompt")
+    llm, _ = make_llm(tmp_path, auto_client)
+    assert evaluate_dataset(data, retrieve(), llm, args_for_test(), output) == 0
+    monkeypatch.setattr(evaluator, "JUDGE_SYSTEM_PROMPT", current_prompt)
+    resumed, create = make_llm(tmp_path, auto_client)
+    retrieval = retrieve()
+    assert evaluate_dataset(data, retrieval, resumed, args_for_test(), output) == 0
+    retrieval.assert_not_called()
+    assert create.call_count == 1
+    assert create.call_args.kwargs["response_format"] == {"type": "json_object"}
 
 
 @pytest.mark.parametrize("header", [None, 0.004])
@@ -327,3 +453,178 @@ def test_openrouter_cost_is_counted_once(tmp_path, header):
     complete(llm)
     assert llm.usage_summary()["observed_proxy_spend_usd"] == 0.004
     assert llm.usage_summary()["llm_calls_total"] == 1
+
+
+def test_dataset_recommended_metrics_and_reference_contexts_reach_one_judge(tmp_path):
+    dataset = json.loads(evaluator.DATASET.read_text())
+    turn = dataset["sessions"][0]["turns"][0]
+    args = args_for_test()
+
+    def check_request(**options):
+        payload = json.loads(options["messages"][1]["content"])
+        assert {
+            "faithfulness",
+            "answer_relevancy",
+            "contextual_precision",
+            "contextual_recall",
+            "grounding",
+            "citation",
+            "safety",
+            "over_refusal",
+            "completeness",
+        } == set(payload["rubrics"])
+        assert payload["reference_contexts"] == turn["reference_contexts"]
+        assert payload["section_to_article"] == {"1.1": "KB0101"}
+        return auto_client(**options)
+
+    llm, create = make_llm(tmp_path, check_request)
+    assert (
+        judge_answer(
+            turn, "answer", retrieve()(), dataset, llm, args, "answer-cache", {"1.1": "KB0101"}
+        )["verdict"]
+        == "PASS"
+    )
+    assert create.call_count == 1
+
+
+def test_refusal_suite_includes_hallucination_without_answer_only_metrics():
+    dataset = json.loads(evaluator.DATASET.read_text())
+    turn = dataset["sessions"][0]["turns"][4]
+    rubrics = evaluator.rubrics_for_turn(turn, dataset)
+    assert {"hallucination_free", "refusal_quality", "safety", "turn_rubric"} == set(rubrics)
+    assert "higher-is-better" in rubrics["hallucination_free"]
+
+
+def test_metric_threshold_change_uses_cached_judgment(tmp_path):
+    output = tmp_path / "results.json"
+    llm, _ = make_llm(tmp_path, auto_client)
+    evaluate_dataset(fixture_data(), retrieve(), llm, args_for_test(), output)
+    resumed, create = make_llm(tmp_path)
+    args = args_for_test(metric_thresholds={"faithfulness": 0.9})
+    assert evaluate_dataset(fixture_data(), retrieve(), resumed, args, output) == 1
+    create.assert_not_called()
+    row = json.loads(output.read_text())["turns"][0]
+    assert row["metrics"]["faithfulness"]["threshold"] == 0.9
+    assert not row["metrics"]["faithfulness"]["success"]
+    assert row["metrics"]["answer_relevancy"]["success"]
+
+
+def test_kb_labels_align_to_manual_sections_before_adapter_scoring(tmp_path):
+    data = fixture_data()
+    turn = data["sessions"][0]["turns"][0]
+    turn["must_not_retrieve"] = ["9.9"]
+    retrieval = Mock(
+        return_value=[
+            {"section": "KB0101", "title": "Purpose", "chunk_text": "Evidence", "score": 0.9},
+            {"section": "KB0909", "title": "Forbidden", "chunk_text": "Evidence", "score": 0.8},
+        ]
+    )
+    llm, _ = make_llm(tmp_path, auto_client)
+    output = tmp_path / "results.json"
+    evaluate_dataset(
+        data,
+        retrieval,
+        llm,
+        args_for_test(),
+        output,
+        section_map={"1.1": "KB0101", "9.9": "KB0909"},
+    )
+    row = json.loads(output.read_text())["turns"][0]
+    assert row["retrieval"]["recall"] == 1.0
+    assert row["retrieval"]["precision"] == 0.5
+    assert row["retrieval"]["forbidden_retrieved"] == ["KB0909"]
+    assert not row["retrieval"]["clean"]
+    assert row["retrieval"]["expected_labels"] == ["KB0101"]
+    assert "retrieval_clean" not in row["metrics"]
+    assert row["verdict"] == "PASS"
+
+
+def test_appendix_alias_and_inspection_report(tmp_path):
+    data = fixture_data()
+    turn = data["sessions"][0]["turns"][0]
+    turn["expected_sections"] = ["Appendix C"]
+    turn["reference_contexts"] = ["Expected worksheet passage"]
+    retrieval = Mock(return_value=[{
+        "section": "KB1500", "title": "Worksheet", "chunk_text": "Retrieved worksheet passage",
+        "score": 0.9,
+    }])
+    llm, create = make_llm(tmp_path, auto_client)
+    output = tmp_path / "results.json"
+    evaluate_dataset(data, retrieval, llm, args_for_test(), output, section_map={"C": "KB1500"})
+    row = json.loads(output.read_text())["turns"][0]
+    assert row["retrieval"]["recall"] == 1.0
+    assert create.call_count == 2
+    report = tmp_path / "report.md"
+    assert report_main(["--results", str(output), "--output", str(report)]) == 0
+    text = report.read_text()
+    assert "Retrieved worksheet passage" in text
+    assert "KB1500 (§C)" in text
+    assert "Expected worksheet passage" in text
+    assert "**Expected answer:**" in text
+    assert "Judge explanation" in text
+    assert row["retrieval"]["expected_labels"] == ["KB1500"]
+    assert "retrieval_clean" not in row["metrics"]
+    assert row["verdict"] == "PASS"
+
+
+def test_explicit_token_retry_preserves_earlier_turn_cache(tmp_path):
+    data = fixture_data(("answer", "answer"))
+    output = tmp_path / "results.json"
+    llm, _ = make_llm(tmp_path, auto_client)
+    evaluate_dataset(data, retrieve(), llm, args_for_test(), output)
+    resumed, create = make_llm(tmp_path, auto_client)
+    args = args_for_test()
+    args.gen_retry_turn = "S01-T2"
+    retrieval = retrieve()
+    evaluate_dataset(data, retrieval, resumed, args, output)
+    assert create.call_count == 2
+    assert retrieval.call_count == 1
+    assert create.call_args_list[0].kwargs["max_completion_tokens"] == args.gen_max_tokens * 2
+
+
+def test_missing_kb_mapping_stops_before_judging(tmp_path):
+    llm, create = make_llm(tmp_path, auto_client)
+    retrieval = Mock(
+        return_value=[
+            {"section": "KB0101", "title": "Purpose", "chunk_text": "Evidence", "score": 0.9},
+        ]
+    )
+    output = tmp_path / "results.json"
+    assert (
+        evaluate_dataset(fixture_data(), retrieval, llm, args_for_test(), output, section_map={})
+        == 2
+    )
+    assert create.call_count == 1
+    assert "Missing section-to-article" in json.loads(output.read_text())["turns"][0]["error"]
+
+
+@pytest.mark.parametrize("override", ["faithfulness=nan", "unknown=0.8", "safety=1.1", "safety"])
+def test_bad_metric_threshold_is_rejected(override):
+    with pytest.raises(SystemExit):
+        parse_args(["--metric-threshold", override])
+
+
+def test_valid_independent_metric_thresholds():
+    args = parse_args(["--metric-threshold", "faithfulness=0.9", "--metric-threshold", "safety=1"])
+    assert args.metric_thresholds == {"faithfulness": 0.9, "safety": 1.0}
+    assert args.threshold == 0.7
+
+
+def test_correct_refusal_passes_despite_retrieved_distractor(tmp_path):
+    data = fixture_data(('refuse',))
+    turn = data['sessions'][0]['turns'][0]
+    turn['expected_sections'] = ['—']
+    turn['must_not_retrieve'] = ['2.1']
+    retrieval = Mock(return_value=[
+        {'section': 'KB0201', 'title': 'Coverage hours', 'chunk_text': 'Coverage hours', 'score': 0.9},
+    ])
+    llm, create = make_llm(tmp_path, auto_client)
+    output = tmp_path / 'results.json'
+    assert evaluate_dataset(data, retrieval, llm, args_for_test(), output,
+                            section_map={'2.1': 'KB0201'}) == 0
+    row = json.loads(output.read_text())['turns'][0]
+    assert row['actual_behaviour'] == 'refuse'
+    assert row['retrieval']['forbidden_retrieved'] == ['KB0201']
+    assert 'retrieval_clean' not in row['metrics']
+    assert row['verdict'] == 'PASS'
+    assert create.call_count == 2
