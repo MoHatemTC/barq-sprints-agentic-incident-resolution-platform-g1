@@ -54,37 +54,90 @@ class _TableBlockExtractor(HTMLParser):
         self._current_cell: list[str] | None = None
         self._in_header_cell = False
         self._depth = 0  # nesting depth for nested tables
+        # Track active rowspans: col_index -> (remaining_rows, text, colspan)
+        self._active_rowspans: dict[int, tuple[int, str, int]] = {}
+        self._current_row_spans: list[tuple[int, int, str, int]] = []  # (col, span, text, colspan)
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        attr_dict = dict(attrs)
         if tag == "table":
             self._depth += 1
-        elif self._depth == 1:  # only process the outermost table
+            if self._depth > 1 and self._current_cell is not None:
+                # Add a separator before nested table contents
+                self._current_cell.append(" [ ")
+        elif self._depth == 1:
             if tag == "tr":
                 self._current_row = []
                 self._current_row_all_th = True
+                self._current_row_spans = []
             elif tag in ("td", "th"):
                 self._current_cell = []
                 self._in_header_cell = tag == "th"
                 if tag == "td":
                     self._current_row_all_th = False
-            # Inline/formatting tags: ignore, text handled by handle_data
+
+                # Check for rowspan/colspan
+                rowspan = int(attr_dict.get("rowspan", 1) or 1)
+                colspan = int(attr_dict.get("colspan", 1) or 1)
+                self._current_cell_spans = (rowspan, colspan)
+        elif self._depth > 1:
+            if tag in ("td", "th") and self._current_cell is not None:
+                self._current_cell.append(" ")
 
     def handle_endtag(self, tag: str) -> None:
         if tag == "table":
+            if self._depth > 1 and self._current_cell is not None:
+                self._current_cell.append(" ] ")
             self._depth -= 1
         elif self._depth == 1:
             if tag in ("td", "th") and self._current_cell is not None:
                 text = " ".join("".join(self._current_cell).split())
+                rowspan, colspan = getattr(self, "_current_cell_spans", (1, 1))
                 if self._current_row is not None:
-                    self._current_row.append(text)
+                    col_idx = len(self._current_row)
+                    # Account for previously active rowspans inserting into current row
+                    while col_idx in self._active_rowspans:
+                        col_idx += 1
+                    for _ in range(colspan):
+                        self._current_row.append(text)
+                    if rowspan > 1:
+                        self._current_row_spans.append((col_idx, rowspan - 1, text, colspan))
                 self._current_cell = None
             elif tag == "tr" and self._current_row is not None:
-                self._rows.append(self._current_row)
+                # Insert inherited rowspans from previous rows into current row
+                complete_row = []
+                cell_iter = iter(self._current_row)
+                new_active = {}
+
+                # First, process existing active rowspans
+                active_cols_span = sum(s[2] for s in self._active_rowspans.values())
+                max_cols = max(len(self._current_row) + active_cols_span, 1)
+                for c in range(max_cols):
+                    if c in self._active_rowspans:
+                        rem, text, cspan = self._active_rowspans[c]
+                        complete_row.append(text)
+                        if rem > 1:
+                            new_active[c] = (rem - 1, text, cspan)
+                    else:
+                        val = next(cell_iter, None)
+                        if val is not None:
+                            complete_row.append(val)
+                # Any trailing cells
+                for val in cell_iter:
+                    complete_row.append(val)
+
+                # Register new rowspans for subsequent rows
+                for col_idx, rem, text, cspan in self._current_row_spans:
+                    for offset in range(cspan):
+                        new_active[col_idx + offset] = (rem, text, 1)
+
+                self._active_rowspans = new_active
+                self._rows.append(complete_row)
                 self._row_is_header.append(self._current_row_all_th)
                 self._current_row = None
 
     def handle_data(self, data: str) -> None:
-        if self._current_cell is not None and self._depth == 1:
+        if self._current_cell is not None:
             self._current_cell.append(data)
 
     def get_table_block(self) -> TableBlock | None:
@@ -184,7 +237,7 @@ def _is_noise_line(line: str) -> bool:
 def _extract_page_number(line: str) -> int | None:
     """If the line is a page-number marker, return the page number."""
     stripped = line.strip()
-    m = re.match(r"^\*{0,2}(\d{1,3})\*{0,2}\s+of\s+\d{1,3}", stripped)
+    m = re.search(r"\*{0,2}(\d{1,3})\*{0,2}\s+of\s+\d{1,3}", stripped)
     if m:
         return int(m.group(1))
     return None
@@ -522,19 +575,25 @@ def _parse_appendix_e_html(body: str) -> AppendixERelationships:
             id_match = _IDENTIFIER_RE.match(id_cell)
             if not id_match:
                 continue
-            identifier = id_match.group(1).replace(" ", "")
+            raw_id = id_match.group(1).replace(" ", "")
+            # Also extract base identifier (e.g. KB0010 from KB0010v1 or KB0010 v1)
+            base_id_match = re.match(r"^((?:KB|INC|PRB|KE|CHG|RITM)\d+|MIR-\d{4}-\d+)", raw_id)
+            base_id = base_id_match.group(1) if base_id_match else raw_id
 
             # Extract section numbers.
             section_nums = _SECTION_LIST_RE.findall(sections_cell)
             if not section_nums:
                 continue
 
-            forward.setdefault(identifier, [])
-            for num in section_nums:
-                if num not in forward[identifier]:
-                    forward[identifier].append(num)
-                reverse.setdefault(num, [])
-                if identifier not in reverse[num]:
-                    reverse[num].append(identifier)
+            # Map both raw_id (e.g. KB0010v1) and base_id (e.g. KB0010)
+            id_keys = [raw_id] if raw_id == base_id else [raw_id, base_id]
+            for identifier in id_keys:
+                forward.setdefault(identifier, [])
+                for num in section_nums:
+                    if num not in forward[identifier]:
+                        forward[identifier].append(num)
+                    reverse.setdefault(num, [])
+                    if identifier not in reverse[num]:
+                        reverse[num].append(identifier)
 
     return AppendixERelationships(forward=forward, reverse=reverse)

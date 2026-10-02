@@ -15,8 +15,10 @@ import argparse
 import collections
 import json
 from collections.abc import Callable, Iterable
+from pathlib import Path
 
-DATA = json.load(open("barq_rag_eval_dataset.json", encoding="utf-8"))
+_DATASET_PATH = Path(__file__).resolve().parent / "barq_rag_eval_dataset.json"
+DATA = json.loads(_DATASET_PATH.read_text(encoding="utf-8"))
 
 
 # ──────────────────────────────────────────────────────────── selection

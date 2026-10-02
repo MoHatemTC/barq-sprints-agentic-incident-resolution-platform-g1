@@ -33,7 +33,7 @@ logger = structlog.get_logger("seed_qdrant_markdown")
 
 DEFAULT_CORPUS = Path("data/corpus/barq_articles.json")
 DEFAULT_STRESSORS = Path("data/corpus/stressors/stressor_articles.json")
-DEFAULT_MARKDOWN = Path("data/corpus/parsed-pdf.md")
+DEFAULT_MARKDOWN = Path("data/corpus/barq_manual.md")
 
 
 def main() -> int:
