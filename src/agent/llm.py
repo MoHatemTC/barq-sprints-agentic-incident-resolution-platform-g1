@@ -68,9 +68,15 @@ class LLMClient(Protocol):
         model: str | None = None,
         trace_content: bool = True,
         max_retries: int | None = None,
+        max_completion_tokens: int | None = None,
         usage_sink: UsageSink | None = None,
     ) -> M:
         """Return ``schema`` parsed from the model's answer to ``prompt``.
+
+        ``max_completion_tokens``, when given, caps the completion size for this
+        call instead of ``settings.agent_llm_max_tokens`` — callers with their
+        own tighter bound (the admin chat) use it so their cost reservation
+        matches the enforced cap.
 
         ``usage_sink``, when given, receives token/cost metadata for the call
         (chat budget reconciliation); it is optional so existing callers and
@@ -174,6 +180,7 @@ class LiteLLMClient:
         model: str | None = None,
         trace_content: bool = True,
         max_retries: int | None = None,
+        max_completion_tokens: int | None = None,
         usage_sink: UsageSink | None = None,
     ) -> M:
         import openai
@@ -182,7 +189,9 @@ class LiteLLMClient:
         selected_model = self.model_for_purpose(purpose, model)
         self._last_model_used = selected_model
         self._purpose_models[purpose] = selected_model
-        options: dict[str, Any] = {"max_completion_tokens": settings.agent_llm_max_tokens}
+        options: dict[str, Any] = {
+            "max_completion_tokens": max_completion_tokens or settings.agent_llm_max_tokens
+        }
         if settings.agent_llm_reasoning_effort:
             options["reasoning_effort"] = settings.agent_llm_reasoning_effort
         trace_input = (

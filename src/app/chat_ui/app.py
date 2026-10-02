@@ -9,6 +9,7 @@ submission so a Streamlit rerun cannot double-charge a turn.
 from __future__ import annotations
 
 import os
+import time
 import uuid
 from typing import Any
 
@@ -20,6 +21,11 @@ import streamlit as st
 DEFAULT_API_BASE = os.environ.get("CHAT_UI_API_BASE", "http://localhost:8000")
 MAX_MESSAGE_CHARS = 6000
 NEW_CONVERSATION = "New conversation"
+
+#: Polling for a turn the API gave up waiting on but did not lose; bounded so
+#: a wedged worker cannot hang the browser session forever.
+_TURN_POLL_SECONDS = 3
+_TURN_POLL_MAX_WAIT_SECONDS = 600
 
 st.set_page_config(page_title="BARQ Admin Chat", page_icon="💬", layout="wide")
 
@@ -61,10 +67,48 @@ def _session_headers() -> dict[str, str]:
 
 def _request(method: str, path: str, *, headers: dict[str, str], **kwargs: Any) -> httpx.Response:
     try:
-        return httpx.request(method, f"{_api()}{path}", headers=headers, timeout=180, **kwargs)
+        response = httpx.request(method, f"{_api()}{path}", headers=headers, timeout=180, **kwargs)
     except httpx.HTTPError as exc:
         st.error(f"Cannot reach the API at {_api()} ({type(exc).__name__}).")
         st.stop()
+    if response.status_code == 401 and "Authorization" in headers:
+        # The operator token is short-lived (5 minutes); refresh it silently once.
+        if _refresh_token():
+            headers["Authorization"] = f"Bearer {st.session_state['token']}"
+            try:
+                return httpx.request(
+                    method, f"{_api()}{path}", headers=headers, timeout=180, **kwargs
+                )
+            except httpx.HTTPError as exc:
+                st.error(f"Cannot reach the API at {_api()} ({type(exc).__name__}).")
+                st.stop()
+    return response
+
+
+def _refresh_token() -> bool:
+    """Re-issue the operator token using the stored credentials; False if not possible."""
+    client_id = st.session_state.get("operator_client_id")
+    client_secret = st.session_state.get("operator_client_secret")
+    if not (client_id and client_secret):
+        return False
+    try:
+        token_response = httpx.request(
+            "POST",
+            f"{_api()}/api/v1/oauth/token",
+            headers={},
+            data={
+                "grant_type": "client_credentials",
+                "client_id": client_id,
+                "client_secret": client_secret,
+            },
+            timeout=30,
+        )
+    except httpx.HTTPError:
+        return False
+    if token_response.status_code != 200:
+        return False
+    st.session_state["token"] = token_response.json()["access_token"]
+    return True
 
 
 def _api_error(response: httpx.Response) -> str:
@@ -78,7 +122,13 @@ def _api_error(response: httpx.Response) -> str:
 def _handle_auth_failure(status_code: int) -> bool:
     if status_code != 401:
         return False
-    for key in ("token", "chat_session_id", "chat_session_secret"):
+    for key in (
+        "token",
+        "chat_session_id",
+        "chat_session_secret",
+        "operator_client_id",
+        "operator_client_secret",
+    ):
         st.session_state.pop(key, None)
     st.error("Your session expired. Sign in again.")
     st.rerun()
@@ -131,8 +181,11 @@ def _login() -> None:
         return
     body = chat_response.json()
     st.session_state["token"] = token
+    st.session_state["operator_client_id"] = client_id.strip()
+    st.session_state["operator_client_secret"] = client_secret
     st.session_state["chat_session_id"] = body["session_id"]
     st.session_state["chat_session_secret"] = body["chat_secret"]
+    st.session_state.pop("conversation_id", None)
     st.rerun()
 
 
@@ -249,6 +302,8 @@ def _sidebar() -> None:
                 "token",
                 "chat_session_id",
                 "chat_session_secret",
+                "operator_client_id",
+                "operator_client_secret",
                 "conversation_id",
                 "conversations",
                 "pending_delete",
@@ -311,12 +366,48 @@ def _send(conversation_id: str, prompt: str) -> None:
         st.error(_api_error(response))
         return
     turn = response.json()
+    if turn["status"] == "running":
+        turn = _wait_for_turn(conversation_id, turn)
+        if turn is None:
+            return
     if turn["status"] == "failed":
         st.error("The answer could not be produced. It is recorded as a failed turn; try again.")
     elif turn["status"] == "blocked":
         st.warning("The answer was withheld; see the assistant message for the reason.")
     _invalidate_conversations()  # a first message may have auto-titled the chat
     st.rerun()
+
+
+def _wait_for_turn(conversation_id: str, turn: dict[str, Any]) -> dict[str, Any] | None:
+    """Poll a slow turn until it reaches a terminal state or the wait expires."""
+    deadline = time.monotonic() + _TURN_POLL_MAX_WAIT_SECONDS
+    turn_id = turn["id"]
+    progress = st.progress(0.0, text="Still working… polling the saved turn.")
+    while time.monotonic() < deadline:
+        time.sleep(_TURN_POLL_SECONDS)
+        progress.progress(
+            min(0.95, 1 - (deadline - time.monotonic()) / _TURN_POLL_MAX_WAIT_SECONDS),
+            text="Still working… polling the saved turn.",
+        )
+        polled = _request(
+            "GET",
+            f"/api/v1/chat/conversations/{conversation_id}/turns/{turn_id}",
+            headers=_session_headers(),
+        )
+        if _handle_auth_failure(polled.status_code):
+            return None
+        if polled.status_code != 200:
+            st.error(_api_error(polled))
+            return None
+        current = polled.json()
+        if current["status"] != "running":
+            progress.empty()
+            return current
+    progress.empty()
+    st.warning(
+        "The answer is still being prepared. Reopen this conversation in a moment to see it."
+    )
+    return None
 
 
 def _chat_panel(conversation_id: str) -> None:
@@ -330,6 +421,11 @@ def _chat_panel(conversation_id: str) -> None:
     )
     if _handle_auth_failure(history.status_code):
         return
+    if history.status_code == 404:
+        # The selected conversation belongs to an earlier chat session — drop it.
+        st.session_state.pop("conversation_id", None)
+        _invalidate_conversations()
+        st.rerun()
     if history.status_code != 200:
         st.error(_api_error(history))
         return

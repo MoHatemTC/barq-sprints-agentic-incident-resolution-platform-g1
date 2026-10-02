@@ -92,7 +92,7 @@ def test_successful_turn_reserves_and_reconciles() -> None:
     assert outcome.route == "knowledge"
     assert len(budget.reserves) == 1 and budget.reserves[0] > 0
     assert len(budget.reconciles) == 1
-    completion = store.calls_named("complete_turn")[-1]
+    completion = store.calls_named("attach_usage")[-1]
     usage = completion["usage"]
     assert usage["model_calls"] == 4
     assert usage["input_tokens"] == 3600  # FakeLLM records 900 in / 150 out per call
@@ -113,6 +113,27 @@ def test_budget_exhausted_blocks_without_any_model_call() -> None:
     assert "budget" in store.calls_named("assistant_message")[0]["content"].lower()
     assert store.calls_named("complete_turn")[0]["usage"] == {"blocked_layer": "budget_exceeded"}
     assert budget.reserves == []
+
+
+def test_budget_blocked_message_is_stored_as_placeholder_without_autotitle() -> None:
+    """No full screening ran, so neither raw nor only-redacted text may persist."""
+    llm = FakeLLM(answers={})
+    store = FakeChatStore()
+    budget = FakeBudget()
+    budget.fail_reserve = True
+    request = TurnRequest(
+        conversation_id=_request().conversation_id,
+        turn_id=_request().turn_id,
+        operator_subject="barq-operator",
+        user_message="My name is Jane Doe — what is a P1?",
+    )
+
+    _service(llm, store, budget).handle_turn(request)
+
+    stored = store.calls_named("user_message")[0]
+    assert stored["content"] == "[message withheld before screening]"
+    assert stored["autotitle"] is False
+    assert "Jane Doe" not in stored["content"]
 
 
 def test_unconfigured_budget_refuses_paid_processing() -> None:

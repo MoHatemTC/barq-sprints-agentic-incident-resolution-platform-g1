@@ -33,6 +33,7 @@ class ChatStore(Protocol):
         *,
         content: str,
         blocked_layer: str | None,
+        autotitle: bool = True,
     ) -> None: ...
 
     def record_assistant_message(
@@ -44,7 +45,28 @@ class ChatStore(Protocol):
         citations: list[dict[str, object]],
     ) -> None: ...
 
+    def publish_turn(
+        self,
+        conversation_id: UUID,
+        turn_id: UUID,
+        *,
+        content: str,
+        citations: list[dict[str, object]],
+        status: str,
+        route: str | None,
+        usage: dict[str, object] | None,
+    ) -> bool: ...
+
     def complete_turn(
+        self,
+        turn_id: UUID,
+        *,
+        status: str,
+        route: str | None,
+        usage: dict[str, object] | None,
+    ) -> None: ...
+
+    def attach_usage(
         self,
         turn_id: UUID,
         *,
@@ -79,8 +101,15 @@ class SQLAlchemyChatStore:
         *,
         content: str,
         blocked_layer: str | None,
+        autotitle: bool = True,
     ) -> None:
-        self._insert_message(conversation_id, turn_id, role="user", content=content)
+        self._insert_message(
+            conversation_id,
+            turn_id,
+            role="user",
+            content=content,
+            autotitle=autotitle,
+        )
 
     def record_assistant_message(
         self,
@@ -102,6 +131,7 @@ class SQLAlchemyChatStore:
         role: str,
         content: str,
         citations: list[dict[str, object]] | None = None,
+        autotitle: bool = False,
     ) -> None:
         with sync_session_scope(self._factory) as session:
             seq = _next_seq(session, conversation_id)
@@ -115,11 +145,52 @@ class SQLAlchemyChatStore:
                     citations=citations or [],
                 )
             )
-            if seq == 1 and role == "user":
+            if autotitle and seq == 1 and role == "user":
                 # Auto-title: the first user message (already sanitized) names
                 # the conversation unless the operator chose an explicit title.
                 _autotitle(session, conversation_id, content)
             session.commit()
+
+    def publish_turn(
+        self,
+        conversation_id: UUID,
+        turn_id: UUID,
+        *,
+        content: str,
+        citations: list[dict[str, object]],
+        status: str,
+        route: str | None,
+        usage: dict[str, object] | None,
+    ) -> bool:
+        """Close the turn and persist the assistant message in one transaction.
+
+        The UPDATE is guarded on ``status = 'running'`` so a worker whose turn
+        was already reclaimed as stale cannot publish an orphaned answer after
+        a new turn started. Returns False when the turn was no longer running.
+        """
+        with sync_session_scope(self._factory) as session:
+            result: Any = session.execute(
+                update(ChatTurn)
+                .where(ChatTurn.id == turn_id, ChatTurn.status == "running")
+                .values(status=status, route=route, usage=usage, completed_at=func.now())
+            )
+            if result.rowcount == 0:
+                session.rollback()
+                logger.warning("chat_turn_publish_skipped_not_running", turn_id=str(turn_id))
+                return False
+            seq = _next_seq(session, conversation_id)
+            session.add(
+                ChatMessage(
+                    conversation_id=conversation_id,
+                    turn_id=turn_id,
+                    seq=seq,
+                    role="assistant",
+                    content=content,
+                    citations=citations or [],
+                )
+            )
+            session.commit()
+            return True
 
     def complete_turn(
         self,
@@ -137,11 +208,32 @@ class SQLAlchemyChatStore:
             )
             session.commit()
 
+    def attach_usage(
+        self,
+        turn_id: UUID,
+        *,
+        status: str,
+        route: str | None,
+        usage: dict[str, object] | None,
+    ) -> None:
+        """Attach final usage to an already-published turn (never resurrect one).
+
+        Guarded to turns ``publish_turn`` already closed, so a reclaimed or
+        failed turn keeps its terminal status.
+        """
+        with sync_session_scope(self._factory) as session:
+            session.execute(
+                update(ChatTurn)
+                .where(ChatTurn.id == turn_id, ChatTurn.status.in_(("succeeded", "blocked")))
+                .values(status=status, route=route, usage=usage, completed_at=func.now())
+            )
+            session.commit()
+
     def fail_turn(self, turn_id: UUID, *, error_category: str) -> None:
         with sync_session_scope(self._factory) as session:
             session.execute(
                 update(ChatTurn)
-                .where(ChatTurn.id == turn_id)
+                .where(ChatTurn.id == turn_id, ChatTurn.status == "running")
                 .values(status="failed", error_category=error_category, completed_at=func.now())
             )
             session.commit()

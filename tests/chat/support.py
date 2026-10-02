@@ -57,11 +57,17 @@ class FakeChatStore:
         *,
         content: str,
         blocked_layer: str | None,
+        autotitle: bool = True,
     ) -> None:
         self.events.append(
             (
                 "user_message",
-                {"content": content, "blocked_layer": blocked_layer, "turn_id": turn_id},
+                {
+                    "content": content,
+                    "blocked_layer": blocked_layer,
+                    "autotitle": autotitle,
+                    "turn_id": turn_id,
+                },
             )
         )
 
@@ -77,6 +83,32 @@ class FakeChatStore:
             ("assistant_message", {"content": content, "citations": citations, "turn_id": turn_id})
         )
 
+    def publish_turn(
+        self,
+        conversation_id: UUID,
+        turn_id: UUID,
+        *,
+        content: str,
+        citations: list[dict[str, object]],
+        status: str,
+        route: str | None,
+        usage: dict[str, object] | None,
+    ) -> bool:
+        self.events.append(
+            (
+                "publish_turn",
+                {
+                    "content": content,
+                    "citations": citations,
+                    "status": status,
+                    "route": route,
+                    "usage": usage,
+                    "turn_id": turn_id,
+                },
+            )
+        )
+        return True
+
     def complete_turn(
         self,
         turn_id: UUID,
@@ -88,6 +120,21 @@ class FakeChatStore:
         self.events.append(
             (
                 "complete_turn",
+                {"status": status, "route": route, "usage": usage, "turn_id": turn_id},
+            )
+        )
+
+    def attach_usage(
+        self,
+        turn_id: UUID,
+        *,
+        status: str,
+        route: str | None,
+        usage: dict[str, object] | None,
+    ) -> None:
+        self.events.append(
+            (
+                "attach_usage",
                 {"status": status, "route": route, "usage": usage, "turn_id": turn_id},
             )
         )

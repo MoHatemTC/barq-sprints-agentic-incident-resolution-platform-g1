@@ -36,7 +36,6 @@ from app.chat.nodes import ChatGraphDeps
 from app.chat.retrieval import ChatRetriever
 from app.chat.state import ChatState
 from app.chat.store import ChatStore
-from observability.redaction import redact_text
 from observability.tracing import Tracer
 
 logger = structlog.get_logger(__name__)
@@ -53,6 +52,10 @@ _UNCONFIGURED_BUDGET_REFUSAL = (
     "processing is refused. Ask an administrator to set CHAT_PRICE_INPUT_PER_MTOKEN and "
     "CHAT_PRICE_OUTPUT_PER_MTOKEN."
 )
+
+#: Stored for messages that never reached full screening (budget-blocked
+#: turns); the raw text is discarded, not merely redacted.
+_WITHHELD_MESSAGE_PLACEHOLDER = "[message withheld before screening]"
 
 
 @dataclass(frozen=True, slots=True)
@@ -142,34 +145,33 @@ class ChatTurnService:
             return TurnOutcome(status="failed", route=None, error_category=category)
 
         self._reconcile(usage_records, reserve)
-        # persist_turn already closed the row without usage (so a crash between
-        # graph and reconcile cannot leave the turn 'running'); this second
+        # publish_turn already closed the row without usage (so a crash between
+        # graph and reconcile cannot leave the turn 'running'); this guarded
         # write attaches the reconciled usage summary.
-        self._store.complete_turn(
+        status = "succeeded" if final.get("route") == "knowledge" else "blocked"
+        self._store.attach_usage(
             request.turn_id,
-            status="succeeded" if final.get("route") == "knowledge" else "blocked",
+            status=status,
             route=final.get("route"),
             usage=_usage_summary(self._settings, usage_records),
         )
-        return TurnOutcome(
-            status="succeeded" if final.get("route") == "knowledge" else "blocked",
-            route=final.get("route"),
-            error_category=None,
-        )
+        return TurnOutcome(status=status, route=final.get("route"), error_category=None)
 
     def _blocked_turn(
         self, request: TurnRequest, refusal: str, *, usage: dict[str, object]
     ) -> TurnOutcome:
         """Close a turn that never reached the answering model.
 
-        The user message is stored only under deterministic redaction — no
-        model-bound screening has run at this point.
+        Full screening has not run at this point, so the user message is stored
+        as a withheld placeholder — never raw or only-redacted text — and must
+        not name the conversation (no auto-title from unscreened content).
         """
         self._store.record_user_message(
             request.conversation_id,
             request.turn_id,
-            content=redact_text(request.user_message),
+            content=_WITHHELD_MESSAGE_PLACEHOLDER,
             blocked_layer=None,
+            autotitle=False,
         )
         self._store.record_assistant_message(
             request.conversation_id, request.turn_id, content=refusal, citations=[]

@@ -69,6 +69,7 @@ def screen_input(state: ChatState, deps: ChatGraphDeps) -> dict[str, Any]:
             state["turn_id"],
             content=REDACTED,
             blocked_layer=screening.layer,
+            autotitle=False,
         )
     else:
         deps.store.record_user_message(
@@ -95,6 +96,7 @@ def route(state: ChatState, deps: ChatGraphDeps) -> dict[str, Any]:
         prompt=chat_route_prompt(state["sanitized_message"], state.get("history", [])),
         schema=RouteDecision,
         model=deps.settings.chat_model,
+        max_completion_tokens=deps.settings.chat_max_output_tokens,
     )
     if decision.request_type == "knowledge":
         return {"route": "knowledge", "route_reason": decision.reason}
@@ -136,6 +138,7 @@ def generate_answer(state: ChatState, deps: ChatGraphDeps) -> dict[str, Any]:
         ),
         schema=AnswerDraft,
         model=deps.settings.chat_model,
+        max_completion_tokens=deps.settings.chat_max_output_tokens,
     )
     return {
         "answer_markdown": draft.answer_markdown,
@@ -145,8 +148,21 @@ def generate_answer(state: ChatState, deps: ChatGraphDeps) -> dict[str, Any]:
     }
 
 
+#: Shown when no draft survives citation verification; never publish an answer
+#: whose citations could not be checked against the retrieved evidence.
+_EVIDENCE_GAP_FALLBACK = (
+    "I found reference material but could not verify that the draft answer is "
+    "supported by it, so I am not publishing the answer. Please rephrase the "
+    "question or try again."
+)
+
+
 def verify_answer(state: ChatState, deps: ChatGraphDeps) -> dict[str, Any]:
-    """Code-only citation validation; one bounded repair on unknown chunk ids."""
+    """Code-only citation validation; one bounded repair on unknown chunk ids.
+
+    Fail-closed: a draft that still names evidence it was not shown — or that
+    cites nothing at all — is replaced by an explicit evidence-gap response.
+    """
     cited = state.get("cited_chunk_ids", [])
     valid_ids = {evidence_key(item) for item in state.get("evidence", [])}
     invalid = [chunk_id for chunk_id in cited if chunk_id not in valid_ids]
@@ -161,10 +177,27 @@ def verify_answer(state: ChatState, deps: ChatGraphDeps) -> dict[str, Any]:
         for chunk_id in dict.fromkeys(cited)
         if chunk_id in valid_ids
     ]
+    passed = not invalid and bool(citations)
+    if passed:
+        return {
+            "repair_pending": False,
+            "verification": {"passed": True, "invalid_citations": []},
+            "citations": [citation.model_dump(mode="json") for citation in citations],
+        }
+
+    note = str(state.get("missing_evidence_note") or "").strip()
+    gap_answer = f"{_EVIDENCE_GAP_FALLBACK}\n\n{note}" if note else _EVIDENCE_GAP_FALLBACK
+    logger.warning(
+        "chat_answer_unverified",
+        invalid_citations=invalid,
+        cited_count=len(cited),
+        turn_id=state.get("turn_id"),
+    )
     return {
         "repair_pending": False,
-        "verification": {"passed": not invalid, "invalid_citations": invalid},
-        "citations": [citation.model_dump(mode="json") for citation in citations],
+        "answer_markdown": gap_answer,
+        "citations": [],
+        "verification": {"passed": False, "invalid_citations": invalid},
     }
 
 
@@ -182,29 +215,25 @@ def persist_turn(state: ChatState, deps: ChatGraphDeps) -> dict[str, Any]:
     """Record the assistant message and close the turn (the graph's only writes)."""
     screening = state.get("screening", {})
     if screening.get("blocked"):
-        deps.store.record_assistant_message(
+        deps.store.publish_turn(
             state["conversation_id"],
             state["turn_id"],
             content=str(screening.get("reason") or "This message was withheld."),
             citations=[],
-        )
-        deps.store.complete_turn(
-            state["turn_id"],
             status="blocked",
             route=None,
             usage={"blocked_layer": screening.get("layer")},
         )
         return {"route": "blocked"}
 
-    deps.store.record_assistant_message(
+    verification_passed = (state.get("verification") or {}).get("passed", True)
+    status = "succeeded" if state.get("route") == "knowledge" and verification_passed else "blocked"
+    deps.store.publish_turn(
         state["conversation_id"],
         state["turn_id"],
         content=state["answer_markdown"],
         citations=list(state.get("citations", [])),
-    )
-    deps.store.complete_turn(
-        state["turn_id"],
-        status="succeeded" if state.get("route") == "knowledge" else "blocked",
+        status=status,
         route=state.get("route"),
         usage=state.get("usage_summary"),
     )

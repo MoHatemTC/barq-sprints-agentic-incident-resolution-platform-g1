@@ -72,22 +72,60 @@ def test_knowledge_answer_persists_with_manual_citation() -> None:
 
     assert final["route"] == "knowledge"
     assert final["verification"]["passed"] is True
-    persisted = store.calls_named("assistant_message")[0]
+    persisted = store.calls_named("publish_turn")[0]
     assert "known error record" in persisted["content"]
     assert persisted["citations"][0]["article_number"] == "KB0704"
     assert persisted["citations"][0]["manual_section"] == "7.4"
-    completion = store.calls_named("complete_turn")[0]
-    assert completion["status"] == "succeeded"
-    assert completion["route"] == "knowledge"
+    assert persisted["status"] == "succeeded"
+    assert persisted["route"] == "knowledge"
     # Model calls in order: PII, classifier, route, answer. No PII on outputs.
     assert llm.purposes() == ["pii_detection", "injection_classifier", "chat_route", "chat_answer"]
+    cap = _deps(llm, FakeChatRetriever(), FakeChatStore()).settings.chat_max_output_tokens
+    assert all(
+        call["max_completion_tokens"] == cap
+        for call in llm.calls
+        if call["purpose"] in ("chat_route", "chat_answer")
+    ), "chat calls must be capped at the reserved output budget"
 
 
-def test_insufficient_evidence_says_so_without_citations() -> None:
+def test_unverifiable_draft_is_replaced_by_an_evidence_gap_response() -> None:
+    llm = FakeLLM(
+        answers=_answers(
+            [
+                AnswerDraft(
+                    answer_markdown="draft citing a hallucinated chunk",
+                    cited_chunk_ids=["KB9999-v9.9::chunk::7"],
+                    sufficient_evidence=True,
+                    missing_evidence_note=None,
+                ),
+                AnswerDraft(
+                    answer_markdown="still hallucinating after repair",
+                    cited_chunk_ids=["KB9999-v9.9::chunk::7"],
+                    sufficient_evidence=True,
+                    missing_evidence_note=None,
+                ),
+            ]
+        )
+    )
+    store = FakeChatStore()
+    graph = build_chat_graph(_deps(llm, FakeChatRetriever([hit_for("KB0704")]), store))
+
+    final = graph.invoke(_state())
+
+    assert final["verification"]["passed"] is False
+    assert final["repair_count"] == 1
+    persisted = store.calls_named("publish_turn")[0]
+    assert persisted["citations"] == []
+    assert persisted["status"] == "blocked"
+    assert "could not verify" in persisted["content"]
+    assert "hallucinating" not in persisted["content"], "unverified drafts must not publish"
+
+
+def test_draft_without_citations_is_rejected() -> None:
     llm = FakeLLM(
         answers=_answers(
             AnswerDraft(
-                answer_markdown="The knowledge base has no documented procedure for this.",
+                answer_markdown="A confident answer with no evidence attached.",
                 cited_chunk_ids=[],
                 sufficient_evidence=False,
                 missing_evidence_note="no article on the topic",
@@ -100,9 +138,12 @@ def test_insufficient_evidence_says_so_without_citations() -> None:
     final = graph.invoke(_state())
 
     assert final["sufficient_evidence"] is False
-    persisted = store.calls_named("assistant_message")[0]
+    assert final["verification"]["passed"] is False
+    persisted = store.calls_named("publish_turn")[0]
     assert persisted["citations"] == []
-    assert store.calls_named("complete_turn")[0]["status"] == "succeeded"
+    assert persisted["status"] == "blocked"
+    assert "no article on the topic" in persisted["content"]
+    assert "confident answer" not in persisted["content"]
 
 
 def test_invalid_citation_triggers_one_bounded_repair() -> None:
@@ -129,7 +170,7 @@ def test_invalid_citation_triggers_one_bounded_repair() -> None:
     assert final["repair_count"] == 1
     assert final["verification"]["passed"] is True
     assert [c["purpose"] for c in llm.calls].count("chat_answer") == 2
-    persisted = store.calls_named("assistant_message")[0]
+    persisted = store.calls_named("publish_turn")[0]
     assert persisted["citations"][0]["article_number"] == "KB0704"
 
 
@@ -150,7 +191,7 @@ def test_unavailable_capability_is_refused_without_retrieval_or_answer() -> None
     assert "not available in this release" in final["answer_markdown"]
     assert retriever.calls == [], "unavailable routes must not retrieve"
     assert "chat_answer" not in llm.purposes()
-    completion = store.calls_named("complete_turn")[0]
+    completion = store.calls_named("publish_turn")[0]
     assert completion["status"] == "blocked"
     assert completion["route"] == "unavailable"
 
@@ -169,11 +210,10 @@ def test_injection_blocked_message_never_reaches_the_model() -> None:
     assert final["screening"]["blocked"] is True
     assert llm.calls == [], "blocked messages must not reach any model call"
     assert store.calls_named("user_message")[0]["blocked_layer"] == "pattern_screening"
-    refusal = store.calls_named("assistant_message")[0]
+    refusal = store.calls_named("publish_turn")[0]
     assert "withheld" in refusal["content"]
-    completion = store.calls_named("complete_turn")[0]
-    assert completion["status"] == "blocked"
-    assert completion["usage"] == {"blocked_layer": "pattern_screening"}
+    assert refusal["status"] == "blocked"
+    assert refusal["usage"] == {"blocked_layer": "pattern_screening"}
 
 
 def test_history_flows_into_route_and_answer_prompts() -> None:

@@ -203,6 +203,7 @@ class FakeLLM:
         model: str | None = None,
         trace_content: bool = True,
         max_retries: int | None = None,
+        max_completion_tokens: int | None = None,
         usage_sink: Any = None,
     ) -> Any:
         selected_model = self.model_for_purpose(purpose, model)
@@ -217,6 +218,7 @@ class FakeLLM:
                 "model": selected_model,
                 "trace_content": trace_content,
                 "max_retries": max_retries,
+                "max_completion_tokens": max_completion_tokens,
             }
         )
         if usage_sink is not None:

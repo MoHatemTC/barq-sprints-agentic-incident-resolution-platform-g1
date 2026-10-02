@@ -101,7 +101,7 @@ def test_estimate_requires_configured_rates() -> None:
         estimate_turn_reserve(_UNCONFIGURED, input_chars=500)
 
     reserve = estimate_turn_reserve(_CONFIGURED, input_chars=800)
-    expected = 5 * ((800 + 4000) / 4 * 0.5 + 2000 * 2.0) / 1_000_000
+    expected = 5 * ((800 + 52_000) / 4 * 0.5 + 2000 * 2.0) / 1_000_000
     assert reserve == pytest.approx(expected)
 
 
