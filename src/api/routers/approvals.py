@@ -40,6 +40,8 @@ logger = structlog.getLogger("api.approvals")
 #: rather than imported so the check reads as the literal database contract it is:
 #: ``ck_executions_status`` in ``models.py`` carries exactly these eight values.
 _PAUSED_STATUS = "awaiting_approval"
+#: Decisions that may close a parked row with no interrupt behind it: they assert no outcome.
+_CLOSE_ORPHAN_DECISIONS = frozenset({"cancelled", "expired"})
 
 router = APIRouter(
     prefix="/api/v1",
@@ -287,17 +289,19 @@ async def decide_approval(
         logger.exception("interrupt_read_failed", execution_id=str(id), error=str(exc))
         raise ServiceUnavailableError("Audit store unavailable; decision not applied.") from exc
 
-    if interrupt_payload is None:
+    if interrupt_payload is None and payload.decision not in _CLOSE_ORPHAN_DECISIONS:
         # ``awaiting_approval`` on the executions row is not proof that a LangGraph
         # interrupt exists (semantic-cache waiters, runs from before the
         # interrupt/resume fix and orphaned rows carry it too). Recording an
-        # immutable approval here would assert that a human approved something
-        # nobody was waiting on, leave the execution parked, and be impossible to
-        # correct afterwards because the approvals table is immutable by trigger.
+        # immutable approval here would assert that a human approved or rejected
+        # something nobody was waiting on, leave the execution parked, and be
+        # impossible to correct afterwards because the approvals table is immutable
+        # by trigger. ``cancelled`` and ``expired`` assert no outcome, so they stay
+        # available to close such a row.
         logger.warning("approval_without_paused_thread", execution_id=execution_id_str)
         raise ConflictError(
             f"Execution '{execution.execution_id}' has no paused interrupt to decide; "
-            "nothing was recorded."
+            "nothing was recorded. Use 'cancelled' or 'expired' to close it."
         )
 
     resumed: dict[str, Any] | None = None
@@ -369,6 +373,8 @@ async def decide_approval(
         db.add(resolved_approval)
         if resumed is not None:
             await _close_resumed_execution(db, id, resumed, now)
+        elif interrupt_payload is None:
+            await _close_orphaned_execution(db, id, payload.decision, now)
         await db.commit()
         await db.refresh(resolved_approval)
         logger.info(
@@ -497,6 +503,45 @@ async def _close_resumed_execution(
             state="cancelled" if resumed.get("processing_state") == "failed" else "succeeded",
             next_retry_at=None,
         )
+    )
+
+
+async def _close_orphaned_execution(
+    db: AsyncSession,
+    execution_id: UUID,
+    decision: str,
+    ended_at: datetime,
+) -> None:
+    """Close a parked row that has no interrupt, so it stops waiting forever.
+
+    Nothing is resumed and nothing is written to ServiceNow: the incident keeps whatever
+    review flag it carries and a person follows up there. If the row led a semantic
+    cluster, the cluster is failed in the same transaction so its waiters are not left
+    behind a leader that can never finish.
+    """
+    await db.execute(
+        update(Execution)
+        .where(Execution.execution_id == execution_id)
+        .values(
+            status="abandoned",
+            ended_at=ended_at,
+            termination_cause=f"operator_{decision}:no_paused_thread",
+        )
+    )
+    await db.execute(
+        update(SemanticCluster)
+        .where(SemanticCluster.anchor_execution_id == execution_id)
+        .values(
+            status="failed",
+            solution=None,
+            failure_reason=f"leader_closed_by_operator_{decision}",
+            completed_at=ended_at,
+        )
+    )
+    await db.execute(
+        update(RetryState)
+        .where(RetryState.execution_id == execution_id)
+        .values(state="cancelled", next_retry_at=None)
     )
 
 

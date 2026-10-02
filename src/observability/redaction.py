@@ -61,6 +61,22 @@ SENSITIVE_KEYS: frozenset[str] = frozenset(
     }
 )
 
+# Names that mark the next value as a credential. The optional prefix and suffix
+# ("aws_secret_access_key", "my_password_is") are bounded: an open-ended repetition is
+# quadratic on long hyphenated text (a pasted log or a list of ids).
+_STRONG_KEYWORDS = (
+    r"password|passwd|pwd|passcode|secret|api[_-]?key|"
+    r"(?:access|account|shared[_-]?access|private|auth|refresh|client)[_-]?(?:key|token|secret)"
+)
+_WEAK_KEYWORDS = r"pass|pin|token"
+_NAME_PREFIX = r"(?<![A-Za-z0-9])((?:[a-z0-9]{1,24}[_-]){0,4}"
+_NAME_SUFFIX = r"(?:[_-][a-z0-9]{1,24}){0,4})"
+_KEY_NAME = (
+    r"(?i)" + _NAME_PREFIX + r"(?:" + _STRONG_KEYWORDS + "|" + _WEAK_KEYWORDS + ")" + _NAME_SUFFIX
+)
+_KEY_NAME_STRONG = r"(?i)" + _NAME_PREFIX + r"(?:" + _STRONG_KEYWORDS + ")" + _NAME_SUFFIX
+_KEY_NAME_WEAK = r"(?i)" + _NAME_PREFIX + r"(?:" + _WEAK_KEYWORDS + ")" + _NAME_SUFFIX
+
 # Order matters: the most specific credential shapes run first so a JWT inside a
 # bearer header is not half-matched by the generic key=value rule. Each rule keeps
 # its label (``Bearer``, ``password=``) so a reader still knows what was removed.
@@ -108,22 +124,24 @@ _CREDENTIAL_RULES: tuple[tuple[re.Pattern[str], str], ...] = (
     # X-Api-Key: ..., my_password_is=... A quoted key (JSON, Python dict) is covered by the
     # optional quote before the separator; the lookbehind keeps a keyword inside a longer
     # word ("bypass", "compass") from matching.
+    (re.compile(_KEY_NAME + r"([\"']?\s*[:=]\s*)([\"']?)[^\s\"',;}]{4,}"), rf"\1\2\3{REDACTED}"),
+    # "the admin password is hunter22", "client secret is ..." — a keyword that is hardly
+    # ever an ordinary word, followed by "is".
     (
-        re.compile(
-            r"(?i)(?<![A-Za-z0-9])"
-            r"((?:[a-z0-9]+[_-])*"
-            r"(?:password|passwd|pwd|passcode|pass|pin|secret|api[_-]?key|"
-            r"(?:access|account|shared[_-]?access|private|auth|refresh|client)[_-]?"
-            r"(?:key|token|secret)|token)"
-            r"(?:[_-][a-z0-9]+)*)"
-            r"([\"']?\s*[:=]\s*|\s+is\s+)"
-            r"([\"']?)[^\s\"',;}]{4,}"
-        ),
+        re.compile(_KEY_NAME_STRONG + r"(\s+is\s+)([\"']?)[^\s\"',;}]{4,}"),
+        rf"\1\2\3{REDACTED}",
+    ),
+    # "the pin is 4821". pass/pin/token are common words ("the build pass is expected", "the
+    # token is expired"), so after "is" the value has to contain a digit to count.
+    (
+        re.compile(_KEY_NAME_WEAK + r"(\s+is\s+)([\"']?)(?=[^\s\"',;}]*\d)[^\s\"',;}]{4,}"),
         rf"\1\2\3{REDACTED}",
     ),
 )
 
-_EMAIL = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
+# The lookbehind starts a match only at the beginning of a run of local-part characters.
+# Without it a long run with no "@" (a hyphenated log line) is rescanned from every offset.
+_EMAIL = re.compile(r"(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
 
 # ISO 13616 lengths for the countries supported by this deterministic layer.
 # Keeping the length table explicit prevents a checksum-valid string with an
@@ -299,13 +317,17 @@ def redact_text(text: str) -> str:
     """Return ``text`` with credentials and personal data replaced by markers."""
     if not text:
         return text
-    text = text.translate(_FULLWIDTH)
+    folded = text.translate(_FULLWIDTH)
+    redacted = folded
     for pattern, replacement in _CREDENTIAL_RULES:
-        text = pattern.sub(replacement, text)
-    text = _EMAIL.sub(REDACTED_EMAIL, text)
-    text = _IBAN.sub(_redact_iban, text)
-    text = _PAYMENT_CARD.sub(_redact_payment_card, text)
-    return _PHONE.sub(_redact_phone, text)
+        redacted = pattern.sub(replacement, redacted)
+    redacted = _EMAIL.sub(REDACTED_EMAIL, redacted)
+    redacted = _IBAN.sub(_redact_iban, redacted)
+    redacted = _PAYMENT_CARD.sub(_redact_payment_card, redacted)
+    redacted = _PHONE.sub(_redact_phone, redacted)
+    # The fold exists only so a disguised secret is found. Text with nothing to redact keeps
+    # its original characters (CJK punctuation, full-width letters).
+    return text if redacted == folded else redacted
 
 
 def redact_text_with_count(text: str) -> tuple[str, int]:
@@ -316,6 +338,7 @@ def redact_text_with_count(text: str) -> tuple[str, int]:
     """
     if not text:
         return text, 0
+    original = text
     text = text.translate(_FULLWIDTH)
     total = 0
     for pattern, replacement in _CREDENTIAL_RULES:
@@ -336,7 +359,7 @@ def redact_text_with_count(text: str) -> tuple[str, int]:
     text = _PHONE.sub(_redact_phone, text)
     after_phone_markers = text.count(REDACTED_PHONE)
     total += after_phone_markers - before_phone_markers
-    return text, total
+    return (text if total else original), total
 
 
 def redact_value(value: Any) -> Any:

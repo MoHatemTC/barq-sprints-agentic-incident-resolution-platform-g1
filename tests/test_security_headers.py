@@ -66,3 +66,16 @@ async def test_a_reasonable_correlation_id_is_preserved(client) -> None:
     async with client as c:
         response = await c.get("/health", headers={"X-Correlation-ID": "snow-INC0010233.v2:1"})
     assert response.headers["x-correlation-id"] == "snow-INC0010233.v2:1"
+
+
+@pytest.mark.asyncio
+async def test_a_replaced_correlation_id_is_logged_with_a_bounded_copy(client) -> None:
+    from structlog.testing import capture_logs
+
+    with capture_logs() as logs:
+        async with client as c:
+            response = await c.get("/health", headers={"X-Correlation-ID": "abc/def==" + "x" * 500})
+    replaced = [log for log in logs if log["event"] == "correlation_id_replaced"]
+    assert len(replaced) == 1
+    assert len(replaced[0]["supplied"]) <= 70
+    assert replaced[0]["correlation_id"] == response.headers["x-correlation-id"]

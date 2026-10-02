@@ -86,3 +86,42 @@ def test_failure_text_persisted_by_the_worker_is_redacted() -> None:
 
 def test_failure_text_is_bounded() -> None:
     assert len(_safe_text(RuntimeError("x" * 10_000), 500)) == 500
+
+
+@pytest.mark.parametrize(
+    "prose",
+    [
+        "the build pass is expected tomorrow",
+        "the token is expired, ask the user to sign in again",
+        "the pin is stuck in the card reader",
+    ],
+)
+def test_weak_keywords_followed_by_is_need_a_digit_to_count(prose: str) -> None:
+    assert redact_text(prose) == prose
+
+
+def test_weak_keyword_with_a_digit_value_is_still_redacted() -> None:
+    assert "4821" not in redact_text("the pin is 4821")
+    assert "tok3n9x" not in redact_text("token is tok3n9x")
+
+
+def test_redaction_is_linear_on_long_separated_text() -> None:
+    # A pasted log line or a list of ids: an open-ended repetition in a pattern made this
+    # quadratic (11 s at 32 KB). One second is generous for a few milliseconds of work.
+    import time
+
+    started = time.perf_counter()
+    redact_text("a-" * 50_000)
+    redact_text("x_" * 50_000 + "password=" + SECRET)
+    assert time.perf_counter() - started < 1.0
+
+
+def test_text_with_nothing_to_redact_keeps_its_original_characters() -> None:
+    text = "会议：地址，ＩＰ是１０．０．０．５"
+    assert redact_text(text) == text
+    assert redact_text_with_count(text) == (text, 0)
+
+
+def test_a_full_width_secret_is_still_found() -> None:
+    disguised = "ｐａｓｓｗｏｒｄ＝" + SECRET
+    assert SECRET not in redact_text(disguised)

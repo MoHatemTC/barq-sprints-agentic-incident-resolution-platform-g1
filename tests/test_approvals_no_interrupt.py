@@ -73,3 +73,80 @@ async def test_decide_rejects_unbounded_reason_and_evidence(app_with_db) -> None
 
     assert too_long.status_code == 422, too_long.text
     assert too_big.status_code == 422, too_big.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("decision", ["cancelled", "expired"])
+async def test_a_parked_row_with_no_interrupt_can_be_closed_without_an_outcome(
+    app_with_db,  # noqa: F811
+    decision: str,
+) -> None:
+    """The 409 above must not leave an orphan stuck for good: cancel/expire close it."""
+    app, session = app_with_db
+    execution = Execution(
+        execution_id=UUID(EXECUTION_ID),
+        event_record_id=uuid4(),
+        incident_sys_id="a" * 32,
+        status="awaiting_approval",
+    )
+
+    async def get(model, pk):
+        if model is Approval:
+            return None
+        return execution if model is Execution and pk == UUID(EXECUTION_ID) else None
+
+    session.get.side_effect = get
+
+    with patch.object(approvals_router, "get_audit_store", return_value=MemoryGraphAuditStore()):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.post(
+                f"/api/v1/approvals/{EXECUTION_ID}/decide",
+                json={"decision": decision, "reason": "orphaned, closing it"},
+                headers=h.AUTH_HEADERS,
+            )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["decision"] == decision
+    recorded = [call.args[0] for call in session.add.call_args_list]
+    assert [type(row) for row in recorded] == [Approval]
+    assert recorded[0].decision == decision
+    # The execution, its cluster and its retry state are closed in the same transaction.
+    statements = " ".join(str(call.args[0]) for call in session.execute.call_args_list)
+    assert "UPDATE executions" in statements
+    assert "UPDATE semantic_clusters" in statements
+    session.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("decision", ["approved", "rejected"])
+async def test_only_outcome_free_decisions_are_accepted_without_an_interrupt(
+    app_with_db,  # noqa: F811
+    decision: str,
+) -> None:
+    app, session = app_with_db
+    execution = Execution(
+        execution_id=UUID(EXECUTION_ID),
+        event_record_id=uuid4(),
+        incident_sys_id="a" * 32,
+        status="awaiting_approval",
+    )
+
+    async def get(model, pk):
+        if model is Approval:
+            return None
+        return execution if model is Execution and pk == UUID(EXECUTION_ID) else None
+
+    session.get.side_effect = get
+
+    with patch.object(approvals_router, "get_audit_store", return_value=MemoryGraphAuditStore()):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.post(
+                f"/api/v1/approvals/{EXECUTION_ID}/decide",
+                json={"decision": decision, "solution": "do the thing"},
+                headers=h.AUTH_HEADERS,
+            )
+
+    assert response.status_code == 409, response.text
+    assert "cancelled" in response.text
+    session.add.assert_not_called()
+    session.commit.assert_not_awaited()

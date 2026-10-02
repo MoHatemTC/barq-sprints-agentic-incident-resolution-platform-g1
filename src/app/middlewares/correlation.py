@@ -29,9 +29,18 @@ class CorrelationIdMiddleware(BaseHTTPMiddleware):
         self.header_name = header_name
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        correlation_id = (request.headers.get(self.header_name) or "").strip()
+        supplied = (request.headers.get(self.header_name) or "").strip()
+        correlation_id = supplied
         if not _VALID_CORRELATION_ID.fullmatch(correlation_id):
             correlation_id = str(uuid.uuid4())
+            if supplied:
+                # Say so once, with a bounded, escaped copy, so a caller whose id was
+                # replaced can still be matched to the id it received back.
+                logger.warning(
+                    "correlation_id_replaced",
+                    supplied=ascii(supplied[:64]),
+                    correlation_id=correlation_id,
+                )
 
         set_correlation_id(correlation_id)
         request.state.correlation_id = correlation_id

@@ -140,24 +140,43 @@ _SCAFFOLDING = frozenset(
 MAX_UNGROUNDED_RATIO = 0.5
 
 
+#: A whole number as written: ``30``, ``1.2``, ``10.0.0.5``, ``1,400``. The word tokeniser
+#: drops anything under ``MIN_TOKEN_LENGTH`` and splits on the dots, so ports, minutes, retry
+#: counts and versions were never compared.
+_NUMBER_RE = re.compile(r"\d+(?:[.,:]\d+)*")
+#: Numbering a composed article adds itself ("1." at the start of a line, "step 3").
+_ORDINAL_RE = re.compile(r"(?im)^\s*\d+[.)]\s+|\bstep\s+\d+")
+
+
+def _numbers(text: str) -> set[str]:
+    return {match.replace(",", "") for match in _NUMBER_RE.findall(text)}
+
+
 def check_faithfulness(
     article: object, solution_text: str, *, incident_context: str = ""
 ) -> list[str]:
-    """Return content tokens in the article body that no source text contains.
+    """Return content tokens and numbers in the article body that no source text contains.
 
     Deterministic and extractive — deliberately not a second LLM call, so the
     capture path stays at exactly one model invocation. Stopwords, structural
     scaffolding words and tokens under ``MIN_TOKEN_LENGTH`` are ignored, inflections of
-    a source word count as grounded, and numbers are checked exactly (they are facts).
+    a source word count as grounded, and numbers are checked exactly and whole, at any
+    length (they are facts), apart from the list numbering the composer adds itself.
     """
     allowed_tokens = _content_tokens(solution_text) | _content_tokens(incident_context)
     allowed = allowed_tokens | {_stem(token) for token in allowed_tokens}
-    body_tokens = _content_tokens(getattr(article, "body", ""))
-    return sorted(
+    body = getattr(article, "body", "")
+    ungrounded = {
         token
-        for token in body_tokens
-        if token not in allowed and _stem(token) not in allowed and token not in _SCAFFOLDING
-    )
+        for token in _content_tokens(body)
+        if not token.isdigit()  # a bare number is judged whole, below
+        and token not in allowed
+        and _stem(token) not in allowed
+        and token not in _SCAFFOLDING
+    }
+    source_numbers = _numbers(f"{solution_text}\n{incident_context}")
+    ungrounded |= _numbers(_ORDINAL_RE.sub(" ", body)) - source_numbers
+    return sorted(ungrounded)
 
 
 @dataclass(frozen=True, slots=True)

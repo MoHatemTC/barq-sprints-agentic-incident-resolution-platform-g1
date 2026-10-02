@@ -257,3 +257,34 @@ class TestFaithfulnessVerdict:
             {"body": "To resolve the issue, perform the following steps: flush keys, restart."},
         )()
         assert faithfulness_verdict(article, "flushed keys then restarted").ok
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            "Set the retry limit to 30 minutes.",
+            "Use port 25 for the relay.",
+            "Require TLS 1.2 on the connection.",
+            "Point clients at 10.0.0.5.",
+        ],
+    )
+    def test_a_short_or_dotted_number_that_was_not_stated_fails(self, body: str) -> None:
+        # The word tokeniser ignores anything under four characters and splits on dots, so
+        # these slipped through while only four-character numbers were checked.
+        from agent.article_composer import faithfulness_verdict
+
+        article = type("A", (), {"body": body})()
+        verdict = faithfulness_verdict(article, "restart the relay service and retry")
+        assert not verdict.ok and verdict.states_unstated_numbers
+
+    def test_numbers_the_human_gave_pass_whole(self) -> None:
+        from agent.article_composer import faithfulness_verdict
+
+        article = type("A", (), {"body": "Set the limit to 30 minutes and 1400 bytes on 1.2."})()
+        stated = "limit 30 minutes, MTU 1,400 bytes, version 1.2"
+        assert faithfulness_verdict(article, stated).ok
+
+    def test_list_numbering_the_composer_adds_is_not_a_fact(self) -> None:
+        from agent.article_composer import faithfulness_verdict
+
+        article = type("A", (), {"body": "1. Restart the service.\n2) Retry the login.\nStep 3"})()
+        assert faithfulness_verdict(article, "restart the service then retry the login").ok
