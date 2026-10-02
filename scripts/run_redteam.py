@@ -31,7 +31,7 @@ def main() -> int:
 
     results = evaluate()
     summary = summarize(results)
-    attacks, benign, secrets = summary["attacks"], summary["benign"], summary["secrets"]
+    attacks, benign, redaction = summary["attacks"], summary["benign"], summary["redaction"]
     print(f"attacks : {attacks['detected_by_patterns']}/{attacks['total']} caught by patterns")
     for label in attacks["missed"]:
         print(f"          not caught by patterns (left to the semantic classifier): {label}")
@@ -41,9 +41,9 @@ def main() -> int:
     )
     for label in benign["hard_blocked"]:
         print(f"          hard-blocked: {label}")
-    print(f"secrets : {secrets['redacted']}/{secrets['total']} redacted")
-    for label in secrets["leaked"]:
-        print(f"          not redacted: {label}")
+    print(f"redaction: {redaction['redacted']}/{redaction['total']} forms redacted")
+    for label in redaction["not_redacted"]:
+        print(f"          form not redacted: {label}")
 
     off_record = [r for r in results if not r.meets_expectation]
     if off_record:

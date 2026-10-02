@@ -102,7 +102,7 @@ def evaluate(corpus: dict[str, Any] | None = None) -> list[CaseResult]:
 def summarize(results: list[CaseResult]) -> dict[str, Any]:
     attacks = [r for r in results if r.kind == "attack"]
     benign = [r for r in results if r.kind == "benign"]
-    secrets = [r for r in results if r.kind == "secret"]
+    redaction = [r for r in results if r.kind == "secret"]
     return {
         "attacks": {
             "total": len(attacks),
@@ -114,10 +114,10 @@ def summarize(results: list[CaseResult]) -> dict[str, Any]:
             "hard_blocked": [r.label for r in benign if r.observed == "blocked"],
             "sent_to_semantic_review": [r.label for r in benign if r.observed == "review"],
         },
-        "secrets": {
-            "total": len(secrets),
-            "redacted": sum(r.observed == "redacted" for r in secrets),
-            "leaked": [r.label for r in secrets if r.observed == "leaked"],
+        "redaction": {
+            "total": len(redaction),
+            "redacted": sum(r.observed == "redacted" for r in redaction),
+            "not_redacted": [r.label for r in redaction if r.observed == "leaked"],
         },
         "cases": [asdict(r) for r in results],
     }

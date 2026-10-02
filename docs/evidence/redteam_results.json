@@ -27,10 +27,10 @@
       "dan name"
     ]
   },
-  "secrets": {
+  "redaction": {
     "total": 30,
     "redacted": 28,
-    "leaked": [
+    "not_redacted": [
       "email obfuscated",
       "ip address"
     ]

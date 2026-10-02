@@ -31,7 +31,7 @@ def test_summary_floors_do_not_regress() -> None:
     summary = summarize(_RESULTS)
     assert summary["attacks"]["detected_by_patterns"] >= 25
     assert len(summary["benign"]["hard_blocked"]) <= 1
-    assert summary["secrets"]["redacted"] >= 28
+    assert summary["redaction"]["redacted"] >= 28
 
 
 def test_every_case_in_the_corpus_is_evaluated() -> None:
