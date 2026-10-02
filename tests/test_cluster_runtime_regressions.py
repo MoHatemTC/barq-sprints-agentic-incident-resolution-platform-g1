@@ -189,3 +189,56 @@ def test_database_failure_cannot_publish_resolved_redis_anchor(monkeypatch):
     with pytest.raises(ConnectionError):
         cache.publish_solution(cluster, {"cache_draft": {}})
     assert cache._anchors[cluster].status.value == "running"
+
+
+def test_follower_resolves_with_zero_llm_calls_and_writes_to_servicenow(monkeypatch):
+    repo, cache, _, eid, payload, incident, cluster = setup_pair()
+    follower_inc = {**incident, "sys_id": payload["sys_id"], "number": payload["number"]}
+    service = FakeServiceNow({"follower": follower_inc})
+    deps = make_deps(servicenow=service, agent_confidence_floor=0.1)
+    monkeypatch.setattr(cluster_runtime, "get_agent_dependencies", lambda: deps)
+    monkeypatch.setattr(
+        tasks,
+        "load_cluster_incident",
+        lambda *args: follower_inc,
+    )
+    solution = {
+        "outcome": "suggested",
+        "summary": "AI Suggested Response drafted. Confidence 0.95.",
+        "suggestion": "1. Reset VPN profile",
+        "resolution": "1. Reset VPN profile",
+        "confidence": 0.95,
+        "classification": "network",
+        "work_note": (
+            "AI Suggested Response drafted. Confidence 0.95. Guarded suggestion completed."
+        ),
+        "processing_state": "complete",
+        "write_back": "written",
+        "cache_draft": {"rendered": "1. Reset VPN profile", "steps": []},
+    }
+    cache.publish_solution(cluster, solution)
+
+    repo.claim_for_running(eid)
+    task = SimpleNamespace(request=SimpleNamespace(retries=0))
+    result = tasks._run_incident(
+        task,
+        payload,
+        str(eid),
+        RetryConfig(3, 1.0, 60.0, False),
+        repo,
+        semantic_cache=cache,
+        graph_backend="langgraph",
+        correlation_id="follower-original-trace",
+    )
+    assert result["status"] == "succeeded"
+    assert result["cluster_role"] == "follower"
+    assert result["result"] == solution
+    assert repo.get_status(eid) == "succeeded"
+    # Zero LLM calls for follower:
+    assert len(deps.llm.calls) == 0
+    # Follower ServiceNow ticket updated:
+    assert [sys_id for sys_id, _ in service.updates] == [payload["sys_id"]]
+    update = service.updates[0][1]
+    assert update.ai_processing_state.value == "complete"
+    assert update.ai_resolution == "1. Reset VPN profile"
+
