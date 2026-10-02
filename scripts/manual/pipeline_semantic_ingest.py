@@ -26,16 +26,16 @@ produced by scripts/corpus_build/build_semantic_corpus.py — one flattened
   future handle: widening a service filter to
   ``["<incident_service>", "general"]`` is enough to opt in.
 
-The articles are then chunked/embedded into the main ``incident_knowledge_base``
-Qdrant collection via :func:`app.retrieval.ingest.ingest_articles` —
-replace-per-article, so existing KB articles are never touched or purged.
-Only the manual-section articles are then published to the ServiceNow KB with
-the same idempotent publisher ``scripts/publish_kb.py`` uses (preflight
+The manual-section articles (65 non-incident sections) are then chunked/embedded
+into the main ``incident_knowledge_base`` Qdrant collection via
+:func:`app.retrieval.ingest.ingest_articles` — strictly additive and replace-per-article,
+so existing canonical KB articles and live human-resolved articles are NEVER touched.
+The same manual-section articles are then published to the ServiceNow KB with
+the idempotent publisher ``scripts/publish_kb.py`` uses (preflight
 resolves/creates the ``process`` category, then each article is created or
-updated by its stable source id). The incident articles are NOT republished:
-they already exist in ServiceNow under their canonical body, the kb_publisher
-account cannot modify published rows (the fail-closed write guard refuses the
-stale-making text change), and the manual's rendering is Qdrant-only by design.
+updated by its stable source id). The incident articles are NOT republished or
+re-ingested: they already exist in ServiceNow and Qdrant in their canonical form,
+frozen for live incident triage.
 
 Read-only by default, matching scripts/publish_kb.py after #76 (issue #41):
 without ``--allow-writes`` the run only builds and validates the Articles.
@@ -326,19 +326,23 @@ def main() -> int:
         print("Dry run complete — re-run with --allow-writes to ingest and publish.")
         return 0
 
+    manual_articles = [a for a in articles if a.article_id not in incident_ids]
+
     if not args.skip_qdrant:
-        print("Ingesting to Qdrant...")
-        upserted = ingest_to_qdrant(articles, qdrant_url=args.qdrant_url)
+        print(
+            f"Ingesting {len(manual_articles)} manual-section articles to Qdrant "
+            f"(skipping {len(incident_ids)} incident articles to preserve canonical incident KB)..."
+        )
+        upserted = ingest_to_qdrant(manual_articles, qdrant_url=args.qdrant_url)
         print(f"Qdrant ingestion complete: {upserted} chunk points upserted.")
     else:
         print("Skipping Qdrant ingestion (--skip-qdrant).")
 
     if not args.skip_servicenow:
-        manual_articles = [a for a in articles if a.article_id not in incident_ids]
         print(
             f"Publishing {len(manual_articles)} manual-section articles to ServiceNow "
             f"(skipping {len(incident_ids)} incident articles already published there — "
-            f"published rows are frozen, the manual's rendering is Qdrant-only)..."
+            "published rows are frozen)..."
         )
         failed = asyncio.run(publish_to_servicenow(manual_articles))
         if failed:
