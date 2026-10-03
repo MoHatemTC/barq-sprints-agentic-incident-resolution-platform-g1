@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import random
 import sys
 import time
 from datetime import UTC, datetime
@@ -21,26 +22,33 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from verify_agentic_core import Backend, ServiceNow, incident_fields, wait_for  # noqa: E402
 from verify_conversation import comments, settled_after, work_notes  # noqa: E402
 
+#: Demo accounts that are not ordinary employees (system, approval or test accounts).
+NOT_A_PERSON = ("admin", "approver", "manager", "user", "scheduler", "svc", "barq", "test")
+
 
 def fresh_callers(sn: ServiceNow, count: int) -> list[str]:
-    """Demo users with no roles and no incident in the last 8 days."""
-    found: list[str] = []
+    """Ordinary demo employees (a first and last name and an email, no roles, not a
+    system or test account) with no incident in the last 8 days."""
     users = sn.query(
-        "sys_user", "active=true^user_nameLIKE.^ORDERBYDESCuser_name", "sys_id,user_name,roles"
+        "sys_user",
+        "active=true^user_nameLIKE.^first_nameISNOTEMPTY^last_nameISNOTEMPTY^emailISNOTEMPTY"
+        "^ORDERBYuser_name",
+        "sys_id,user_name,roles",
     )
-    for user in users:
-        if user.get("roles") or user["user_name"] == "barq.admin":
-            continue
-        recent = sn.query(
-            "incident",
-            f"caller_id={user['sys_id']}^opened_at>javascript:gs.daysAgoStart(8)",
-            "sys_id",
-        )
-        if not recent:
-            found.append(user["user_name"])
-        if len(found) >= count:
-            break
-    return found
+    recent = {
+        row["caller_id"]
+        for row in sn.query("incident", "opened_at>javascript:gs.daysAgoStart(8)", "caller_id")
+    }
+    found = [
+        user["user_name"]
+        for user in users
+        if not user.get("roles")
+        and user["sys_id"] not in recent
+        and user["user_name"] == user["user_name"].lower()
+        and not any(word in user["user_name"] for word in NOT_A_PERSON)
+    ]
+    # Random, so suites running side by side do not pick the same caller.
+    return random.sample(found, min(count, len(found)))
 
 
 def caller(sn: ServiceNow, name: str) -> str:

@@ -76,6 +76,7 @@ def _incident(**fields: Any) -> SimpleNamespace:
         "ai_resolution": "Fix [KB0010060 v1]",
         "ai_human_review_required": False,
         "ai_processing_state": AIProcessingState.COMPLETE,
+        "short_description": "Outlook shows Disconnected",
     }
     values.update(fields)
     return SimpleNamespace(**values)
@@ -139,3 +140,34 @@ def test_the_caller_hears_a_real_team_name() -> None:
     told = [body for _, kind, body in backend.journal if kind == "comments"]
     assert told and "the network team" in told[0]
     assert sys.modules["agent.nodes.act"]._TEAM_NAMES["inquiry"] == "the Service Desk"
+
+
+@pytest.mark.parametrize(
+    ("prefix", "short", "counted"),
+    [
+        ("", "[BARQ-TEST-2026-10-03] Outlook", True),
+        ("[BARQ-TEST-", "Outlook shows Disconnected", True),
+        ("[BARQ-TEST-", "[BARQ-TEST-2026-10-03] Outlook", False),
+    ],
+)
+def test_test_fixtures_can_be_kept_out_of_the_record(prefix, short, counted) -> None:
+    client = MagicMock()
+    client.__aenter__ = AsyncMock(return_value=client)
+    client.__aexit__ = AsyncMock(return_value=None)
+    client.get_incident = AsyncMock(
+        return_value=_incident(ai_human_review_required=True, short_description=short)
+    )
+    client.get_conversation = AsyncMock(return_value={"work_notes": AI_REOPEN})
+    store = MagicMock()
+    store.record.return_value = 1
+    with (
+        patch("app.workers.incident_state.ServiceNowClient", return_value=client),
+        patch("app.workers.incident_state.ArticleFeedbackStore", return_value=store),
+        patch("app.workers.sync_engine.create_sync_engine"),
+    ):
+        recorded = record_outcome_best_effort(
+            mock_settings(article_feedback_ignore_prefix=prefix),
+            {"sys_id": "a" * 32, "event_id": "evt-1"},
+            "incident.reopened",
+        )
+    assert recorded == (1 if counted else 0)

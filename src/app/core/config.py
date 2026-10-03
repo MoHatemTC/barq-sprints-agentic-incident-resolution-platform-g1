@@ -102,6 +102,16 @@ class Settings(RetrievalSettings):
         ),
     )
 
+    article_feedback_ignore_prefix: str = Field(
+        default="",
+        description=(
+            "Incidents whose short description starts with this text (a test system's "
+            "fixture label, e.g. '[BARQ-TEST-') never count toward an article's record, "
+            "so test runs that reopen AI resolutions on purpose cannot mark an article "
+            "weak. Empty in production."
+        ),
+    )
+
     # Host & Network Binding (Security)
     bind_ip: str = "127.0.0.1"
 

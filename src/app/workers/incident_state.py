@@ -277,6 +277,9 @@ def record_outcome_best_effort(settings: Settings, payload: dict[str, Any], even
                 return incident, notes
 
         incident, notes = asyncio.run(read())
+        prefix = settings.article_feedback_ignore_prefix
+        if prefix and str(incident.short_description or "").startswith(prefix):
+            return 0
         articles = cited_articles(incident.ai_resolution)
         if not articles:
             return 0
