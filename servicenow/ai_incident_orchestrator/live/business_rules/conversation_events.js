@@ -52,7 +52,9 @@
         }
         event = 'incident.engineer_replied';
     } else if (isCaller && (wrote || edited)) {
-        var waiting = aiState == 'in_progress' && state == '3' && current.getValue('hold_reason') == '1';
+        // "Waiting for the caller" is judged on the values before this update: a stock rule
+        // may already have moved the incident out of On Hold when the caller replied.
+        var waiting = aiState == 'in_progress' && before == '3' && previous.getValue('hold_reason') == '1';
         var owned = !locked && current.active == true && state != '6' && state != '7' &&
             (aiState == 'complete' || aiState == 'failed' || waiting);
         if (owned) {
@@ -60,7 +62,7 @@
             current.setValue(P + 'failure_reason', '');
             current.setValue(P + 'processing_start', '');
             current.setValue(P + 'processing_end', '');
-            if (waiting) {
+            if (waiting && state == '3') {
                 current.state = 2;
                 current.hold_reason = '';
             }

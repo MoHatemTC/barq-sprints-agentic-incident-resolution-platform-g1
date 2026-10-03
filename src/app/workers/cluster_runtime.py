@@ -78,8 +78,31 @@ class ReuseVerdict:
     reason: str
 
 
+def leader_caller_id(
+    anchor_sys_id: str | None, execution_id: str, correlation_id: str
+) -> str | None:
+    """The caller of the cluster's leader incident (governed read), or None if unknown."""
+    if not anchor_sys_id:
+        return None
+    try:
+        deps = get_agent_dependencies()
+        raw = asyncio.run(
+            deps.tools.invoke(
+                "read_incident",
+                context=ToolCallContext(execution_id=execution_id, correlation_id=correlation_id),
+                arguments={"sys_id": anchor_sys_id},
+            )
+        )
+        return snapshot_incident(raw).caller_id
+    except Exception:  # noqa: BLE001 - unknown leader caller means no reuse
+        return None
+
+
 def follower_reuse_verdict(
-    raw_incident: Mapping[str, Any], solution: Mapping[str, Any]
+    raw_incident: Mapping[str, Any],
+    solution: Mapping[str, Any],
+    *,
+    leader_caller: str | None = "",
 ) -> ReuseVerdict:
     """Decide, with no LLM call, whether this follower may reuse the leader's resolution.
 
@@ -108,6 +131,16 @@ def follower_reuse_verdict(
 
     if screen_text(f"{snapshot.short_description}\n{snapshot.description}").flagged:
         return ReuseVerdict(False, "input screening flagged the incident text")
+
+    # ``leader_caller`` "" means the caller was not asked for (tests, stub backend);
+    # None means the lookup failed, which never allows reuse.
+    if leader_caller is None:
+        return ReuseVerdict(False, "the leader incident's caller could not be read")
+    if leader_caller and snapshot.caller_id == leader_caller:
+        return ReuseVerdict(
+            False,
+            "the same caller reported this again: the earlier fix may not have worked",
+        )
 
     try:
         label = Classification(str(solution.get("classification") or ""))

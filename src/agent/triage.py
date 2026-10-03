@@ -34,7 +34,7 @@ from observability.redaction import redact_text
 logger = structlog.getLogger(__name__)
 
 AGENT_NAME = "BARQ AI Agent"
-SIMILARITY = 0.25
+SIMILARITY = 0.34
 
 _ATTACK = re.compile(
     r"\b(phish\w*|ransom\w*|malware|trojan|virus|hacked|hacker\w*|compromised|breach\w*|"
@@ -51,7 +51,9 @@ _OUTAGE = re.compile(
     r"down for (all|everyone|everybody))\b",
     re.IGNORECASE,
 )
-_WORD = re.compile(r"[a-z0-9]{3,}")
+_WORD = re.compile(r"[a-z][a-z0-9]{2,}")
+#: Bracketed prefixes ("[URGENT]", "[BARQ-TEST-…]") say nothing about the problem.
+_BRACKETS = re.compile(r"\[[^\]]*\]")
 _STOP = frozenset(
     "the and for with since this that from have has not can cannot cant does doesnt "
     "dont when what after before into your you our are was were since today morning "
@@ -60,14 +62,16 @@ _STOP = frozenset(
 
 
 def _words(text: str) -> set[str]:
-    return {word for word in _WORD.findall(text.lower()) if word not in _STOP}
+    return {word for word in _WORD.findall(_BRACKETS.sub(" ", text).lower()) if word not in _STOP}
 
 
 def similarity(a: str, b: str) -> float:
+    """Word overlap of two short descriptions; needs at least two shared problem words."""
     left, right = _words(a), _words(b)
-    if not left or not right:
+    shared = left & right
+    if len(shared) < 2:
         return 0.0
-    return len(left & right) / len(left | right)
+    return len(shared) / len(left | right)
 
 
 class Situation(BaseModel):

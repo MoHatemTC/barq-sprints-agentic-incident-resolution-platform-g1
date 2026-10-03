@@ -58,6 +58,18 @@ def test_similarity_ignores_filler_words() -> None:
     assert similarity("Printer jam on floor 3", "VPN invalid credentials") == 0.0
 
 
+def test_bracketed_prefixes_and_one_shared_word_are_not_similarity() -> None:
+    # A shared ticket prefix made unrelated test incidents look like an outage live.
+    assert (
+        similarity(
+            "[BARQ-TEST-2026-10-03] VPN invalid credentials",
+            "[BARQ-TEST-2026-10-03] Intranet portal times out",
+        )
+        == 0.0
+    )
+    assert similarity("[URGENT] laptop battery", "[URGENT] laptop screen flickers") == 0.0
+
+
 @pytest.mark.parametrize(
     "text",
     [

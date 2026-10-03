@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<j:jelly trim="false" xmlns:j="jelly:core" xmlns:g="glide" xmlns:j2="null" xmlns:g2="null">
+<!--
+  BARQ AI card: the top of the engineer's incident page (form view "BARQ AI").
+  One glance answers: what is the AI doing, who is in control, why, and what is the fix.
+  Read-only; the buttons stay the form's own UI actions. Every value is HTML-escaped.
+  Phase 2 (g2 / $[]) on purpose: phase-1 output is cached and would show one incident's
+  card on every incident.
+-->
+<g2:evaluate var="jvar_barq_card">
+var barqCard = '';
+try {
+    barqCard = (function () {
+        var P = 'x_2215032_ai_inc_0_ai_';
+        function esc(value) {
+            return String(value === null || value === undefined ? '' : value)
+                .replace(/&amp;/g, '&amp;amp;').replace(/&lt;/g, '&amp;lt;').replace(/&gt;/g, '&amp;gt;')
+                .replace(/"/g, '&amp;quot;').replace(/'/g, '&amp;#39;');
+        }
+        // In a scoped formatter the form record is not passed in; read it by its sys_id.
+        var current = new GlideRecord('incident');
+        var sysId = String(RP.getParameterValue('sys_id') || '');
+        var isNew = !sysId || sysId == '-1' || !current.get(sysId);
+        function val(name) { return String(current.getValue(name) || ''); }
+        if (isNew)
+            return '&lt;div class="barq-card barq-muted"&gt;&lt;div class="barq-head"&gt;&lt;span class="barq-logo"&gt;BARQ AI&lt;/span&gt;' +
+                '&lt;span class="barq-chip"&gt;Tick AI Enabled and save: BARQ AI Agent starts on this incident&lt;/span&gt;&lt;/div&gt;&lt;/div&gt;';
+
+        var agentUser = gs.getProperty('x_2215032_ai_inc_0.agent_user_name', 'ai_orchestrator_svc');
+        var aiState = val(P + 'processing_state');
+        var locked = val(P + 'human_lock') == '1';
+        var enabled = val(P + 'enabled') == '1';
+        var state = val('state');
+        var waitingCaller = state == '3' &amp;&amp; val('hold_reason') == '1';
+        var resolvedByAgent = String(current.resolved_by.user_name) == agentUser;
+        var confidence = parseFloat(val(P + 'confidence'));
+        var fix = val(P + 'resolution') || val(P + 'suggestion');
+        var failure = val(P + 'failure_reason');
+
+        var status, tone, owner, hint = '';
+        if (!enabled) {
+            status = 'AI is off for this incident'; tone = 'muted'; owner = 'Engineers';
+            hint = 'Tick AI Enabled and save to let BARQ AI Agent work on it.';
+        } else if (locked) {
+            status = 'An engineer has taken over'; tone = 'muted'; owner = 'Engineer';
+            hint = 'BARQ AI Agent will not write to this incident. Use Hand back to BARQ AI to return it, with an instruction in Work notes.';
+        } else if (aiState == 'pending') {
+            status = 'Queued for BARQ AI'; tone = 'info'; owner = 'BARQ AI Agent';
+        } else if (aiState == 'in_progress' &amp;&amp; waitingCaller) {
+            status = 'Waiting for the caller to answer a question'; tone = 'info'; owner = 'BARQ AI Agent';
+            hint = 'The caller\'s answer brings it back to the agent automatically.';
+        } else if (aiState == 'in_progress') {
+            status = 'BARQ AI is working on it'; tone = 'info'; owner = 'BARQ AI Agent';
+        } else if (aiState == 'awaiting_approval') {
+            status = 'Waiting for an engineer to approve'; tone = 'warn'; owner = 'Waiting for approval';
+            hint = 'Review the fix, then Approve AI fix or Reject AI fix. To send your own fix, edit AI Resolution first.';
+        } else if (aiState == 'failed') {
+            status = 'BARQ AI could not finish'; tone = 'bad'; owner = 'Engineers';
+            hint = 'Handle it yourself, or Hand back to BARQ AI with an instruction.';
+        } else if (aiState == 'complete' &amp;&amp; resolvedByAgent &amp;&amp; state == '7') {
+            status = 'Resolved by BARQ AI and closed'; tone = 'good'; owner = 'Closed';
+        } else if (aiState == 'complete' &amp;&amp; resolvedByAgent &amp;&amp; state == '6') {
+            status = 'Resolved by BARQ AI, waiting for the caller'; tone = 'good'; owner = 'Caller';
+            hint = 'If the caller replies or reopens it, it comes back to an engineer with this fix.';
+        } else if (aiState == 'complete') {
+            status = 'Fix ready for the engineer'; tone = 'info'; owner = 'Engineers';
+            hint = 'BARQ AI Agent routed and started this incident; the fix below needs an engineer.';
+        } else {
+            status = 'Not processed by BARQ AI'; tone = 'muted'; owner = 'Engineers';
+        }
+
+        var html = [];
+        html.push('&lt;div class="barq-card barq-' + tone + '"&gt;');
+        html.push('&lt;div class="barq-head"&gt;&lt;span class="barq-logo"&gt;BARQ AI&lt;/span&gt;');
+        html.push('&lt;span class="barq-chip"&gt;' + esc(status) + '&lt;/span&gt;');
+        html.push('&lt;span class="barq-owner"&gt;In control: &lt;b&gt;' + esc(owner) + '&lt;/b&gt;&lt;/span&gt;&lt;/div&gt;');
+
+        var facts = [];
+        var type = current.getDisplayValue(P + 'classification');
+        if (type) facts.push('Type: &lt;b&gt;' + esc(type) + '&lt;/b&gt;');
+        if (!isNaN(confidence)) {
+            var pct = Math.round(confidence * 100);
+            facts.push('Confidence: &lt;b&gt;' + pct + '%&lt;/b&gt; &lt;span class="barq-bar"&gt;&lt;span style="width:' + pct + '%"&gt;&lt;/span&gt;&lt;/span&gt;');
+        }
+        var updated = current.getDisplayValue(P + 'processing_end');
+        if (updated) facts.push('Updated: ' + esc(updated));
+        if (facts.length) html.push('&lt;div class="barq-facts"&gt;' + facts.join('&lt;span class="barq-sep"&gt;&lt;/span&gt;') + '&lt;/div&gt;');
+        if (hint) html.push('&lt;div class="barq-hint"&gt;' + esc(hint) + '&lt;/div&gt;');
+        if (aiState == 'failed' &amp;&amp; failure) html.push('&lt;div class="barq-failure"&gt;' + esc(failure) + '&lt;/div&gt;');
+
+        if (fix) {
+            var lines = fix.split(/\r?\n/), steps = [], sources = [];
+            for (var i = 0; i &lt; lines.length; i++) {
+                var line = lines[i].replace(/^\s+|\s+$/g, '');
+                if (!line) continue;
+                if (/^Sources?:/i.test(line)) { sources.push(line.replace(/^Sources?:\s*/i, '')); continue; }
+                steps.push(line.replace(/^\d+[.)]\s*/, ''));
+            }
+            html.push('&lt;div class="barq-fix-title"&gt;' + (aiState == 'awaiting_approval' ? 'Proposed fix' : 'Fix') + '&lt;/div&gt;&lt;ol class="barq-steps"&gt;');
+            for (var s = 0; s &lt; steps.length &amp;&amp; s &lt; 12; s++)
+                html.push('&lt;li&gt;' + esc(steps[s]).replace(/\[(KB\d{4,7}[^\]]*)\]/g, '&lt;span class="barq-kb"&gt;$1&lt;/span&gt;') + '&lt;/li&gt;');
+            html.push('&lt;/ol&gt;');
+            if (sources.length) html.push('&lt;div class="barq-sources"&gt;Sources: ' + esc(sources.join('; ')) + '&lt;/div&gt;');
+        }
+        html.push('&lt;/div&gt;');
+        return html.join('');
+    })();
+} catch (e) {
+    barqCard = '&lt;div class="barq-card barq-muted"&gt;BARQ AI card unavailable.&lt;/div&gt;';
+    gs.warn('BARQ AI card error: ' + e);
+}
+barqCard;
+</g2:evaluate>
+<style>
+.barq-card { margin: 4px 0 16px; padding: 14px 18px; border: 1px solid #d5dbe1; border-left: 5px solid #5f6b7a; border-radius: 6px; background: #fbfcfd; font-size: 13px; line-height: 1.5; }
+.barq-card.barq-info { border-left-color: #2f6fdb; }
+.barq-card.barq-warn { border-left-color: #d98c00; background: #fffaf0; }
+.barq-card.barq-good { border-left-color: #2e8540; background: #f6fbf7; }
+.barq-card.barq-bad { border-left-color: #c62828; background: #fff6f6; }
+.barq-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.barq-logo { font-weight: 700; letter-spacing: .04em; color: #1f2d3d; }
+.barq-chip { padding: 2px 10px; border-radius: 12px; background: #e8edf3; color: #1f2d3d; font-weight: 600; }
+.barq-info .barq-chip { background: #e4eefc; color: #1d4fa3; }
+.barq-warn .barq-chip { background: #fdeccb; color: #8a5a00; }
+.barq-good .barq-chip { background: #dff1e3; color: #1f5f2c; }
+.barq-bad .barq-chip { background: #fbe0e0; color: #8e1c1c; }
+.barq-owner { margin-left: auto; color: #4a5866; }
+.barq-facts { margin-top: 8px; color: #33414f; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 0; }
+.barq-sep { display: inline-block; width: 1px; height: 12px; background: #c9d1d9; margin: 0 12px; }
+.barq-bar { display: inline-block; width: 70px; height: 6px; margin-left: 6px; background: #e1e6eb; border-radius: 3px; vertical-align: middle; overflow: hidden; }
+.barq-bar span { display: block; height: 100%; background: #2e8540; }
+.barq-hint { margin-top: 8px; color: #4a5866; }
+.barq-failure { margin-top: 8px; color: #8e1c1c; }
+.barq-fix-title { margin-top: 10px; font-weight: 600; color: #1f2d3d; }
+.barq-steps { margin: 4px 0 0 18px; padding: 0; }
+.barq-steps li { margin: 2px 0; }
+.barq-kb { margin-left: 4px; padding: 0 6px; border-radius: 8px; background: #eef2f6; color: #44546a; font-size: 11px; white-space: nowrap; }
+.barq-sources { margin-top: 6px; color: #6b7785; font-size: 12px; }
+</style>
+<g2:no_escape>$[jvar_barq_card]</g2:no_escape>
+</j:jelly>

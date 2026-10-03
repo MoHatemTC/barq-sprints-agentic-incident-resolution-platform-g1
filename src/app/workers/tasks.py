@@ -57,6 +57,7 @@ from app.workers.cluster_runtime import (
     cacheable_result,
     dispatch_cluster_waiters,
     follower_reuse_verdict,
+    leader_caller_id,
     load_cluster_incident,
 )
 from app.workers.db import WorkerRepo, build_worker_repo
@@ -375,7 +376,15 @@ def _run_incident(
                     # auto-resolved: the follower must pass its own deterministic gates
                     # (eligibility, screening, risk) first. See follower_reuse_verdict.
                     verdict = (
-                        follower_reuse_verdict(incident, solution)
+                        follower_reuse_verdict(
+                            incident,
+                            solution,
+                            leader_caller=leader_caller_id(
+                                admission.anchor_incident_sys_id,
+                                execution_id,
+                                correlation_id or execution_id,
+                            ),
+                        )
                         if graph_backend == "langgraph"
                         else ReuseVerdict(True, "stub graph backend")
                     )

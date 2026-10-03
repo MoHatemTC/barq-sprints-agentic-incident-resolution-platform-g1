@@ -272,7 +272,13 @@ class TestWorkflowStateTable:
             "verify_evidence",
         ]
         # write_execution_log is S3.1's multi-agent audit write-back (#156).
-        assert backend.calls == ["read_incident", "write_ai_fields", "write_execution_log"]
+        assert backend.calls == [
+            "read_incident",
+            "read_conversation",
+            "find_related_incidents",
+            "write_ai_fields",
+            "write_execution_log",
+        ]
         stored = rows(pg_engine, execution_id)
         by_attempt = {(r.node_name, r.attempt) for r in stored}
         assert ("classify", 1) in by_attempt and ("classify", 2) not in by_attempt

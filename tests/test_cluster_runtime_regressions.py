@@ -17,6 +17,13 @@ from app.workers.retry_policy import RetryConfig
 from tests.agent_support import MFA, ORDER_P1, VPN, FakeServiceNow, event_for, make_deps
 
 
+@pytest.fixture(autouse=True)
+def _leader_has_another_caller(monkeypatch):
+    # The leader incident is not readable in these tests; it was reported by someone
+    # else, so the same-caller rule does not apply unless a test says so.
+    monkeypatch.setattr(tasks, "leader_caller_id", lambda *args, **kwargs: "f" * 32)
+
+
 def graph_run(deps, record, cached=None):
     return run_graph(
         build_graph(deps, checkpointer=InMemorySaver()),

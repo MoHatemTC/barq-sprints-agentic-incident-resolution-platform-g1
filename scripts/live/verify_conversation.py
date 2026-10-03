@@ -128,6 +128,22 @@ def settled_after(be: Backend, sys_id: str, count: int) -> Callable[[], Any]:
     return check
 
 
+def produced_a_result(be: Backend, sn: ServiceNow, sys_id: str) -> bool:
+    """The newest agent run did real work (not skipped) and the incident is not left
+    queued or marked in progress with nobody working on it."""
+    acted = [
+        r for r in runs(be, sys_id) if not str(r.get("termination_cause")).startswith("observed:")
+    ]
+    if not acted or str(acted[0].get("termination_cause")) == "skipped_ineligible":
+        return False
+    record = sn.incident(sys_id)
+    ai_state = record[f"{P}processing_state"]
+    waiting_caller = record["state"] == "On Hold"
+    return ai_state in ("Complete", "Awaiting Approval", "Failed") or (
+        ai_state == "In Progress" and waiting_caller
+    )
+
+
 def comments(sn: ServiceNow, sys_id: str) -> list[str]:
     return [j["value"] for j in sn.journal(sys_id) if j["element"] == "comments"]
 
@@ -159,9 +175,7 @@ def scenario_ask_then_continue(sn, be, admin, caller, engineer) -> dict[str, Any
         "asked_one_question": any(QUESTION_MARKER in t for t in texts),
         "waited_on_hold": asked["state"] == "On Hold",
         "reply_queued_the_agent_again": bool(second),
-        "agent_continued_to_a_result": final[f"{P}processing_state"]
-        in ("Complete", "Awaiting Approval")
-        or final["state"] in ("Resolved", "In Progress"),
+        "agent_continued_to_a_result": produced_a_result(be, sn, inc["sys_id"]),
         "no_question_repeated": sum(QUESTION_MARKER in t for t in texts) <= 2,
     }
     return {
@@ -206,7 +220,7 @@ def scenario_engineer_takes_over_then_hands_back(sn, be, admin, caller, engineer
         "hand_back_note_with_instruction": any(
             "Handed back to BARQ AI Agent" in n and "Instruction" in n for n in notes
         ),
-        "agent_resumed": bool(resumed),
+        "agent_resumed": bool(resumed) and produced_a_result(be, sn, inc["sys_id"]),
         "lock_cleared": final[f"{P}human_lock"] == "false",
     }
     return {

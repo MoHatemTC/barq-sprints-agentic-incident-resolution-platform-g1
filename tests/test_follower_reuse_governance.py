@@ -36,6 +36,13 @@ LEADER_SOLUTION = {
 }
 
 
+@pytest.fixture(autouse=True)
+def _leader_has_another_caller(monkeypatch):
+    # The leader incident is not readable in these tests; it was reported by someone
+    # else, so the same-caller rule does not apply unless a test says so.
+    monkeypatch.setattr(tasks, "leader_caller_id", lambda *args, **kwargs: "f" * 32)
+
+
 def follower_record(**overrides):
     base = dict(
         short="VPN authentication fails after password reset",
@@ -159,3 +166,24 @@ def test_an_autonomous_follower_is_worked_like_a_graph_resolution(monkeypatch):
     assert stored["state"] == "6"
     assert stored["assignment_group"] == "e" * 32
     assert [kind for _, kind, _ in service.journal].count("comments") == 1
+
+
+def test_the_same_caller_reporting_again_never_reuses_the_fix() -> None:
+    from tests.test_nodes import snapshot
+
+    caller = "c" * 32
+    incident = snapshot({**follower_record(), "caller_id": caller})
+    verdict = cluster_runtime.follower_reuse_verdict(
+        incident, {"classification": "network"}, leader_caller=caller
+    )
+    assert verdict.allowed is False
+    assert "same caller" in verdict.reason
+
+
+def test_an_unknown_leader_caller_never_reuses_the_fix() -> None:
+    from tests.test_nodes import snapshot
+
+    verdict = cluster_runtime.follower_reuse_verdict(
+        snapshot(follower_record()), {"classification": "network"}, leader_caller=None
+    )
+    assert verdict.allowed is False

@@ -19,6 +19,11 @@
     incident.setValue(P + 'failure_reason', '');
     incident.setValue(P + 'processing_start', '');
     incident.setValue(P + 'processing_end', '');
+    // The agent does not work an incident that is On Hold, so handing back resumes it.
+    if (incident.getValue('state') == '3') {
+        incident.state = 2;
+        incident.hold_reason = '';
+    }
     incident.work_notes = 'Handed back to BARQ AI Agent by ' + gs.getUserDisplayName() +
         (instruction ? '. Instruction: ' + instruction : '.');
     incident.update();

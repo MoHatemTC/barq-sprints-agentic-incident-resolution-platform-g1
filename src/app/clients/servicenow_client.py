@@ -135,7 +135,9 @@ class ServiceNowClient:
         history: list[dict[str, str]] = []
         if category:
             recent = await query(
-                f"active=true^category={category}^sys_id!={sys_id}"
+                # Open and not yet resolved: resolved incidents are not evidence of an
+                # ongoing outage.
+                f"active=true^stateNOT IN6,7,8^category={category}^sys_id!={sys_id}"
                 "^opened_at>javascript:gs.minutesAgoStart(60)"
             )
         if caller_id:
