@@ -1,0 +1,152 @@
+{
+  "started_at": "2026-10-03T11:43:54.619403+00:00",
+  "scenarios": {
+    "low_risk_resolved": {
+      "incident": "INC0010346",
+      "sys_id": "781da24847ff0710c148497f316d43c5",
+      "run": {
+        "execution_id": "47722c3a-a23c-4092-9a1d-b5a58650a95c",
+        "event_record_id": "aa0fc524-7078-4de6-89c5-1c2a67682e56",
+        "incident_sys_id": "781da24847ff0710c148497f316d43c5",
+        "status": "succeeded",
+        "node_reached": "act",
+        "model_name": null,
+        "agent_version": "s3.4-graph-1.0.0",
+        "started_at": "2026-10-03T11:44:04.048585Z",
+        "ended_at": "2026-10-03T11:45:11.500197Z",
+        "termination_cause": "suggested",
+        "updated_at": "2026-10-03T11:45:11.501113Z"
+      },
+      "checks": {
+        "run_succeeded": true,
+        "resolved": true,
+        "resolved_by_agent": true,
+        "routed": true,
+        "ai_complete": true,
+        "caller_got_the_fix": true
+      },
+      "passed": true
+    },
+    "engineer_fix_handed_over": {
+      "incident": "INC0010347",
+      "sys_id": "0c6d6e4847ff0710c148497f316d432f",
+      "run": {
+        "execution_id": "78f5c5d0-c568-4dba-b596-d8855919015b",
+        "event_record_id": "25416b5e-a719-45f6-a12e-3cb70b3e80e1",
+        "incident_sys_id": "0c6d6e4847ff0710c148497f316d432f",
+        "status": "succeeded",
+        "node_reached": "act",
+        "model_name": null,
+        "agent_version": "s3.4-graph-1.0.0",
+        "started_at": "2026-10-03T11:45:24.105028Z",
+        "ended_at": "2026-10-03T11:46:03.633272Z",
+        "termination_cause": "suggested",
+        "updated_at": "2026-10-03T11:46:03.634175Z"
+      },
+      "checks": {
+        "run_succeeded": true,
+        "in_progress": true,
+        "engineer_has_it": true,
+        "fix_recorded": true,
+        "caller_told_about_handoff": true
+      },
+      "passed": true
+    },
+    "p1_parks_then_approved": {
+      "incident": "INC0010348",
+      "sys_id": "e09d268847ff0710c148497f316d435f",
+      "run": {
+        "execution_id": "1b19cba4-77a5-41c6-a259-cab71cbf43f3",
+        "event_record_id": "8f1f72de-5b7c-4568-9b59-375b40ddda19",
+        "incident_sys_id": "e09d268847ff0710c148497f316d435f",
+        "status": "awaiting_approval",
+        "node_reached": "act",
+        "model_name": null,
+        "agent_version": "s3.4-graph-1.0.0",
+        "started_at": "2026-10-03T11:46:14.052919Z",
+        "ended_at": null,
+        "termination_cause": null,
+        "updated_at": "2026-10-03T11:46:31.570986Z"
+      },
+      "decision_status": 200,
+      "knowledge_capture": {
+        "status": "ingested",
+        "article_number": "KB1706",
+        "point_count": 1
+      },
+      "checks": {
+        "parked": true,
+        "nothing_applied_while_parked": true,
+        "decision_accepted": true,
+        "resolved_after_approval": true,
+        "human_fix_applied": true
+      },
+      "passed": true
+    },
+    "p1_rejected": {
+      "incident": "INC0010349",
+      "sys_id": "e1cd2e8847ff0710c148497f316d43c0",
+      "checks": {
+        "parked": true,
+        "decision_accepted": true,
+        "not_resolved": true,
+        "ai_failed_state": true
+      },
+      "passed": true
+    },
+    "injection_blocked": {
+      "incident": "INC0010350",
+      "sys_id": "67ddee8847ff0710c148497f316d43f3",
+      "run": {
+        "execution_id": "44e44a25-ab2b-42d5-85d9-cef2c03284d1",
+        "event_record_id": "30443227-ba0b-407e-8382-d7daf7cbcf60",
+        "incident_sys_id": "67ddee8847ff0710c148497f316d43f3",
+        "status": "awaiting_approval",
+        "node_reached": "act",
+        "model_name": null,
+        "agent_version": "s3.4-graph-1.0.0",
+        "started_at": "2026-10-03T11:47:24.625588Z",
+        "ended_at": null,
+        "termination_cause": null,
+        "updated_at": "2026-10-03T11:47:33.812486Z"
+      },
+      "checks": {
+        "not_resolved": true,
+        "not_applied": true
+      },
+      "passed": true
+    },
+    "no_caller_suggested": {
+      "incident": "INC0010351",
+      "sys_id": "36eda2c847ff0710c148497f316d432a",
+      "run": {
+        "execution_id": "e75a0a78-7ad2-4cd2-ba81-db3ada032063",
+        "event_record_id": "4a51715c-5b3f-43f8-910a-006ad9226942",
+        "incident_sys_id": "36eda2c847ff0710c148497f316d432a",
+        "status": "succeeded",
+        "node_reached": "act",
+        "model_name": null,
+        "agent_version": "s3.4-graph-1.0.0",
+        "started_at": "2026-10-03T11:47:44.197250Z",
+        "ended_at": "2026-10-03T11:47:45.850604Z",
+        "termination_cause": "suggested",
+        "updated_at": "2026-10-03T11:47:45.851562Z"
+      },
+      "checks": {
+        "not_resolved": true,
+        "started": true
+      },
+      "passed": true
+    },
+    "locked_untouched": {
+      "incident": "INC0010352",
+      "sys_id": "8efd26c847ff0710c148497f316d4345",
+      "checks": {
+        "no_run": true,
+        "untouched": true
+      },
+      "passed": true
+    }
+  },
+  "finished_at": "2026-10-03T11:48:36.592962+00:00"
+}

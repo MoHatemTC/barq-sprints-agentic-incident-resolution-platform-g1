@@ -109,7 +109,35 @@ Scoped app `x_2215032_ai_inc_0`, update set "BARQ agentic 2026-10-03":
 
 Live runs use real demo users through impersonation; buttons are pressed by submitting the
 form as that user, exactly as the browser does. The admin login is for fixtures and setup
-only. Evidence JSON is in `docs/evidence/`.
+only. Evidence of the latest full run: `docs/evidence/agentic_live_2026-10-03/`.
+
+## 5A. Try it yourself (about 15 minutes)
+
+Log in to `https://dev407364.service-now.com` as admin, then use **Impersonate user** (user
+menu) for each role. Label your test tickets so they are easy to find and clean up.
+
+1. **As a user** (impersonate `Abel Tuter` or any caller without roles), open
+   `https://dev407364.service-now.com/esc?id=barq_ai`.
+   * Ask "How do I fix Outlook showing Disconnected?" → an answer with its sources, no ticket.
+   * Describe a problem ("My Outlook says Disconnected since this morning, webmail works")
+     → *Open the ticket* → the ticket appears under My tickets; within a minute BARQ AI Agent
+     answers in the ticket. Press *It works, close it* or *Still not working*.
+   * Write something vague ("It does not work, please help") → the agent asks one question;
+     answer it in the ticket → it continues.
+   * Try *Talk to a person* and *Cancel this ticket* on another ticket.
+2. **As an engineer** (impersonate `Beth Anglin`), open any of those incidents: the **BARQ AI**
+   page opens with the card on top. Write an Additional comment to the caller → the agent
+   stands down (the user sees your message on their page). Type an instruction in Work notes
+   and press *Hand back to BARQ AI* → the agent continues with it.
+3. **High risk:** as a user, open a ticket that says the whole office is down, or as admin
+   create an incident with Impact 1 / Urgency 1 and AI Enabled → it waits for approval.
+   As Beth you see no Approve button. Impersonate `BARQ Approver` (`barq.approver`), type
+   your fix in Work notes and press *Approve AI fix* (or *Reject AI fix*).
+4. **Attack:** a ticket like "I clicked a link in a phishing email and entered my password"
+   → raised to security and waits for a person; no advice to wipe anything.
+
+What you should never see: the user seeing work notes or another user's ticket; a button
+that does not apply; the agent writing after an engineer took over.
 
 ## 6. Deploy and roll back
 

@@ -1,0 +1,87 @@
+{
+  "at": "2026-10-03T12:05:20.668254+00:00",
+  "pages": {
+    "parked": {
+      "incident": "INC0010362",
+      "beth.anglin": {
+        "view": "barq_engineer",
+        "card": "Waiting for an engineer to approve",
+        "buttons": [
+          "barq_take_over_from_ai"
+        ]
+      },
+      "barq.approver": {
+        "view": "barq_engineer",
+        "card": "Waiting for an engineer to approve",
+        "buttons": [
+          "barq_approve_ai_fix",
+          "barq_reject_ai_fix",
+          "barq_take_over_from_ai"
+        ]
+      },
+      "abel.tuter": {
+        "view": "other",
+        "card": null,
+        "buttons": []
+      }
+    },
+    "fix_for_engineer": {
+      "incident": "INC0010366",
+      "beth.anglin": {
+        "view": "barq_engineer",
+        "card": "Fix ready for the engineer",
+        "buttons": [
+          "barq_hand_back_to_ai"
+        ]
+      },
+      "barq.approver": {
+        "view": "barq_engineer",
+        "card": "Fix ready for the engineer",
+        "buttons": [
+          "barq_hand_back_to_ai"
+        ]
+      }
+    },
+    "resolved_by_ai": {
+      "incident": "INC0010364",
+      "beth.anglin": {
+        "view": "barq_engineer",
+        "card": "Resolved by BARQ AI, waiting for the caller",
+        "buttons": [
+          "barq_take_over_from_ai"
+        ]
+      },
+      "barq.approver": {
+        "view": "barq_engineer",
+        "card": "Resolved by BARQ AI, waiting for the caller",
+        "buttons": [
+          "barq_take_over_from_ai"
+        ]
+      }
+    },
+    "cancelled": {
+      "incident": "INC0010345",
+      "beth.anglin": {
+        "view": "barq_engineer",
+        "card": "An engineer has taken over",
+        "buttons": []
+      },
+      "barq.approver": {
+        "view": "barq_engineer",
+        "card": "An engineer has taken over",
+        "buttons": []
+      }
+    }
+  },
+  "checks": {
+    "engineer_lands_on_barq_page": true,
+    "parked_card_says_waiting_for_approval": true,
+    "engineer_cannot_approve": true,
+    "approver_can_approve_reject_take_over": true,
+    "fix_for_engineer_offers_hand_back_only": true,
+    "resolved_by_ai_offers_take_over_only": true,
+    "cancelled_offers_nothing": true,
+    "caller_gets_no_barq_buttons": true
+  },
+  "passed": true
+}

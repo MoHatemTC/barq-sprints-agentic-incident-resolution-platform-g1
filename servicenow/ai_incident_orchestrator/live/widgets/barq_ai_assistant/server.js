@@ -38,8 +38,10 @@
             can_reply: ['6', '7', '8'].indexOf(gr.getValue('state')) < 0,
             can_confirm: gr.getValue('state') == '6',
             can_cancel: ['6', '7', '8'].indexOf(gr.getValue('state')) < 0,
+            // Only while BARQ AI Agent still has it (not already with an engineer).
             can_ask_person: ['6', '7', '8'].indexOf(gr.getValue('state')) < 0 &&
-                gr.getValue(P + 'human_lock') != '1'
+                gr.getValue(P + 'human_lock') != '1' &&
+                gr.getValue(P + 'human_review_required') != '1'
         };
     }
 
