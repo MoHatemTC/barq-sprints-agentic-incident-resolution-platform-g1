@@ -174,19 +174,75 @@ caller confirms or reopens every resolution (Phase 3); P1 parks still need an en
 rule above fails; the kill switch and the reassessment switch are admin settings; and the
 intelligence test set (section 16, R1–R9) must show zero wrong downgrades before the switch is on by default.
 
-**Talk naturally (Phases 3 and 4).** With the caller, in incident comments: ask one clarifying question
+**Talk naturally (Phase 3; engineer chat next round).** With the caller, in incident comments: ask one clarifying question
 when information is missing (incident On Hold – Awaiting Caller), read the reply, continue,
 and confirm the fix worked — this is the conversation behind T6. With engineers, in the
-console chat (Phase 4): explain decisions, accept instructions ("try X", "take this one") as
+console chat (next round): explain decisions, accept instructions ("try X", "take this one") as
 proposals that go through the same gates. Agent and chat share the memory of section 10.
 
 **See (only if time remains).** Screenshots and log files attached to an incident are read through the
 current model's vision input (via the LiteLLM proxy), redacted and screened like any input,
 and quoted as evidence.
 
-**Learn from outcomes (Phase 5).** Reopens count against the article and the decision path that
+**Learn from outcomes (next round).** Reopens count against the article and the decision path that
 led to them, confirmations count for them, and past outcomes for similar incidents feed the
 confidence score.
+
+### 6.4 Who is talking and who is in control (Ali, 2026-10-03)
+
+Two conversations exist on every incident, and they must never be confused:
+
+- **Caller conversation** — the incident's *Additional comments*, which the caller sees in the
+  portal. ServiceNow shows the author's name on every entry out of the box, so the caller always
+  sees whether a message came from **BARQ AI Agent** (the agent's user) or from a named
+  engineer. Agent messages also start with "Hello, this is BARQ AI Agent".
+- **Engineer ↔ agent conversation** — private: *work notes* the caller never sees, and the
+  *Ask BARQ AI* chat on the incident (next round). Nothing said there reaches the caller unless an
+  engineer sends it.
+
+At any moment exactly one party is in control of the caller conversation:
+
+| Control | Who may write to the caller | How it starts | How it ends |
+|---|---|---|---|
+| **Agent** | the agent only | eligible incident arrives; or an engineer hands back | engineer takes over; caller asks for a person; agent escalates; incident closed |
+| **Waiting for approval** | nobody | agent parks (risk, low confidence, no knowledge) | engineer approves (agent continues), rejects, or takes over |
+| **Engineer** | engineers only; the agent may only draft privately | Take over; Undo; an engineer writes to the caller; caller reopens an AI resolution; agent hands over | Hand back to BARQ AI; incident closed |
+
+Rules, enforced in code and ACLs, not by the model:
+1. When control is **Engineer**, the agent never writes a caller comment, state or resolution
+   (Human Lock + field ACLs, already live), and every run it starts stops at the pre-write re-read.
+2. **Any customer-visible comment by a person other than the caller or the agent is an implicit
+   take-over**: the agent stands down so the caller never hears two voices.
+3. **Handing back** is an explicit action by an engineer, with an optional instruction. The agent
+   resumes with the whole history — caller replies, engineer notes and the instruction — as
+   evidence, never repeats a question already asked, and its first comment says it is continuing
+   ("BARQ AI Agent is continuing with your incident on behalf of <engineer>").
+4. **Drafts stay drafts.** When an engineer asks the agent for help while keeping control, the
+   draft goes into a work note addressed to that engineer. If the engineer sends it, it is the
+   engineer's message under the engineer's name; the work note keeps the record that the agent
+   drafted it.
+5. The agent never writes the Human Lock (it is admin-only); it stands down through its own
+   processing state (`handed_over`), which the eligibility check refuses.
+
+#### Control scenarios
+| ID | Situation | What happens | Caller sees |
+|---|---|---|---|
+| S1 | Engineer presses Take over while the agent is running | lock on; a paused run is rejected; the run stops at its pre-write re-read | nothing more from the agent; next message from the engineer by name |
+| S2 | Engineer writes to the caller while the agent owns the incident | implicit take-over (rule 2); work note records it | the engineer's message; the agent goes quiet |
+| S3 | Engineer hands back with "try clearing the cache first" | agent resumes with history + instruction | "BARQ AI Agent is continuing … on behalf of <engineer>" |
+| S4 | Engineer keeps control but asks the agent to draft a reply | draft in a work note for that engineer | only what the engineer sends, under the engineer's name |
+| S5 | Caller replies while an engineer owns it | goes to the engineer; agent silent | engineer's answer |
+| S6 | Caller replies while the agent owns it | agent continues with the reply as evidence (Phase 3) | agent's next message |
+| S7 | Caller writes "I want to talk to a person" | agent hands over: assigns the group, hand-over work note with its summary, stands down | "An engineer from <group> will continue with you" |
+| S8 | Engineer edits the agent's draft, then approves | edited text is applied as the human's solution (live) | the fix, resolved by the agent on the engineer's approval |
+| S9 | Engineer rejects with a reason | run closed; reason recorded for learning; agent does not retry that incident | nothing from the agent |
+| S10 | Two engineers act at once | first take-over wins; the second sees "Taken over by <name>" | one engineer |
+| S11 | Engineer reassigns the group while the agent owns it | agent keeps the person's group, continues | agent continues |
+| S12 | Engineer resolves it themselves | agent stops; the human fix is captured as a knowledge proposal | engineer's resolution |
+| S13 | Engineer presses Undo on an AI-reassessed or AI-resolved incident | reopened, locked, hand-over note | the engineer by name |
+| S14 | Kill switch turned on mid-conversation | no new runs; current state kept; engineers continue by hand | nothing new from the agent |
+| S15 | Caller reopens an AI resolution | control → Engineer with the agent's summary; article penalised | the engineer by name |
+| S16 | Engineer hands back an incident the agent previously failed on | agent runs once more with the engineer's instruction; if it fails again it hands over and does not loop | agent message or the engineer |
 
 ## 7. Agent abilities (registered tools)
 
@@ -625,60 +681,52 @@ deploy; caller-message gate; NUL-safe JSON; SDK audit gate. 5 of 6 live core sce
 
 Scenarios: A1, A3, A4, C1, C5, C6, D1, D7, E1, E3, F2, L2, L4.
 
-### Phase 1 — Engineers see and steer the agent in ServiceNow
-The most visible gap: today the agent's work is spread over fields and work notes.
+### Phase 1 — Control: engineers steer, the caller always knows who is talking (6.4)
+The system behaviour comes before new intelligence: who is in control, what happens when an
+engineer steps in or hands back, and what the caller sees.
 | Task | Done when |
 |---|---|
-| *BARQ AI* section on the incident form: what the agent did and why, cited evidence, confidence, risk verdict, run status, the three actions | visible on a live incident |
-| Lists and filters in one *BARQ AI* menu: Needs me, Resolved by AI, AI reassessed, Failed | each filter returns the right live records |
-| Agent writes a short incident summary and timeline note (what happened, what it checked, what it did) | unit + live |
+| `handed_over` processing state refused by eligibility; agent hands over on "talk to a person" (S7) | unit |
+| Implicit take-over: a customer-visible comment by anyone but the caller or the agent stands the agent down (S2) — ServiceNow business rule + event | unit + live |
+| *Hand back to BARQ AI* action with an optional instruction; agent resumes with history and instruction, no repeated questions, says it is continuing (S3, S16) | unit + live |
+| Drafts for an engineer go to a work note only (S4) | unit + live |
+| *BARQ AI* section on the incident form: who is in control, what the agent did and why, evidence, confidence, actions; one *BARQ AI* menu with Needs me, Resolved by AI, Handed over, Failed | visible and correct on live incidents |
 
-Scenarios: E1–E4, E8, E11, G6, 11.1–11.3.
+Scenarios: S1–S16, E1–E4, E8, E11, G6.
 
-### Phase 2 — The agent investigates and judges real risk
-This is the core of "very intelligent": look around before acting, and decide how critical
-the incident really is.
+### Phase 2 — The agent judges real risk
 | Task | Done when |
 |---|---|
-| Investigation step (read-only, bounded): caller's recent incidents, similar open incidents, recent changes on the CI, attachments list, knowledge; findings recorded as evidence | unit (budget, read-only, evidence) + live |
-| Two-way reassessment (6.3): code-enforced downgrade rules + independent second check; upgrade when similar incidents point to an outage | unit per rule + live: fake P1 resolved, real outage escalated |
-| *AI reassessed* flag, explanation note, one-click Undo action | live |
-| Similar incidents grouped and a Problem proposed (old T11, first part) | live |
-
-Scenarios: C1–C6, F1, F3, plus new R1–R6 below.
+| Investigation (read-only, bounded): caller's recent incidents and similar open incidents; findings recorded as evidence | unit + live |
+| Two-way reassessment (6.3) with code-enforced rules, second check, *AI reassessed* note, Undo (S13) | unit per rule + live R1–R6 |
 
 ### Phase 3 — The agent talks to the caller
 | Task | Done when |
 |---|---|
-| Clarifying question when information is missing → On Hold – Awaiting Caller; caller reply resumes the run | unit + live |
-| Confirmation window (in-instance scheduled job, 30 min for tests): silence or "it works" → confirmed and closed; reopen → hand-over note to an engineer, article penalty | unit + live |
-| Events `incident.reopened` / `incident.confirmed` / `incident.caller_replied` through the existing webhook | unit + live |
+| Clarifying question → On Hold – Awaiting Caller; caller reply resumes (S6) | unit + live R7–R9 |
+| Confirmation window job; reopen → engineer with the agent's summary (S15) | unit + live D2–D4 |
 
-Scenarios: D2, D3, D4, D8, L1, B6, plus R7–R9.
+### Phase 4 — Finish this round
+Docs, evidence, operations notes, PR description; #213 marked ready for Ali's approval. This
+phase is always done, even if an earlier phase is cut short.
 
-### Phase 4 — BARQ AI Console with chat and memory, inside ServiceNow
-| Task | Done when |
-|---|---|
-| One console page (Needs me, Live, Results, Failed & sync, Settings) reading the backend through the bridge | works with real data |
-| Chat panel: #213's chatbot moved behind the bridge, incident-aware, shared memory, actions only as gated proposals; Streamlit removed | unit + live |
+### Next round (not this session)
+*Ask BARQ AI* chat on the incident and the full console page with Streamlit removed; knowledge
+publish/retire sync and article scoring; similar incidents → Problem; recent changes and CI in the
+investigation; screenshots; one real remediation runbook; instance clean-up.
 
-Scenarios: G7, H1–H8, I1, I2.
-
-### Phase 5 — Knowledge that improves itself
-| Task | Done when |
-|---|---|
-| Human fix → knowledge proposal (exists) → publish/retire sync to Qdrant | live |
-| Confirmations and reopens credit or penalise the article and feed confidence (old T20) | unit + live |
-
-Scenarios: B3, B6, B7.
-
-### Phase 6 — Finish
-Instance clean-up per Ali's decisions, sync report reconciliation, docs, evidence, PR
-description, #213 marked ready. Scenarios: J1, J2.
-
-### Only if time remains
-Reading screenshots (old T19); one real remediation runbook through the catalog or a standard
-change (old T12, one item); the lab runner (old T13) is out of scope for this round.
+### Why the line is drawn here
+Writing the code is not the slow part — we built the core in a few hours. The limits are:
+1. **Live proof.** Every scenario is proven with a real run on the shared system (model calls
+   take minutes, a burst once took 151 s for the first result), and every bug found live needs a
+   fix, the gate, a rebuild on the 2-vCPU EC2 and a re-run.
+2. **ServiceNow changes** go through update-set uploads as admin and must be checked on the real
+   form, one at a time, on a shared instance other people use.
+3. **This conversation's working memory.** The previous session ended because it filled up; a
+   session can only carry so much code, logs and live output before it has to hand over.
+4. **Shared systems.** Each phase is deployed only when it is safe for teammates using them.
+Phases 0–4 fit inside those limits with every scenario actually proven; adding the console and
+chat would mean shipping parts that were never tested live, which the rules forbid.
 
 ### New scenarios for the intelligent agent
 | ID | Scenario | Expected |
