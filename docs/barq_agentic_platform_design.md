@@ -651,82 +651,10 @@ E1–E4, E7–E9, E11, F1–F2, F4, G2, G4, G6–G7, H1–H5, I1, L1–L4, L8, a
 read-back, the PostgreSQL rows and the Langfuse trace, and is labelled `[BARQ-TEST-…]`.
 Caller-side steps (accept / reopen) are performed through the portal as an existing demo user.
 
-## 16. Delivery plan — phases (rewritten 2026-10-03 06:45 Cairo)
+## 16. Delivery plan
 
-The first version of this plan (T0–T21) was ordered by component: backend first, ServiceNow
-screens late, intelligence spread across six tasks, and a large remediation block in the middle.
-That meant engineers would see nothing until near the end, and a deadline cut would have left
-half-finished pieces. It is replaced by **phases**. Each phase is a vertical slice — backend,
-ServiceNow screen and live test together — and ends in a state that is deployed to the shared
-EC2, tested live on `dev407364`, committed to #213 and demonstrable. If time runs out, the
-completed phases are the product; nothing is left half-built.
-
-Rules for every phase: unit tests and the full gate (ruff, format, mypy, pytest) before each
-push; CI green on #213; hand deploy to the EC2; live scenarios with evidence in
-`docs/evidence/`; nothing deleted on the instance; every ServiceNow change in the tracked update
-set with its previous value in the manifest.
-
-**Already done (T0–T4 of the old plan):** backups and rollback script; critical fixes
-(follower governance, no decision without an interrupt, redaction, no default approval); agent
-tools assign / In Progress / caller comment / resolve with the autonomy level and kill switch;
-ServiceNow bridge, Approve / Reject / Take over actions, field ACLs, *BARQ AI Agent* user; hand
-deploy; caller-message gate; NUL-safe JSON; SDK audit gate. 5 of 6 live core scenarios passed.
-
-### Phase 0 — Make what exists solid
-| Task | Done when |
-|---|---|
-| Failure hook releases a stuck *awaiting approval* when no paused run exists | unit + PostgreSQL tests |
-| Deploy #213 head to the EC2; re-run the 6 live core scenarios + caller-message scenario | all pass, evidence committed |
-| Rehearse the rollback once (to `e065df9` and back) | `/ready` and worker ping after each direction |
-
-Scenarios: A1, A3, A4, C1, C5, C6, D1, D7, E1, E3, F2, L2, L4.
-
-### Phase 1 — Control: engineers steer, the caller always knows who is talking (6.4)
-The system behaviour comes before new intelligence: who is in control, what happens when an
-engineer steps in or hands back, and what the caller sees.
-| Task | Done when |
-|---|---|
-| `handed_over` processing state refused by eligibility; agent hands over on "talk to a person" (S7) | unit |
-| Implicit take-over: a customer-visible comment by anyone but the caller or the agent stands the agent down (S2) — ServiceNow business rule + event | unit + live |
-| *Hand back to BARQ AI* action with an optional instruction; agent resumes with history and instruction, no repeated questions, says it is continuing (S3, S16) | unit + live |
-| Drafts for an engineer go to a work note only (S4) | unit + live |
-| *BARQ AI* section on the incident form: who is in control, what the agent did and why, evidence, confidence, actions; one *BARQ AI* menu with Needs me, Resolved by AI, Handed over, Failed | visible and correct on live incidents |
-
-Scenarios: S1–S16, E1–E4, E8, E11, G6.
-
-### Phase 2 — The agent judges real risk
-| Task | Done when |
-|---|---|
-| Investigation (read-only, bounded): caller's recent incidents and similar open incidents; findings recorded as evidence | unit + live |
-| Two-way reassessment (6.3) with code-enforced rules, second check, *AI reassessed* note, Undo (S13) | unit per rule + live R1–R6 |
-
-### Phase 3 — The agent talks to the caller
-| Task | Done when |
-|---|---|
-| Clarifying question → On Hold – Awaiting Caller; caller reply resumes (S6) | unit + live R7–R9 |
-| Confirmation window job; reopen → engineer with the agent's summary (S15) | unit + live D2–D4 |
-
-### Phase 4 — Finish this round
-Docs, evidence, operations notes, PR description; #213 marked ready for Ali's approval. This
-phase is always done, even if an earlier phase is cut short.
-
-### Next round (not this session)
-*Ask BARQ AI* chat on the incident and the full console page with Streamlit removed; knowledge
-publish/retire sync and article scoring; similar incidents → Problem; recent changes and CI in the
-investigation; screenshots; one real remediation runbook; instance clean-up.
-
-### Why the line is drawn here
-Writing the code is not the slow part — we built the core in a few hours. The limits are:
-1. **Live proof.** Every scenario is proven with a real run on the shared system (model calls
-   take minutes, a burst once took 151 s for the first result), and every bug found live needs a
-   fix, the gate, a rebuild on the 2-vCPU EC2 and a re-run.
-2. **ServiceNow changes** go through update-set uploads as admin and must be checked on the real
-   form, one at a time, on a shared instance other people use.
-3. **This conversation's working memory.** The previous session ended because it filled up; a
-   session can only carry so much code, logs and live output before it has to hand over.
-4. **Shared systems.** Each phase is deployed only when it is safe for teammates using them.
-Phases 0–4 fit inside those limits with every scenario actually proven; adding the console and
-chat would mean shipping parts that were never tested live, which the rules forbid.
+The plan to execute is [barq_agentic_plan.md](barq_agentic_plan.md). Earlier versions of this
+section are superseded. The scenario tables below stay as the reference it tests against.
 
 ### New scenarios for the intelligent agent
 | ID | Scenario | Expected |
