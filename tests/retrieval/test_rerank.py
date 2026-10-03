@@ -41,10 +41,12 @@ class _FakeTextCrossEncoder:
     def __init__(self, model_name: str) -> None:
         self.model_name = model_name
         self.rerank_calls: list[tuple[str, list[str]]] = []
+        self.batch_sizes: list[int] = []
         _FakeTextCrossEncoder.instances.append(self)
 
-    def rerank(self, query: str, documents: list[str]):
+    def rerank(self, query: str, documents: list[str], batch_size: int = 64):
         self.rerank_calls.append((query, documents))
+        self.batch_sizes.append(batch_size)
         return _FakeTextCrossEncoder.next_scores
 
 
@@ -84,6 +86,7 @@ def _mock_settings(monkeypatch: pytest.MonkeyPatch):
     settings = MagicMock()
     settings.rerank_model = "test/cross-encoder-model"
     settings.rerank_rrf_weight = 0.3
+    settings.rerank_batch_size = 4
     monkeypatch.setattr("app.retrieval.rerank.get_retrieval_settings", lambda: settings)
     yield settings
 
@@ -310,3 +313,11 @@ def test_get_default_reranker_returns_same_instance():
 def test_get_default_reranker_is_a_cross_encoder_reranker():
     reranker = get_default_reranker()
     assert isinstance(reranker, CrossEncoderReranker)
+
+
+def test_candidates_are_scored_in_small_batches() -> None:
+    """One pass over every candidate peaked at 1.6 GB per worker; 4 at a time ~0.5 GB."""
+    hits = [_make_hit(f"KB{i:04d}-v1.0", 0, 0.5) for i in range(6)]
+    _FakeTextCrossEncoder.next_scores = [0.1 * i for i in range(6)]
+    CrossEncoderReranker(model_name="m").rerank("q", hits, top_n=2)
+    assert _FakeTextCrossEncoder.instances[0].batch_sizes == [4]

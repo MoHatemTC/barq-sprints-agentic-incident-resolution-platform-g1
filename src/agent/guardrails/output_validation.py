@@ -85,8 +85,11 @@ _DISALLOWED_ACTION_PATTERNS: tuple[re.Pattern[str], ...] = (
         r"(?i)\bI(?:'ve| have| will| am going to| just)\b[^.]{0,40}\b"
         r"(clos\w*|resolv\w*|reset\w*|delet\w*|grant\w*|approv\w*)\b"
     ),
+    # "Close the incident" is an action outside the contract; "confirm mail flow before
+    # closing the incident" (articles say this) only says when an engineer may do it.
     re.compile(
-        r"(?i)\b(clos(?:e|ed|ing)|resolv(?:e|ed|ing))\s+(?:this|the)\s+(?:incident|ticket|case)\b"
+        r"(?i)(?<!before )(?<!after )(?<!until )(?<!when )(?<!prior to )"
+        r"\b(clos(?:e|ed|ing)|resolv(?:e|ed|ing))\s+(?:this|the)\s+(?:incident|ticket|case)\b"
     ),
     re.compile(r"(?i)\bcontact(?:ing|ed)?\s+the\s+(?:user|requester|customer)\b"),
     re.compile(r"(?i)\bgrant(?:ing|ed)?\b[^.]{0,40}\b(?:access|permissions?)\b"),

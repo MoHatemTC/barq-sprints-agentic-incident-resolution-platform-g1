@@ -138,6 +138,9 @@ class EvidenceItem(_Section):
     text: str
     fused_score: float
     relevance: float = Field(description="Dense cosine similarity to the query (0-1).")
+    category: str = Field(
+        default="", description="The article's owning team category (network, software, ...)."
+    )
 
     @property
     def citation(self) -> str:

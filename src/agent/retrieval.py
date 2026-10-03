@@ -482,6 +482,7 @@ class QdrantRetriever:
                 text=hit.chunk_text,
                 fused_score=hit.score,
                 relevance=relevance_map.get((hit.article_id, hit.chunk_index), 0.0),
+                category=hit.category,
             )
         except Exception:
             return None
@@ -524,6 +525,7 @@ class QdrantRetriever:
                 text=hit.chunk_text,
                 fused_score=hit.score,
                 relevance=relevance.get((hit.article_id, hit.chunk_index), 0.0),
+                category=hit.category,
             )
             for hit in hits
         ]

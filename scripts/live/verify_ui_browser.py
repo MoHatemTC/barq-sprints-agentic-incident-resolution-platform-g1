@@ -135,14 +135,19 @@ def main() -> int:  # noqa: PLR0915 - one linear walk through the page
 
         # 5. The chat answers a question readably.
         page.get_by_text("Chat with BARQ AI", exact=True).click()
+        page.wait_for_timeout(1000)
+        before = page.locator(".barq-msg.from-ai .barq-bubble").count()
         page.fill(".barq-input textarea", "How do I fix Wi-Fi that keeps dropping on 5 GHz?")
         page.get_by_role("button", name="Send").click()
         asked = time.monotonic()
-        page.wait_for_selector(".barq-msg.from-ai .barq-bubble", timeout=150000)
+        page.wait_for_function(
+            f"() => document.querySelectorAll('.barq-msg.from-ai .barq-bubble').length > {before}",
+            timeout=150000,
+        )
         timings["chat_answer_s"] = round(time.monotonic() - asked, 1)
         page.wait_for_timeout(1000)
         shot("05_chat_answer")
-        chat = " ".join(page.locator(".barq-msg.from-ai .barq-bubble").all_inner_texts())
+        chat = page.locator(".barq-msg.from-ai .barq-bubble").last.inner_text()
         checks["chat_answered"] = len(chat) > 40
         checks["chat_is_readable"] = not any(mark in chat for mark in RAW_MARKUP)
 

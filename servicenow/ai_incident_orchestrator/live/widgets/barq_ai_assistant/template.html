@@ -68,7 +68,7 @@
         </div>
       </div>
       <div ng-if="c.ticket">
-        <div class="barq-msg from-me"><div class="barq-bubble">{{c.ticket.description}}</div></div>
+        <div class="barq-msg from-me"><div class="barq-bubble" ng-bind="c.ticket.description"></div></div>
         <div class="barq-msg" ng-repeat="e in c.ticket.conversation" ng-class="e.mine ? 'from-me' : 'from-ai'">
           <div class="barq-who" ng-if="!e.mine">{{e.agent ? 'BARQ AI Agent' : e.who}}</div>
           <div class="barq-bubble" ng-bind-html="c.readable(e.text)"></div>

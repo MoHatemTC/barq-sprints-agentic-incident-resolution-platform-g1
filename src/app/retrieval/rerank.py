@@ -29,6 +29,7 @@ class CrossEncoderReranker:
         # Weight of the incoming fusion ranking vs the cross-encoder ranking
         # in the final RRF. 0.0 = reranker has full authority (legacy behaviour).
         self.rrf_weight = settings.rerank_rrf_weight if rrf_weight is None else rrf_weight
+        self.batch_size = settings.rerank_batch_size
         self._model = None
 
     def _load(self):
@@ -56,7 +57,7 @@ class CrossEncoderReranker:
 
         model = self._load()
         documents = [f"{hit.title}\n\n{hit.chunk_text}".strip() for hit in hits]
-        raw_scores = list(model.rerank(query, documents))
+        raw_scores = list(model.rerank(query, documents, batch_size=self.batch_size))
 
         encoder_ranks = self._ranks(raw_scores)
         fusion_ranks = list(range(1, len(hits) + 1))  # input order = fusion order

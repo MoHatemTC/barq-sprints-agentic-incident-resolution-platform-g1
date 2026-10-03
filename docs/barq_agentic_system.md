@@ -63,6 +63,9 @@ Key decisions, each enforced in code or ServiceNow ACLs:
 | `AGENT_SERVICE_ACCOUNT_IDS` | agent + KB publisher | never resolved for these callers |
 | `CHAT_ENABLED`, `CHAT_DAILY_BUDGET_USD` | `true`, `5` | users' chat on, daily spend cap |
 | `CHAT_PRICE_INPUT_PER_MTOK` / `_OUTPUT_` | `0.5` / `3.0` | budget accounting; **estimates, not verified prices** |
+| `AGENT_LLM_FAST_PURPOSES` | default list | model calls that run without step-by-step thinking (personal-data check, injection check, caller message, clarifying question, chat routing); several times faster. Classification is deliberately not one |
+| `ARTICLE_FEEDBACK_IGNORE_PREFIX` | `[BARQ-TEST-` | test system only: labelled test tickets never count toward an article's record. Empty in production |
+| `WORKER_CONCURRENCY` | `2` | tickets worked at the same time; extra tickets wait in the queue |
 
 ServiceNow side: engineers' page on/off with
 `scripts/servicenow_apply_engineer_view.py --enable | --disable`; users' page with
@@ -96,7 +99,7 @@ Scoped app `x_2215032_ai_inc_0`, update set "BARQ agentic 2026-10-03":
 
 | Level | Command | What it proves |
 |---|---|---|
-| Unit + contract | `uv run pytest -q` (2,070 pass) | every rule above, incl. v1 event compatibility, triage, conversation, feedback, assist API, follower governance |
+| Unit + contract | `uv run pytest -q` (2,108 pass) | every rule above, incl. v1 event compatibility, triage, conversation, feedback, assist API, follower governance |
 | CI on #213 | GitHub | the above plus PostgreSQL/Redis integration, SDK build/audit, CodeQL |
 | Live core | `scripts/live/verify_agentic_core.py` | resolve, P1 park → approve / reject, injection, no caller, lock |
 | Live connection | `scripts/live/verify_conversation.py` | ask → caller answers → continues; engineer takes over → presses Hand back; caller reopens → engineer; approver presses Approve on the page; engineer presses Take over on a paused run |
@@ -105,6 +108,8 @@ Scoped app `x_2215032_ai_inc_0`, update set "BARQ agentic 2026-10-03":
 | Live triage | `scripts/live/verify_triage.py` | attack → person; burst → outage; P1 reassessed; repeat → approval |
 | Live permissions | `scripts/live/verify_permissions.py` | 12 role checks as the real users |
 | Live users' page | `scripts/live/verify_user_chat.py` | the real widget as a fresh caller, end to end |
+| Live matrix | `scripts/live/verify_matrix.py` | 22 cases side by side, each timed: one per knowledge article, personal data kept out of AI output, Arabic, an attack in the text and in a reply, an unknown problem, a wrong category, long logs, a question, two problems from one caller, two callers with one problem, and the users' page flows (confirm, still not working, cancel while waiting for approval, talk to a person) |
+| Live browser | `scripts/live/verify_ui_browser.py` | the users' page in Chrome as a real employee: form, "working" banner, the answer arriving without Refresh, readable text, confirm, chat, phone-sized screen, then the engineer's card |
 | Clean-up | `scripts/live/cleanup_test_incidents.py` | cancels only the harness's own fixtures (never deletes) |
 
 Live runs use real demo users through impersonation; buttons are pressed by submitting the

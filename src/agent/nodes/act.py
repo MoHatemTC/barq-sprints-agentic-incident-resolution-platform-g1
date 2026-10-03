@@ -38,7 +38,7 @@ from agent.state import (
     RiskLevel,
 )
 from agent.tools import ToolCallContext
-from app.feedback import weak_articles
+from app.feedback import cited_articles, weak_articles
 from app.models.execution_log import (
     ExecutionAction,
     ExecutionLogCreatePayload,
@@ -727,17 +727,36 @@ def _fulfil(
         confidence=output.confidence,
         context=_tool_context(state),
         classification=label,
+        article_category=fix_owner(state, output.resolution),
     )
 
 
+def fix_owner(state: AgentState, resolution: str) -> str | None:
+    """The team category of the first knowledge article the fix cites, if retrieved."""
+    evidence = (state.get("retrieval") or {}).get("hits") or []
+    owners = {
+        str(item.get("article_number")): str(item.get("category") or "")
+        for item in evidence
+        if isinstance(item, dict)
+    }
+    for article in cited_articles(resolution):
+        if owners.get(article):
+            return owners[article]
+    return None
+
+
 def route(
-    deps: AgentDependencies, incident: IncidentSnapshot, label: str | None
+    deps: AgentDependencies,
+    incident: IncidentSnapshot,
+    label: str | None,
+    article_category: str | None = None,
 ) -> tuple[str, str | None]:
-    """The team for an incident: what the agent found the problem to be, when that names a
-    team (an Outlook fault filed under Network goes to Software), else the caller's own
+    """The team for an incident, first that names a team: the team owning the knowledge
+    article the fix comes from (printing belongs to hardware), what the agent found the
+    problem to be (an Outlook fault filed under Network is software), the caller's own
     category. Returns the team key and its assignment group, or no group."""
     groups = deps.settings.agent_assignment_groups
-    for key in (label, incident.category):
+    for key in (article_category, label, incident.category):
         if key and groups.get(key):
             return key, groups[key]
     return incident.category, None
@@ -751,6 +770,7 @@ def fulfil_applied_fix(
     confidence: float | None,
     context: ToolCallContext,
     classification: str | None = None,
+    article_category: str | None = None,
 ) -> list[str]:
     """Route, start and resolve the incident as far as the autonomy level allows.
 
@@ -764,7 +784,7 @@ def fulfil_applied_fix(
     if level not in ("assist", "autonomous") or not resolution:
         return []
     steps: list[str] = []
-    category, group = route(deps, incident, classification)
+    category, group = route(deps, incident, classification, article_category)
     routed = f"routed it to the {category} group and " if group else ""
     calls: list[tuple[str, dict[str, Any]]] = [
         (

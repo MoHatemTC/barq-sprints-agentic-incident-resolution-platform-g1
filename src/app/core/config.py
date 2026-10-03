@@ -56,6 +56,10 @@ class RetrievalSettings(BaseSettings):
     retrieval_mmr_enabled: bool = False
     retrieval_mmr_lambda: float = Field(default=0.8, ge=0.0, le=1.0)
     rerank_top_k: int = 5
+    # Candidates scored per model pass. One pass over all 20 candidates peaked at 1.6 GB
+    # per worker and the server's memory killer stopped workers mid-ticket; 4 per pass
+    # peaks at about 0.5 GB with identical scores.
+    rerank_batch_size: int = Field(default=4, ge=1)
     rerank_candidate_limit: int = 20  # must be larger than rerank_top_k
     rerank_rrf_weight: float = Field(default=0.5, ge=0.0, le=1.0)
 

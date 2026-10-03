@@ -118,6 +118,18 @@ def test_action_contract_does_not_flag_a_human_engineer_being_told_to_contact_so
 @pytest.mark.parametrize(
     "text",
     [
+        "Confirm mail flow before closing the incident.",  # from KB0002, seen live
+        "Check the fix with the user after closing the ticket.",
+        "Do not reassign until resolving the incident is agreed.",
+    ],
+)
+def test_action_contract_allows_saying_when_an_engineer_may_close(text: str) -> None:
+    assert validate_action_contract(_draft([_step(text)])) == []
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
         "I have already closed this incident and reset the user's password directly.",
         "I will resolve this ticket once the restart completes.",
         "Closing this incident now that the fix has been applied.",
