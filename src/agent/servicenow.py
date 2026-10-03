@@ -254,7 +254,8 @@ class IncidentGateway:
         )
 
     def update_caller(self, sys_id: str, message: str) -> FulfilmentResult:
-        """Tell the caller where their incident stands (comment only, In Progress)."""
+        """Tell the caller where their incident stands (comment only; New or In Progress,
+        so a ticket waiting for an engineer's approval is not silent)."""
         payload = IncidentFulfilmentPayload(comments=message)
         return self._call(
             "update_caller",
@@ -263,7 +264,7 @@ class IncidentGateway:
             lambda b: b.fulfil_incident(
                 sys_id,
                 payload,
-                expected_states=frozenset({INCIDENT_STATE_IN_PROGRESS}),
+                expected_states=frozenset({INCIDENT_STATE_NEW, INCIDENT_STATE_IN_PROGRESS}),
                 done_states=frozenset(),
             ),
         )

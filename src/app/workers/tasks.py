@@ -59,6 +59,7 @@ from app.workers.cluster_runtime import (
     follower_reuse_verdict,
     leader_caller_id,
     load_cluster_incident,
+    notify_caller_waiting,
 )
 from app.workers.db import WorkerRepo, build_worker_repo
 from app.workers.incident_state import (
@@ -643,6 +644,11 @@ def _run_incident(
             node_reached=str(result["node_reached"]) if result.get("node_reached") else None,
             agent_version=str(result["agent_version"]) if result.get("agent_version") else None,
         )
+        if graph_backend == "langgraph":
+            told = notify_caller_waiting(
+                payload, result, execution_id, correlation_id or execution_id
+            )
+            logger.info("caller_told_waiting", execution_id=execution_id, outcome=told)
         logger.info("incident_awaiting_approval", execution_id=execution_id)
         return {"status": "awaiting_approval", "execution_id": execution_id, "result": result}
 

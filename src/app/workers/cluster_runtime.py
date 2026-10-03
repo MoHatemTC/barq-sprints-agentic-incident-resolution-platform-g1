@@ -269,3 +269,47 @@ def apply_follower_cluster_resolution(
                 error=redact_text(str(exc))[:500],
             )
     return steps
+
+
+def notify_caller_waiting(
+    payload: Mapping[str, Any], result: Mapping[str, Any], execution_id: str, correlation_id: str
+) -> str:
+    """Tell the caller their ticket now waits for an engineer (never leave them in silence).
+
+    Runs once in the worker after the graph paused, outside the paused node, so a resume
+    never repeats it. Best effort: no caller, a service account or any failure skips it.
+    """
+    from agent.conversation import AGENT_NAME
+
+    sys_id = str(payload.get("sys_id") or "")
+    if not sys_id:
+        return "skipped:no_incident"
+    try:
+        deps = get_agent_dependencies()
+        context = ToolCallContext(execution_id=execution_id, correlation_id=correlation_id)
+        raw = asyncio.run(
+            deps.tools.invoke("read_incident", context=context, arguments={"sys_id": sys_id})
+        )
+        caller = snapshot_incident(raw).caller_id
+        if not caller or caller in deps.settings.agent_service_account_ids:
+            return "skipped:no_caller"
+        brief = str((result.get("interrupt_payload") or {}).get("summary") or "")
+        why = (
+            "You reported a similar problem recently, so an engineer will check the fix "
+            "before it is applied."
+            if "repeat from the same caller" in brief
+            else "An engineer needs to check it before anything is applied."
+        )
+        message = (
+            f"Hello, this is {AGENT_NAME}. I looked into your incident. {why} You will hear "
+            "from them here, and you can add details at any time."
+        )
+        outcome = asyncio.run(
+            deps.tools.invoke(
+                "update_caller", context=context, arguments={"sys_id": sys_id, "message": message}
+            )
+        )
+        return f"update_caller:{outcome}"
+    except Exception as exc:  # noqa: BLE001 - telling the caller must not break the run
+        logger.warning("notify_caller_waiting_failed", error_type=type(exc).__name__)
+        return "failed"
