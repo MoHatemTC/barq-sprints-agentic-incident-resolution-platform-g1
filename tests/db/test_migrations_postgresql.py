@@ -33,6 +33,7 @@ APPLICATION_TABLES = {
     "chat_conversations",
     "chat_turns",
     "chat_messages",
+    "article_feedback",
 }
 
 TIMESTAMP_COLUMNS = {
@@ -64,6 +65,7 @@ TIMESTAMP_COLUMNS = {
     ("chat_turns", "created_at"),
     ("chat_turns", "completed_at"),
     ("chat_messages", "created_at"),
+    ("article_feedback", "created_at"),
 }
 
 JSONB_COLUMNS = {
