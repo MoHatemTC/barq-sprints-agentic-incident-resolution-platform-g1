@@ -86,9 +86,6 @@ def _mandatory_filter(extra: Filter | None, max_security_level: SecurityLevel) -
 #: the gate is what stops a junk match becoming a draft.
 OUT_OF_CATEGORY_EVIDENCE_MARGIN = 0.1
 
-#: Categories excluded from incident retrieval (e.g. operations manual process sections).
-EXCLUDED_CATEGORIES: list[str] = ["process"]
-
 #: Classification label → corpus category (inverse of the S1.4 mapping, #70).
 CLASSIFICATION_TO_CORPUS_CATEGORY: dict[Classification, str] = {
     label: category for category, label in CORPUS_CATEGORY_TO_CLASSIFICATION.items()
@@ -206,14 +203,6 @@ class QdrantRetriever:
                 else None,
             )
 
-        wide_extra = (
-            Filter(
-                must_not=[FieldCondition(key="category", match=MatchAny(any=EXCLUDED_CATEGORIES))]
-            )
-            if EXCLUDED_CATEGORIES
-            else None
-        )
-
         if not categories and (
             not settings.retrieval_mmr_enabled or settings.retrieval_mmr_lambda == 1
         ):
@@ -222,7 +211,7 @@ class QdrantRetriever:
             # human solution out of exactly this population (the capture trigger is
             # the no-evidence interrupt), so returning early made every article the
             # platform learned unreachable to the incidents that produced it.
-            wide, _ = self._one_pass(query, wide_extra, top_k=top_k, engine=engine)
+            wide, _ = self._one_pass(query, None, top_k=top_k, engine=engine)
             items = sorted(wide, key=rank_score, reverse=True)[:top_k]
             sufficient = any(
                 item.relevance >= threshold + OUT_OF_CATEGORY_EVIDENCE_MARGIN for item in items
@@ -249,7 +238,7 @@ class QdrantRetriever:
         scoped: list[EvidenceItem] = []
         if extra is not None:
             scoped, _ = self._one_pass(query, extra, top_k=candidate_k, engine=engine)
-        wide, _ = self._one_pass(query, wide_extra, top_k=candidate_k, engine=engine)
+        wide, _ = self._one_pass(query, None, top_k=candidate_k, engine=engine)
 
         in_category = {(item.article_id, item.chunk_index) for item in scoped}
         merged: dict[tuple[str, int], EvidenceItem] = {}
@@ -596,7 +585,6 @@ def build_default_retriever() -> Retriever:
 
 __all__ = [
     "CLASSIFICATION_TO_CORPUS_CATEGORY",
-    "EXCLUDED_CATEGORIES",
     "OUT_OF_CATEGORY_EVIDENCE_MARGIN",
     "QdrantRetriever",
     "Retriever",
