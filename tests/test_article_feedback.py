@@ -122,3 +122,10 @@ def test_learning_never_breaks_event_handling() -> None:
             record_outcome_best_effort(mock_settings(), {"sys_id": "a" * 32}, "incident.closed")
             == 0
         )
+
+
+def test_the_caller_hears_a_real_team_name() -> None:
+    backend, _ = run(lambda articles: dict.fromkeys(articles, WEAK_SCORE))
+    told = [body for _, kind, body in backend.journal if kind == "comments"]
+    assert told and "the network team" in told[0]
+    assert sys.modules["agent.nodes.act"]._TEAM_NAMES["inquiry"] == "the Service Desk"

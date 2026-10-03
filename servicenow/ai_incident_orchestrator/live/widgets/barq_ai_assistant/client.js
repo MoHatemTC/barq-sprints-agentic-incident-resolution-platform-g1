@@ -142,6 +142,7 @@ api.controller = function($scope, $timeout, $interval) {
         if (c.ticket && !c.busy) {
             c.server.get({action: 'open', sys_id: c.ticket.sys_id}).then(function(response) {
                 var t = response.data.ticket;
+                if (response.data.tickets) c.data.tickets = response.data.tickets;
                 if (t && c.ticket && t.sys_id == c.ticket.sys_id &&
                     (t.conversation.length != c.ticket.conversation.length || t.status != c.ticket.status)) {
                     c.ticket = t;

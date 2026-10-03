@@ -148,6 +148,7 @@
         data.ticket = ticketSummary(ticket);
         data.ticket.description = ticket.getValue('description');
         data.ticket.conversation = conversation(ticket);
+        data.tickets = myTickets(); // keep the list's statuses in step with the open ticket
         return;
     }
 

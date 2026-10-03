@@ -67,6 +67,15 @@ INTERRUPT_OUTCOMES = frozenset(
 )
 
 
+#: How the caller hears each routing category ("inquiry" is the Service Desk).
+_TEAM_NAMES: dict[str, str] = {
+    "network": "the network team",
+    "software": "the software team",
+    "hardware": "the hardware team",
+    "inquiry": "the Service Desk",
+}
+
+
 def decide_outcome(state: AgentState) -> Outcome:
     """The outcome implied by the recorded state. Mirrors the edge conditions."""
     guardrail = state.get("input_guardrail")
@@ -795,7 +804,7 @@ def fulfil_applied_fix(
         and not reply_limit
     ):
         # The caller is never left in silence: say who has it and that they will hear back.
-        team = f"the {category} team" if group else "an engineer"
+        team = _TEAM_NAMES.get(category, f"the {category} team") if group else "an engineer"
         try:
             result = run_blocking(
                 deps.tools.invoke(
