@@ -1,0 +1,189 @@
+{
+  "started_at": "2026-10-03T06:39:15.701917+00:00",
+  "scenarios": {
+    "ask_then_continue": {
+      "incident": "INC0010262",
+      "sys_id": "c657a98847770710c148497f316d43d9",
+      "runs": [
+        {
+          "execution_id": "d48e4428-e6ab-4968-b249-914694225ccf",
+          "event_record_id": "a5be934b-0443-430e-9fc9-b3c4b726e0bc",
+          "incident_sys_id": "c657a98847770710c148497f316d43d9",
+          "status": "succeeded",
+          "node_reached": "act",
+          "model_name": null,
+          "agent_version": "s3.4-graph-1.0.0",
+          "started_at": "2026-10-03T06:40:04.045384Z",
+          "ended_at": "2026-10-03T06:40:10.556900Z",
+          "termination_cause": "skipped_ineligible",
+          "updated_at": "2026-10-03T06:40:10.558075Z"
+        },
+        {
+          "execution_id": "56cb8a4f-24cb-4e30-9c93-5dd88ce0c0a5",
+          "event_record_id": "b8303c2e-cf8e-4602-87c1-54e45aafb6bd",
+          "incident_sys_id": "c657a98847770710c148497f316d43d9",
+          "status": "succeeded",
+          "node_reached": "act",
+          "model_name": null,
+          "agent_version": "s3.4-graph-1.0.0",
+          "started_at": "2026-10-03T06:39:24.327900Z",
+          "ended_at": "2026-10-03T06:39:52.528924Z",
+          "termination_cause": "asked_caller",
+          "updated_at": "2026-10-03T06:39:52.530899Z"
+        }
+      ],
+      "final": {
+        "close_code": null,
+        "assignment_group": "Network",
+        "x_2215032_ai_inc_0_ai_failure_reason": "",
+        "x_2215032_ai_inc_0_ai_suggestion": "",
+        "x_2215032_ai_inc_0_ai_human_review_required": "false",
+        "close_notes": "",
+        "number": "INC0010262",
+        "resolved_by": "",
+        "x_2215032_ai_inc_0_ai_human_lock": "false",
+        "x_2215032_ai_inc_0_ai_resolution": "",
+        "x_2215032_ai_inc_0_ai_classification": "network",
+        "state": "In Progress",
+        "x_2215032_ai_inc_0_ai_confidence": "",
+        "x_2215032_ai_inc_0_ai_processing_state": "In Progress"
+      },
+      "checks": {
+        "first_run_finished": true,
+        "asked_one_question": true,
+        "waited_on_hold": true,
+        "reply_queued_the_agent_again": true,
+        "agent_continued_to_a_result": true,
+        "no_question_repeated": true
+      },
+      "passed": true
+    },
+    "engineer_takes_over_then_hands_back": {
+      "incident": "INC0010263",
+      "sys_id": "9c9725c847770710c148497f316d4335",
+      "runs": [
+        {
+          "execution_id": "4f6702b3-6cca-4597-9815-a1df78ac1657",
+          "event_record_id": "1322fdc8-58c5-4132-b964-2e614d87243e",
+          "incident_sys_id": "9c9725c847770710c148497f316d4335",
+          "status": "succeeded",
+          "node_reached": "act",
+          "model_name": null,
+          "agent_version": "s3.4-graph-1.0.0",
+          "started_at": "2026-10-03T06:40:53.998420Z",
+          "ended_at": "2026-10-03T06:41:17.927186Z",
+          "termination_cause": "skipped_ineligible",
+          "updated_at": "2026-10-03T06:41:17.928474Z"
+        },
+        {
+          "execution_id": "74295db8-bc0c-423b-9024-4549a3cad04b",
+          "event_record_id": "c0b78877-f77f-48e6-8563-2678bc0b0998",
+          "incident_sys_id": "9c9725c847770710c148497f316d4335",
+          "status": "succeeded",
+          "node_reached": null,
+          "model_name": null,
+          "agent_version": null,
+          "started_at": "2026-10-03T06:40:44.167653Z",
+          "ended_at": "2026-10-03T06:40:44.188105Z",
+          "termination_cause": "observed:incident.engineer_replied",
+          "updated_at": "2026-10-03T06:40:44.189605Z"
+        },
+        {
+          "execution_id": "ac1f7ddc-bb05-4367-8ea8-91ac7a76cca2",
+          "event_record_id": "c8adb0ae-0266-4aa3-9a0b-5b20ffd8a2f7",
+          "incident_sys_id": "9c9725c847770710c148497f316d4335",
+          "status": "succeeded",
+          "node_reached": "act",
+          "model_name": null,
+          "agent_version": "s3.4-graph-1.0.0",
+          "started_at": "2026-10-03T06:40:24.018311Z",
+          "ended_at": "2026-10-03T06:40:41.076290Z",
+          "termination_cause": "asked_caller",
+          "updated_at": "2026-10-03T06:40:41.077204Z"
+        }
+      ],
+      "final": {
+        "close_code": null,
+        "assignment_group": "Network",
+        "x_2215032_ai_inc_0_ai_failure_reason": "",
+        "x_2215032_ai_inc_0_ai_suggestion": "",
+        "x_2215032_ai_inc_0_ai_human_review_required": "false",
+        "close_notes": "",
+        "number": "INC0010263",
+        "resolved_by": "",
+        "x_2215032_ai_inc_0_ai_human_lock": "false",
+        "x_2215032_ai_inc_0_ai_resolution": "",
+        "x_2215032_ai_inc_0_ai_classification": "network",
+        "state": "On Hold",
+        "x_2215032_ai_inc_0_ai_confidence": "",
+        "x_2215032_ai_inc_0_ai_processing_state": "Pending"
+      },
+      "checks": {
+        "engineer_reply_locked_the_agent_out": true,
+        "stood_down_note": true,
+        "engineer_reply_recorded": true,
+        "hand_back_note_with_instruction": true,
+        "agent_resumed": true,
+        "lock_cleared": true
+      },
+      "passed": true
+    },
+    "caller_reopens_ai_resolution": {
+      "incident": "INC0010266",
+      "sys_id": "dcd7adc847770710c148497f316d43b2",
+      "runs": [
+        {
+          "execution_id": "3e364764-477f-445f-8f1d-62895f28cd76",
+          "event_record_id": "13c51776-170e-45db-b22e-bcb9bc3413ae",
+          "incident_sys_id": "dcd7adc847770710c148497f316d43b2",
+          "status": "succeeded",
+          "node_reached": null,
+          "model_name": null,
+          "agent_version": null,
+          "started_at": "2026-10-03T06:42:03.939205Z",
+          "ended_at": "2026-10-03T06:42:03.955228Z",
+          "termination_cause": "observed:incident.reopened",
+          "updated_at": "2026-10-03T06:42:03.956039Z"
+        },
+        {
+          "execution_id": "94143a42-b6bc-46d1-848c-6b36e8d16562",
+          "event_record_id": "916b769d-0ae5-43cd-aa6f-af66c2176b94",
+          "incident_sys_id": "dcd7adc847770710c148497f316d43b2",
+          "status": "succeeded",
+          "node_reached": "act",
+          "model_name": null,
+          "agent_version": "s3.4-graph-1.0.0",
+          "started_at": "2026-10-03T06:41:24.302808Z",
+          "ended_at": "2026-10-03T06:41:53.993716Z",
+          "termination_cause": "suggested",
+          "updated_at": "2026-10-03T06:41:53.994966Z"
+        }
+      ],
+      "final": {
+        "close_code": "Solution provided",
+        "assignment_group": "Network",
+        "x_2215032_ai_inc_0_ai_failure_reason": "",
+        "x_2215032_ai_inc_0_ai_suggestion": "1. Confirm with the user that they changed their password within the last 24 hours. [KB0001 v2.0 \u00a7Resolution]\n2. Ask the user to sign out of the VPN client completely, including the system tray icon. [KB0001 v2.0 \u00a7Resolution]\n3. Clear the cached credential for the VPN profile from the credential store. [KB0001 v2.0 \u00a7Resolution]\n4. Reconnect using the new password. [KB0001 v2.0 \u00a7Resolution]\n5. If authentication still fails, check whether the account is locked in the identity console before escalating. [KB0001 v2.0 \u00a7Resolution]\n\nSources: KB0001 v2.0 \u2014 VPN AUTHENTICATION FAILS AFTER A PASSWORD CHANGE",
+        "x_2215032_ai_inc_0_ai_human_review_required": "true",
+        "close_notes": "Resolved by BARQ AI Agent with confidence 0.95.\n\n1. Confirm with the user that they changed their password within the last 24 hours. [KB0001 v2.0 \u00a7Resolution]\n2. Ask the user to sign out of the VPN client completely, including the system tray icon. [KB0001 v2.0 \u00a7Resolution]\n3. Clear the cached credential for the VPN profile from the credential store. [KB0001 v2.0 \u00a7Resolution]\n4. Reconnect using the new password. [KB0001 v2.0 \u00a7Resolution]\n5. If authentication still fails, check whether the account is locked in the identity console before escalating. [KB0001 v2.0 \u00a7Resolution]\n\nSources: KB0001 v2.0 \u2014 VPN AUTHENTICATION FAILS AFTER A PASSWORD CHANGE",
+        "number": "INC0010266",
+        "resolved_by": "BARQ AI Agent",
+        "x_2215032_ai_inc_0_ai_human_lock": "true",
+        "x_2215032_ai_inc_0_ai_resolution": "1. Confirm with the user that they changed their password within the last 24 hours. [KB0001 v2.0 \u00a7Resolution]\n2. Ask the user to sign out of the VPN client completely, including the system tray icon. [KB0001 v2.0 \u00a7Resolution]\n3. Clear the cached credential for the VPN profile from the credential store. [KB0001 v2.0 \u00a7Resolution]\n4. Reconnect using the new password. [KB0001 v2.0 \u00a7Resolution]\n5. If authentication still fails, check whether the account is locked in the identity console before escalating. [KB0001 v2.0 \u00a7Resolution]\n\nSources: KB0001 v2.0 \u2014 VPN AUTHENTICATION FAILS AFTER A PASSWORD CHANGE",
+        "x_2215032_ai_inc_0_ai_classification": "access",
+        "state": "In Progress",
+        "x_2215032_ai_inc_0_ai_confidence": "0.95",
+        "x_2215032_ai_inc_0_ai_processing_state": "Complete"
+      },
+      "checks": {
+        "was_resolved_by_agent": true,
+        "reopened_to_in_progress": true,
+        "engineer_has_it": true,
+        "hand_over_note": true,
+        "reopen_recorded": true
+      },
+      "passed": true
+    }
+  },
+  "finished_at": "2026-10-03T06:42:10.296713+00:00"
+}

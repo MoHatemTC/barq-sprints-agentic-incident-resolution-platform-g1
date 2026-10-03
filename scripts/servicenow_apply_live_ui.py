@@ -68,6 +68,60 @@ UI_ACTIONS = [
     },
 ]
 
+UI_ACTIONS.append(
+    {
+        "name": "Hand back to BARQ AI",
+        "action_name": "barq_hand_back_to_ai",
+        "condition": (
+            "current.active == true && current.state != 6 && "
+            "current.x_2215032_ai_inc_0_ai_enabled == true && "
+            "(current.x_2215032_ai_inc_0_ai_human_lock == true || "
+            "current.x_2215032_ai_inc_0_ai_processing_state == 'failed' || "
+            "current.x_2215032_ai_inc_0_ai_processing_state == 'complete') && "
+            "(gs.hasRole('itil') || " + OPERATOR + ")"
+        ),
+        "hint": (
+            "Return this incident to BARQ AI Agent. Anything you typed in Work notes "
+            "is passed to the agent as your instruction."
+        ),
+        "order": "130",
+        "source": "ui_actions/hand_back_to_ai.js",
+    }
+)
+
+#: The event that carries contract v2, its sender, and the rule that raises it.
+EVENT_NAME = "x_2215032_ai_inc_0.barq_event"
+PROPERTIES = [
+    {
+        "name": "x_2215032_ai_inc_0.agent_user_name",
+        "value": "ai_orchestrator_svc",
+        "type": "string",
+        "description": "User name of BARQ AI Agent; its own writes never raise events.",
+    }
+]
+BUSINESS_RULES = [
+    {
+        "name": "BARQ AI - Conversation events",
+        "collection": "incident",
+        "when": "before",
+        "order": "1000",
+        "action_update": "true",
+        "action_insert": "false",
+        "advanced": "true",
+        "active": "true",
+        "description": "Turns caller, engineer, reopen and close actions into contract v2 events.",
+        "source": "business_rules/conversation_events.js",
+    }
+]
+SCRIPT_ACTIONS = [
+    {
+        "name": "BARQ AI - Send event v2",
+        "event_name": EVENT_NAME,
+        "active": "true",
+        "source": "script_actions/send_barq_event.js",
+    }
+]
+
 #: Superseded actions: deactivated, never deleted (they edited fields only, or embedded
 #: the operator secret in script text).
 RETIRE = ["Approve AI Suggestion", "Refuse AI Suggestion", "Approve & Capture to KB"]
@@ -151,6 +205,38 @@ def main() -> int:
             "sys_ui_action", f"name={spec['name']}^table=incident^sys_scope={SCOPE}", fields
         )
         print(f"ui action {spec['name']}: {sys_id}")
+    for spec in PROPERTIES:
+        sys_id = instance.upsert(
+            "sys_properties", f"name={spec['name']}", {**spec, "sys_scope": SCOPE}
+        )
+        print(f"property {spec['name']}: {sys_id}")
+    sys_id = instance.upsert(
+        "sysevent_register",
+        f"event_name={EVENT_NAME}",
+        {
+            "event_name": EVENT_NAME,
+            "table": "incident",
+            "description": "BARQ contract v2 event (conversation, reopen, close, hand back).",
+            "sys_scope": SCOPE,
+        },
+    )
+    print(f"event {EVENT_NAME}: {sys_id}")
+    for spec in SCRIPT_ACTIONS:
+        fields = {k: v for k, v in spec.items() if k != "source"}
+        fields["script"] = (LIVE / spec["source"]).read_text(encoding="utf-8")
+        fields["sys_scope"] = SCOPE
+        sys_id = instance.upsert(
+            "sysevent_script_action", f"name={spec['name']}^sys_scope={SCOPE}", fields
+        )
+        print(f"script action {spec['name']}: {sys_id}")
+    for spec in BUSINESS_RULES:
+        fields = {k: v for k, v in spec.items() if k != "source"}
+        fields["script"] = (LIVE / spec["source"]).read_text(encoding="utf-8")
+        fields["sys_scope"] = SCOPE
+        sys_id = instance.upsert(
+            "sys_script", f"name={spec['name']}^collection=incident^sys_scope={SCOPE}", fields
+        )
+        print(f"business rule {spec['name']}: {sys_id}")
     for name in RETIRE:
         for record in instance.find(
             "sys_ui_action", f"name={name}^table=incident^sys_scope={SCOPE}", "sys_id,active"
