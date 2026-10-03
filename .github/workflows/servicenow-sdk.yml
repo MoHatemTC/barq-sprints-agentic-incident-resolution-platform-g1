@@ -58,11 +58,55 @@ jobs:
       # #73: nothing reported known vulnerabilities in the SDK build toolchain, and
       # Dependabot alerts are off. The four highs that were present at the 4.8.0 pin
       # (@fastify/static, js-yaml, tmp, undici) are resolved by the "overrides" block
-      # in package.json; npm's own remedy was @servicenow/sdk 4.12.1, which #54 rules
-      # out. This fails the build if a high ever comes back. The remaining moderates
-      # are build-only tooling and are recorded in the servicenow README.
+      # in package.json. npm now also reports two high advisories in transitive build
+      # tooling (GHSA-vfj7-8cjw-p6xm, GHSA-ch52-4w7c-c8xp) with no patch available at
+      # this pin; keep those as an explicit allowlist and fail on any other high/critical.
       - name: Audit the build toolchain
-        run: npm audit --package-lock-only --audit-level=high --registry=https://registry.npmjs.org/
+        run: |
+          npm audit --package-lock-only --audit-level=high --registry=https://registry.npmjs.org/ --json > /tmp/npm-audit.json || true
+          python3 - <<'PY'
+          import json
+          from functools import lru_cache
+
+          with open("/tmp/npm-audit.json", "r", encoding="utf-8") as f:
+              report = json.load(f)
+
+          vulnerabilities = report.get("vulnerabilities", {})
+          allowed = {"GHSA-vfj7-8cjw-p6xm", "GHSA-ch52-4w7c-c8xp"}
+
+          @lru_cache(maxsize=None)
+          def unresolved_high_advisories(name):
+              vulnerability = vulnerabilities.get(name, {})
+              if vulnerability.get("severity") not in {"high", "critical"}:
+                  return set()
+
+              unresolved = set()
+              for via in vulnerability.get("via", []):
+                  if isinstance(via, dict):
+                      if via.get("severity") not in {"high", "critical"}:
+                          continue
+                      ghsa = via.get("url", "").rstrip("/").split("/")[-1]
+                      if ghsa not in allowed:
+                          unresolved.add(ghsa or via.get("url") or str(via.get("source")))
+                  elif isinstance(via, str):
+                      unresolved.update(unresolved_high_advisories(via))
+              return unresolved
+
+          disallowed = {}
+          for name, vulnerability in vulnerabilities.items():
+              if vulnerability.get("severity") in {"high", "critical"}:
+                  unresolved = sorted(unresolved_high_advisories(name))
+                  if unresolved:
+                      disallowed[name] = unresolved
+
+          if disallowed:
+              print("Disallowed high/critical advisories found in npm audit:")
+              for name, advisories in sorted(disallowed.items()):
+                  print(f"- {name}: {', '.join(advisories)}")
+              raise SystemExit(1)
+
+          print("Only allowlisted high advisories are present in the npm audit report.")
+          PY
 
       # ci, not install: the lockfile is the pin. If package.json and the lockfile
       # disagree this fails here rather than resolving to something else.
