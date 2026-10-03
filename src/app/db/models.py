@@ -62,10 +62,10 @@ class Event(Base):
     contract_version: Mapped[str] = mapped_column(
         String(16), nullable=False, server_default=text("'v1'")
     )
-    actor_sys_id: Mapped[str | None] = mapped_column(String(32))
     received_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+    actor_sys_id: Mapped[str | None] = mapped_column(String(32))
 
     idempotency_key: Mapped[IdempotencyKey | None] = relationship(
         back_populates="event", uselist=False, passive_deletes=True
