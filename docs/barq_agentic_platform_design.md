@@ -170,7 +170,7 @@ different handling class, with the evidence:
   can *Undo* (reopen, hand over, lock) with one click.
 
 **How the human stays in the loop.** Engineers see every reassessment and can undo it; the
-caller confirms or reopens every resolution (T6); P1 parks still need an engineer whenever any
+caller confirms or reopens every resolution (Phase 3); P1 parks still need an engineer whenever any
 rule above fails; the kill switch and the reassessment switch are admin settings; and the
 intelligence test set (section 16, R1–R9) must show zero wrong downgrades before the switch is on by default.
 
@@ -346,7 +346,7 @@ reused in the test plan (section 15). "Card" = the AI Assistant card on the inci
 
 ### C. Risk and safety
 - **C1 Priority 1.** Parks before any retrieval; approver decides — unless the reassessment of
-  6.3 (T17) finds it low risk under every hard rule, in which case it is handled as low risk,
+  6.3 (Phase 2) finds it low risk under every hard rule, in which case it is handled as low risk,
   flagged *AI reassessed*, and an engineer can undo it.
 - **C2 Security category.** Same as C1.
 - **C3 Elevated** (Tier-1 service, MFA reset). Draft produced, parks for approval.
@@ -713,7 +713,7 @@ for CI and run live after each phase.
    labelled and cancelled after testing (never deleted).
 10. Reassessment (6.3): decided 2026-10-03 — a P1 judged low risk is handled as low risk
     (option a), with the safeguards in 6.3. Still open: whether the switch is on by default
-    before T21 has enough cases.
+    before the R1–R9 test set has enough cases.
 
 ## 18. Deadline handling
 
