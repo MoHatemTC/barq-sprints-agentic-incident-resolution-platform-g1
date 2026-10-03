@@ -202,9 +202,9 @@ def apply(instance: Instance) -> None:
         )
     rule = instance.upsert(
         "sysrule_view",
-        "table=incident^name=BARQ AI - engineers open incidents in the BARQ AI view",
+        "table=incident^name=BARQ AI engineer view",
         {
-            "name": "BARQ AI - engineers open incidents in the BARQ AI view",
+            "name": "BARQ AI engineer view",
             "table": "incident",
             "advanced": "true",
             "script": VIEW_RULE_SCRIPT,
@@ -229,9 +229,7 @@ def apply(instance: Instance) -> None:
 
 
 def switch_rule(instance: Instance, on: bool) -> None:
-    for rule in instance.find(
-        "sysrule_view", "table=incident^name=BARQ AI - engineers open incidents in the BARQ AI view"
-    ):
+    for rule in instance.find("sysrule_view", "table=incident^name=BARQ AI engineer view"):
         value = "true" if on else "false"
         instance.request(
             "PATCH", f"/api/now/table/sysrule_view/{rule['sys_id']}", {"active": value}

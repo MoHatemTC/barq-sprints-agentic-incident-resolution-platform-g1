@@ -6,7 +6,8 @@ event to the deployed backend, waits for the agent, then reads the result back f
 ServiceNow (admin read) and from the backend (operator API). Nothing is deleted.
 
 Environment: SN_INSTANCE_URL, SN_ADMIN_USER, SN_ADMIN_PASS, BACKEND_URL,
-OPERATOR_SECRET. Optional: CALLER_USER_NAME (default abel.tuter).
+OPERATOR_SECRET. Optional: CALLER_USER_NAMES (comma-separated; default: fresh demo
+callers with no recent incidents, one per scenario).
 
     uv run python scripts/live/verify_agentic_core.py --out evidence.json
         [--only low_risk_resolved,p1_rejected]
@@ -354,12 +355,20 @@ def main() -> int:
     parser.add_argument("--only", default="")
     args = parser.parse_args()
     sn, be = ServiceNow(), Backend()
-    caller_name = os.environ.get("CALLER_USER_NAME", "abel.tuter")
-    caller = sn.query("sys_user", f"user_name={caller_name}", "sys_id")[0]["sys_id"]
     chosen = [s for s in args.only.split(",") if s] or list(SCENARIOS)
+    # One fresh caller per scenario: the repeat-caller rule (agent.triage) would rightly
+    # treat a caller who reported the same problem earlier today as a repeat.
+    from verify_triage import fresh_callers
+
+    names = (
+        os.environ.get("CALLER_USER_NAMES", "").split(",")
+        if os.environ.get("CALLER_USER_NAMES")
+        else fresh_callers(sn, len(chosen))
+    )
     results: dict[str, Any] = {"started_at": datetime.now(UTC).isoformat(), "scenarios": {}}
     for name in chosen:
         print(f"== {name}", flush=True)
+        caller = sn.query("sys_user", f"user_name={names.pop()}", "sys_id")[0]["sys_id"]
         try:
             outcome = SCENARIOS[name](sn, be, caller)
         except Exception as exc:  # noqa: BLE001 - record and continue with the next scenario
