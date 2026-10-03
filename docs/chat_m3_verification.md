@@ -36,3 +36,20 @@ TTL/concurrency, browser behavior and actual proxy costs remain E2E acceptance w
 Enable `CHAT_CACHE_ENABLED=true` in the API and ingestion environments and follow the
 cache E2E steps in `admin_chatbot.md`. The default is off. M4 live incident reads and
 M5 confirmed work notes are not implemented in this change set.
+
+## Follow-up CI migration repair
+
+The isolated schema test initially expected only pre-chat tables. Its table, timestamp,
+JSONB and UUID/default checks now include the chat schema. The ORM summary columns are
+ordered after timestamps to match migration 0007; strict schema parity remains enforced.
+
+On a fresh, isolated PostgreSQL 14 instance:
+
+```text
+BARQ_TEST_DATABASE_URL=<isolated test database> uv run pytest \
+  tests/db tests/test_audit_reconstruction.py tests/test_idempotency.py -q
+44 passed in 16.66s
+```
+
+This adds real migration/audit/idempotency verification. It does not establish real
+Redis behavior, browser E2E or the separate chat-store concurrency suite.

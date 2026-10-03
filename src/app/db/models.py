@@ -633,10 +633,6 @@ class ChatConversation(Base):
     )
     operator_subject: Mapped[str] = mapped_column(String(255), nullable=False)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
-    # Rolling summary of messages that aged out of the recent-history window;
-    # summary_seq is the newest message seq the summary covers.
-    history_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
-    summary_seq: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -646,6 +642,11 @@ class ChatConversation(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
+
+    # Added by migration 0007, after the original timestamp columns. Keep this
+    # order aligned with the migrated schema; summary_seq marks covered history.
+    history_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    summary_seq: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
 
     session: Mapped[ChatSession] = relationship(
         back_populates="conversations", passive_deletes=True

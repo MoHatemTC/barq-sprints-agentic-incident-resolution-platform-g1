@@ -214,8 +214,13 @@ Model/Redis calls were mocked; ingestion tests used in-memory Qdrant and fake em
 The earlier sandbox API-test hang disappeared when tests ran outside the sandbox.
 No paid model calls, live ServiceNow writes or production migrations were run.
 
-Still required: browser UI E2E, real Redis TTL/concurrency, PostgreSQL migrations/store
-integration, delayed-worker recovery and actual proxy pricing/cost inspection. Default
+The follow-up CI schema repair ran the exact database job against an isolated PostgreSQL
+14 instance: **44 passed**. It verifies migration upgrade/downgrade/re-upgrade, complete
+ORM/schema parity (including chat tables and summary-column order), chat timestamps/JSONB
+and defaults, audit reconstruction, approval behavior and idempotency.
+
+Still required: browser UI E2E, real Redis TTL/concurrency, PostgreSQL chat-store
+concurrency integration, delayed-worker recovery and actual proxy pricing/cost inspection. Default
 tests do not establish those guarantees. Use fake providers for failure injection.
 
 ```bash
