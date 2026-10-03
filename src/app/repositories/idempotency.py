@@ -16,12 +16,14 @@ IDEMPOTENCY_CONSTRAINT_NAME = "uq_idempotency_keys_event_id"
 
 @dataclass(frozen=True, slots=True)
 class InboundEvent:
-    """Exact four-field Sprint 1 event accepted by the persistence boundary."""
+    """An accepted inbound event: the four v1 fields, plus v2's contract version and actor."""
 
     event_id: str
     sys_id: str
     number: str
     event_type: str
+    contract_version: str = "v1"
+    actor_sys_id: str | None = None
 
 
 class EventAcceptanceStatus(StrEnum):
@@ -93,7 +95,8 @@ async def accept_inbound_event(
                             incident_sys_id=inbound_event.sys_id,
                             incident_number=inbound_event.number,
                             event_type=inbound_event.event_type,
-                            contract_version="v1",
+                            contract_version=inbound_event.contract_version,
+                            actor_sys_id=inbound_event.actor_sys_id,
                         ),
                         Execution(
                             execution_id=execution_id,

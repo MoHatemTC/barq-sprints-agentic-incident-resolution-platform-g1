@@ -63,6 +63,7 @@ EXPECTED_COLUMNS = {
         "incident_number",
         "event_type",
         "contract_version",
+        "actor_sys_id",
         "received_at",
     },
     "idempotency_keys": {"id", "event_id", "created_at"},
@@ -200,7 +201,7 @@ EXPECTED_COLUMNS = {
 }
 
 NULLABLE_COLUMNS = {
-    "events": set(),
+    "events": {"actor_sys_id"},
     "idempotency_keys": set(),
     "executions": {
         "node_reached",
@@ -570,7 +571,9 @@ def test_workflow_order_and_node_attempt_are_unique() -> None:
 
 def test_event_and_execution_check_constraints() -> None:
     assert _check_sql(Event.__table__, "ck_events_event_type") == (
-        "event_type IN ('incident.created', 'incident.updated')"
+        "event_type IN ('incident.caller_replied', 'incident.caller_updated', "
+        "'incident.closed', 'incident.created', 'incident.engineer_replied', "
+        "'incident.handed_back', 'incident.reopened', 'incident.updated')"
     )
     assert _check_sql(Execution.__table__, "ck_executions_status") == (
         "status IN ('accepted', 'queued', 'running', 'awaiting_approval', "

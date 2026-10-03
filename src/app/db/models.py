@@ -33,18 +33,19 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.events import EVENT_TYPES
 
 _EXECUTION_TERMINAL_STATUSES = "'succeeded', 'failed', 'blocked', 'abandoned'"
 
 
 class Event(Base):
-    """Immutable copy of an accepted Sprint 1 four-field inbound event."""
+    """Immutable copy of an accepted inbound event (contract v1 or v2)."""
 
     __tablename__ = "events"
     __table_args__ = (
         UniqueConstraint("event_id", name="uq_events_event_id"),
         CheckConstraint(
-            "event_type IN ('incident.created', 'incident.updated')",
+            "event_type IN (" + ", ".join(f"'{value}'" for value in sorted(EVENT_TYPES)) + ")",
             name="event_type",
         ),
         Index("ix_events_incident_sys_id", "incident_sys_id"),
@@ -61,6 +62,7 @@ class Event(Base):
     contract_version: Mapped[str] = mapped_column(
         String(16), nullable=False, server_default=text("'v1'")
     )
+    actor_sys_id: Mapped[str | None] = mapped_column(String(32))
     received_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

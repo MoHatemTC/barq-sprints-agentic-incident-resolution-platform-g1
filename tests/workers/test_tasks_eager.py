@@ -406,3 +406,18 @@ class TestBackoffSecondsTruncation:
         # But the DB stores int(0.2) = 0.
         snapshot = repo.get_retry_state(EXECUTION_ID)
         assert snapshot["backoff_seconds"] == 0  # <-- the truncation
+
+
+@pytest.mark.parametrize(
+    "event_type", ["incident.engineer_replied", "incident.reopened", "incident.closed"]
+)
+def test_observe_only_events_are_recorded_without_running_the_agent(event_type: str) -> None:
+    repo = make_repo()
+    with mock.patch.object(tasks_module, "invoke_graph") as graph:
+        result = _run_incident(
+            FakeTask(), {**PAYLOAD_OK, "event_type": event_type}, str(EXECUTION_ID), CFG, repo
+        )
+    graph.assert_not_called()
+    assert result["status"] == "observed"
+    assert repo.get_status(EXECUTION_ID) == "succeeded"
+    assert repo.get_termination_cause(EXECUTION_ID) == f"observed:{event_type}"

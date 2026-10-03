@@ -16,8 +16,9 @@ import operator
 from enum import StrEnum
 from typing import Annotated, Any, Literal, TypedDict
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.events import EVENT_TYPES
 from app.models.knowledge import Classification
 
 
@@ -59,8 +60,16 @@ class EventPayload(_Section):
     event_id: str
     sys_id: str = Field(..., pattern=r"^[0-9a-fA-F]{32}$")
     number: str = Field(..., pattern=r"^INC\d{7,}$", max_length=32)
-    event_type: Literal["incident.created", "incident.updated"] = "incident.created"
+    event_type: str = "incident.created"
+    actor_sys_id: str | None = Field(default=None, pattern=r"^[0-9a-fA-F]{32}$")
     prefetched_incident: dict[str, Any] | None = None
+
+    @field_validator("event_type")
+    @classmethod
+    def _registered(cls, value: str) -> str:
+        if value not in EVENT_TYPES:
+            raise ValueError(f"unregistered event type '{value}'")
+        return value
 
 
 class IncidentSnapshot(_Section):

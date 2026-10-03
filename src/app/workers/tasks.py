@@ -48,6 +48,7 @@ from agent.semantic_cache import (
 from app.core.config import Settings, get_settings
 from app.core.correlation import clear_correlation_id, get_correlation_id, set_correlation_id
 from app.db.redis.keys import INCIDENT_DLQ_QUEUE
+from app.events import is_observe_only
 from app.models.semantic_cluster import AdmissionMode, AdmissionResult, ClusterStatus
 from app.workers.celery_app import celery_app
 from app.workers.cluster_runtime import (
@@ -296,6 +297,15 @@ def _run_incident(
         return {"status": "skipped", "execution_id": execution_id}
 
     repo.ensure_retry_state(execution_uuid, max_attempts=cfg.max_retries)
+
+    event_type = str(payload.get("event_type") or "")
+    if is_observe_only(event_type):
+        # A person acted (engineer replied, ticket reopened or closed). The agent
+        # records it for learning and the audit trail; it never runs the graph or
+        # writes to ServiceNow for these.
+        repo.mark_succeeded(execution_uuid, termination_cause=f"observed:{event_type}")
+        logger.info("incident_event_observed", execution_id=execution_id, event_type=event_type)
+        return {"status": "observed", "execution_id": execution_id, "event_type": event_type}
 
     admission = AdmissionResult(mode=AdmissionMode.INDEPENDENT, reason="not_admitted")
     candidate_draft = None
