@@ -61,6 +61,10 @@ _STOP = frozenset(
 )
 
 
+#: Incident states that say nothing failed: Closed (7) and Canceled (8).
+FINISHED_FINE = frozenset({"7", "8"})
+
+
 def _words(text: str) -> set[str]:
     return {word for word in _WORD.findall(_BRACKETS.sub(" ", text).lower()) if word not in _STOP}
 
@@ -113,10 +117,13 @@ def look_around(deps: Any, context: ToolCallContext, incident: IncidentSnapshot)
         for row in related.get("recent_same_category") or []
         if similarity(mine, str(row.get("short_description") or "")) >= SIMILARITY
     ]
+    # A repeat means the last fix may not have worked. A closed incident (the caller
+    # confirmed, or it closed without complaint) or a cancelled one is no such sign.
     situation.repeat_from_caller = [
         str(row.get("number"))
         for row in related.get("caller_recent") or []
-        if similarity(mine, str(row.get("short_description") or "")) >= SIMILARITY
+        if str(row.get("state") or "") not in FINISHED_FINE
+        and similarity(mine, str(row.get("short_description") or "")) >= SIMILARITY
     ]
     return situation
 

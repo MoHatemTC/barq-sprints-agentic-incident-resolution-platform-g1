@@ -225,3 +225,10 @@ def test_a_repeat_with_no_fix_goes_to_an_engineer_not_a_question(
     output = act(state, deps)["output"]
     assert output["outcome"] != "asked_caller"
     assert len(seen) == 1
+
+
+@pytest.mark.parametrize("state", ["7", "8"])
+def test_a_closed_or_cancelled_earlier_ticket_is_not_a_repeat(state: str) -> None:
+    earlier = [{**row, "state": state} for row in similar(1)]
+    risk = risk_for(vpn(), related={"caller_recent": earlier})
+    assert risk["approval_required"] is False
