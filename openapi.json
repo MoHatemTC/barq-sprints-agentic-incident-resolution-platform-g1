@@ -1718,6 +1718,142 @@
           }
         }
       }
+    },
+    "/api/v1/assist/messages": {
+      "post": {
+        "tags": [
+          "Assist (ServiceNow users)"
+        ],
+        "summary": "A ServiceNow user's chat message (bridge only)",
+        "operationId": "post_message_api_v1_assist_messages_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssistMessageRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistReply"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid operator token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A turn is already running.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Chat disabled or database unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/assist/history/{user_sys_id}": {
+      "get": {
+        "tags": [
+          "Assist (ServiceNow users)"
+        ],
+        "summary": "A ServiceNow user's own chat history (bridge only)",
+        "operationId": "get_history_api_v1_assist_history__user_sys_id__get",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_sys_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{32}$",
+              "title": "User Sys Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistHistory"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1944,6 +2080,90 @@
         ],
         "title": "ApprovalResponse",
         "description": "Schema representing an approval record from the 'approvals' table."
+      },
+      "AssistHistory": {
+        "properties": {
+          "conversation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/ChatMessageResponse"
+            },
+            "type": "array",
+            "title": "Messages"
+          }
+        },
+        "type": "object",
+        "required": [
+          "conversation_id",
+          "messages"
+        ],
+        "title": "AssistHistory"
+      },
+      "AssistMessageRequest": {
+        "properties": {
+          "user_sys_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$",
+            "title": "User Sys Id",
+            "description": "The logged-in ServiceNow user."
+          },
+          "message": {
+            "type": "string",
+            "maxLength": 6000,
+            "minLength": 1,
+            "title": "Message"
+          },
+          "request_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 8,
+            "title": "Request Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_sys_id",
+          "message",
+          "request_id"
+        ],
+        "title": "AssistMessageRequest"
+      },
+      "AssistReply": {
+        "properties": {
+          "conversation_id": {
+            "type": "string",
+            "title": "Conversation Id"
+          },
+          "turn": {
+            "$ref": "#/components/schemas/ChatTurnResponse"
+          },
+          "ticket_proposal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TicketProposal"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "conversation_id",
+          "turn"
+        ],
+        "title": "AssistReply"
       },
       "ChatConversationResponse": {
         "properties": {
@@ -3324,6 +3544,38 @@
         ],
         "title": "SuggestionReviewResponse",
         "description": "A drafted suggestion as it stands on the incident, for a human to judge."
+      },
+      "TicketProposal": {
+        "properties": {
+          "short_description": {
+            "type": "string",
+            "maxLength": 160,
+            "title": "Short Description"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 2000,
+            "title": "Description"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "network",
+              "software",
+              "hardware",
+              "inquiry"
+            ],
+            "title": "Category"
+          }
+        },
+        "type": "object",
+        "required": [
+          "short_description",
+          "description",
+          "category"
+        ],
+        "title": "TicketProposal",
+        "description": "What the page offers to open as an incident; ServiceNow creates it as the user."
       },
       "TraceResponse": {
         "properties": {
