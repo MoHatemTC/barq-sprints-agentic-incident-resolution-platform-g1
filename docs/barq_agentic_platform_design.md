@@ -583,3 +583,41 @@ the decision table, approvals, caller loop and audit from the core.
    scope.
 9. Test requests and changes created on the shared instance are real records; they will be
    labelled and cancelled after testing (never deleted).
+
+## 18. Delivery under the 12:00 deadline (2026-10-03)
+
+At 05:03 Cairo there are 6 h 56 min to 12:00. The full design is ≈45–57 h, so it **cannot** be
+finished today. What follows is the slice that is real, tested and reversible by 12:00, chosen
+so that nothing built today is thrown away later: every item is a piece of the full design,
+built the way the full design needs it.
+
+### 18.1 Must ship by 12:00 (the "agentic core" slice)
+
+| Time (Cairo) | Work | Done when |
+|---|---|---|
+| 05:10–05:40 | **Step 0 — safety.** `pg_dump`, Qdrant snapshot, `.env` copy, recorded SHA, dump of every scoped ServiceNow record; rollback script written | backups exist on the EC2 and locally; script reviewed |
+| 05:40–07:10 | **Backend.** Port and re-test the critical audit fixes (follower governance F-1/F-2, no decision without a paused interrupt F-8, secrets inside JSON redacted F-4). New registered tools: `assign_incident`, `set_in_progress`, `comment_to_caller`, `resolve_incident`; decision table at the *Autonomous* level for LOW risk + verified evidence + caller present; everything else unchanged (parks for approval). Autonomy level setting with *Suggest only* as the instant fallback | unit tests for every new path pass; full suite green |
+| 07:10–08:10 | **ServiceNow** (one named update set). Field ACLs for the new writes; agent display name *BARQ AI Agent*; one script include that calls the backend with the secret read from the property; **Approve / Reject UI actions that really resume the agent** and record the engineer's name; duplicate and broken actions deactivated (not deleted); roles on the actions | actions work against the backend from a ServiceNow session |
+| 08:10–08:40 | **Gate.** Ruff, format, mypy, full pytest, DB/integration suites; push the branch (never `main`) | all green |
+| 08:40–09:10 | **Deploy by hand** to the shared EC2 (same steps as the CI deploy), worker concurrency 2 (out-of-memory fix) | `/ready` 200, worker ping, migrations at head |
+| 09:10–10:30 | **Live tests**: low-risk incident fully resolved by the agent (assigned, In Progress, caller comment, Resolved by BARQ AI Agent); P1 parks → approved in ServiceNow → resumes once with the engineer's name; reject; P1 follower of a solved cluster parks; fake secret in JSON absent from Langfuse; duplicate event ignored; human-locked incident untouched | evidence recorded per test |
+| 10:30–11:15 | **If everything is green:** a simple AI card on a separate *BARQ AI* form view. **If not:** fix what failed | — |
+| 11:15–12:00 | Evidence, docs, draft PR; leave deployed or roll back — Ali decides | PR open; rollback ready |
+
+Buffer: ≈45 min is inside the 11:15–12:00 block. Go/no-go checkpoints: 07:10 (backend green?),
+08:40 (gate green?), 10:30 (live core works?). If a checkpoint fails, later items are cut, never
+the tests.
+
+### 18.2 Deferred (designed here, built in the next sessions)
+Console page, chatbot inside ServiceNow with the three memory layers, caller confirmation
+window + reopen hand-over job, knowledge publish/retire sync, clustering → Problem, split /
+duplicate, remediation runbooks and lab runner, instance clean-up, full knowledge-base
+ingestion, CI evaluation gate, secret rotation.
+
+### 18.3 Risks and how they are handled
+- **Shared system during a deadline.** Our branch runs on the shared EC2 from ≈08:40; the
+  rollback script returns it to `main` in minutes. Team asked not to merge to `main` meanwhile.
+- **ServiceNow changes affect everyone.** All in one update set; old actions deactivated not
+  deleted; new form view separate from the default.
+- **New permissions for the agent user.** Field-level only, in the update set, backed out with it.
+- **Approvals tomorrow.** Nothing merges today; the PR is ready for review.
