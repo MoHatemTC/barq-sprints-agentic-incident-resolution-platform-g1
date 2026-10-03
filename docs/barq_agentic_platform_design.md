@@ -148,14 +148,14 @@ situation, talk naturally, see what is attached, act on what it sees, and recogn
 the agent judges to be low risk is handled like any low-risk incident (option a), with the
 human kept through the safeguards below.
 
-**Investigate before acting (T16).** Inside the fixed pipeline's gates the agent gets a
+**Investigate before acting (Phase 2).** Inside the fixed pipeline's gates the agent gets a
 bounded loop — observe, reason, call a READ tool, observe again — over: the incident and its
 journal, the caller's recent incidents, similar open incidents (a possible wider outage), the
 affected CI/service, recent changes, attachments and knowledge. It stops when it has enough
 evidence or after a fixed step budget, and every observation it relies on is recorded as
 evidence. It never gains write tools this way: writes still go through `act` and the registry.
 
-**Reassess risk in both directions (T17).** After investigating, the agent may propose a
+**Reassess risk in both directions (Phase 2).** After investigating, the agent may propose a
 different handling class, with the evidence:
 - *Lower* (e.g. a P1 "can't log in" that is one user and a password problem). Allowed only if
   all of these hold, checked in code: no security, data-loss or outage signal in the text or
@@ -163,7 +163,7 @@ different handling class, with the evidence:
   service; the caller is not flagged VIP; a second, independent model check agrees; and the
   reassessment setting is on. Then the incident follows the LOW row of 6.2.
 - *Higher* (e.g. a "minor" ticket matching five others → likely outage): always allowed; the
-  agent parks it for an engineer and proposes a Problem (T11).
+  agent parks it for an engineer and proposes a Problem.
 - The ServiceNow priority field is never changed silently. The agent writes a work note
   "Handled as low risk because …" with the evidence, the incident is flagged *AI reassessed*,
   and it appears in the console's *Needs me* view for the confirmation window, where an engineer
@@ -172,19 +172,19 @@ different handling class, with the evidence:
 **How the human stays in the loop.** Engineers see every reassessment and can undo it; the
 caller confirms or reopens every resolution (T6); P1 parks still need an engineer whenever any
 rule above fails; the kill switch and the reassessment switch are admin settings; and the
-intelligence test set (T21) must show zero wrong downgrades before the switch is on by default.
+intelligence test set (section 16, R1–R9) must show zero wrong downgrades before the switch is on by default.
 
-**Talk naturally (T18).** With the caller, in incident comments: ask one clarifying question
+**Talk naturally (Phases 3 and 4).** With the caller, in incident comments: ask one clarifying question
 when information is missing (incident On Hold – Awaiting Caller), read the reply, continue,
 and confirm the fix worked — this is the conversation behind T6. With engineers, in the
-console chat (T9): explain decisions, accept instructions ("try X", "take this one") as
+console chat (Phase 4): explain decisions, accept instructions ("try X", "take this one") as
 proposals that go through the same gates. Agent and chat share the memory of section 10.
 
-**See (T19).** Screenshots and log files attached to an incident are read through the
+**See (only if time remains).** Screenshots and log files attached to an incident are read through the
 current model's vision input (via the LiteLLM proxy), redacted and screened like any input,
 and quoted as evidence.
 
-**Learn from outcomes (T20).** Reopens count against the article and the decision path that
+**Learn from outcomes (Phase 5).** Reopens count against the article and the decision path that
 led to them, confirmations count for them, and past outcomes for similar incidents feed the
 confidence score.
 
@@ -595,40 +595,106 @@ E1–E4, E7–E9, E11, F1–F2, F4, G2, G4, G6–G7, H1–H5, I1, L1–L4, L8, a
 read-back, the PostgreSQL rows and the Langfuse trace, and is labelled `[BARQ-TEST-…]`.
 Caller-side steps (accept / reopen) are performed through the portal as an existing demo user.
 
-## 16. Delivery plan — tasks in priority order
+## 16. Delivery plan — phases (rewritten 2026-10-03 06:45 Cairo)
 
-Work is tracked as tasks, not hours. Each task is done only when its tests pass (unit, then
-live where listed). Tasks are ordered so that whatever point is reached, everything before it
-is complete, tested and deployable. Estimated total ≈ 16 h of continuous work, dominated by
-live model latency, builds and deploys rather than writing code.
+The first version of this plan (T0–T21) was ordered by component: backend first, ServiceNow
+screens late, intelligence spread across six tasks, and a large remediation block in the middle.
+That meant engineers would see nothing until near the end, and a deadline cut would have left
+half-finished pieces. It is replaced by **phases**. Each phase is a vertical slice — backend,
+ServiceNow screen and live test together — and ends in a state that is deployed to the shared
+EC2, tested live on `dev407364`, committed to #213 and demonstrable. If time runs out, the
+completed phases are the product; nothing is left half-built.
 
-| ID | Task | Done when | Scenarios proven |
-|---|---|---|---|
-| T0 | Safety: DB dump, Qdrant snapshot, `.env` copy, SHA, ServiceNow config snapshot, rollback script | backups on EC2 + local; script passes shellcheck — **done 2026-10-03 05:10** | — |
-| T1 | Critical fixes: follower governance + no silent follower success (F-1/F-2); no decision without a paused interrupt (F-8); secrets inside JSON redacted (F-4); approval path cannot default to approved | unit tests for each | C6, F1, F2, E7 |
-| T2 | Agent tools: assign, set In Progress, comment to caller, resolve, hand over; decision table; autonomy setting (Suggest / Assist / Autonomous / off); pre-write re-read | unit tests; registry permit/refuse tests | A1, A3, A7, D1, D7, L2, L4 |
-| T3 | ServiceNow foundation (one update set): field ACLs for new writes, agent display name, bridge script include reading the secret from the property, Approve / Reject / Take over / Retry actions calling the backend with the engineer's name, roles on actions, old actions deactivated | actions work from a ServiceNow session | E1, E3, E4, E8, E11, G6 |
-| T4 | Gate + hand deploy to the shared EC2 (worker concurrency 2) + rollback rehearsal | all suites green; `/ready`; rollback proven once | G5 |
-| T5 | Live core tests | evidence for each | A1, A3, A4, C1, C5, C6, D1, E1, E3, F2 |
-| T6 | Caller loop: confirmation window (in-instance job), accept/silent → confirmed + close, reopen → hand-over brief + lock + article penalty; vague incident → ask caller (On Hold) | unit + live | D2, D3, D4, D8, L1, B6 |
-| T7 | Incident form: *BARQ AI* view with AI card, timeline tab, diagnostics tab, list status column + filters, one BARQ AI menu | visible and working on the instance | 11.1–11.3 |
-| T8 | BARQ AI Console (React UI page + scripted REST): Live, Needs me, Results, Failed & sync, Settings | page works with real data | G7, I1, I2 |
-| T9 | Chat in the console + memory (incident, engineer, team) + confirmed actions; Streamlit removed | unit + live | H1–H8 |
-| T10 | Knowledge: publish/retire sync event, full KB ingestion, proposals from human fixes, article credit/penalty | live | B3, B7, B6 |
-| T11 | Multi-ticket: cluster → Problem + parent links, problem resolved → linked incidents through caller loop, split, duplicate | unit + live | F1, F3, F4, F5 |
-| T12 | Remediation phase 1: runbook catalog, `run_runbook`, catalog orders, standard changes, incident task, account unlock | unit + live | K1–K4, K6–K10 |
-| T13 | Remediation phase 2: lab runner with verify/rollback | live | K5 |
-| T14 | Instance clean-up (per Ali's decisions) + sync report reconciliation | report clean | J1, J2, G7 |
-| T15 | Docs: design status, operations runbook, evidence, PR description | PR ready for review | — |
-| T16 | Investigation loop: bounded observe → reason → READ tool → observe, over journal, caller history, similar open incidents, CI, recent changes, attachments, knowledge | unit (step budget, read-only tools, evidence recorded) + live | A, C, F |
-| T17 | Risk reassessment both ways (6.3): code-enforced downgrade rules, independent second check, visible note + *AI reassessed* flag + one-click Undo, upgrade → park + Problem proposal; admin switch | unit per rule + live (fake P1 resolved, real outage escalated) | C, F |
-| T18 | Natural conversation: clarifying question to the caller (On Hold – Awaiting Caller), read reply and continue, confirm fix; engineer instructions in chat as gated proposals | unit + live | D, H |
-| T19 | Vision: read screenshot/log attachments, redacted and screened, quoted as evidence | unit + live | A, B |
-| T20 | Learning from outcomes: reopen/confirm credit to article and decision path, outcome history in confidence | unit + live | B, D |
-| T21 | Intelligence test set: fake P1s, outages that look minor, missing information, misleading attachments; scored; zero wrong downgrades required | runs in CI on recorded cases and live on the shared system | all |
+Rules for every phase: unit tests and the full gate (ruff, format, mypy, pytest) before each
+push; CI green on #213; hand deploy to the EC2; live scenarios with evidence in
+`docs/evidence/`; nothing deleted on the instance; every ServiceNow change in the tracked update
+set with its previous value in the manifest.
 
-**Execution order:** T5 → T6 with T18 → T16 with T17 → T7, T8, T9 → T19, T20 → T10–T15.
-T21 grows with each step and gates T17's switch.
+**Already done (T0–T4 of the old plan):** backups and rollback script; critical fixes
+(follower governance, no decision without an interrupt, redaction, no default approval); agent
+tools assign / In Progress / caller comment / resolve with the autonomy level and kill switch;
+ServiceNow bridge, Approve / Reject / Take over actions, field ACLs, *BARQ AI Agent* user; hand
+deploy; caller-message gate; NUL-safe JSON; SDK audit gate. 5 of 6 live core scenarios passed.
+
+### Phase 0 — Make what exists solid
+| Task | Done when |
+|---|---|
+| Failure hook releases a stuck *awaiting approval* when no paused run exists | unit + PostgreSQL tests |
+| Deploy #213 head to the EC2; re-run the 6 live core scenarios + caller-message scenario | all pass, evidence committed |
+| Rehearse the rollback once (to `e065df9` and back) | `/ready` and worker ping after each direction |
+
+Scenarios: A1, A3, A4, C1, C5, C6, D1, D7, E1, E3, F2, L2, L4.
+
+### Phase 1 — Engineers see and steer the agent in ServiceNow
+The most visible gap: today the agent's work is spread over fields and work notes.
+| Task | Done when |
+|---|---|
+| *BARQ AI* section on the incident form: what the agent did and why, cited evidence, confidence, risk verdict, run status, the three actions | visible on a live incident |
+| Lists and filters in one *BARQ AI* menu: Needs me, Resolved by AI, AI reassessed, Failed | each filter returns the right live records |
+| Agent writes a short incident summary and timeline note (what happened, what it checked, what it did) | unit + live |
+
+Scenarios: E1–E4, E8, E11, G6, 11.1–11.3.
+
+### Phase 2 — The agent investigates and judges real risk
+This is the core of "very intelligent": look around before acting, and decide how critical
+the incident really is.
+| Task | Done when |
+|---|---|
+| Investigation step (read-only, bounded): caller's recent incidents, similar open incidents, recent changes on the CI, attachments list, knowledge; findings recorded as evidence | unit (budget, read-only, evidence) + live |
+| Two-way reassessment (6.3): code-enforced downgrade rules + independent second check; upgrade when similar incidents point to an outage | unit per rule + live: fake P1 resolved, real outage escalated |
+| *AI reassessed* flag, explanation note, one-click Undo action | live |
+| Similar incidents grouped and a Problem proposed (old T11, first part) | live |
+
+Scenarios: C1–C6, F1, F3, plus new R1–R6 below.
+
+### Phase 3 — The agent talks to the caller
+| Task | Done when |
+|---|---|
+| Clarifying question when information is missing → On Hold – Awaiting Caller; caller reply resumes the run | unit + live |
+| Confirmation window (in-instance scheduled job, 30 min for tests): silence or "it works" → confirmed and closed; reopen → hand-over note to an engineer, article penalty | unit + live |
+| Events `incident.reopened` / `incident.confirmed` / `incident.caller_replied` through the existing webhook | unit + live |
+
+Scenarios: D2, D3, D4, D8, L1, B6, plus R7–R9.
+
+### Phase 4 — BARQ AI Console with chat and memory, inside ServiceNow
+| Task | Done when |
+|---|---|
+| One console page (Needs me, Live, Results, Failed & sync, Settings) reading the backend through the bridge | works with real data |
+| Chat panel: #213's chatbot moved behind the bridge, incident-aware, shared memory, actions only as gated proposals; Streamlit removed | unit + live |
+
+Scenarios: G7, H1–H8, I1, I2.
+
+### Phase 5 — Knowledge that improves itself
+| Task | Done when |
+|---|---|
+| Human fix → knowledge proposal (exists) → publish/retire sync to Qdrant | live |
+| Confirmations and reopens credit or penalise the article and feed confidence (old T20) | unit + live |
+
+Scenarios: B3, B6, B7.
+
+### Phase 6 — Finish
+Instance clean-up per Ali's decisions, sync report reconciliation, docs, evidence, PR
+description, #213 marked ready. Scenarios: J1, J2.
+
+### Only if time remains
+Reading screenshots (old T19); one real remediation runbook through the catalog or a standard
+change (old T12, one item); the lab runner (old T13) is out of scope for this round.
+
+### New scenarios for the intelligent agent
+| ID | Scenario | Expected |
+|---|---|---|
+| R1 | P1 "can't log in", one user, password expired | handled as low risk, resolved, flagged *AI reassessed*, Undo available |
+| R2 | P1 with "breach" / "ransomware" / "data leak" | never lowered; parked |
+| R3 | P1 on a Tier-1 service | never lowered; parked |
+| R4 | P3 "VPN slow", five similar open incidents in 30 min | raised; parked; Problem proposed |
+| R5 | Second model check disagrees with the downgrade | stays high; parked |
+| R6 | Engineer presses Undo on a reassessed incident | reopened, locked, handed over, recorded |
+| R7 | Vague ticket "it doesn't work" | one clarifying question; On Hold – Awaiting Caller |
+| R8 | Caller answers the question | run resumes with the answer as new evidence |
+| R9 | Caller never answers | standard reminder/autoclose path; never resolved by the agent |
+
+The intelligence test set (old T21) is these scenarios plus the existing catalogue, recorded
+for CI and run live after each phase.
 
 ## 17. Open decisions
 
