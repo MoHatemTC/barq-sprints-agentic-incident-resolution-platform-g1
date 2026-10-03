@@ -26,18 +26,42 @@ system and change what needs changing; nothing is rebuilt from scratch.
 
 ## 2. What people see
 
-**One incident page (ServiceNow)** — one page, no tabs, minimum fields.
-- *Engineer:* the essentials, one AI panel (status, who is in control, urgency and why, the
-  instructions, the history) and only the buttons that apply now.
-- *Caller (portal):* their problem, the status, and the conversation with the AI or the
-  engineer. Nothing technical.
-- The exact fields are decided together field by field before anything changes.
+**Incident page (ServiceNow) — engineers only.** One page, no tabs, minimum fields: the
+essentials, one AI panel (status, who is in control, urgency and why, the instructions, the
+history) and only the buttons that apply now. Engineers also work from incident lists
+(*Assigned to my groups*, *Needs my approval*, *Reopened from AI*) and can create incidents
+there; the AI picks those up too. The exact fields are decided with Ali field by field, keeping
+every rule that depends on the page (mandatory resolution / hold / work-notes fields, routing
+fields, our buttons).
 
-**BARQ AI page (ServiceNow portal) — for callers only.** One chat page where a user raises a
-problem, gets instructions, asks questions, follows their tickets, and reopens or closes them.
-It remembers past conversations. Actions on tickets run in ServiceNow with that user's own
-permissions, never the agent's. Engineers have no separate console: they work from the
-incident page and lists.
+**BARQ AI chat (Employee Center portal) — users only.** One chat page where a user raises a
+problem (the chat **creates the incident** in ServiceNow under the user's name), gets
+instructions, asks questions, follows their tickets, adds information, and reopens or closes
+them. It remembers past conversations. Users never see the engineer form. Every ticket action
+runs in ServiceNow with that user's own permissions, never the agent's.
+
+**Who sees what is locked by ServiceNow itself:** a user without a role can read an incident
+only as its caller, opener or watcher (existing instance ACL, checked 2026-10-03); the chat
+applies the same filter again on the server, so a user can never see another user's ticket,
+even by asking the AI.
+
+### 2B. Roles (each with a real test user on dev407364)
+
+| Role | Test user | Can | Cannot |
+|---|---|---|---|
+| Caller | Abel Tuter, David Miller (no roles) | chat; create, follow, add to, reopen, close **own** tickets | see others' tickets; approve; see work notes or AI reasoning |
+| Engineer | Beth Anglin (`itil`) + an assignment group | lists and form; create; take over; hand back / run AI again; write to caller | approve AI fixes (unless also approver); change AI rules |
+| Approver | `incident_operator` (`x_2215032_ai_inc_0.operator`) | approve / reject risky AI fixes | change AI rules |
+| BARQ admin | a user with `x_2215032_ai_inc_0.admin` (to create) | rules, autonomy, kill switch, approve knowledge proposals | — |
+| The agent | `ai_orchestrator_svc` (BARQ AI Agent) | write only the allowed fields, never on a locked ticket | anything else; never an admin login |
+
+A permission test plays every role and proves each "can" works and each "cannot" is refused.
+
+### 2C. Not in this round
+**The AI fixing systems itself** (account unlock, catalog requests, standard changes, machine
+fixes) is kept as a future addition. Facts gathered for it: no MID Server on the instance;
+Password Reset and the Standard Change Catalog are installed. In this round the AI gives
+instructions and answers only.
 
 ## 2A. Everything connected
 
@@ -82,23 +106,26 @@ three copies.
 
 ## 4. Order (each step deployed by hand to the shared EC2 and tested live; no merge)
 
-1. **Finish the current core:** failure-hook tests, deploy #213 head, all live scenarios pass,
-   rollback rehearsed once.
-2. **Flexible contracts:** versioned events and agent actions, ServiceNow rule sends the new
-   events, old flow still passes.
-3. **Agent conversation and control (the connection core, section 2A):** every change becomes
-   an event with its actor; control states; caller replies and ticket edits continue the AI;
-   engineer edits take control; *Run AI again* / hand back; reopen → engineer; loop and
-   self-trigger guards. Proven live with the caller and engineer acting on the same ticket.
-4. **Agent intelligence:** urgency triage, look-around, outage and security handling, outcome
-   recording.
-5. **The incident page:** fields agreed with Ali, then built in the SDK app and installed.
-6. **The BARQ AI page for callers:** chatbot moved behind the bridge with user identity,
-   ticket actions, portal page; a ticket's chat is its comment thread, so engineer and AI
-   messages appear in it and caller messages appear on the incident.
-7. **Improvement loop and admin rules:** article proposals and scores, rules editable by an
+1. **Finish the current core:** failure-hook tests, full gate, deploy #213 head, all live
+   scenarios pass, rollback rehearsed once.
+2. **Flexible contracts:** the event contract (today exactly four fields, enforced in the
+   ServiceNow script action, the webhook schema, the agent state and a database check) gets a
+   version 2 with the actor and a registered event type; agent actions likewise; version 1
+   keeps working until everything has moved.
+3. **Connection core (section 2A):** ServiceNow's own `incident.inserted / commented / updated`
+   events (they already carry who acted) and the reopen fields feed our event; control states;
+   caller replies and edits continue the AI; engineer edits take control; *Run AI again* /
+   hand back; reopen → engineer; loop and self-trigger guards.
+4. **Roles and permissions (2B):** test users and groups set up, permission test passes.
+5. **Agent intelligence:** urgency triage, look-around (similar tickets, caller history),
+   outage and security handling, outcome recording.
+6. **Incident page for engineers:** fields agreed with Ali, built in the SDK app, installed;
+   list views.
+7. **BARQ AI chat for users:** #213's chat behind the bridge with the user's identity, create
+   incident from chat, ticket thread = chat, Employee Center page; Streamlit removed.
+8. **Improvement loop and admin rules:** article proposals and scores, rules editable by an
    admin.
-8. **Clean-up and docs;** #213 ready for Ali's approval.
+9. **Clean-up and docs;** #213 ready for Ali's approval.
 
 ## 4A. Built to be upgraded at any time
 
@@ -127,3 +154,89 @@ Shared systems only (dev407364 + shared EC2). The agent never uses an admin acco
 ServiceNow change lives in the repo and the tracked update set and can be undone. Nothing on
 the instance is changed without Ali's go-ahead for that step. One working session at a time.
 Teammates are asked not to merge to `main` while the EC2 runs our branch.
+
+## 6. Scenarios (what the tests prove)
+
+Each scenario becomes a unit test and, where marked **L**, a live test on dev407364 with the
+role's real test user. "AI" = BARQ AI Agent. The older catalogue in
+`barq_agentic_platform_design.md` §8 remains as extra detail; these are the ones this round
+must pass.
+
+**U — User in the chat**
+- U1 **L** User describes a problem in chat → incident created under the user's name, AI answers in the same chat.
+- U2 **L** User asks a knowledge question without a ticket → answer with article reference, no incident created.
+- U3 **L** User asks "what happened with my ticket?" → status and last messages of *their* ticket.
+- U4 **L** User asks about another user's ticket → refused; nothing revealed.
+- U5 **L** User adds information to an open ticket from chat → appears on the incident; AI continues with it.
+- U6 **L** User edits their ticket's description → AI re-reads and continues; does not repeat questions.
+- U7 **L** User says "it works" → incident closed as resolved by AI.
+- U8 **L** User reopens an AI-resolved ticket → goes to an engineer with the AI's summary.
+- U9 User closes their own open ticket → closed as cancelled by the caller; AI stops.
+- U10 User returns days later → chat remembers the conversation and their tickets.
+- U11 Two tickets open at once → chat keeps them apart; each reply goes to the right ticket.
+- U12 User asks for a person → AI hands over to the group; engineer's next message appears in chat.
+
+**A — AI understanding and decisions**
+- A1 **L** Caller-doable fix, low risk → steps to the caller, resolved by AI.
+- A2 **L** Fix needs IT rights → assigned to the right group, fix written for the engineer, not resolved.
+- A3 **L** Vague ticket → one clarifying question, On Hold – Awaiting Caller; reply resumes.
+- A4 **L** Priority 1 or security → parked for approval, nothing applied.
+- A5 Labelled P1 but clearly one user and minor → handled as low risk only if every hard rule holds; noted with reasons; engineer can undo.
+- A6 Labelled low but five similar tickets in an hour → raised as a likely outage; parked; engineers told.
+- A7 **L** No relevant knowledge → parked for an engineer; their fix becomes a knowledge proposal.
+- A8 Low confidence or citations fail verification → parked with the draft.
+- A9 **L** No caller or a service account as caller → never resolved; fix written for the engineer.
+- A10 Repeat ticket from the same caller (last fix failed) → not the same fix again; engineer.
+
+**E — Engineer**
+- E1 **L** Engineer opens the incident page → sees AI panel: status, control, urgency, instructions, history.
+- E2 **L** Approve (optionally with edited fix) → applied once; caller sees it in chat.
+- E3 **L** Reject with reason → nothing applied; reason recorded.
+- E4 **L** Take over → AI stops on its next re-read; never writes again unless handed back.
+- E5 **L** Engineer writes to the caller → takes control; message appears in the user's chat.
+- E6 **L** Hand back / Run AI again with an instruction → AI continues from the current state with the instruction.
+- E7 Engineer edits a field while the AI is mid-run → AI's write refused at re-read; no overwrite.
+- E8 Engineer creates an incident from the list → AI processes it like any other.
+- E9 Two engineers act at once → first wins; second sees who has it.
+- E10 Engineer resolves it themselves → AI stops; their fix proposed as knowledge.
+
+**P — Permissions (every role, live)**
+- P1 Caller cannot read, list or chat about others' incidents.
+- P2 Caller cannot see work notes, AI reasoning or approval briefs.
+- P3 Caller cannot approve, reject, take over or hand back.
+- P4 Engineer without approver role cannot approve.
+- P5 Agent cannot write a locked ticket, any field outside its list, or use admin.
+- P6 Only BARQ admin changes rules, autonomy and the kill switch.
+
+**S — Security and abuse**
+- S1 **L** Prompt injection in ticket or chat → blocked before any model; nothing written; flagged.
+- S2 Reported attack (phishing clicked, ransomware, account misuse) → security group, parked, no "delete/reinstall" advice, evidence preserved.
+- S3 Secrets in text (passwords, tokens) → redacted everywhere: model, logs, traces, chat history.
+- S4 Flood of tickets or chat messages from one user → rate-limited; grouped; engineers alerted.
+- S5 User claims to be someone else in text → ignored; identity is the ServiceNow login only.
+
+**C — Connection and consistency**
+- C1 AI never reacts to its own writes (no loops).
+- C2 Re-run limit per ticket reached → engineer, with summary.
+- C3 Event arrives twice → processed once.
+- C4 Events arrive out of order → state decided from a fresh read, not the event order.
+- C5 ServiceNow and backend disagree (e.g. "awaiting approval" with nothing to approve) → released to an engineer with a reason.
+- C6 Ticket closed by a person while AI works → AI stops; nothing written.
+
+**F — Failures and recovery**
+- F1 Model unavailable → retries, then failed with a visible reason; DLQ; replay works.
+- F2 ServiceNow unavailable → retries; no half-written ticket.
+- F3 Worker crash mid-run → resumes from checkpoint; nothing applied twice.
+- F4 Backend down while user chats → chat says so; nothing lost; message sent when back.
+- F5 Kill switch on → events recorded, nothing processed, chat answers "AI paused".
+- F6 Deploy and rollback on the shared EC2 → both proven; schema reversible.
+
+**K — Knowledge and improvement**
+- K1 Engineer's fix → knowledge proposal → approver publishes → used in the next answer.
+- K2 Article retired in ServiceNow → no longer used.
+- K3 Reopen after an AI resolution → article and decision scored down; confirmation scores up.
+- K4 Admin changes a rule (e.g. category → group) → takes effect without a deploy; change recorded and undoable.
+
+**V — Upgrades**
+- V1 Old (v1) events still accepted while v2 is introduced.
+- V2 A new event type or tool is added by registration only; existing tests still pass.
