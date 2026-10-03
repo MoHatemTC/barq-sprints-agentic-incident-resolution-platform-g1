@@ -248,6 +248,10 @@ def write_final_failure_best_effort(
         )
 
 
+#: Written by the conversation rule when an incident BARQ AI Agent resolved is reopened.
+REOPEN_AFTER_AI = "after a BARQ AI Agent resolution"
+
+
 def record_outcome_best_effort(settings: Settings, payload: dict[str, Any], event_type: str) -> int:
     """Credit or penalise the articles behind an agent resolution (app.feedback).
 
@@ -265,14 +269,22 @@ def record_outcome_best_effort(settings: Settings, payload: dict[str, Any], even
 
         async def read() -> Any:
             async with ServiceNowClient(settings) as client:
-                return await client.get_incident(sys_id)
+                incident = await client.get_incident(sys_id)
+                notes = ""
+                if event_type == "incident.reopened":
+                    conversation = await client.get_conversation(sys_id)
+                    notes = str((conversation or {}).get("work_notes") or "")
+                return incident, notes
 
-        incident = asyncio.run(read())
+        incident, notes = asyncio.run(read())
         articles = cited_articles(incident.ai_resolution)
         if not articles:
             return 0
         if event_type == "incident.reopened":
-            if not incident.ai_human_review_required:
+            # Only a reopened *AI* resolution counts: ServiceNow's conversation rule writes
+            # this note exactly then. A ticket an engineer resolved (review flag already
+            # set) must not count against the article the AI only suggested.
+            if not incident.ai_human_review_required or REOPEN_AFTER_AI not in notes:
                 return 0
             outcome = "reopened"
         else:

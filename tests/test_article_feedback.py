@@ -81,22 +81,32 @@ def _incident(**fields: Any) -> SimpleNamespace:
     return SimpleNamespace(**values)
 
 
+AI_REOPEN = "Reopened by Abel Tuter after a BARQ AI Agent resolution, so an engineer takes over."
+
+
 @pytest.mark.parametrize(
-    "event_type,incident,outcome",
+    "event_type,incident,outcome,notes",
     [
-        ("incident.reopened", _incident(ai_human_review_required=True), "reopened"),
-        ("incident.closed", _incident(), "confirmed"),
-        ("incident.reopened", _incident(), None),  # not an AI resolution coming back
-        ("incident.closed", _incident(ai_human_review_required=True), None),
-        ("incident.closed", _incident(ai_resolution=""), None),
-        ("incident.engineer_replied", _incident(), None),
+        ("incident.reopened", _incident(ai_human_review_required=True), "reopened", AI_REOPEN),
+        # An engineer resolved it (review flag already set); the AI fix only suggested.
+        ("incident.reopened", _incident(ai_human_review_required=True), None, "Resolved."),
+        ("incident.closed", _incident(), "confirmed", ""),
+        ("incident.reopened", _incident(), None, AI_REOPEN),  # not an AI resolution coming back
+        ("incident.closed", _incident(ai_human_review_required=True), None, ""),
+        ("incident.closed", _incident(ai_resolution=""), None, ""),
+        ("incident.engineer_replied", _incident(), None, ""),
     ],
 )
-def test_outcomes_are_recorded_only_for_agent_resolutions(event_type, incident, outcome) -> None:
+def test_outcomes_are_recorded_only_for_agent_resolutions(
+    event_type, incident, outcome, notes
+) -> None:
     client = MagicMock()
     client.__aenter__ = AsyncMock(return_value=client)
     client.__aexit__ = AsyncMock(return_value=None)
     client.get_incident = AsyncMock(return_value=incident)
+    client.get_conversation = AsyncMock(
+        return_value={"work_notes": notes, "comments": "", "caller_name": ""}
+    )
     store = MagicMock()
     store.record.return_value = 1
     with (
