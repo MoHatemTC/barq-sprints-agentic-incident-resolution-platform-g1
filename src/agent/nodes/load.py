@@ -26,7 +26,7 @@ from agent.guardrails.semantic_injection_classifier import (
     ClassifierOutcome,
     classify_injection,
 )
-from agent.policy import snapshot_incident
+from agent.policy import check_eligibility, snapshot_incident
 from agent.prompts import PIIText
 from agent.state import AgentState, EventPayload, GateResult, IncidentSnapshot
 from agent.tools import ToolCallContext
@@ -51,7 +51,15 @@ def load(state: AgentState, deps: AgentDependencies) -> dict[str, Any]:
             )
         )
     incident = _with_conversation(snapshot_incident(raw), state, deps)
-    sanitized_incident, gate = _run_input_guardrails(incident, deps)
+    # An incident the agent may not work (taken over, closed, already handled) gets no
+    # model call at all: validate stops the run next, and the screening models would
+    # otherwise hold a worker for up to half a minute for nothing.
+    eligible = check_eligibility(
+        incident,
+        event_number=event.number,
+        supported_categories=deps.settings.agent_supported_categories,
+    ).eligible
+    sanitized_incident, gate = _run_input_guardrails(incident, deps, use_models=eligible)
     return {
         "incident": sanitized_incident.model_dump(mode="json"),
         "input_guardrail": gate.model_dump(mode="json"),
@@ -97,7 +105,7 @@ def _with_conversation(
 
 
 def _run_input_guardrails(
-    incident: IncidentSnapshot, deps: AgentDependencies
+    incident: IncidentSnapshot, deps: AgentDependencies, *, use_models: bool = True
 ) -> tuple[IncidentSnapshot, GateResult]:
     with deps.tracer.span(
         "guardrail.input_screening",
@@ -124,6 +132,12 @@ def _run_input_guardrails(
         if pattern_result.flagged:
             blocked = True
             detection_layer = "pattern_screening"
+            protected_short = REDACTED
+            protected_description = REDACTED
+        elif not use_models:
+            # Nothing downstream reads the text of an ineligible incident; keep none of it.
+            blocked = False
+            detection_layer = "skipped_ineligible"
             protected_short = REDACTED
             protected_description = REDACTED
         else:

@@ -24,7 +24,7 @@ from agent.prompts import (
     DiagnoseOutput,
     GenerateOutput,
     InjectionClassification,
-    PIIDetectionOutput,
+    PIIWordDetectionOutput,
     StepOutput,
 )
 from agent.servicenow import AsyncRunner, IncidentGateway
@@ -283,7 +283,7 @@ class FakeLLM:
 
 def vpn_answers(confidence: float = 0.82) -> dict[str, Any]:
     return {
-        "pii_detection": PIIDetectionOutput(findings=[]),
+        "pii_detection": PIIWordDetectionOutput(findings=[]),
         "injection_classifier": InjectionClassification(
             is_injection=False, reason="ordinary VPN incident, no manipulation attempt"
         ),
@@ -338,7 +338,7 @@ class FakeOpenAISDK:
         "GenerateOutput": "generate",
         "CriticOutput": "verify_evidence",
         "ApprovalBriefOutput": "approval_brief",
-        "PIIDetectionOutput": "pii_detection",
+        "PIIWordDetectionOutput": "pii_detection",
     }
 
     def __init__(

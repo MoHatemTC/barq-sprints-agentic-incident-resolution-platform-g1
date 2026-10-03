@@ -288,7 +288,13 @@ class TestLiteLLMClient:
             {"role": "user", "content": "the incident"},
         ]
         assert request["max_completion_tokens"] == 16000
-        assert "reasoning_effort" not in request
+        # Classification is a narrow check: it runs without step-by-step thinking.
+        assert request["reasoning_effort"] == "none"
+
+    def test_reasoning_purposes_keep_the_models_default_thinking(self) -> None:
+        sdk = FakeOpenAISDK(vpn_answers())
+        self._llm(sdk).structured(purpose="diagnose", system="s", prompt="p", schema=ClassifyOutput)
+        assert "reasoning_effort" not in sdk.requests[0]
 
     def test_shared_fake_records_sensitive_call_options(self) -> None:
         fake = FakeLLM(
@@ -318,7 +324,7 @@ class TestLiteLLMClient:
             Tracer(None),
             client=sdk,
         )
-        llm.structured(purpose="classify", system="s", prompt="p", schema=ClassifyOutput)
+        llm.structured(purpose="generate", system="s", prompt="p", schema=ClassifyOutput)
         assert sdk.requests[0]["reasoning_effort"] == "low"
 
     def test_per_request_retry_override_does_not_leak_to_later_calls(self) -> None:

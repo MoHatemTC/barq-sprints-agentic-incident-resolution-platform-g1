@@ -192,7 +192,9 @@ class LiteLLMClient:
         options: dict[str, Any] = {
             "max_completion_tokens": max_completion_tokens or settings.agent_llm_max_tokens
         }
-        if settings.agent_llm_reasoning_effort:
+        if purpose in settings.agent_llm_fast_purposes:
+            options["reasoning_effort"] = "none"
+        elif settings.agent_llm_reasoning_effort:
             options["reasoning_effort"] = settings.agent_llm_reasoning_effort
         trace_input = (
             {"system": system, "prompt": prompt}

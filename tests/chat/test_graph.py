@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from agent.prompts import PIIDetectionOutput
+from agent.prompts import PIIWordDetectionOutput
 from app.chat.config import ChatSettings
 from app.chat.graph import build_chat_graph
 from app.chat.prompts import AnswerDraft, RouteDecision
@@ -16,7 +16,7 @@ _CLEAN = "Explain the known error register policy."
 
 def _answers(answer: AnswerDraft | list[AnswerDraft], route: str = "knowledge") -> dict:
     return {
-        "pii_detection": PIIDetectionOutput(findings=[]),
+        "pii_detection": PIIWordDetectionOutput(findings=[]),
         "injection_classifier": _no_injection(),
         "chat_route": RouteDecision(request_type=route, reason="test"),
         "chat_answer": answer,

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from agent.prompts import PIIDetectionOutput
+from agent.prompts import PIIWordDetectionOutput
 from app.chat.screening import screen_chat_input
 from observability.redaction import REDACTED
 from tests.agent_support import FakeLLM
@@ -13,7 +13,7 @@ _CLEAN = "Explain the known error register policy."
 def test_clean_message_passes_with_sanitized_text() -> None:
     llm = FakeLLM(
         answers={
-            "pii_detection": PIIDetectionOutput(findings=[]),
+            "pii_detection": PIIWordDetectionOutput(findings=[]),
             "injection_classifier": _no_injection(),
         }
     )
@@ -58,7 +58,7 @@ def test_pii_detector_unavailable_blocks_fail_closed() -> None:
 def test_injection_classifier_unavailable_blocks_fail_closed() -> None:
     llm = FakeLLM(
         answers={
-            "pii_detection": PIIDetectionOutput(findings=[]),
+            "pii_detection": PIIWordDetectionOutput(findings=[]),
             "injection_classifier": RuntimeError("classifier down"),
         }
     )
@@ -72,7 +72,7 @@ def test_injection_classifier_unavailable_blocks_fail_closed() -> None:
 def test_semantic_injection_blocks() -> None:
     llm = FakeLLM(
         answers={
-            "pii_detection": PIIDetectionOutput(findings=[]),
+            "pii_detection": PIIWordDetectionOutput(findings=[]),
             "injection_classifier": _injection(),
         }
     )
@@ -87,7 +87,7 @@ def test_semantic_injection_blocks() -> None:
 def test_deterministic_redaction_runs_before_models() -> None:
     llm = FakeLLM(
         answers={
-            "pii_detection": PIIDetectionOutput(findings=[]),
+            "pii_detection": PIIWordDetectionOutput(findings=[]),
             "injection_classifier": _no_injection(),
         }
     )

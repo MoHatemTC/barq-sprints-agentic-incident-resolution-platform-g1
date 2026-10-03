@@ -73,6 +73,10 @@
           <div class="barq-who" ng-if="!e.mine">{{e.agent ? 'BARQ AI Agent' : e.who}}</div>
           <div class="barq-bubble" ng-bind-html="c.readable(e.text)"></div>
         </div>
+        <div class="barq-working" ng-if="c.ticket.working">
+          <span class="barq-dot"></span><span class="barq-dot"></span><span class="barq-dot"></span>
+          BARQ AI Agent is working on it. This usually takes under a minute; the answer appears here by itself.
+        </div>
         <div class="barq-actions barq-actions-quiet" ng-if="c.ticket.can_cancel">
           <button class="barq-link" ng-if="c.ticket.can_ask_person" ng-click="c.act('person')" ng-disabled="c.busy">Talk to a person</button>
           <button class="barq-link" ng-click="c.confirmCancel()" ng-disabled="c.busy">Cancel this ticket</button>

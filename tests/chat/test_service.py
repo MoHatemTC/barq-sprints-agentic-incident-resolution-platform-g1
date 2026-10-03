@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from agent.llm import TerminalError
-from agent.prompts import PIIDetectionOutput
+from agent.prompts import PIIWordDetectionOutput
 from app.chat.budget import ChatBudgetExceeded, Reservation
 from app.chat.config import ChatSettings
 from app.chat.prompts import AnswerDraft, RouteDecision
@@ -40,7 +40,7 @@ class FakeBudget:
 
 def _answers() -> dict:
     return {
-        "pii_detection": PIIDetectionOutput(findings=[]),
+        "pii_detection": PIIWordDetectionOutput(findings=[]),
         "injection_classifier": _no_injection(),
         "chat_route": RouteDecision(request_type="knowledge", reason="t"),
         "chat_answer": AnswerDraft(

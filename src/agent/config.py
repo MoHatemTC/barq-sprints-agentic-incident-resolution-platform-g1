@@ -79,6 +79,20 @@ class AgentSettings(BaseSettings):
     agent_llm_reasoning_effort: Literal["low", "medium", "high"] | None = Field(
         default=None, description="Unset = the model's default thinking level."
     )
+    agent_llm_fast_purposes: list[str] = Field(
+        default_factory=lambda: [
+            "pii_detection",
+            "injection_classifier",
+            "classify",
+            "caller_message",
+            "clarifying_question",
+            "chat_route",
+        ],
+        description=(
+            "Model calls that run without step-by-step thinking: narrow checks and rewording "
+            "that the model does accurately and several times faster without it."
+        ),
+    )
     agent_llm_max_tokens: int = Field(default=16000, gt=0)
     agent_llm_timeout_seconds: float = Field(default=60.0, gt=0)
     agent_llm_max_retries: int = Field(default=2, ge=0)

@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from agent.llm import TerminalError
-from agent.prompts import InjectionClassification, PIIDetectionOutput
+from agent.prompts import InjectionClassification, PIIWordDetectionOutput
 from app.chat.budget import (
     ChatBudgetExceeded,
     ChatBudgetUnavailable,
@@ -179,17 +179,19 @@ def test_partial_proxy_reporting_preserves_each_reported_cost() -> None:
 
 
 def test_gateway_dispatches_the_configured_chat_model_for_guardrails() -> None:
-    base = FakeLLM(answers={"pii_detection": PIIDetectionOutput(findings=[])})
+    base = FakeLLM(answers={"pii_detection": PIIWordDetectionOutput(findings=[])})
     settings = ChatSettings(_env_file=None, chat_model="gemini/test-chat")
     gateway = ChatModelGateway(base, settings)
-    gateway.structured(purpose="pii_detection", system="s", prompt="p", schema=PIIDetectionOutput)
+    gateway.structured(
+        purpose="pii_detection", system="s", prompt="p", schema=PIIWordDetectionOutput
+    )
     assert base.calls[0]["model"] == "gemini/test-chat"
 
 
 def test_gateway_captures_guardrail_calls() -> None:
     base = FakeLLM(
         answers={
-            "pii_detection": PIIDetectionOutput(findings=[]),
+            "pii_detection": PIIWordDetectionOutput(findings=[]),
             "injection_classifier": InjectionClassification(is_injection=False, reason="ok"),
         }
     )
@@ -205,9 +207,9 @@ def test_gateway_captures_guardrail_calls() -> None:
 
 
 def test_gateway_caps_output_and_disables_retries() -> None:
-    from agent.prompts import PIIDetectionOutput
+    from agent.prompts import PIIWordDetectionOutput
 
-    base = FakeLLM(answers={"chat_route": PIIDetectionOutput(findings=[])})
+    base = FakeLLM(answers={"chat_route": PIIWordDetectionOutput(findings=[])})
     settings = ChatSettings(
         _env_file=None,
         chat_max_output_tokens=2000,
@@ -219,7 +221,7 @@ def test_gateway_caps_output_and_disables_retries() -> None:
         purpose="chat_route",
         system="s",
         prompt="p",
-        schema=PIIDetectionOutput,
+        schema=PIIWordDetectionOutput,
         max_completion_tokens=999_999,
     )
 

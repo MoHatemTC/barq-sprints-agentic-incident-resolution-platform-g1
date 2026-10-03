@@ -168,7 +168,7 @@ class TestRoutes:
         result = run(VPN, make_deps(llm=llm, servicenow=backend))
         assert result["path"] == ["load", "validate", "act"]
         assert result["outcome"] == "skipped_ineligible"
-        assert llm.purposes() == ["pii_detection", "injection_classifier"]
+        assert llm.purposes() == []  # no model is called for an incident it may not work
         assert backend.updates == []
 
     def test_elevated_risk_drafts_and_awaits_approval(self) -> None:

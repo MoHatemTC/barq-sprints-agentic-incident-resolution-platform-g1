@@ -140,20 +140,22 @@ api.controller = function($scope, $timeout, $interval) {
     // The page opens on a new ticket ready to fill; the chat is one click away.
     c.startNew();
 
-    // While a ticket is open, pick up new messages from BARQ AI Agent or an engineer.
+    // While a ticket is open, pick up new messages from BARQ AI Agent or an engineer:
+    // every 3 seconds while BARQ AI Agent is working on it, every 9 seconds otherwise.
+    var ticks = 0;
     var poll = $interval(function() {
-        if (c.ticket && !c.busy) {
-            c.server.get({action: 'open', sys_id: c.ticket.sys_id}).then(function(response) {
-                var t = response.data.ticket;
-                if (response.data.tickets) c.data.tickets = response.data.tickets;
-                if (t && c.ticket && t.sys_id == c.ticket.sys_id &&
-                    (t.conversation.length != c.ticket.conversation.length || t.status != c.ticket.status)) {
-                    c.ticket = t;
-                    scroll();
-                }
-            });
-        }
-    }, 8000);
+        ticks++;
+        if (!c.ticket || c.busy || (!c.ticket.working && ticks % 3)) return;
+        c.server.get({action: 'open', sys_id: c.ticket.sys_id}).then(function(response) {
+            var t = response.data.ticket;
+            if (response.data.tickets) c.data.tickets = response.data.tickets;
+            if (t && c.ticket && t.sys_id == c.ticket.sys_id &&
+                (t.conversation.length != c.ticket.conversation.length || t.status != c.ticket.status)) {
+                c.ticket = t;
+                scroll();
+            }
+        });
+    }, 3000);
     $scope.$on('$destroy', function() { $interval.cancel(poll); });
     scroll();
 };

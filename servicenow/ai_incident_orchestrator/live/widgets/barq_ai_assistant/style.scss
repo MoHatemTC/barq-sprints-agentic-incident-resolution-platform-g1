@@ -45,3 +45,9 @@
 .barq-newform label { font-size: 13px; color: #4a5866; margin-top: 6px; }
 .barq-newform input, .barq-newform textarea, .barq-newform select { border: 1px solid #cfd6de; border-radius: 8px; padding: 8px 10px; font: inherit; }
 .barq-chat-item { border-color: #c9d8f3; }
+
+.barq-working { margin: 8px 0; padding: 10px 12px; border-radius: 10px; background: #eef4ff; color: #1f3b73; font-size: 13px; }
+.barq-dot { display: inline-block; width: 6px; height: 6px; margin-right: 3px; border-radius: 50%; background: #3b6fd8; animation: barq-blink 1.2s infinite ease-in-out; }
+.barq-dot:nth-child(2) { animation-delay: .2s; }
+.barq-dot:nth-child(3) { animation-delay: .4s; margin-right: 8px; }
+@keyframes barq-blink { 0%, 80%, 100% { opacity: .25; } 40% { opacity: 1; } }

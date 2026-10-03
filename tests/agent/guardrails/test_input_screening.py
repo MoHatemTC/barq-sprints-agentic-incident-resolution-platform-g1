@@ -14,9 +14,9 @@ from agent.nodes.load import load
 from agent.prompts import (
     InjectionClassification,
     PIICategory,
-    PIIDetectionOutput,
     PIIField,
-    PIIFinding,
+    PIIWordDetectionOutput,
+    PIIWordFinding,
 )
 from agent.state import EventPayload
 from observability.redaction import (
@@ -171,7 +171,7 @@ class _RecordingLLM:
         classifier_result: object | None = None,
     ) -> None:
         self.calls: list[dict[str, Any]] = []
-        self._pii_result = PIIDetectionOutput(findings=[]) if pii_result is None else pii_result
+        self._pii_result = PIIWordDetectionOutput(findings=[]) if pii_result is None else pii_result
         self._classifier_result = (
             InjectionClassification(is_injection=False, reason="benign")
             if classifier_result is None
@@ -239,6 +239,11 @@ def _incident_payload(**overrides: Any) -> dict[str, Any]:
         "number": "INC0010052",
         "short_description": "VPN issue",
         "description": "The VPN client fails with error 807.",
+        # Eligible, so the model screening layers run (an ineligible one skips them).
+        "state": "1",
+        "category": "network",
+        "ai_enabled": True,
+        "ai_human_lock": False,
     }
     base.update(overrides)
     return base
@@ -364,12 +369,12 @@ def test_regex_only_detection_is_preserved_through_both_model_guardrails() -> No
 def test_llm_only_detection_masks_contextual_pii() -> None:
     description = "Mona cannot connect"
     llm = _RecordingLLM(
-        pii_result=PIIDetectionOutput(
+        pii_result=PIIWordDetectionOutput(
             findings=[
-                PIIFinding(
+                PIIWordFinding(
                     field=PIIField.DESCRIPTION,
-                    start=0,
-                    end=4,
+                    first=0,
+                    last=0,
                     category=PIICategory.PERSON_NAME,
                 )
             ]
@@ -391,26 +396,26 @@ def test_regex_then_pii_then_semantic_masks_both_fields() -> None:
     description = "Omar lives on Nile Street"
     regex_short = f"Mona reported {REDACTED_EMAIL}"
     findings = [
-        PIIFinding(
+        PIIWordFinding(
             field=PIIField.SHORT_DESCRIPTION,
-            start=0,
-            end=4,
+            first=0,
+            last=0,
             category=PIICategory.PERSON_NAME,
         ),
-        PIIFinding(
+        PIIWordFinding(
             field=PIIField.DESCRIPTION,
-            start=0,
-            end=4,
+            first=0,
+            last=0,
             category=PIICategory.PERSON_NAME,
         ),
-        PIIFinding(
+        PIIWordFinding(
             field=PIIField.DESCRIPTION,
-            start=description.index("Nile Street"),
-            end=description.index("Nile Street") + len("Nile Street"),
+            first=3,
+            last=4,
             category=PIICategory.POSTAL_ADDRESS,
         ),
     ]
-    llm = _RecordingLLM(pii_result=PIIDetectionOutput(findings=findings))
+    llm = _RecordingLLM(pii_result=PIIWordDetectionOutput(findings=findings))
     result = load(
         _event_state(),
         _make_deps(llm, _incident_payload(short_description=short, description=description)),
@@ -422,7 +427,7 @@ def test_regex_then_pii_then_semantic_masks_both_fields() -> None:
     ]
     assert llm.calls[0]["trace_content"] is False
     assert llm.calls[0]["max_retries"] == 0
-    assert regex_short in llm.calls[0]["prompt"]
+    assert all(f'"{word}"' in llm.calls[0]["prompt"] for word in regex_short.split())
     semantic_prompt = str(llm.calls[1]["prompt"])
     assert "Mona" not in semantic_prompt
     assert "Omar" not in semantic_prompt
@@ -455,12 +460,12 @@ def test_regex_then_pii_then_semantic_masks_both_fields() -> None:
         (ModelTimeoutError("private provider detail"), "timeout"),
         (object(), "invalid_output"),
         (
-            PIIDetectionOutput(
+            PIIWordDetectionOutput(
                 findings=[
-                    PIIFinding.model_construct(
+                    PIIWordFinding.model_construct(
                         field=PIIField.DESCRIPTION,
-                        start=0,
-                        end=999,
+                        first=0,
+                        last=999,
                         category=PIICategory.PERSON_NAME,
                     )
                 ]
@@ -572,12 +577,12 @@ def test_shadow_findings_are_reported_but_not_applied() -> None:
     raw_email = "jane.doe@example.com"
     description = f"Mona cannot sign in; contact {raw_email}"
     llm = _RecordingLLM(
-        pii_result=PIIDetectionOutput(
+        pii_result=PIIWordDetectionOutput(
             findings=[
-                PIIFinding(
+                PIIWordFinding(
                     field=PIIField.DESCRIPTION,
-                    start=0,
-                    end=4,
+                    first=0,
+                    last=0,
                     category=PIICategory.PERSON_NAME,
                 )
             ]
@@ -662,12 +667,12 @@ def test_pan_and_iban_are_layer_one_redacted_in_every_mode(mode: PIIDetectionMod
         f"to {PII_REDACTION_MARKERS['financial_account']}"
     )
     llm = _RecordingLLM(
-        pii_result=PIIDetectionOutput(
+        pii_result=PIIWordDetectionOutput(
             findings=[
-                PIIFinding(
+                PIIWordFinding(
                     field=PIIField.DESCRIPTION,
-                    start=0,
-                    end=4,
+                    first=0,
+                    last=0,
                     category=PIICategory.PERSON_NAME,
                 )
             ]
@@ -694,7 +699,7 @@ def test_pan_and_iban_are_layer_one_redacted_in_every_mode(mode: PIIDetectionMod
 
     if mode is not PIIDetectionMode.DISABLED:
         detector_prompt = str(llm.calls[0]["prompt"])
-        assert layer_one in detector_prompt
+        assert all(f'"{word}"' in detector_prompt for word in layer_one.split())
         assert llm.calls[0]["trace_content"] is False
         assert llm.calls[0]["max_retries"] == 0
 
@@ -749,3 +754,23 @@ def test_semantic_injection_wholly_redacts_protected_fields() -> None:
     assert result["input_guardrail"]["passed"] is False
     assert result["incident"]["short_description"] == REDACTED
     assert result["incident"]["description"] == REDACTED
+
+
+def test_ineligible_incident_calls_no_model_and_keeps_no_text() -> None:
+    llm = _RecordingLLM()
+    result = load(
+        _event_state(),
+        _make_deps(
+            llm,
+            _incident_payload(
+                description="Mona cannot connect",
+                ai_human_lock=True,
+            ),
+        ),
+    )
+
+    assert llm.calls == []
+    assert result["input_guardrail"]["passed"] is True
+    assert result["incident"]["description"] == REDACTED
+    assert result["incident"]["short_description"] == REDACTED
+    assert result["input_guardrail"]["checks"][1]["ran"] is False

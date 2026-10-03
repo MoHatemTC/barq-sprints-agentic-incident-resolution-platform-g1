@@ -34,6 +34,7 @@
             title: gr.getValue('short_description'),
             status: s.label,
             tone: s.tone,
+            working: s.label == 'BARQ AI is looking at it',
             updated: gr.getDisplayValue('sys_updated_on'),
             can_reply: ['6', '7', '8'].indexOf(gr.getValue('state')) < 0,
             can_confirm: gr.getValue('state') == '6',

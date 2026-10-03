@@ -28,7 +28,10 @@ from agent.prompts import (
     PIIField,
     PIIFinding,
     PIIText,
+    PIIWordDetectionOutput,
+    PIIWordFinding,
     pii_detection_prompt,
+    pii_word_spans,
 )
 from app.workers.retry_policy import RetryableError, TerminalError
 from observability.redaction import PII_REDACTION_MARKERS, REDACTION_MARKERS
@@ -175,6 +178,47 @@ def validate_pii_findings(
     return ordered
 
 
+# Punctuation that clings to a word ("Hany," or "(Mona") is left visible when masking.
+_EDGE_PUNCTUATION = ".,;:!?()[]{}\"'،؛"
+
+
+def word_findings_to_offsets(response: object, text: PIIText) -> PIIDetectionOutput:
+    """Turn the model's word ranges into character offsets over the exact field values.
+
+    A word index outside the numbered words rejects the whole response; the offsets
+    then pass the same atomic validation as before.
+    """
+
+    if not isinstance(response, PIIWordDetectionOutput):
+        raise PIIFindingValidationError("invalid PII detection response type")
+    if not isinstance(response.findings, list):
+        raise PIIFindingValidationError("invalid PII findings collection")
+    if len(response.findings) > MAX_PII_FINDINGS:
+        raise PIIFindingValidationError("too many PII findings")
+    spans = {field: pii_word_spans(_field_value(text, field)) for field in PIIField}
+    findings: list[PIIFinding] = []
+    for candidate in response.findings:
+        if not isinstance(candidate, PIIWordFinding) or not isinstance(candidate.field, PIIField):
+            raise PIIFindingValidationError("invalid PII finding type")
+        if type(candidate.first) is not int or type(candidate.last) is not int:
+            raise PIIFindingValidationError("PII word indices must be strict integers")
+        words = spans[candidate.field]
+        if not 0 <= candidate.first <= candidate.last < len(words):
+            raise PIIFindingValidationError("PII word index is out of bounds")
+        value = _field_value(text, candidate.field)
+        start, end = words[candidate.first][0], words[candidate.last][1]
+        while end - start > 1 and value[end - 1] in _EDGE_PUNCTUATION:
+            end -= 1
+        while end - start > 1 and value[start] in _EDGE_PUNCTUATION:
+            start += 1
+        findings.append(
+            PIIFinding.model_construct(
+                field=candidate.field, start=start, end=end, category=candidate.category
+            )
+        )
+    return PIIDetectionOutput.model_construct(findings=findings)
+
+
 def _mask_field(
     value: str,
     findings: Sequence[PIIFinding],
@@ -236,7 +280,7 @@ def protect_residual_pii(
             purpose="pii_detection",
             system=PII_DETECTION_SYSTEM,
             prompt=pii_detection_prompt(text),
-            schema=PIIDetectionOutput,
+            schema=PIIWordDetectionOutput,
             trace_content=False,
             max_retries=0,
         )
@@ -257,13 +301,13 @@ def protect_residual_pii(
     except Exception:  # noqa: BLE001 - never expose a sensitive unexpected error
         return _failure("unexpected")
 
-    if not isinstance(response, PIIDetectionOutput):
+    if not isinstance(response, PIIWordDetectionOutput):
         return _failure("invalid_output")
     if not isinstance(response.findings, list):
         return _failure("invalid_output")
 
     try:
-        findings = validate_pii_findings(response, text)
+        findings = validate_pii_findings(word_findings_to_offsets(response, text), text)
         protected = _mask_pii_findings(text, findings)
     except PIIFindingValidationError:
         return _failure("invalid_findings")
@@ -287,4 +331,5 @@ __all__ = [
     "PIIProtectionOutcome",
     "protect_residual_pii",
     "validate_pii_findings",
+    "word_findings_to_offsets",
 ]
