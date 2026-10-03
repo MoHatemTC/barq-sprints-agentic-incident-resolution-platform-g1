@@ -55,8 +55,10 @@
         // "Waiting for the caller" is judged on the values before this update: a stock rule
         // may already have moved the incident out of On Hold when the caller replied.
         var waiting = aiState == 'in_progress' && before == '3' && previous.getValue('hold_reason') == '1';
-        var owned = !locked && current.active == true && state != '6' && state != '7' &&
-            (aiState == 'complete' || aiState == 'failed' || waiting);
+        // Handed to engineers (review flag) means the engineers own the conversation.
+        var forEngineers = current.getValue(P + 'human_review_required') == '1';
+        var owned = !locked && !forEngineers && current.active == true && state != '6' &&
+            state != '7' && (aiState == 'complete' || aiState == 'failed' || waiting);
         if (owned) {
             current.setValue(P + 'processing_state', 'pending');
             current.setValue(P + 'failure_reason', '');

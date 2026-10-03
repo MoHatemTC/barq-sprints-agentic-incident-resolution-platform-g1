@@ -206,6 +206,7 @@ def test_a_fix_the_caller_cannot_do_is_left_for_an_engineer() -> None:
     assert output["fulfilment"] == [
         "assign_incident:applied",
         "update_caller:applied",
+        "flag_human_review:applied",
         "resolve_incident:skipped_needs_engineer",
     ]
     assert backend.records[VPN["sys_id"]]["state"] == "2"

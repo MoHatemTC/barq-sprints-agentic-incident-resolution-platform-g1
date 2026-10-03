@@ -812,6 +812,19 @@ def fulfil_applied_fix(
                 )
             )
             steps.append(f"update_caller:{result}")
+            # From here the engineers own it: the review flag stops the caller's next
+            # message from returning the incident to the agent (conversation rule).
+            run_blocking(
+                deps.tools.invoke(
+                    "write_ai_fields",
+                    context=context,
+                    arguments={
+                        "sys_id": incident.sys_id,
+                        "payload": IncidentUpdatePayload(ai_human_review_required=True),
+                    },
+                )
+            )
+            steps.append("flag_human_review:applied")
         except Exception as exc:  # noqa: BLE001 - the fix is with the engineer already
             steps.append(f"update_caller:failed:{type(exc).__name__}")
     if level == "autonomous" and not caller_can_confirm:
