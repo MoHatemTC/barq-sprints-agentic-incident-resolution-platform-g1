@@ -53,6 +53,8 @@ EXPECTED_TABLES = {
     "chat_conversations",
     "chat_turns",
     "chat_messages",
+    # Learning from outcomes (0009).
+    "article_feedback",
 }
 
 EXPECTED_COLUMNS = {
@@ -198,6 +200,14 @@ EXPECTED_COLUMNS = {
         "citations",
         "created_at",
     },
+    "article_feedback": {
+        "id",
+        "article_number",
+        "incident_sys_id",
+        "outcome",
+        "event_id",
+        "created_at",
+    },
 }
 
 NULLABLE_COLUMNS = {
@@ -239,6 +249,7 @@ NULLABLE_COLUMNS = {
     "chat_conversations": {"history_summary"},
     "chat_turns": {"route", "error_category", "usage", "completed_at"},
     "chat_messages": {"citations"},
+    "article_feedback": set(),
 }
 
 
@@ -403,6 +414,8 @@ def test_server_defaults_are_complete_and_explicit() -> None:
         ("chat_messages", "id"): "gen_random_uuid()",
         ("chat_messages", "citations"): "'[]'::jsonb",
         ("chat_messages", "created_at"): "now()",
+        ("article_feedback", "id"): "gen_random_uuid()",
+        ("article_feedback", "created_at"): "now()",
     }
     actual_defaults = {
         (table.name, column.name): _server_default(column)
@@ -481,6 +494,7 @@ def test_all_timestamp_columns_are_timezone_aware() -> None:
         ("chat_turns", "created_at"),
         ("chat_turns", "completed_at"),
         ("chat_messages", "created_at"),
+        ("article_feedback", "created_at"),
     }
     timestamps = {
         (table.name, column.name): column

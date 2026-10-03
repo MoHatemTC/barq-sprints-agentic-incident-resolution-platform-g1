@@ -175,3 +175,53 @@ def test_the_work_note_explains_a_reassessment(monkeypatch: pytest.MonkeyPatch) 
     output = act(state, make_deps())["output"]
     assert output["work_note"].startswith("Reassessed by BARQ AI Agent")
     assert "Take over from AI" in output["work_note"]
+
+
+def test_a_question_to_the_caller_keeps_the_reassessment_note(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from agent.conversation import ClarifyingQuestionOutput
+
+    state = reasoned_state(incident=snapshot(vpn()))
+    state["risk"] = {
+        "level": "low",
+        "reasons": ["Reassessed by BARQ AI Agent: one person"],
+        "approval_required": False,
+        "service_tier": 2,
+        "reassessed": True,
+    }
+    state["confidence"] = {**state["confidence"], "passed": False}
+    deps = make_deps(agent_autonomy_level="autonomous")
+    deps.llm.answers["clarifying_question"] = ClarifyingQuestionOutput(
+        useful=True, question="Which error do you see?"
+    )
+    output = act(state, deps)["output"]
+    assert output["outcome"] == "asked_caller"
+    assert output["work_note"].startswith("Reassessed by BARQ AI Agent")
+
+
+def test_a_repeat_with_no_fix_goes_to_an_engineer_not_a_question(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from agent.conversation import ClarifyingQuestionOutput
+
+    seen: list[Any] = []
+    monkeypatch.setattr(
+        sys.modules["agent.nodes.act"],
+        "_request_human_decision",
+        lambda payload: seen.append(payload) or {"decision": "rejected", "decided_by": "t"},
+    )
+    state = reasoned_state(incident=snapshot(vpn()))
+    state["risk"] = {
+        "level": "elevated",
+        "reasons": ["repeat from the same caller (INC0009900)"],
+        "approval_required": True,
+        "service_tier": 2,
+        "reassessed": False,
+    }
+    state["confidence"] = {**state["confidence"], "passed": False}
+    deps = make_deps(agent_autonomy_level="autonomous")
+    deps.llm.answers["clarifying_question"] = ClarifyingQuestionOutput(useful=True, question="?")
+    output = act(state, deps)["output"]
+    assert output["outcome"] != "asked_caller"
+    assert len(seen) == 1

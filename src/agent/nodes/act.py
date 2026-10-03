@@ -37,6 +37,7 @@ from agent.state import (
     RiskLevel,
 )
 from agent.tools import ToolCallContext
+from app.feedback import weak_articles
 from app.models.execution_log import (
     ExecutionAction,
     ExecutionLogCreatePayload,
@@ -443,7 +444,7 @@ def act(state: AgentState, deps: AgentDependencies) -> dict[str, Any]:
 
     asked = _ask_caller_instead(state, deps, outcome, output)
     if asked is not None:
-        return _perform_write(state, deps, asked)
+        return _perform_write(state, deps, _explain_reassessment(state, asked))
 
     if outcome in INTERRUPT_OUTCOMES or output.approval_required:
         payload = interrupt_payload(state, output, outcome)
@@ -493,6 +494,11 @@ def _ask_caller_instead(
     the incident parks for an engineer exactly as before.
     """
     if outcome not in ASKABLE_OUTCOMES or output.approval_required:
+        return None
+    # Raised risk (repeat, Tier 1, MFA, outage, attack) always goes to a person, even
+    # when there is no fix to approve yet.
+    risk = state.get("risk")
+    if risk is None or RiskAssessment.model_validate(risk).level is not RiskLevel.LOW:
         return None
     if deps.settings.agent_autonomy_level != "autonomous":
         return None
@@ -749,7 +755,10 @@ def fulfil_applied_fix(
     caller_can_confirm = bool(caller) and caller not in deps.settings.agent_service_account_ids
     needs_engineer = False
     reply_limit = incident.agent_replies >= MAX_AGENT_REPLIES
-    if level == "autonomous" and caller_can_confirm and not reply_limit:
+    # Learning from outcomes: an article that keeps getting reopened no longer lets the
+    # agent resolve on its own; the cited fix stays for an engineer.
+    weak = weak_articles(deps.article_trust, resolution)
+    if level == "autonomous" and caller_can_confirm and not reply_limit and not weak:
         # Resolve only when the caller can carry out the fix alone; a fix that needs IT
         # staff stays In Progress with the cited steps for an engineer.
         message = compose_caller_message(deps, incident.short_description, resolution)
@@ -783,6 +792,8 @@ def fulfil_applied_fix(
         steps.append("resolve_incident:skipped_no_caller")
     elif level == "autonomous" and reply_limit:
         steps.append("resolve_incident:skipped_reply_limit")
+    elif level == "autonomous" and weak:
+        steps.append("resolve_incident:skipped_weak_article:" + ",".join(weak))
     elif needs_engineer:
         steps.append("resolve_incident:skipped_needs_engineer")
     return steps

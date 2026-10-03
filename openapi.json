@@ -1854,6 +1854,60 @@
           }
         }
       }
+    },
+    "/api/v1/feedback/articles": {
+      "get": {
+        "tags": [
+          "Feedback"
+        ],
+        "summary": "Outcome score per knowledge article, weakest first",
+        "operationId": "article_outcomes_api_v1_feedback_articles_get",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ArticleOutcome"
+                  },
+                  "title": "Response Article Outcomes Api V1 Feedback Articles Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2080,6 +2134,39 @@
         ],
         "title": "ApprovalResponse",
         "description": "Schema representing an approval record from the 'approvals' table."
+      },
+      "ArticleOutcome": {
+        "properties": {
+          "article_number": {
+            "type": "string",
+            "title": "Article Number"
+          },
+          "confirmed": {
+            "type": "integer",
+            "title": "Confirmed"
+          },
+          "reopened": {
+            "type": "integer",
+            "title": "Reopened"
+          },
+          "score": {
+            "type": "integer",
+            "title": "Score"
+          },
+          "weak": {
+            "type": "boolean",
+            "title": "Weak"
+          }
+        },
+        "type": "object",
+        "required": [
+          "article_number",
+          "confirmed",
+          "reopened",
+          "score",
+          "weak"
+        ],
+        "title": "ArticleOutcome"
       },
       "AssistHistory": {
         "properties": {

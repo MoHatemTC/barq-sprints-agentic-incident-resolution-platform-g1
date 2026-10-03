@@ -20,6 +20,7 @@ from agent.servicenow import IncidentGateway, build_servicenow_backend
 from agent.tools import RefusalExplainer, ToolRegistry, build_servicenow_tool_registry
 from agent.tools.registry import PostgreSQLApprovalChecker
 from app.core.config import get_settings
+from app.feedback import ArticleFeedbackStore
 from app.workers.sync_engine import (
     build_sync_database_url,
     create_sync_engine,
@@ -41,6 +42,8 @@ class AgentDependencies:
     tracer: Tracer
     clock: Callable[[], datetime] = field(default=utc_now)
     audit: GraphAuditStore = field(default_factory=MemoryGraphAuditStore)
+    #: Net outcome score per knowledge article (app.feedback); None = no record kept.
+    article_trust: Callable[[list[str]], dict[str, int]] | None = None
 
 
 def build_production_tool_registry(
@@ -71,6 +74,9 @@ def get_agent_dependencies() -> AgentDependencies:
         tools=build_production_tool_registry(gateway, llm),
         tracer=tracer,
         audit=build_audit_store(settings.agent_checkpointer_backend),
+        article_trust=ArticleFeedbackStore(
+            create_sync_session_factory(create_sync_engine(build_sync_database_url(get_settings())))
+        ).scores,
     )
 
 

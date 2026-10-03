@@ -233,15 +233,23 @@ def scenario_engineer_takes_over_then_hands_back(sn, be, admin, caller, engineer
 
 
 def scenario_caller_reopens_ai_resolution(sn, be, admin, caller, engineer) -> dict[str, Any]:
-    """U8/D: a reply on an AI-resolved incident reopens it for an engineer, with the AI fix."""
+    """U8/D: a reply on an AI-resolved incident reopens it for an engineer, with the AI fix.
+
+    A fresh caller and a topic no other open test incident shares, so neither the
+    repeat rule nor the outage rule applies."""
+    from verify_triage import fresh_callers
+
+    name = fresh_callers(sn, 1)[0]
+    caller = sn.query("sys_user", f"user_name={name}", "sys_id,user_name")[0]
     inc = sn.create_incident(
         incident_fields(
             caller["sys_id"],
-            short="VPN invalid credentials after password reset",
+            short="Mapped shared drive missing after sign-in",
             description=(
-                "Since this morning the VPN client says invalid credentials although I can "
-                "reach the internet. I reset my password yesterday."
+                "After I sign in this morning my mapped S: drive is missing from File "
+                "Explorer. Other drives are fine and I can browse the internet."
             ),
+            category="software",
         )
     )
     wait_for(settled_after(be, inc["sys_id"], 1), 300)

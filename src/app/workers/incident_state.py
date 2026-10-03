@@ -15,6 +15,7 @@ from app.clients.servicenow_client import ServiceNowClient
 from app.core.config import Settings
 from app.db.models import Approval, Execution, ExecutionNodeState
 from app.exceptions.app_errors import ConflictError
+from app.feedback import ArticleFeedbackStore, cited_articles
 from app.models.incident import AIProcessingState, IncidentUpdatePayload
 from observability.redaction import redact_text
 
@@ -245,6 +246,64 @@ def write_final_failure_best_effort(
             incident_sys_id=incident_sys_id(payload),
             error=str(write_exc),
         )
+
+
+def record_outcome_best_effort(settings: Settings, payload: dict[str, Any], event_type: str) -> int:
+    """Credit or penalise the articles behind an agent resolution (app.feedback).
+
+    ``incident.reopened`` counts against them when ServiceNow's conversation rule marked
+    the incident for review (it does so only for a reopened AI resolution);
+    ``incident.closed`` counts for them when the agent's fix completed without review.
+    Never raises: learning must not break event handling.
+    """
+    if event_type not in ("incident.reopened", "incident.closed"):
+        return 0
+    sys_id = incident_sys_id(payload)
+    if sys_id is None:
+        return 0
+    try:
+
+        async def read() -> Any:
+            async with ServiceNowClient(settings) as client:
+                return await client.get_incident(sys_id)
+
+        incident = asyncio.run(read())
+        articles = cited_articles(incident.ai_resolution)
+        if not articles:
+            return 0
+        if event_type == "incident.reopened":
+            if not incident.ai_human_review_required:
+                return 0
+            outcome = "reopened"
+        else:
+            if (
+                incident.ai_processing_state is not AIProcessingState.COMPLETE
+                or incident.ai_human_review_required
+            ):
+                return 0
+            outcome = "confirmed"
+        from app.workers.sync_engine import (
+            build_sync_database_url,
+            create_sync_engine,
+            create_sync_session_factory,
+        )
+
+        engine = create_sync_engine(build_sync_database_url(settings))
+        try:
+            store = ArticleFeedbackStore(create_sync_session_factory(engine))
+            recorded = store.record(
+                incident_sys_id=sys_id,
+                articles=articles,
+                outcome=outcome,
+                event_id=str(payload.get("event_id") or ""),
+            )
+        finally:
+            engine.dispose()
+        logger.info("article_feedback_recorded", outcome=outcome, articles=articles)
+        return recorded
+    except Exception as exc:  # noqa: BLE001 - learning never breaks event handling
+        logger.warning("article_feedback_failed", error_type=type(exc).__name__)
+        return 0
 
 
 def reset_failed_incident_for_replay(settings: Settings, payload: dict[str, Any]) -> None:

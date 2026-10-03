@@ -63,6 +63,7 @@ from app.workers.cluster_runtime import (
 from app.workers.db import WorkerRepo, build_worker_repo
 from app.workers.incident_state import (
     prepare_servicenow_retry_sync,
+    record_outcome_best_effort,
     write_final_failure_best_effort,
 )
 from app.workers.producer import CORRELATION_HEADER
@@ -304,6 +305,9 @@ def _run_incident(
         # A person acted (engineer replied, ticket reopened or closed). The agent
         # records it for learning and the audit trail; it never runs the graph or
         # writes to ServiceNow for these.
+        active_settings = settings or getattr(task, "settings", None)
+        if graph_backend == "langgraph" and active_settings is not None:
+            record_outcome_best_effort(active_settings, payload, event_type)
         repo.mark_succeeded(execution_uuid, termination_cause=f"observed:{event_type}")
         logger.info("incident_event_observed", execution_id=execution_id, event_type=event_type)
         return {"status": "observed", "execution_id": execution_id, "event_type": event_type}

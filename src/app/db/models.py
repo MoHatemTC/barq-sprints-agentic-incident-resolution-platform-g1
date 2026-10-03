@@ -794,3 +794,25 @@ __all__ = [
     "SemanticCluster",
     "SemanticClusterMember",
 ]
+
+
+class ArticleFeedback(Base):
+    """What happened after the agent resolved an incident citing this article."""
+
+    __tablename__ = "article_feedback"
+    __table_args__ = (
+        CheckConstraint("outcome IN ('confirmed', 'reopened')", name="outcome"),
+        UniqueConstraint("event_id", "article_number", name="uq_article_feedback_event_article"),
+        Index("ix_article_feedback_article", "article_number"),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    article_number: Mapped[str] = mapped_column(String(32), nullable=False)
+    incident_sys_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    outcome: Mapped[str] = mapped_column(String(16), nullable=False)
+    event_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
