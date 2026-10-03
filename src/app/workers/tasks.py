@@ -48,7 +48,7 @@ from agent.semantic_cache import (
 from app.core.config import Settings, get_settings
 from app.core.correlation import clear_correlation_id, get_correlation_id, set_correlation_id
 from app.db.redis.keys import INCIDENT_DLQ_QUEUE
-from app.events import is_observe_only
+from app.events import is_observe_only, may_use_semantic_cache
 from app.models.semantic_cluster import AdmissionMode, AdmissionResult, ClusterStatus
 from app.workers.celery_app import celery_app
 from app.workers.cluster_runtime import (
@@ -323,7 +323,17 @@ def _run_incident(
             else True
         )
 
-        if enable_cache:
+        if enable_cache and not may_use_semantic_cache(event_type):
+            logger.info(
+                "semantic_cache_skipped_for_conversation_event",
+                execution_id=execution_id,
+                event_type=event_type,
+            )
+            admission = AdmissionResult(
+                mode=AdmissionMode.INDEPENDENT,
+                reason="conversation_event_not_cacheable",
+            )
+        elif enable_cache:
             redis_client = getattr(task, "dlq_redis", None)
             cache = semantic_cache or get_semantic_cache(repo=repo, redis_client=redis_client)
             try:

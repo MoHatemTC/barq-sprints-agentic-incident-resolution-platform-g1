@@ -421,3 +421,38 @@ def test_observe_only_events_are_recorded_without_running_the_agent(event_type: 
     assert result["status"] == "observed"
     assert repo.get_status(EXECUTION_ID) == "succeeded"
     assert repo.get_termination_cause(EXECUTION_ID) == f"observed:{event_type}"
+
+
+@pytest.mark.parametrize(
+    "event_type,admitted",
+    [
+        ("incident.created", True),
+        ("incident.updated", True),
+        ("", True),
+        ("incident.caller_replied", False),
+        ("incident.caller_updated", False),
+        ("incident.handed_back", False),
+    ],
+)
+def test_conversation_runs_never_share_or_reuse_a_cached_fix(
+    event_type: str, admitted: bool
+) -> None:
+    """The cache compares ticket text only. A fix that rests on a caller's answer or an
+    engineer's instruction must not reach a ticket that merely reads alike (live:
+    INC0010339 got INC0010338's Outlook fix for a vague VPN ticket)."""
+    repo = make_repo()
+    cache = MagicMock()
+    cache.admit.return_value = tasks_module.AdmissionResult(
+        mode=tasks_module.AdmissionMode.INDEPENDENT, reason="no_match"
+    )
+    with mock.patch.object(tasks_module, "invoke_graph", return_value={"outcome": "suggested"}):
+        result = _run_incident(
+            FakeTask(),
+            {**PAYLOAD_OK, "event_type": event_type},
+            str(EXECUTION_ID),
+            CFG,
+            repo,
+            semantic_cache=cache,
+        )
+    assert result["status"] == "succeeded"
+    assert cache.admit.called is admitted

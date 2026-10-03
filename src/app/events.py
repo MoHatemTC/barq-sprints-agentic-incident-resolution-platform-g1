@@ -28,6 +28,11 @@ OBSERVE_EVENT_TYPES: frozenset[str] = frozenset(
 
 EVENT_TYPES: frozenset[str] = ACT_EVENT_TYPES | OBSERVE_EVENT_TYPES
 
+#: Events whose run may share or reuse a fix through the semantic cache. The cache
+#: compares incident text only; after a caller's answer or an engineer's hand-back the
+#: fix also rests on the conversation, so a ticket that merely reads alike must not get it.
+CACHEABLE_EVENT_TYPES: frozenset[str] = V1_EVENT_TYPES
+
 CONTRACT_EVENT_TYPES: dict[str, frozenset[str]] = {"v1": V1_EVENT_TYPES, "v2": EVENT_TYPES}
 
 
@@ -35,11 +40,18 @@ def is_observe_only(event_type: str | None) -> bool:
     return event_type in OBSERVE_EVENT_TYPES
 
 
+def may_use_semantic_cache(event_type: str | None) -> bool:
+    """Original v1 events (and payloads with no type, which are v1) may use the cache."""
+    return not event_type or event_type in CACHEABLE_EVENT_TYPES
+
+
 __all__ = [
     "ACT_EVENT_TYPES",
+    "CACHEABLE_EVENT_TYPES",
     "CONTRACT_EVENT_TYPES",
     "EVENT_TYPES",
     "OBSERVE_EVENT_TYPES",
     "V1_EVENT_TYPES",
     "is_observe_only",
+    "may_use_semantic_cache",
 ]
