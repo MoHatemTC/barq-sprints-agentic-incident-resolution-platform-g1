@@ -1,114 +1,119 @@
 # BARQ agentic platform — the plan
 
-Written 2026-10-03 07:15 Cairo. This is the single plan to execute. The design document
-(`barq_agentic_platform_design.md`) stays as the reference for behaviour and scenarios; this
-file says what we build, in what order, and when each step is done.
+Written 2026-10-03 07:30 Cairo. This is the single plan to execute. Behaviour, screens and
+scenarios are specified in `barq_agentic_platform_design.md` (section numbers below point there).
 
-## Goal
+## What Ali asked for, and where each item is built
 
-An agent that works incidents in ServiceNow by itself and decides what to do — resolve, ask the
-caller, hand over, escalate, open a parent incident for an outage — while engineers can see
-everything, step in at any time and hand back. The caller always sees who is talking.
+| Ali's requirement | Step |
+|---|---|
+| Fully agentic: the agent works the incident itself; a human only where we choose | 1, 3, 4 |
+| Very intelligent: understands the situation, talks naturally, acts on what it sees, judges whether a "critical" ticket really is critical — human kept | 4, 10 |
+| Opens, closes and creates tickets (parent incident for an outage, split, link, close) | 4, 5 |
+| Caller loop: AI resolves → caller confirms or stays silent → resolved by AI; caller reopens → engineer | 5 |
+| Engineers steer: take over, hand back, edit, approve; the caller always sees who is talking | 3 |
+| UI usable immediately (not localhost), inside ServiceNow, engineers see everyone's and the agent's work, approvals there | 2, 6 |
+| Incident form redesigned (today it looks bad) | 2 |
+| Chatbot from #213 continued, Streamlit removed, memory shared with the agent | 7 |
+| New knowledge, and who can add it | 8 |
+| The agent actually fixes things, like an engineer would | 9 |
+| ServiceNow cleaned: nothing generic or unneeded | 2, 11 |
+| Every scenario covered; everything reversible; tested without pushing to `main`; documented | every step, 11 |
 
 ## Where we are (checked 2026-10-03)
 
-- **One PR: #213** (`feat/admin-chatbot`): Kerolos's chatbot + all our work. Draft; Ali approves
-  it at the end. #214 and #215 are closed into it. All CI checks pass, including the SDK audit
-  (the unfixable `braces` advisory is accepted until 2026-10-31, nothing else).
-- **Built and live-tested on the shared system:** the agent reads the incident, classifies,
-  finds knowledge, writes a cited fix, checks it, assigns the group, sets In Progress, writes to
-  the caller, and resolves as *BARQ AI Agent*. P1 and risky incidents park for an engineer, who
-  approves, rejects or takes over from buttons on the incident form. Human Lock blocks the agent
-  (ACLs, proven live). Kill switch and autonomy level exist. Backups and a rollback script exist.
-- **Live result:** 5 of 6 core scenarios pass. The failing one (P1 reject, INC0010252) was a NUL
-  character bug, fixed in code but not yet deployed.
-- **Deployed on the EC2:** an older commit (`493836c`). The newer fixes are not on it yet.
-- **Unfinished:** the failure hook (code pushed, tests missing).
+- **One PR: #213** (`feat/admin-chatbot`) = Kerolos's chatbot + all our work. Draft; Ali approves
+  it at the end. All CI checks pass, including the SDK audit.
+- **Built and live-tested:** the agent finds the fix, assigns the group, sets In Progress, writes
+  to the caller and resolves as *BARQ AI Agent*. Risky incidents wait for an engineer, who uses
+  Approve / Reject / Take over on the incident form (through the `BarqBackend` bridge). Human
+  Lock blocks the agent. Autonomy level and kill switch. Backups and rollback script.
+- **Live result:** 5 of 6 core scenarios pass; the sixth failed on a bug fixed in code, not yet
+  deployed. The EC2 still runs an older commit (`493836c`).
+- **Unfinished:** failure-hook tests.
 
-## What is missing, and why
+## How every step is done
 
-1. **The agent cannot decide.** Every run follows the same steps and ends in one fixed outcome.
-   It cannot choose to ask the caller, hand over, or open a parent incident.
-2. **It cannot see around the incident.** It never looks at similar open incidents or the
-   caller's other tickets, so it cannot spot an outage or a repeat problem.
-3. **It only hears new incidents.** ServiceNow does not tell it when the caller replies, reopens,
-   or an engineer comments, so it cannot hold a conversation or react to a human.
-4. **Engineers cannot hand back,** and the form does not show clearly who is in control.
+Each step is finished before the next starts: unit tests and the full gate (ruff, format,
+mypy, pytest), CI green on #213, hand deploy to the shared EC2, live proof on `dev407364` with
+evidence in `docs/evidence/`. ServiceNow changes go in the tracked update set with previous
+values in the manifest; nothing is deleted. The order puts what engineers see early, so
+whatever point we reach is a working product.
 
-## How we build it (no rewrite)
-
-The 11-step pipeline stays: its safety gates are tested and proven live. We add two steps and a
-few tools inside it, so the model decides *what* to do and the existing code decides *whether it
-is allowed*:
-
-- **investigate** (new step, read-only): similar open incidents and the caller's recent
-  incidents, recorded as evidence.
-- **decide** (inside `act`): the model picks one action — `resolve`, `ask_caller`, `hand_over`,
-  `escalate`, `open_parent_incident` — with a reason. Code rules check it against risk, autonomy
-  level, Human Lock, caller presence and evidence; anything not allowed becomes `escalate`.
+**Technical approach (no rewrite).** The 11-step pipeline and its proven safety gates stay. The
+agent gains an *investigate* step (read-only look-around) and a *decide* step (the model picks an
+action; code checks it is allowed). The ServiceNow screens are scoped UI pages and form views
+that call the backend server-side through `BarqBackend`, because the EC2 is plain HTTP.
 
 ## The steps
 
-Each step ends deployed to the shared EC2, proven live on `dev407364`, committed to #213, with
-evidence in `docs/evidence/`. Gate before every push: ruff, format, mypy, pytest.
+### 1. Finish and prove the core
+Failure-hook tests (+ PostgreSQL test) → deploy #213 head → 6 core scenarios + caller-message
+scenario live → rollback rehearsed once.
 
-### Step 1 — Finish and prove what exists
-- Failure hook tests (released when nothing can be approved; kept when a real pause exists;
-  kept when the check fails) + a PostgreSQL test of the query.
-- Deploy #213 head to the EC2; run the 6 core scenarios + the caller-message scenario.
-- Rehearse the rollback once.
+### 2. The incident form and ServiceNow cleaned up (design 11.1–11.3, 12)
+- New *BARQ AI* form view: the **AI card** at the top (status chip, who is in control,
+  confidence, the fix as steps with article links, why, buttons for this user), the standard
+  fields below, an **AI timeline** tab, an **AI diagnostics** tab (admins) holding the technical
+  fields that clutter today's form.
+- Incident list: **AI status** column with colours; filters *Needs my approval*, *Resolved by AI —
+  waiting*, *Reopened from AI*, *AI failed*.
+- One **BARQ AI** menu replacing the three scattered entries; old buttons and menus deactivated.
 
-**Done when:** all 7 live scenarios pass and the rollback has worked once.
+### 3. The agent hears ServiceNow; engineers in control (design 6.4)
+- New events through the existing webhook: caller comment, engineer comment, reopen, close.
+- Control rules: engineer comment → agent stands down; **Hand back to BARQ AI** with an
+  instruction → agent continues with the history and says so to the caller; **Undo**; drafts for
+  an engineer stay private; caller asks for a person → hand over.
+- Scenarios S1–S16.
 
-### Step 2 — The agent hears ServiceNow
-- ServiceNow business rule on incident updates sends three new events through the existing
-  webhook: `incident.commented` (new customer-visible comment, with who wrote it: caller,
-  engineer, agent), `incident.reopened`, `incident.closed`.
-- Worker handles them without re-running the whole pipeline:
-  - caller comment while the agent is waiting for the caller → resume the agent with the reply;
-  - engineer comment while the agent is in control → agent stands down (`handed_over`), work note;
-  - reopen of an AI resolution → hand over to the group with the agent's summary;
-  - close → record the AI resolution as confirmed.
-- `handed_over` processing state; eligibility refuses it.
+### 4. The agent investigates and decides (design 6.3)
+- *investigate*: similar open incidents, the caller's recent incidents.
+- *decide*: resolve · ask the caller · hand over · escalate · **create** a parent incident and
+  link the similar ones · **split** a ticket with two problems · **close** a duplicate.
+- P1 reassessment under the hard rules (no security / outage / Tier-1 / multi-caller signal, a
+  second model check agrees, always noted, Undo available); outages raised.
+- Scenarios R1–R9, F1–F5, C1–C6.
 
-**Done when:** live — caller reply reaches the agent; engineer comment stops it; reopen hands over.
-Scenarios S2, S5, S6, S12, S15, D2–D4.
+### 5. Caller loop (design 6.2, D)
+Clarifying question → On Hold – Awaiting Caller → reply resumes; confirmation window job
+(30 min for tests): silence or "it works" → confirmed and closed as resolved by AI; reopen →
+engineer with the agent's summary; article credited or penalised. Scenarios D1–D8, L1.
 
-### Step 3 — The agent investigates and decides
-- `investigate` step + two read tools: `find_similar_open_incidents`, `caller_recent_incidents`.
-- `decide` in `act` with the five actions and the code rules.
-- New tools: `ask_caller` (comment + On Hold – Awaiting Caller), `hand_over` (assign group +
-  hand-over note + `handed_over`), `open_parent_incident` (create a parent incident and link the
-  similar ones as children; needs a create ACL for the agent role — one update-set change).
-- P1 reassessment with the hard rules of design 6.3: lowered only with no security / outage /
-  Tier-1 / multi-caller signal and a second model check agreeing; always noted on the incident.
+### 6. BARQ AI Console inside ServiceNow (design 11.4)
+One page at the instance URL: **Live** (what the agent is doing now), **Needs me** (approvals and
+reopened incidents for my groups), **Results** (resolved, confirmed, reopened, escalated, failed,
+time to resolve, best and worst articles), **Failed & sync** (retry; ServiceNow vs backend
+mismatch report), **Settings** (autonomy, window, category → group, kill switch, bridge health).
+Scenarios E, G7, I1–I4.
 
-**Done when:** live — vague ticket gets one question and continues on the reply; fake P1 is
-resolved with a reassessment note; five similar tickets produce one parent incident with the
-others linked; "I want a person" hands over. Scenarios R1–R9, S7, F1.
+### 7. Chat with memory inside the console (design 10, H)
+#213's chat graph behind the bridge; each engineer identified by their ServiceNow login; answers
+from knowledge, and about any incident from the agent's timeline; proposes actions (work note,
+assign, hand back) that run only on Confirm, through the same tools and audit; shows who said
+what; shared memory with the agent (incident, engineer, team); Streamlit removed.
+Scenarios H1–H8.
 
-### Step 4 — Engineers in control, visibly
-- *Hand back to BARQ AI* action with an optional instruction; agent resumes with history and the
-  instruction and tells the caller it is continuing on the engineer's behalf.
-- Incident form: a *BARQ AI* section showing who is in control, what the agent did and why,
-  confidence, and the actions. One *BARQ AI* menu: Needs me, Resolved by AI, Handed over, Failed.
+### 8. Knowledge lifecycle (design 9)
+Engineer's fix → knowledge proposal → knowledge approver publishes → indexed; articles written in
+ServiceNow indexed on publish, removed on retire; only the approver role publishes.
+Scenarios B1–B7.
 
-**Done when:** live — take over, hand back with an instruction, undo, all visible on the form.
-Scenarios S1, S3, S4, S8–S11, S13, S14, S16.
+### 9. The agent fixes things (design 7A, fulfil through ServiceNow)
+Runbook catalog; the agent orders a catalog item, raises a standard change from a pre-approved
+template, creates an incident task, or unlocks the caller's account, links it, and resolves when
+it completes. Scenarios K1–K4, K6–K10.
 
-### Step 5 — Finish
-Docs (design status, operations notes, evidence), PR description, #213 marked ready for Ali.
-Always done, even if an earlier step is cut short.
+### 10. The agent sees attachments
+Screenshots and log files on the incident read through the model's vision input, redacted and
+screened, quoted as evidence.
 
-## Not in this round
-
-Engineer chat inside ServiceNow and the console page (Streamlit removal), knowledge scoring from
-confirmations and reopens, Problem records, recent changes / CI lookups, screenshots, automatic
-remediation, instance clean-up. The design document keeps them for the next round.
+### 11. Clean-up, docs, ready for approval (design 12, 14, 15)
+Test data archived per Ali's decisions (never deleted), sync report clean, docs to the full app
+(operations, screens, scenarios, evidence), rollback documented, #213 ready for Ali.
 
 ## Rules that do not change
 
 Shared systems only (`dev407364` + shared EC2). The agent never uses an admin account; admin is
-only for ServiceNow setup and labelled test incidents. Nothing is deleted on the instance. Every
-ServiceNow change goes in the tracked update set with its previous value in the manifest. No
+only for ServiceNow setup and labelled test incidents. Nothing deleted on the instance. No
 force-push. No attribution. No test or check is skipped.
