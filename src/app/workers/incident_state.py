@@ -116,9 +116,7 @@ async def mark_incident_failed(
         return True
 
 
-def _no_decidable_pause(
-    lookup: PausedRunLookup | None, sys_id: str, execution_id: str
-) -> bool:
+def _no_decidable_pause(lookup: PausedRunLookup | None, sys_id: str, execution_id: str) -> bool:
     """True only when the lookup positively says nothing can be decided."""
     if lookup is None:
         return False
