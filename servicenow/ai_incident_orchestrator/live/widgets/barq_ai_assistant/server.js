@@ -37,6 +37,7 @@
             updated: gr.getDisplayValue('sys_updated_on'),
             can_reply: ['6', '7', '8'].indexOf(gr.getValue('state')) < 0,
             can_confirm: gr.getValue('state') == '6',
+            closed: ['7', '8'].indexOf(gr.getValue('state')) >= 0,
             can_cancel: ['6', '7', '8'].indexOf(gr.getValue('state')) < 0,
             // Only while BARQ AI Agent still has it (not already with an engineer).
             can_ask_person: ['6', '7', '8'].indexOf(gr.getValue('state')) < 0 &&

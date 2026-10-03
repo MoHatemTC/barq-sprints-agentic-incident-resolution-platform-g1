@@ -38,7 +38,16 @@ try {
         var failure = val(P + 'failure_reason');
 
         var status, tone, owner, hint = '';
-        if (!enabled) {
+        var showFix = true;
+        // The incident's own end state comes first: nobody works on it any more.
+        if (state == '8') {
+            status = 'Cancelled'; tone = 'muted'; owner = 'Nobody (cancelled)'; showFix = false;
+        } else if (state == '7' &amp;&amp; !resolvedByAgent) {
+            status = 'Closed'; tone = 'muted'; owner = 'Closed';
+        } else if (state == '6' &amp;&amp; !resolvedByAgent) {
+            status = 'Resolved by an engineer'; tone = 'good'; owner = 'Caller';
+            hint = 'If the caller replies or reopens it, it comes back to the engineers.';
+        } else if (!enabled) {
             status = 'AI is off for this incident'; tone = 'muted'; owner = 'Engineers';
             hint = 'Tick AI Enabled and save to let BARQ AI Agent work on it.';
         } else if (locked) {
@@ -89,7 +98,7 @@ try {
         if (hint) html.push('&lt;div class="barq-hint"&gt;' + esc(hint) + '&lt;/div&gt;');
         if (aiState == 'failed' &amp;&amp; failure) html.push('&lt;div class="barq-failure"&gt;' + esc(failure) + '&lt;/div&gt;');
 
-        if (fix) {
+        if (fix &amp;&amp; showFix) {
             var lines = fix.split(/\r?\n/), steps = [], sources = [];
             for (var i = 0; i &lt; lines.length; i++) {
                 var line = lines[i].replace(/^\s+|\s+$/g, '');

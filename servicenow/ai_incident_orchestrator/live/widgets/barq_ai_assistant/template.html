@@ -1,11 +1,19 @@
 <div class="barq">
   <div class="barq-side">
+    <button class="barq-btn barq-new" ng-click="c.startNew()">+ New ticket</button>
     <div class="barq-side-head">
       <span>My tickets</span>
       <button class="barq-link" ng-click="c.refresh()" aria-label="Refresh">Refresh</button>
     </div>
-    <div class="barq-empty" ng-if="!c.data.tickets.length">No tickets yet. Describe a problem in the chat and BARQ AI can open one for you.</div>
-    <button class="barq-ticket" ng-repeat="t in c.data.tickets" ng-class="{'is-open': c.ticket.sys_id == t.sys_id}" ng-click="c.open(t)">
+    <div class="barq-empty" ng-if="!c.openTickets().length">No open tickets. Press New ticket, or describe a problem in the chat.</div>
+    <button class="barq-ticket" ng-repeat="t in c.openTickets()" ng-class="{'is-open': c.ticket.sys_id == t.sys_id}" ng-click="c.open(t)">
+      <span class="barq-ticket-title">{{t.title}}</span>
+      <span class="barq-ticket-meta">{{t.number}} · <span class="barq-pill tone-{{t.tone}}">{{t.status}}</span></span>
+    </button>
+    <button class="barq-link barq-closed-toggle" ng-if="c.closedTickets().length" ng-click="c.showClosed = !c.showClosed">
+      {{c.showClosed ? 'Hide' : 'Show'}} closed tickets ({{c.closedTickets().length}})
+    </button>
+    <button class="barq-ticket barq-ticket-closed" ng-if="c.showClosed" ng-repeat="t in c.closedTickets()" ng-class="{'is-open': c.ticket.sys_id == t.sys_id}" ng-click="c.open(t)">
       <span class="barq-ticket-title">{{t.title}}</span>
       <span class="barq-ticket-meta">{{t.number}} · <span class="barq-pill tone-{{t.tone}}">{{t.status}}</span></span>
     </button>
@@ -22,10 +30,29 @@
     </div>
 
     <div class="barq-thread" id="barq-thread">
-      <div ng-if="!c.ticket">
+      <form class="barq-newform" ng-if="!c.ticket && c.drafting" ng-submit="c.createNew()">
+        <div class="barq-proposal-title">New ticket</div>
+        <label>What is the problem? (one line)</label>
+        <input type="text" ng-model="c.draft.short_description" maxlength="160" required placeholder="e.g. My mapped S: drive disappeared" />
+        <label>Details</label>
+        <textarea ng-model="c.draft.description" rows="4" maxlength="4000" placeholder="What happened, since when, what you already tried"></textarea>
+        <label>Type</label>
+        <select ng-model="c.draft.category">
+          <option value="inquiry">Not sure / question</option>
+          <option value="network">Network, VPN, Wi-Fi</option>
+          <option value="software">Software, email, apps</option>
+          <option value="hardware">Laptop, printer, devices</option>
+        </select>
+        <div class="barq-actions">
+          <button class="barq-btn" type="submit" ng-disabled="c.busy || !c.draft.short_description">Open the ticket</button>
+          <button class="barq-link" type="button" ng-click="c.drafting = false">Cancel</button>
+        </div>
+      </form>
+      <div ng-if="!c.ticket && !c.drafting">
         <div class="barq-msg" ng-repeat="m in c.messages" ng-class="m.role == 'user' ? 'from-me' : 'from-ai'">
           <div class="barq-bubble" ng-bind-html="m.html"></div>
           <div class="barq-cites" ng-if="m.sources.length">Sources: {{m.sources.join(', ')}}</div>
+          <button class="barq-link barq-ask-ticket" ng-if="m.role != 'user' && $last && !c.proposal" ng-click="c.ticketFromChat()">Still need help? Open a ticket about this</button>
         </div>
         <div class="barq-msg from-ai" ng-if="c.proposal">
           <div class="barq-bubble barq-proposal">
@@ -55,7 +82,7 @@
       <div class="barq-error" ng-if="c.data.error">{{c.data.error}}</div>
     </div>
 
-    <form class="barq-input" ng-submit="c.send()" ng-if="!c.ticket || c.ticket.can_reply">
+    <form class="barq-input" ng-submit="c.send()" ng-if="!c.drafting && (!c.ticket || c.ticket.can_reply)">
       <textarea ng-model="c.text" rows="2" maxlength="4000" placeholder="{{c.ticket ? 'Reply on this ticket…' : 'Type your question or describe the problem…'}}" ng-keydown="$event.keyCode == 13 && !$event.shiftKey && ($event.preventDefault() || c.send())"></textarea>
       <button class="barq-btn" type="submit" ng-disabled="c.busy || !c.text">Send</button>
     </form>

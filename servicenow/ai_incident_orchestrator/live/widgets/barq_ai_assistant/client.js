@@ -89,6 +89,7 @@ api.controller = function($scope, $timeout, $interval) {
         });
     };
     c.open = function(t) {
+        c.drafting = false;
         call({action: 'open', sys_id: t.sys_id}).then(function(d) {
             if (d.ticket) c.ticket = d.ticket;
             scroll();
@@ -100,10 +101,37 @@ api.controller = function($scope, $timeout, $interval) {
             scroll();
         });
     };
+    c.openTickets = function() {
+        return (c.data.tickets || []).filter(function(t) { return !t.closed; });
+    };
+    c.closedTickets = function() {
+        return (c.data.tickets || []).filter(function(t) { return t.closed; });
+    };
+    c.startNew = function(text) {
+        c.ticket = null;
+        c.proposal = null;
+        c.drafting = true;
+        c.draft = {short_description: (text || '').substring(0, 160), description: text || '', category: 'inquiry'};
+    };
+    // Open a ticket from the last thing the user asked in the chat.
+    c.ticketFromChat = function() {
+        var mine = c.messages.filter(function(m) { return m.role == 'user'; });
+        c.startNew(mine.length ? mine[mine.length - 1].content : '');
+    };
+    c.createNew = function() {
+        if (!c.draft || !c.draft.short_description) return;
+        c.proposal = {
+            short_description: c.draft.short_description,
+            description: c.draft.description || c.draft.short_description,
+            category: c.draft.category
+        };
+        c.drafting = false;
+        c.create();
+    };
     c.confirmCancel = function() {
         if (window.confirm('Cancel ' + c.ticket.number + '? Nobody will work on it any more.')) c.act('cancel');
     };
-    c.close = function() { c.ticket = null; scroll(); };
+    c.close = function() { c.ticket = null; c.drafting = false; scroll(); };
     c.refresh = function() {
         call({action: 'refresh'});
         if (c.ticket) c.open(c.ticket);

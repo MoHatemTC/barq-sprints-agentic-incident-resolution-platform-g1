@@ -67,7 +67,8 @@ ELEMENTS: list[tuple[str, str]] = [
     ("work_notes", ""),
     ("activity.xml", "formatter"),
 ]
-RELATED_LISTS = ["incident.parent_incident"]
+#: No related lists on the BARQ AI page (the Default view keeps its own).
+RELATED_LISTS: list[str] = []
 
 VIEW_RULE_SCRIPT = """(function overrideView(view, is_list) {
     // Engineers open incidents in the BARQ AI view (one page, AI card on top) unless
@@ -195,6 +196,12 @@ def apply(instance: Instance) -> None:
     related = instance.upsert(
         "sys_ui_related_list", f"name=incident^view={view}", {"name": "incident", "view": view}
     )
+    entries = instance.find(
+        "sys_ui_related_list_entry", f"list_id={related}", "sys_id,related_list"
+    )
+    for entry in entries:
+        if entry["related_list"] not in RELATED_LISTS:
+            instance.delete("sys_ui_related_list_entry", entry["sys_id"])
     for position, name in enumerate(RELATED_LISTS):
         instance.upsert(
             "sys_ui_related_list_entry",

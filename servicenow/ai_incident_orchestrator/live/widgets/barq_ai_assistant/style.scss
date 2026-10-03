@@ -37,3 +37,10 @@
 .barq-btn-quiet { background: #e8edf3; color: #1f2d3d; }
 .barq-link { background: none; border: 0; color: #2f6fdb; cursor: pointer; padding: 4px 6px; }
 @media (max-width: 800px) { .barq { flex-direction: column; } .barq-side { width: auto; } }
+.barq-new { width: 100%; margin-bottom: 12px; }
+.barq-closed-toggle { display: block; margin: 4px 0 8px; font-size: 13px; }
+.barq-ticket-closed { opacity: .75; }
+.barq-ask-ticket { font-size: 13px; margin: 4px 2px 0; }
+.barq-newform { display: flex; flex-direction: column; gap: 6px; max-width: 640px; }
+.barq-newform label { font-size: 13px; color: #4a5866; margin-top: 6px; }
+.barq-newform input, .barq-newform textarea, .barq-newform select { border: 1px solid #cfd6de; border-radius: 8px; padding: 8px 10px; font: inherit; }
