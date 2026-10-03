@@ -251,3 +251,11 @@ def test_the_search_uses_what_people_said_not_the_agents_questions() -> None:
     assert query.startswith("My Outlook says Disconnected")  # newest answer first
     assert "I can't use vpn" in query
     assert "BARQ AI Agent" not in query and "error message" not in query
+
+
+def test_the_caller_message_step_sees_the_callers_answers() -> None:
+    from agent.caller_message import CALLER_MESSAGE_SYSTEM, caller_message_prompt
+
+    prompt = caller_message_prompt("Outlook says Disconnected, webmail works\ntest", "1. Step")
+    assert "webmail works" in prompt
+    assert "already answered" in CALLER_MESSAGE_SYSTEM

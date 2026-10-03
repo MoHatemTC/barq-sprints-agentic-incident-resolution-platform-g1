@@ -21,6 +21,7 @@ from agent.caller_message import compose_caller_message
 from agent.conversation import MAX_AGENT_REPLIES, MAX_QUESTIONS, compose_clarifying_question
 from agent.dependencies import AgentDependencies
 from agent.errors import HumanLockedError
+from agent.nodes.retrieve import build_query
 from agent.state import (
     AgentState,
     ClassificationResult,
@@ -770,7 +771,9 @@ def fulfil_applied_fix(
     if level == "autonomous" and caller_can_confirm and not reply_limit and not weak:
         # Resolve only when the caller can carry out the fix alone; a fix that needs IT
         # staff stays In Progress with the cited steps for an engineer.
-        message = compose_caller_message(deps, incident.short_description, resolution)
+        # The caller's own words (title, text, answers) let the model see what is
+        # already known, e.g. "only me, webmail works".
+        message = compose_caller_message(deps, build_query(incident), resolution)
         if message is None:
             needs_engineer = True
         else:
