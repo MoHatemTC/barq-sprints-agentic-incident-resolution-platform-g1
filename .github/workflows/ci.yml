@@ -144,6 +144,6 @@ jobs:
           PY
 
       - name: Database migrations, approvals, audit and idempotency
-        run: uv run pytest tests/db tests/test_audit_reconstruction.py tests/test_idempotency.py -q
+        run: uv run pytest tests/db tests/test_audit_reconstruction.py tests/test_idempotency.py tests/test_crash_reaper.py -q
         env:
           BARQ_TEST_DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/barq_s2_2_test

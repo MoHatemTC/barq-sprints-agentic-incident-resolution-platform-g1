@@ -69,6 +69,7 @@ from app.workers.incident_state import (
     write_final_failure_best_effort,
 )
 from app.workers.producer import CORRELATION_HEADER
+from app.workers.reaper import event_payloads
 from app.workers.reaper import reap_stale_executions as reap_stale
 from app.workers.retry_policy import (
     RetryableError,
@@ -819,8 +820,15 @@ def reap_stale_executions() -> dict[str, Any]:
         report = reap_stale(
             session,
             time_limit_seconds=settings.worker_time_limit,
+            requeue_once=True,
         )
+        payloads = event_payloads(session, report.requeued)
         session.commit()
+    from app.workers.producer import send_incident_event
+
+    for execution_id, payload in payloads.items():
+        # The same execution and event, once more: the ticket is not left silent.
+        send_incident_event(payload, execution_id)
     if report.reclaimed:
         logger.warning(
             "reaper_sweep_reclaimed",
@@ -830,6 +838,7 @@ def reap_stale_executions() -> dict[str, Any]:
     dispatched = dispatch_cluster_waiters(build_worker_repo(settings))
     return {
         "reclaimed": len(report.reclaimed),
+        "requeued": len(report.requeued),
         "examined": report.examined,
         "cluster_waiters_dispatched": dispatched,
     }

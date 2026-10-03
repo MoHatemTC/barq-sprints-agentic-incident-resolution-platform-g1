@@ -36,7 +36,7 @@ import structlog
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
-from app.db.models import Execution, RetryState
+from app.db.models import Event, Execution, Failure, RetryState
 
 logger = structlog.getLogger("workers.reaper")
 
@@ -50,6 +50,9 @@ DEFAULT_GRACE_SECONDS = 120
 #: and it is not orphaned.
 RECLAIMABLE_STATUSES = ("running",)
 
+#: ``failures.failure_type`` recorded when a run's worker died; one per run at most.
+WORKER_LOST = "worker_lost"
+
 
 @dataclass(frozen=True)
 class ReaperReport:
@@ -57,6 +60,8 @@ class ReaperReport:
 
     reclaimed: tuple[UUID, ...] = ()
     examined: int = 0
+    #: Runs put back in the queue for one more attempt (first crash only).
+    requeued: tuple[UUID, ...] = ()
 
 
 def reap_stale_executions(
@@ -65,8 +70,14 @@ def reap_stale_executions(
     time_limit_seconds: int,
     grace_seconds: int = DEFAULT_GRACE_SECONDS,
     now: dt.datetime | None = None,
+    requeue_once: bool = False,
 ) -> ReaperReport:
-    """Mark overdue ``running`` executions ``abandoned``.
+    """Mark overdue ``running`` executions ``abandoned`` — or, with ``requeue_once``,
+    put a run whose worker died for the first time back to ``queued`` so the caller
+    re-sends it (``WORKER_LOST`` failure row marks the crash; a second crash abandons).
+
+    Seen live on 2026-10-03: the memory killer stopped a worker mid-ticket, the
+    redelivery never came, and the ticket stayed New with no team and no message.
 
     ``abandoned`` is terminal, and ``ck_executions_terminal_state`` requires
     ``ended_at`` and a non-empty ``termination_cause`` alongside it, so both are
@@ -90,8 +101,40 @@ def reap_stale_executions(
     if not stale:
         return ReaperReport()
 
-    ids = [row.execution_id for row in stale]
+    found = [row.execution_id for row in stale]
     holders = {row.execution_id: row.worker_id for row in stale}
+
+    requeue: list[UUID] = []
+    if requeue_once:
+        crashed_before = set(
+            session.scalars(
+                select(Failure.execution_id).where(
+                    Failure.execution_id.in_(found), Failure.failure_type == WORKER_LOST
+                )
+            )
+        )
+        requeue = [execution_id for execution_id in found if execution_id not in crashed_before]
+    for execution_id in requeue:
+        session.add(
+            Failure(
+                execution_id=execution_id,
+                attempt=1,
+                failure_type=WORKER_LOST,
+                message="the worker running it stopped (killed or restarted); queued again once",
+                retryable=True,
+            )
+        )
+    if requeue:
+        session.execute(
+            update(Execution)
+            .where(Execution.execution_id.in_(requeue), Execution.status == "running")
+            .values(status="queued", heartbeat_at=None)
+        )
+        for execution_id in requeue:
+            logger.warning("execution_requeued_after_crash", execution_id=str(execution_id))
+    ids = [execution_id for execution_id in found if execution_id not in requeue]
+    if not ids:
+        return ReaperReport(examined=len(found), requeued=tuple(requeue))
 
     session.execute(
         update(Execution)
@@ -132,10 +175,40 @@ def reap_stale_executions(
             last_worker=holders.get(execution_id),
             cutoff=cutoff.isoformat(),
         )
-    return ReaperReport(reclaimed=tuple(ids), examined=len(ids))
+    return ReaperReport(reclaimed=tuple(ids), examined=len(found), requeued=tuple(requeue))
+
+
+def event_payloads(session: Session, execution_ids: tuple[UUID, ...]) -> dict[UUID, dict]:
+    """The original contract-v1 event of each execution, to send it to a worker again."""
+    if not execution_ids:
+        return {}
+    rows = session.execute(
+        select(
+            Execution.execution_id,
+            Event.event_id,
+            Event.incident_sys_id,
+            Event.incident_number,
+            Event.event_type,
+            Event.contract_version,
+        )
+        .join(Event, Event.id == Execution.event_record_id)
+        .where(Execution.execution_id.in_(execution_ids))
+    )
+    return {
+        row.execution_id: {
+            "event_id": row.event_id,
+            "sys_id": row.incident_sys_id,
+            "number": row.incident_number,
+            "event_type": row.event_type,
+            "contract_version": row.contract_version,
+        }
+        for row in rows
+    }
 
 
 __all__ = [
+    "WORKER_LOST",
+    "event_payloads",
     "DEFAULT_GRACE_SECONDS",
     "RECLAIMABLE_STATUSES",
     "ReaperReport",

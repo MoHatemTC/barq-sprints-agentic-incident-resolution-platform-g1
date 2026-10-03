@@ -319,3 +319,55 @@ def test_one_sweep_reclaims_every_stale_row_not_just_the_first(reaper_session: S
 
     assert set(report.reclaimed) == {r.execution_id for r in stale}
     assert report.examined == 3
+
+
+def test_a_first_crash_is_queued_again_once(reaper_session: Session) -> None:
+    """Seen live 2026-10-03: the memory killer stopped a worker mid-ticket and the ticket
+    stayed New with no team and no message. The first crash puts the run back in the
+    queue (with its original event), the second one abandons it."""
+    from app.db.models import Failure
+    from app.workers.reaper import WORKER_LOST, event_payloads
+
+    stale = NOW - dt.timedelta(seconds=TIME_LIMIT + DEFAULT_GRACE_SECONDS + 60)
+    row = _execution(reaper_session, heartbeat_at=stale)
+    _retry_state(reaper_session, row.execution_id)
+
+    first = _reap(reaper_session, requeue_once=True)
+    payloads = event_payloads(reaper_session, first.requeued)
+    reaper_session.commit()
+    reaper_session.refresh(row)
+    assert first.requeued == (row.execution_id,)
+    assert first.reclaimed == ()
+    assert row.status == "queued"
+    assert row.ended_at is None and row.termination_cause is None
+    assert payloads[row.execution_id]["number"] == "INC0099999"
+    assert payloads[row.execution_id]["event_type"] == "incident.created"
+    crashes = reaper_session.scalars(
+        sa.select(Failure).where(Failure.execution_id == row.execution_id)
+    ).all()
+    assert [failure.failure_type for failure in crashes] == [WORKER_LOST]
+
+    # The retried attempt dies too: this time it is abandoned, not queued again.
+    reaper_session.execute(
+        sa.update(Execution)
+        .where(Execution.execution_id == row.execution_id)
+        .values(status="running", heartbeat_at=stale)
+    )
+    reaper_session.commit()
+    second = _reap(reaper_session, requeue_once=True)
+    reaper_session.commit()
+    reaper_session.refresh(row)
+    assert second.requeued == ()
+    assert second.reclaimed == (row.execution_id,)
+    assert row.status == "abandoned"
+
+
+def test_without_requeue_a_crash_is_abandoned_as_before(reaper_session: Session) -> None:
+    row = _execution(
+        reaper_session,
+        heartbeat_at=NOW - dt.timedelta(seconds=TIME_LIMIT + DEFAULT_GRACE_SECONDS + 60),
+    )
+    report = _reap(reaper_session)
+    reaper_session.commit()
+    assert report.requeued == ()
+    assert report.reclaimed == (row.execution_id,)
