@@ -61,8 +61,12 @@ jobs:
       # in package.json; npm's own remedy was @servicenow/sdk 4.12.1, which #54 rules
       # out. This fails the build if a high ever comes back. The remaining moderates
       # are build-only tooling and are recorded in the servicenow README.
+      # audit-gate.cjs applies the same high bar as `npm audit --audit-level=high`, with
+      # one difference: an advisory that has no fixed release anywhere can be accepted
+      # in audit-exceptions.json with a reason and an expiry date. Any other high, or
+      # an expired exception, still fails here.
       - name: Audit the build toolchain
-        run: npm audit --package-lock-only --audit-level=high --registry=https://registry.npmjs.org/
+        run: node audit-gate.cjs
 
       # ci, not install: the lockfile is the pin. If package.json and the lockfile
       # disagree this fails here rather than resolving to something else.
