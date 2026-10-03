@@ -469,3 +469,18 @@ def test_a_new_run_supersedes_an_older_paused_run_of_the_same_incident() -> None
     assert repo.get_status(older) == "abandoned"
     assert repo.get_termination_cause(older) == "superseded_by_newer_run"
     assert repo.get_status(other) == "awaiting_approval"
+
+
+def test_a_closed_or_cancelled_incident_ends_its_paused_run() -> None:
+    """The caller cancelled while the run waited for approval: nobody can approve it now."""
+    repo = make_repo()
+    paused, other = uuid4(), uuid4()
+    repo.seed_execution(paused, status="awaiting_approval", incident_sys_id=PAYLOAD_OK["sys_id"])
+    repo.seed_execution(other, status="awaiting_approval", incident_sys_id="f" * 32)
+    closed = {**PAYLOAD_OK, "event_type": "incident.closed"}
+    with mock.patch.object(tasks_module, "invoke_graph") as graph:
+        _run_incident(FakeTask(), closed, str(EXECUTION_ID), CFG, repo)
+    graph.assert_not_called()
+    assert repo.get_status(paused) == "abandoned"
+    assert repo.get_termination_cause(paused) == "incident_closed"
+    assert repo.get_status(other) == "awaiting_approval"

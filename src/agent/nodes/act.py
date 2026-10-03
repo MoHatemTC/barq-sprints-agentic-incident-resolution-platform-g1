@@ -715,8 +715,9 @@ def _fulfil(
     Runs only for an applied fix (processing state ``complete`` with a resolution),
     which is either a low-risk draft that passed every gate or a fix a person approved.
     """
+    label = (state.get("classification") or {}).get("label")
     if output.outcome is Outcome.ASKED_CALLER and output.caller_question:
-        return _fulfil_question(deps, incident, output.caller_question, _tool_context(state))
+        return _fulfil_question(deps, incident, output.caller_question, _tool_context(state), label)
     if output.processing_state != AIProcessingState.COMPLETE.value or not output.resolution:
         return []
     return fulfil_applied_fix(
@@ -725,7 +726,21 @@ def _fulfil(
         resolution=output.resolution,
         confidence=output.confidence,
         context=_tool_context(state),
+        classification=label,
     )
+
+
+def route(
+    deps: AgentDependencies, incident: IncidentSnapshot, label: str | None
+) -> tuple[str, str | None]:
+    """The team for an incident: what the agent found the problem to be, when that names a
+    team (an Outlook fault filed under Network goes to Software), else the caller's own
+    category. Returns the team key and its assignment group, or no group."""
+    groups = deps.settings.agent_assignment_groups
+    for key in (label, incident.category):
+        if key and groups.get(key):
+            return key, groups[key]
+    return incident.category, None
 
 
 def fulfil_applied_fix(
@@ -735,6 +750,7 @@ def fulfil_applied_fix(
     resolution: str,
     confidence: float | None,
     context: ToolCallContext,
+    classification: str | None = None,
 ) -> list[str]:
     """Route, start and resolve the incident as far as the autonomy level allows.
 
@@ -748,16 +764,15 @@ def fulfil_applied_fix(
     if level not in ("assist", "autonomous") or not resolution:
         return []
     steps: list[str] = []
-    category = incident.category
-    group = deps.settings.agent_assignment_groups.get(category)
-    route = f"routed it to the {category} group and " if group else ""
+    category, group = route(deps, incident, classification)
+    routed = f"routed it to the {category} group and " if group else ""
     calls: list[tuple[str, dict[str, Any]]] = [
         (
             "assign_incident",
             {
                 "sys_id": incident.sys_id,
                 "assignment_group": group,
-                "work_note": f"{AGENT_NAME} {route}started work on this incident.",
+                "work_note": f"{AGENT_NAME} {routed}started work on this incident.",
             },
         )
     ]
@@ -851,19 +866,22 @@ def fulfil_applied_fix(
 
 
 def _fulfil_question(
-    deps: AgentDependencies, incident: IncidentSnapshot, question: str, context: ToolCallContext
+    deps: AgentDependencies,
+    incident: IncidentSnapshot,
+    question: str,
+    context: ToolCallContext,
+    label: str | None = None,
 ) -> list[str]:
     """Route and start the incident, then ask the caller and wait (On Hold, Awaiting Caller)."""
-    category = incident.category
-    group = deps.settings.agent_assignment_groups.get(category)
-    route = f"routed it to the {category} group and " if group else ""
+    category, group = route(deps, incident, label)
+    routed = f"routed it to the {category} group and " if group else ""
     calls: list[tuple[str, dict[str, Any]]] = [
         (
             "assign_incident",
             {
                 "sys_id": incident.sys_id,
                 "assignment_group": group,
-                "work_note": f"{AGENT_NAME} {route}started work on this incident.",
+                "work_note": f"{AGENT_NAME} {routed}started work on this incident.",
             },
         ),
         ("ask_caller", {"sys_id": incident.sys_id, "question": question}),

@@ -401,9 +401,11 @@ class RefusalExplanation(BaseModel):
 
 
 CLASSIFY_SYSTEM = f"""You triage IT incidents for the BARQ service desk.
-Choose exactly one label:
+Choose exactly one label for what the problem actually is, read from the short
+description and description. The category field is the caller's own guess and is often
+wrong: judge the problem, never copy that field.
 - hardware: a physical device or peripheral is faulty
-- software: an application or operating system misbehaves
+- software: an application or operating system misbehaves, including email clients
 - network: connectivity, VPN, Wi-Fi, DNS or reachability
 - access: sign-in, account lockout, MFA or permissions
 - security: suspected compromise, phishing, malware or data exposure
@@ -505,6 +507,12 @@ Rules:
 
 9. The final output must remain a structured list of steps. Do not include analysis,
    reasoning, commentary about the Critic, or explanations of the revision process.
+
+10. Fix the problem that was reported, nothing more. The evidence may hold articles
+    for neighbouring problems (a locked account next to a stale VPN credential). Use
+    the article whose symptoms match what the incident describes. Do not add steps
+    for a condition the incident does not report; at most, end with one conditional
+    step such as "If it still fails, check whether the account is locked [KB… §…]".
 
 10. If no evidence-supported resolution can be produced, return an empty list of
     steps rather than hallucinating a solution.

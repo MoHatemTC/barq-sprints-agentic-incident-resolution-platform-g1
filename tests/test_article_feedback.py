@@ -95,6 +95,7 @@ AI_REOPEN = "Reopened by Abel Tuter after a BARQ AI Agent resolution, so an engi
         ("incident.reopened", _incident(), None, AI_REOPEN),  # not an AI resolution coming back
         ("incident.closed", _incident(ai_human_review_required=True), None, ""),
         ("incident.closed", _incident(ai_resolution=""), None, ""),
+        ("incident.closed", _incident(state="8"), None, ""),  # cancelled: no verdict
         ("incident.engineer_replied", _incident(), None, ""),
     ],
 )

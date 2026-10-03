@@ -22,7 +22,8 @@
         if (state == '8') return {label: 'Cancelled', tone: 'done'};
         if (state == '6') return {label: 'Solved - please confirm', tone: 'good'};
         if (state == '3' && gr.getValue('hold_reason') == '1') return {label: 'Waiting for your answer', tone: 'warn'};
-        if (ai == 'pending' || ai == 'in_progress') return {label: 'BARQ AI is looking at it', tone: 'info'};
+        var withPeople = gr.getValue(P + 'human_lock') == '1' || gr.getValue(P + 'human_review_required') == '1';
+        if (!withPeople && (ai == 'pending' || ai == 'in_progress')) return {label: 'BARQ AI is looking at it', tone: 'info'};
         return {label: 'An engineer is working on it', tone: 'info'};
     }
 
@@ -180,6 +181,11 @@
             if (action == 'person') {
                 // Human Lock: BARQ AI Agent stops writing; an engineer can hand it back.
                 record.setValue(P + 'human_lock', true);
+                // No longer waiting for the caller's answer to the agent: a person takes it.
+                if (record.getValue('state') == '3' && record.getValue('hold_reason') == '1') {
+                    record.state = 2;
+                    record.hold_reason = '';
+                }
                 record.comments = 'I would like to talk to a person, please.';
                 record.work_notes = 'The caller asked for a person on the BARQ AI page, so BARQ AI Agent stood down. ' +
                     'Reply to the caller here; use "Hand back to BARQ AI" to return it to the agent.';

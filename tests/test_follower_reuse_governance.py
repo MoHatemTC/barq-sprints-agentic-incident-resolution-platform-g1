@@ -187,3 +187,29 @@ def test_an_unknown_leader_caller_never_reuses_the_fix() -> None:
         snapshot(follower_record()), {"classification": "network"}, leader_caller=None
     )
     assert verdict.allowed is False
+
+
+@pytest.mark.parametrize(
+    ("situation", "allowed", "reason"),
+    [
+        ({"looked": True}, True, "passed"),
+        ({"looked": False}, False, "could not look"),
+        ({"looked": True, "similar_open": ["INC1", "INC2"]}, False, "likely outage"),
+        ({"looked": True, "outage_words": True}, False, "likely outage"),
+        ({"looked": True, "attack_signal": True}, False, "security"),
+        ({"looked": True, "repeat_from_caller": ["INC3"]}, False, "reported this again"),
+    ],
+    ids=["quiet", "unknown", "burst", "outage-words", "attack", "repeat"],
+)
+def test_followers_get_the_same_look_around_as_the_graph(situation, allowed, reason) -> None:
+    """A burst of identical reports is an outage for a person, not N self-service fixes."""
+    from agent.triage import Situation
+    from tests.test_nodes import snapshot
+
+    verdict = cluster_runtime.follower_reuse_verdict(
+        snapshot(follower_record()),
+        {"classification": "network"},
+        situation=Situation(**situation),
+    )
+    assert verdict.allowed is allowed
+    assert reason in verdict.reason

@@ -7,7 +7,8 @@
 //     takes over with the AI's fix in a work note (Human Lock on);
 //   - someone other than the caller writes to the caller -> a person takes the
 //     conversation (Human Lock on), so the caller never hears two voices;
-//   - the incident is closed -> recorded for learning.
+//   - the incident is closed or cancelled -> recorded for learning, and a run still
+//     waiting for approval is closed.
 // The agent's own writes never trigger anything. Runs late (order 1000) so stock rules
 // that change the state run first.
 (function executeRule(current, previous) {
@@ -33,7 +34,8 @@
         state = '2';
     }
 
-    if (before == '6' && state != '6' && state != '7') {
+    var finished = state == '7' || state == '8';
+    if (before == '6' && state != '6' && !finished) {
         if (resolvedByAgent) {
             current.setValue(P + 'human_lock', true);
             current.setValue(P + 'human_review_required', true);
@@ -42,7 +44,7 @@
                 (current.getValue(P + 'resolution') || '(none recorded)');
         }
         event = 'incident.reopened';
-    } else if (state == '7' && before != '7') {
+    } else if (finished && before != state) {
         event = 'incident.closed';
     } else if (wrote && !isCaller) {
         if (!locked) {

@@ -83,14 +83,14 @@ class AgentSettings(BaseSettings):
         default_factory=lambda: [
             "pii_detection",
             "injection_classifier",
-            "classify",
             "caller_message",
             "clarifying_question",
             "chat_route",
         ],
         description=(
             "Model calls that run without step-by-step thinking: narrow checks and rewording "
-            "that the model does accurately and several times faster without it."
+            "that the model does accurately and several times faster without it. "
+            "Classification is not one: without thinking it copied the caller's category."
         ),
     )
     agent_llm_max_tokens: int = Field(default=16000, gt=0)

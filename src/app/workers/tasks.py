@@ -57,6 +57,7 @@ from app.workers.cluster_runtime import (
     cacheable_result,
     dispatch_cluster_waiters,
     follower_reuse_verdict,
+    follower_situation,
     leader_caller_id,
     load_cluster_incident,
     notify_caller_waiting,
@@ -309,6 +310,14 @@ def _run_incident(
         active_settings = settings or getattr(task, "settings", None)
         if graph_backend == "langgraph" and active_settings is not None:
             record_outcome_best_effort(active_settings, payload, event_type)
+        if event_type == "incident.closed" and payload.get("sys_id"):
+            # Closed or cancelled while a run waited for approval: nobody can approve
+            # it any more, so it ends instead of waiting forever.
+            closed = repo.supersede_paused_runs(
+                str(payload["sys_id"]), execution_uuid, cause="incident_closed"
+            )
+            if closed:
+                logger.info("paused_runs_closed_with_incident", closed=[str(r) for r in closed])
         repo.mark_succeeded(execution_uuid, termination_cause=f"observed:{event_type}")
         logger.info("incident_event_observed", execution_id=execution_id, event_type=event_type)
         return {"status": "observed", "execution_id": execution_id, "event_type": event_type}
@@ -411,6 +420,9 @@ def _run_incident(
                                 admission.anchor_incident_sys_id,
                                 execution_id,
                                 correlation_id or execution_id,
+                            ),
+                            situation=follower_situation(
+                                incident, execution_id, correlation_id or execution_id
                             ),
                         )
                         if graph_backend == "langgraph"

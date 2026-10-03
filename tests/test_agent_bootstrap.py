@@ -288,13 +288,16 @@ class TestLiteLLMClient:
             {"role": "user", "content": "the incident"},
         ]
         assert request["max_completion_tokens"] == 16000
-        # Classification is a narrow check: it runs without step-by-step thinking.
-        assert request["reasoning_effort"] == "none"
+        # Classification keeps the model's thinking: without it, it copied the caller's
+        # own category (an Outlook fault filed under Network was labelled network).
+        assert "reasoning_effort" not in request
 
-    def test_reasoning_purposes_keep_the_models_default_thinking(self) -> None:
+    def test_narrow_checks_run_without_thinking(self) -> None:
         sdk = FakeOpenAISDK(vpn_answers())
-        self._llm(sdk).structured(purpose="diagnose", system="s", prompt="p", schema=ClassifyOutput)
-        assert "reasoning_effort" not in sdk.requests[0]
+        self._llm(sdk).structured(
+            purpose="caller_message", system="s", prompt="p", schema=ClassifyOutput
+        )
+        assert sdk.requests[0]["reasoning_effort"] == "none"
 
     def test_shared_fake_records_sensitive_call_options(self) -> None:
         fake = FakeLLM(

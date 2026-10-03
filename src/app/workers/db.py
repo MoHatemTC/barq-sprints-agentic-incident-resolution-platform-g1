@@ -158,10 +158,13 @@ class WorkerRepo(Protocol):
         """Park a HITL interrupt: non-terminal, no ServiceNow write yet."""
         ...
 
-    def supersede_paused_runs(self, incident_sys_id: str, keep: UUID) -> list[UUID]:
+    def supersede_paused_runs(
+        self, incident_sys_id: str, keep: UUID, *, cause: str = "superseded_by_newer_run"
+    ) -> list[UUID]:
         """Close older runs of this incident still paused for approval: a newer run
-        (caller answer, hand-back) replaces them. Each gets a 'cancelled' decision, so
-        it can never be approved later, and ends 'abandoned'. Returns their ids."""
+        (caller answer, hand-back) replaces them, or the incident was closed or
+        cancelled. Each gets a 'cancelled' decision, so it can never be approved later,
+        and ends 'abandoned' with ``cause``. Returns their ids."""
         ...
 
     def mark_succeeded(
@@ -478,7 +481,9 @@ class PostgresRepo:
                 update(Execution).where(Execution.execution_id == execution_id).values(**values)
             )
 
-    def supersede_paused_runs(self, incident_sys_id: str, keep: UUID) -> list[UUID]:
+    def supersede_paused_runs(
+        self, incident_sys_id: str, keep: UUID, *, cause: str = "superseded_by_newer_run"
+    ) -> list[UUID]:
         with self._session_factory() as session, session.begin():
             paused = list(
                 session.scalars(
@@ -498,7 +503,7 @@ class PostgresRepo:
                         execution_id=execution_id,
                         decision="cancelled",
                         decided_by="barq-agent",
-                        reason=f"superseded by newer run {keep}",
+                        reason=f"{cause.replace('_', ' ')} ({keep})",
                     )
                     .on_conflict_do_nothing()
                 )
@@ -511,7 +516,7 @@ class PostgresRepo:
                     .values(
                         status="abandoned",
                         ended_at=func.now(),
-                        termination_cause="superseded_by_newer_run",
+                        termination_cause=cause,
                     )
                 )
         return paused
@@ -1035,7 +1040,9 @@ class InMemoryRepo:
         elif attempt_count is not None:
             row["attempt_count"] = attempt_count
 
-    def supersede_paused_runs(self, incident_sys_id: str, keep: UUID) -> list[UUID]:
+    def supersede_paused_runs(
+        self, incident_sys_id: str, keep: UUID, *, cause: str = "superseded_by_newer_run"
+    ) -> list[UUID]:
         paused = [
             execution_id
             for execution_id, row in self.executions.items()
@@ -1047,7 +1054,7 @@ class InMemoryRepo:
             row = self.executions[execution_id]
             row["status"] = "abandoned"
             row["ended_at"] = _utcnow()
-            row["termination_cause"] = "superseded_by_newer_run"
+            row["termination_cause"] = cause
         return paused
 
     def mark_awaiting_approval(

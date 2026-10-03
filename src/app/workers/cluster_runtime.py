@@ -17,6 +17,7 @@ from agent.guardrails.input_screening import screen_text
 from agent.policy import assess_risk, check_eligibility, snapshot_incident
 from agent.state import ClassificationResult, EventPayload, RiskLevel
 from agent.tools import ToolCallContext
+from agent.triage import Situation, look_around
 from app.models.execution_log import ExecutionAction, ExecutionLogCreatePayload, ExecutionStatus
 from app.models.incident import AIProcessingState, IncidentUpdatePayload
 from app.models.knowledge import Classification
@@ -103,6 +104,7 @@ def follower_reuse_verdict(
     solution: Mapping[str, Any],
     *,
     leader_caller: str | None = "",
+    situation: Situation | None = None,
 ) -> ReuseVerdict:
     """Decide, with no LLM call, whether this follower may reuse the leader's resolution.
 
@@ -142,6 +144,20 @@ def follower_reuse_verdict(
             "the same caller reported this again: the earlier fix may not have worked",
         )
 
+    # The graph's look-around (agent.triage) without its model call: a burst of similar
+    # open reports is a likely outage for a person, and a caller reporting the same thing
+    # again means the earlier fix did not work. Either way the full graph decides.
+    if situation is not None:
+        if not situation.looked:
+            return ReuseVerdict(False, "could not look at related incidents")
+        if situation.attack_signal:
+            return ReuseVerdict(False, "the text reports a possible security incident")
+        burst = len(situation.similar_open) + 1 >= settings.agent_outage_threshold
+        if situation.outage_words or burst:
+            return ReuseVerdict(False, "likely outage: a person coordinates one fix")
+        if situation.repeat_from_caller:
+            return ReuseVerdict(False, "the same caller reported this again recently")
+
     try:
         label = Classification(str(solution.get("classification") or ""))
     except ValueError:
@@ -156,6 +172,20 @@ def follower_reuse_verdict(
     if risk.level is not RiskLevel.LOW or risk.approval_required:
         return ReuseVerdict(False, f"risk {risk.level.value}: " + "; ".join(risk.reasons))
     return ReuseVerdict(True, "follower passed eligibility, screening and risk gates")
+
+
+def follower_situation(
+    raw_incident: Mapping[str, Any], execution_id: str, correlation_id: str
+) -> Situation:
+    """Related incidents around a follower (governed reads, no model call)."""
+    try:
+        return look_around(
+            get_agent_dependencies(),
+            ToolCallContext(execution_id=execution_id, correlation_id=correlation_id),
+            snapshot_incident(raw_incident),
+        )
+    except Exception:  # noqa: BLE001 - not knowing means the full graph decides
+        return Situation()
 
 
 def apply_follower_cluster_resolution(
@@ -243,6 +273,7 @@ def apply_follower_cluster_resolution(
                 resolution=str(resolution),
                 confidence=float(confidence) if isinstance(confidence, int | float) else None,
                 context=tool_context,
+                classification=str(solution.get("classification") or "") or None,
             )
 
         log_payload = ExecutionLogCreatePayload(
@@ -274,31 +305,53 @@ def apply_follower_cluster_resolution(
 def notify_caller_waiting(
     payload: Mapping[str, Any], result: Mapping[str, Any], execution_id: str, correlation_id: str
 ) -> str:
-    """Tell the caller their ticket now waits for an engineer (never leave them in silence).
+    """Route a paused ticket to its team and tell the caller who has it.
 
-    Runs once in the worker after the graph paused, outside the paused node, so a resume
-    never repeats it. Best effort: no caller, a service account or any failure skips it.
+    A paused run waits for an engineer, so the ticket must reach a team's queue (a ticket
+    with no group was seen live: nobody would have picked it up) and the caller must not
+    be left in silence. Runs once in the worker after the graph paused, outside the paused
+    node, so a resume never repeats it. Best effort: any failure is logged and skipped.
     """
     from agent.conversation import AGENT_NAME
+    from agent.nodes.act import _TEAM_NAMES, route
 
     sys_id = str(payload.get("sys_id") or "")
     if not sys_id:
         return "skipped:no_incident"
+    done: list[str] = []
     try:
         deps = get_agent_dependencies()
         context = ToolCallContext(execution_id=execution_id, correlation_id=correlation_id)
         raw = asyncio.run(
             deps.tools.invoke("read_incident", context=context, arguments={"sys_id": sys_id})
         )
-        caller = snapshot_incident(raw).caller_id
+        incident = snapshot_incident(raw)
+        brief = result.get("interrupt_payload") or {}
+        category, group = route(deps, incident, brief.get("classification"))
+        if group and incident.state == "1":
+            routed = asyncio.run(
+                deps.tools.invoke(
+                    "assign_incident",
+                    context=context,
+                    arguments={
+                        "sys_id": sys_id,
+                        "assignment_group": group,
+                        "work_note": f"{AGENT_NAME} routed it to the {category} group: it "
+                        "waits for an engineer's decision (see the BARQ AI card).",
+                    },
+                )
+            )
+            done.append(f"assign_incident:{routed}")
+        caller = incident.caller_id
         if not caller or caller in deps.settings.agent_service_account_ids:
-            return "skipped:no_caller"
-        brief = str((result.get("interrupt_payload") or {}).get("summary") or "")
+            return ";".join([*done, "update_caller:skipped_no_caller"])
+        team = _TEAM_NAMES.get(category, f"the {category} team") if group else "an engineer"
+        who = "an engineer" if team == "an engineer" else f"an engineer of {team}"
         why = (
-            "You reported a similar problem recently, so an engineer will check the fix "
-            "before it is applied."
-            if "repeat from the same caller" in brief
-            else "An engineer needs to check it before anything is applied."
+            f"You reported a similar problem recently, so {who} will check the fix before it "
+            "is applied."
+            if "repeat from the same caller" in str(brief.get("summary") or "")
+            else f"{who[0].upper()}{who[1:]} needs to check it before anything is applied."
         )
         message = (
             f"Hello, this is {AGENT_NAME}. I looked into your incident. {why} You will hear "
@@ -309,7 +362,7 @@ def notify_caller_waiting(
                 "update_caller", context=context, arguments={"sys_id": sys_id, "message": message}
             )
         )
-        return f"update_caller:{outcome}"
+        return ";".join([*done, f"update_caller:{outcome}"])
     except Exception as exc:  # noqa: BLE001 - telling the caller must not break the run
         logger.warning("notify_caller_waiting_failed", error_type=type(exc).__name__)
-        return "failed"
+        return ";".join([*done, "failed"])

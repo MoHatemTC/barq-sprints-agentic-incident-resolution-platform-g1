@@ -120,14 +120,18 @@ def main() -> int:  # noqa: PLR0915 - one linear walk through the page
         checks["banner_gone_after_answer"] = not page.locator(".barq-working").is_visible()
 
         # 4. Confirm: the ticket closes and moves under "closed tickets".
-        page.get_by_role("button", name="It works, close it").click()
-        page.wait_for_function(
-            "() => /Closed/.test(document.querySelector('.barq-head .barq-pill')?.innerText||'')",
-            timeout=30000,
-        )
-        shot("04_confirmed_closed")
-        checks["closed_after_confirm"] = True
-        checks["closed_ticket_folded"] = page.locator(".barq-closed-toggle").is_visible()
+        if "Solved" in status:
+            page.get_by_role("button", name="It works, close it").click()
+            page.wait_for_function(
+                "() => /Closed/.test("
+                "document.querySelector('.barq-head .barq-pill')?.innerText || '')",
+                timeout=30000,
+            )
+            shot("04_confirmed_closed")
+            checks["closed_after_confirm"] = True
+            checks["closed_ticket_folded"] = page.locator(".barq-closed-toggle").is_visible()
+        else:
+            checks["closed_after_confirm"] = False
 
         # 5. The chat answers a question readably.
         page.get_by_text("Chat with BARQ AI", exact=True).click()

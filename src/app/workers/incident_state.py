@@ -291,9 +291,11 @@ def record_outcome_best_effort(settings: Settings, payload: dict[str, Any], even
                 return 0
             outcome = "reopened"
         else:
+            # Cancelled (8) says nothing about whether the fix worked.
             if (
                 incident.ai_processing_state is not AIProcessingState.COMPLETE
                 or incident.ai_human_review_required
+                or str(getattr(incident, "state", "") or "") == "8"
             ):
                 return 0
             outcome = "confirmed"
