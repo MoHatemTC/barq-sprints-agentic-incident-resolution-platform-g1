@@ -1,5 +1,9 @@
 <div class="barq">
   <div class="barq-side">
+    <button class="barq-ticket barq-chat-item" ng-class="{'is-open': !c.ticket && !c.drafting}" ng-click="c.close()">
+      <span class="barq-ticket-title">Chat with BARQ AI</span>
+      <span class="barq-ticket-meta">Ask a question or describe a problem</span>
+    </button>
     <button class="barq-btn barq-new" ng-click="c.startNew()">+ New ticket</button>
     <div class="barq-side-head">
       <span>My tickets</span>
@@ -26,7 +30,7 @@
         <div class="barq-sub" ng-if="!c.ticket">Ask a question or describe a problem. BARQ AI remembers your conversations.</div>
         <div class="barq-sub" ng-if="c.ticket">{{c.ticket.number}} · {{c.ticket.title}} · <span class="barq-pill tone-{{c.ticket.tone}}">{{c.ticket.status}}</span></div>
       </div>
-      <button class="barq-link" ng-if="c.ticket" ng-click="c.close()">Back to chat</button>
+
     </div>
 
     <div class="barq-thread" id="barq-thread">

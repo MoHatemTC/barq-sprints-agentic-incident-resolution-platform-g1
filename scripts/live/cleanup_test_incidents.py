@@ -1,9 +1,10 @@
 """Cancel this harness's own finished test incidents so they cannot skew later runs.
 
 Only incidents whose short description starts with the harness label
-``[BARQ-TEST-2026-10-03]``, that are still active and older than ``--older-than`` minutes,
-are touched. Anything else — the team's ``[AUDIT-…]`` incidents, the older parked runs,
-real incidents — is never selected. Nothing is deleted:
+``[BARQ-TEST-2026-10-03]``, that are not closed or cancelled yet (resolved ones included)
+and older than ``--older-than`` minutes, are touched. Anything else — the team's
+``[AUDIT-…]`` incidents, the older parked runs, real incidents — is never selected.
+Nothing is deleted:
 
 1. a paused AI run on the incident is rejected through the backend (operator API, the
    reason says it is test clean-up), so ServiceNow and the backend stay in agreement;
@@ -26,7 +27,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from verify_agentic_core import LABEL, Backend, ServiceNow  # noqa: E402
+from verify_agentic_core import LABEL, Backend, P, ServiceNow  # noqa: E402
 
 
 def main() -> int:
@@ -38,8 +39,8 @@ def main() -> int:
     cutoff = (datetime.now(UTC) - timedelta(minutes=args.older_than)).strftime("%Y-%m-%d %H:%M:%S")
     rows = sn.query(
         "incident",
-        f"short_descriptionSTARTSWITH{LABEL}^active=true^stateNOT IN6,7,8^sys_created_on<{cutoff}",
-        "sys_id,number,short_description",
+        f"short_descriptionSTARTSWITH{LABEL}^stateNOT IN7,8^sys_created_on<{cutoff}",
+        "sys_id,number,short_description,state",
     )
     done = []
     for row in rows:
@@ -59,6 +60,10 @@ def main() -> int:
                 "incident",
                 row["sys_id"],
                 {
+                    # AI Enabled off first, in the same update: the conversation rule then
+                    # ignores the change, so cancelling a resolved fixture is not recorded
+                    # as a reopen (which would count against the knowledge article).
+                    f"{P}enabled": "false",
                     "state": "8",
                     "close_code": "Solution provided",
                     "close_notes": "Cancelled: BARQ live-test fixture, cleaned up after the run.",

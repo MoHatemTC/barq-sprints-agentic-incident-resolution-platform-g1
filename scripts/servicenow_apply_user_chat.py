@@ -53,6 +53,8 @@ def apply(instance: Instance) -> None:
             "id": PAGE_ID,
             "title": "BARQ AI",
             "short_description": "Chat with BARQ AI",
+            # This page is the chat: hide the portal's own Virtual Agent launcher here only.
+            "css": ".sp-ac-root { display: none !important; }",
             "public": "false",
             "roles": "",
             "sys_scope": SCOPE,
