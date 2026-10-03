@@ -1,10 +1,14 @@
-// UI action "Take over from AI" (incident form). Condition:
-//   current.x_2215032_ai_inc_0_ai_human_lock != true && current.active == true &&
-//   (gs.hasRole('itil') || gs.hasRole('x_2215032_ai_inc_0.operator'))
+// UI action "Take over from AI" (incident form). Condition: new x_2215032_ai_inc_0.BarqControl().canTakeOver(current)
 // A paused AI run is rejected first (the agent can still write its closing note),
 // then the Human Lock keeps the agent out of this incident from now on. A fresh copy of
 // the record is updated so nothing the agent just wrote is overwritten by form values.
 (function() {
+    // The condition is checked again here: a button must never act where it does not apply.
+    if (!new x_2215032_ai_inc_0.BarqControl().canTakeOver(current)) {
+        gs.addErrorMessage('This action is not available for this incident now.');
+        action.setRedirectURL(current);
+        return;
+    }
     var sysId = current.getUniqueValue();
     if (current.x_2215032_ai_inc_0_ai_processing_state == 'awaiting_approval') {
         var result = new BarqBackend().decide(current, 'rejected', 'Taken over');

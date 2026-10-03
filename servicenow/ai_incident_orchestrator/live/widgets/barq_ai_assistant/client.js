@@ -1,7 +1,35 @@
 api.controller = function($scope, $timeout, $interval) {
     var c = this;
+
+    // Answers arrive as light markdown with internal chunk references. Users see plain
+    // readable text: headings and **bold** become bold, "[KB0009-v2.0::chunk::2]" becomes
+    // "KB0009", and each source is listed once. Text is escaped before any markup is added.
+    function escape(text) {
+        return String(text || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+    function readable(text) {
+        return escape(text)
+            .replace(/\(cited from (\[[^\]]+\](?:,\s*)?)+\)/g, function(all) {
+                var ids = all.match(/KB\d+/g) || [];
+                return ids.length ? '(' + unique(ids).join(', ') + ')' : '';
+            })
+            .replace(/\[(KB\d+)[^\]]*::chunk::\d+\]/g, '$1')
+            .replace(/^#{1,6}\s*(.+)$/gm, '<strong>$1</strong>')
+            .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+    }
+    function unique(values) {
+        var seen = {};
+        return values.filter(function(v) { return v && !seen[v] && (seen[v] = true); });
+    }
+    function message(role, content, citations) {
+        var sources = unique((citations || []).map(function(s) {
+            return s.article_number || s.number || s.title;
+        }));
+        return {role: role, content: content, html: readable(content), sources: sources};
+    }
+    c.readable = readable;
     c.messages = (c.data.history || []).map(function(m) {
-        return {role: m.role, content: m.content, citations: m.citations || []};
+        return message(m.role, m.content, m.citations);
     });
     c.ticket = null;
     c.proposal = null;
@@ -40,11 +68,11 @@ api.controller = function($scope, $timeout, $interval) {
             });
             return;
         }
-        c.messages.push({role: 'user', content: text, citations: []});
+        c.messages.push(message('user', text));
         c.proposal = null;
         scroll();
         call({action: 'send', message: text}).then(function(d) {
-            if (d.reply) c.messages.push({role: 'assistant', content: d.reply.content, citations: d.reply.citations || []});
+            if (d.reply) c.messages.push(message('assistant', d.reply.content, d.reply.citations));
             c.proposal = d.proposal || null;
             scroll();
         });
@@ -54,7 +82,7 @@ api.controller = function($scope, $timeout, $interval) {
         call({action: 'create', proposal: proposal}).then(function(d) {
             c.proposal = null;
             if (d.created) {
-                c.messages.push({role: 'assistant', content: 'I opened ' + d.created.number + ' for you. BARQ AI Agent is working on it; you will see its answer here.', citations: []});
+                c.messages.push(message('assistant', 'I opened ' + d.created.number + ' for you. BARQ AI Agent is working on it; you will see its answer here.'));
                 c.open({sys_id: d.created.sys_id});
             }
             scroll();
@@ -71,6 +99,9 @@ api.controller = function($scope, $timeout, $interval) {
             if (d.ticket) c.ticket = d.ticket;
             scroll();
         });
+    };
+    c.confirmCancel = function() {
+        if (window.confirm('Cancel ' + c.ticket.number + '? Nobody will work on it any more.')) c.act('cancel');
     };
     c.close = function() { c.ticket = null; scroll(); };
     c.refresh = function() {

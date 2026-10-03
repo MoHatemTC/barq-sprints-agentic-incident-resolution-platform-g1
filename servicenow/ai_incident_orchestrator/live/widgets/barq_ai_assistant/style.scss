@@ -27,6 +27,7 @@
 .barq-proposal { background: #fffaf0; border: 1px solid #f1d39a; }
 .barq-proposal-title { font-weight: 600; margin: 6px 0 10px; }
 .barq-actions { display: flex; gap: 8px; margin: 6px 0 12px; }
+.barq-actions-quiet { justify-content: flex-end; margin: 0 0 4px; font-size: 13px; }
 .barq-typing { color: #5f6b7a; font-style: italic; margin: 4px 0 8px; }
 .barq-error { color: #8e1c1c; margin: 6px 0; }
 .barq-input { display: flex; gap: 8px; padding: 12px 14px; border-top: 1px solid #eef1f4; }

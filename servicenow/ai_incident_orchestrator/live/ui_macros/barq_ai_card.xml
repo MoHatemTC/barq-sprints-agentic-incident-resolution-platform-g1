@@ -84,7 +84,7 @@ try {
         }
         var updated = current.getDisplayValue(P + 'processing_end');
         if (updated) facts.push('Updated: ' + esc(updated));
-        if (facts.length) html.push('&lt;div class="barq-facts"&gt;' + facts.join('&lt;span class="barq-sep"&gt;&lt;/span&gt;') + '&lt;/div&gt;');
+        if (facts.length) html.push('&lt;div class="barq-facts"&gt;&lt;span&gt;' + facts.join('&lt;/span&gt;&lt;span class="barq-sep"&gt;&lt;/span&gt;&lt;span&gt;') + '&lt;/span&gt;&lt;/div&gt;');
         if (hint) html.push('&lt;div class="barq-hint"&gt;' + esc(hint) + '&lt;/div&gt;');
         if (aiState == 'failed' &amp;&amp; failure) html.push('&lt;div class="barq-failure"&gt;' + esc(failure) + '&lt;/div&gt;');
 

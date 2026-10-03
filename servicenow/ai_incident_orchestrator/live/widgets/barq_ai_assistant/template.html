@@ -24,8 +24,8 @@
     <div class="barq-thread" id="barq-thread">
       <div ng-if="!c.ticket">
         <div class="barq-msg" ng-repeat="m in c.messages" ng-class="m.role == 'user' ? 'from-me' : 'from-ai'">
-          <div class="barq-bubble">{{m.content}}</div>
-          <div class="barq-cites" ng-if="m.citations.length">Sources: <span ng-repeat="s in m.citations">{{s.article_number || s.number || s.title}}{{$last ? '' : ', '}}</span></div>
+          <div class="barq-bubble" ng-bind-html="m.html"></div>
+          <div class="barq-cites" ng-if="m.sources.length">Sources: {{m.sources.join(', ')}}</div>
         </div>
         <div class="barq-msg from-ai" ng-if="c.proposal">
           <div class="barq-bubble barq-proposal">
@@ -40,7 +40,11 @@
         <div class="barq-msg from-me"><div class="barq-bubble">{{c.ticket.description}}</div></div>
         <div class="barq-msg" ng-repeat="e in c.ticket.conversation" ng-class="e.mine ? 'from-me' : 'from-ai'">
           <div class="barq-who" ng-if="!e.mine">{{e.agent ? 'BARQ AI Agent' : e.who}}</div>
-          <div class="barq-bubble">{{e.text}}</div>
+          <div class="barq-bubble" ng-bind-html="c.readable(e.text)"></div>
+        </div>
+        <div class="barq-actions barq-actions-quiet" ng-if="c.ticket.can_cancel">
+          <button class="barq-link" ng-if="c.ticket.can_ask_person" ng-click="c.act('person')" ng-disabled="c.busy">Talk to a person</button>
+          <button class="barq-link" ng-click="c.confirmCancel()" ng-disabled="c.busy">Cancel this ticket</button>
         </div>
         <div class="barq-actions" ng-if="c.ticket.can_confirm">
           <button class="barq-btn" ng-click="c.act('confirm')" ng-disabled="c.busy">It works, close it</button>

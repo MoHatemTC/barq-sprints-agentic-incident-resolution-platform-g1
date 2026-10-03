@@ -31,6 +31,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from verify_agentic_core import (  # noqa: E402
+    VPN_TEXT,
     Backend,
     P,
     ServiceNow,
@@ -101,15 +102,62 @@ class AdminSession:
             f"inc.comments = {json.dumps(text)}; inc.update();",
         )
 
-    def hand_back(self, user_name: str, sys_id: str, instruction: str) -> None:
-        """Run the real "Hand back to BARQ AI" action script as the engineer."""
-        action = (LIVE / "ui_actions/hand_back_to_ai.js").read_text(encoding="utf-8")
-        self.run_as(
-            user_name,
-            f"var current = new GlideRecord('incident'); current.get({json.dumps(sys_id)});\n"
-            f"current.work_notes = {json.dumps(instruction)};\n"
-            "var action = { setRedirectURL: function() {} };\n" + action,
+
+class Desk:
+    """Press a form button exactly as the browser does, as a real (impersonated) user.
+
+    The form is loaded as that user, so a button only exists if its condition shows it
+    to them; pressing submits the form with that button's action, and the button's own
+    script runs in the app scope as that user."""
+
+    def __init__(self, sn: ServiceNow, user_name: str) -> None:
+        self.admin = AdminSession()
+        user = sn.query("sys_user", f"user_name={user_name}", "sys_id")[0]["sys_id"]
+        request = urllib.request.Request(
+            f"{self.admin.url}/api/now/ui/impersonate/{user}",
+            data=b"{}",
+            method="POST",
+            headers={"X-UserToken": self.admin.ck, "Content-Type": "application/json"},
         )
+        self.admin.opener.open(request, timeout=60).read()
+
+    def _form(self, sys_id: str) -> str:
+        url = f"{self.admin.url}/incident.do?sys_id={sys_id}"
+        return self.admin.opener.open(url, timeout=120).read().decode("utf-8", "replace")
+
+    def buttons(self, sys_id: str) -> dict[str, str]:
+        """Visible BARQ buttons: action name -> UI action sys_id."""
+        html_text = self._form(sys_id)
+        return dict(re.findall(r'value="(barq_[a-z_]+)"[^>]*?gsft_id="([0-9a-f]{32})"', html_text))
+
+    def press(self, sys_id: str, action_name: str, **fields: str) -> str | None:
+        """Press ``action_name``; returns the page's messages, or None if not offered."""
+        html_text = self._form(sys_id)
+        found = dict(re.findall(r'value="(barq_[a-z_]+)"[^>]*?gsft_id="([0-9a-f]{32})"', html_text))
+        if action_name not in found:
+            return None
+        ck = re.search(r"var g_ck = '([^']+)'", html_text)
+        mod = re.search(r'name="sys_modCount"[^>]*value="(\d*)"', html_text)
+        form = {
+            "sysparm_ck": ck.group(1) if ck else "",
+            "sys_target": "incident",
+            "sys_uniqueName": "sys_id",
+            "sys_uniqueValue": sys_id,
+            "sys_action": found[action_name],
+            "sys_modCount": mod.group(1) if mod else "",
+            **{f"incident.{name}": value for name, value in fields.items()},
+        }
+        page = (
+            self.admin.opener.open(
+                f"{self.admin.url}/incident.do",
+                data=urllib.parse.urlencode(form).encode(),
+                timeout=180,
+            )
+            .read()
+            .decode("utf-8", "replace")
+        )
+        messages = re.findall(r'class="outputmsg_text">([^<]+)<', page)
+        return " | ".join(html.unescape(m) for m in messages) or "pressed"
 
 
 def runs(be: Backend, sys_id: str) -> list[dict[str, Any]]:
@@ -223,10 +271,10 @@ def scenario_engineer_takes_over_then_hands_back(sn, be, admin, caller, engineer
         120,
     )
     count = len(runs(be, inc["sys_id"]))
-    admin.hand_back(
-        engineer["user_name"],
+    pressed = Desk(sn, engineer["user_name"]).press(
         inc["sys_id"],
-        "The caller changed their password yesterday; use the VPN credential article.",
+        "barq_hand_back_to_ai",
+        work_notes="The caller changed their password yesterday; use the VPN credential article.",
     )
     resumed = wait_for(settled_after(be, inc["sys_id"], count + 1), 300)
     final = sn.incident(inc["sys_id"])
@@ -235,6 +283,7 @@ def scenario_engineer_takes_over_then_hands_back(sn, be, admin, caller, engineer
         "engineer_reply_locked_the_agent_out": bool(taken),
         "stood_down_note": any("stood down" in n for n in notes),
         "engineer_reply_recorded": bool(observed),
+        "hand_back_button_offered_and_pressed": pressed is not None,
         "hand_back_note_with_instruction": any(
             "Handed back to BARQ AI Agent" in n and "Instruction" in n for n in notes
         ),
@@ -298,10 +347,94 @@ def scenario_caller_reopens_ai_resolution(sn, be, admin, caller, engineer) -> di
     }
 
 
+APPROVER = os.environ.get("APPROVER_USER_NAME", "barq.approver")
+
+
+def scenario_approver_approves_on_page(sn, be, admin, caller, engineer) -> dict[str, Any]:
+    """E2 on the real page: a P1 parks; the engineer has no Approve button; the approver
+    edits AI Resolution and presses Approve AI fix; the edited fix is applied once."""
+    caller = fresh_caller(sn)
+    inc = sn.create_incident(
+        incident_fields(
+            caller["sys_id"],
+            short="Whole sales floor cannot reach the VPN",
+            description=VPN_TEXT + " Nobody on the sales floor can connect.",
+            impact="1",
+            urgency="1",
+        )
+    )
+    run = wait_for(settled_after(be, inc["sys_id"], 1), 300)
+    engineer_buttons = Desk(sn, engineer["user_name"]).buttons(inc["sys_id"])
+    fix = (
+        "1. Ask the user to sign out of the VPN client completely. 2. Clear the saved "
+        "credentials in the VPN client. 3. Sign in again with the new password."
+    )
+    message = Desk(sn, APPROVER).press(
+        inc["sys_id"], "barq_approve_ai_fix", **{f"{P}resolution": fix}
+    )
+    final = wait_for(
+        lambda: (r := sn.incident(inc["sys_id"]))["state"] == "Resolved" and r, 180
+    ) or sn.incident(inc["sys_id"])
+    newest = runs(be, inc["sys_id"])[0]
+    checks = {
+        "parked": bool(run) and run.get("status") == "awaiting_approval",
+        "engineer_has_no_approve_button": "barq_approve_ai_fix" not in engineer_buttons,
+        "approver_pressed_approve": message is not None,
+        "resolved_after_approval": final["state"] == "Resolved",
+        "edited_fix_applied": fix[:40] in (final.get("close_notes") or ""),
+        "backend_run_finished": newest.get("status") == "succeeded",
+    }
+    return {
+        "incident": final["number"],
+        "sys_id": inc["sys_id"],
+        "message": message,
+        "runs": runs(be, inc["sys_id"]),
+        "checks": checks,
+    }
+
+
+def scenario_engineer_takes_over_parked(sn, be, admin, caller, engineer) -> dict[str, Any]:
+    """E4 on the real page: Take over on a paused run rejects it and locks the agent out."""
+    caller = fresh_caller(sn)
+    inc = sn.create_incident(
+        incident_fields(
+            caller["sys_id"],
+            short="Order processing outage reported by the caller",
+            description="Orders fail to submit for everyone in my team.",
+            category="software",
+            impact="1",
+            urgency="1",
+        )
+    )
+    run = wait_for(settled_after(be, inc["sys_id"], 1), 300)
+    message = Desk(sn, engineer["user_name"]).press(inc["sys_id"], "barq_take_over_from_ai")
+    closed = wait_for(
+        lambda: (r := runs(be, inc["sys_id"])[0]).get("status") not in ("awaiting_approval",) and r,
+        120,
+    )
+    final = sn.incident(inc["sys_id"])
+    checks = {
+        "parked": bool(run) and run.get("status") == "awaiting_approval",
+        "take_over_pressed": message is not None,
+        "paused_run_closed": bool(closed) and closed.get("status") != "awaiting_approval",
+        "locked": final[f"{P}human_lock"] == "true",
+        "nothing_resolved": final["state"] != "Resolved",
+    }
+    return {
+        "incident": final["number"],
+        "sys_id": inc["sys_id"],
+        "message": message,
+        "runs": runs(be, inc["sys_id"]),
+        "checks": checks,
+    }
+
+
 SCENARIOS = {
     "ask_then_continue": scenario_ask_then_continue,
     "engineer_takes_over_then_hands_back": scenario_engineer_takes_over_then_hands_back,
     "caller_reopens_ai_resolution": scenario_caller_reopens_ai_resolution,
+    "approver_approves_on_page": scenario_approver_approves_on_page,
+    "engineer_takes_over_parked": scenario_engineer_takes_over_parked,
 }
 
 

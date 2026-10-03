@@ -1,13 +1,13 @@
-// UI action "Hand back to BARQ AI" (incident form). Condition:
-//   current.active == true && current.state != 6 &&
-//   current.x_2215032_ai_inc_0_ai_enabled == true &&
-//   (current.x_2215032_ai_inc_0_ai_human_lock == true ||
-//    current.x_2215032_ai_inc_0_ai_processing_state == 'failed' ||
-//    current.x_2215032_ai_inc_0_ai_processing_state == 'complete') &&
-//   (gs.hasRole('itil') || gs.hasRole('x_2215032_ai_inc_0.operator'))
+// UI action "Hand back to BARQ AI" (incident form). Condition: new x_2215032_ai_inc_0.BarqControl().canHandBack(current)
 // Returns the incident to the agent. Whatever the engineer typed in Work notes becomes
 // the instruction; the agent continues with the whole conversation as evidence.
 (function() {
+    // The condition is checked again here: a button must never act where it does not apply.
+    if (!new x_2215032_ai_inc_0.BarqControl().canHandBack(current)) {
+        gs.addErrorMessage('This action is not available for this incident now.');
+        action.setRedirectURL(current);
+        return;
+    }
     var P = 'x_2215032_ai_inc_0_ai_';
     var instruction = String(current.work_notes || '').trim();
     var incident = new GlideRecord('incident');

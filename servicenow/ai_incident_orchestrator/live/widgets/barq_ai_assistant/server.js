@@ -36,7 +36,10 @@
             tone: s.tone,
             updated: gr.getDisplayValue('sys_updated_on'),
             can_reply: ['6', '7', '8'].indexOf(gr.getValue('state')) < 0,
-            can_confirm: gr.getValue('state') == '6'
+            can_confirm: gr.getValue('state') == '6',
+            can_cancel: ['6', '7', '8'].indexOf(gr.getValue('state')) < 0,
+            can_ask_person: ['6', '7', '8'].indexOf(gr.getValue('state')) < 0 &&
+                gr.getValue(P + 'human_lock') != '1'
         };
     }
 
@@ -151,6 +154,26 @@
         if (!text) return;
         ticket.comments = text;
         ticket.update();
+    } else if (action == 'person' || action == 'cancel') {
+        // Ownership was checked above. Both are the caller's own decisions about their
+        // ticket, applied server-side with a fixed set of fields (the caller cannot edit
+        // the AI fields or the state through their own ACLs).
+        var open = ['6', '7', '8'].indexOf(ticket.getValue('state')) < 0;
+        var record = new GlideRecord('incident');
+        if (open && record.get(ticket.getUniqueValue())) {
+            if (action == 'person') {
+                // Human Lock: BARQ AI Agent stops writing; an engineer can hand it back.
+                record.setValue(P + 'human_lock', true);
+                record.comments = 'I would like to talk to a person, please.';
+                record.work_notes = 'The caller asked for a person on the BARQ AI page, so BARQ AI Agent stood down. ' +
+                    'Reply to the caller here; use "Hand back to BARQ AI" to return it to the agent.';
+            } else {
+                record.state = 8;
+                record.close_notes = 'Cancelled by the caller on the BARQ AI page.';
+                record.work_notes = 'Cancelled by the caller on the BARQ AI page; BARQ AI Agent stops.';
+            }
+            record.update();
+        }
     } else if (action == 'confirm') {
         // Ownership was checked above; closing a solved ticket is the caller's decision,
         // so it is applied server-side even where the caller cannot edit the state field.

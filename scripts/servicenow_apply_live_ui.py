@@ -22,8 +22,9 @@ from pathlib import Path
 from typing import Any
 
 SCOPE = "51a63bbf738bc7502aedfed25ab8b789"
-OPERATOR = "gs.hasRole('x_2215032_ai_inc_0.operator')"
-PAUSED = "current.x_2215032_ai_inc_0_ai_processing_state == 'awaiting_approval'"
+#: ServiceNow keeps only 254 characters of a UI action condition (a longer one is cut and
+#: then ignored, so the button always shows); the rules live in BarqControl.
+CONTROL = "new x_2215032_ai_inc_0.BarqControl()"
 LIVE = Path(__file__).resolve().parents[1] / "servicenow/ai_incident_orchestrator/live"
 
 SCRIPT_INCLUDES = [
@@ -35,14 +36,23 @@ SCRIPT_INCLUDES = [
         "active": "true",
         "description": "Server-side bridge from ServiceNow to the BARQ backend.",
         "source": "BarqBackend.js",
-    }
+    },
+    {
+        "name": "BarqControl",
+        "api_name": "x_2215032_ai_inc_0.BarqControl",
+        "access": "package_private",
+        "client_callable": "false",
+        "active": "true",
+        "description": "When each BARQ button applies (conditions are limited to 254 characters).",
+        "source": "BarqControl.js",
+    },
 ]
 
-UI_ACTIONS = [
+UI_ACTIONS = [  # every condition must stay under 254 characters
     {
         "name": "Approve AI fix",
         "action_name": "barq_approve_ai_fix",
-        "condition": f"{PAUSED} && {OPERATOR}",
+        "condition": f"{CONTROL}.canDecide(current)",
         "hint": "Approve the paused BARQ AI run. Edit AI Resolution first to approve your own fix.",
         "order": "100",
         "source": "ui_actions/approve_ai_fix.js",
@@ -50,7 +60,7 @@ UI_ACTIONS = [
     {
         "name": "Reject AI fix",
         "action_name": "barq_reject_ai_fix",
-        "condition": f"{PAUSED} && {OPERATOR}",
+        "condition": f"{CONTROL}.canDecide(current)",
         "hint": "Reject the paused BARQ AI run; nothing is applied.",
         "order": "110",
         "source": "ui_actions/reject_ai_fix.js",
@@ -58,10 +68,7 @@ UI_ACTIONS = [
     {
         "name": "Take over from AI",
         "action_name": "barq_take_over_from_ai",
-        "condition": (
-            "current.x_2215032_ai_inc_0_ai_human_lock != true && current.active == true && "
-            "(gs.hasRole('itil') || " + OPERATOR + ")"
-        ),
+        "condition": f"{CONTROL}.canTakeOver(current)",
         "hint": "Lock BARQ AI Agent out of this incident and handle it yourself.",
         "order": "120",
         "source": "ui_actions/take_over_from_ai.js",
@@ -72,14 +79,7 @@ UI_ACTIONS.append(
     {
         "name": "Hand back to BARQ AI",
         "action_name": "barq_hand_back_to_ai",
-        "condition": (
-            "current.active == true && current.state != 6 && "
-            "current.x_2215032_ai_inc_0_ai_enabled == true && "
-            "(current.x_2215032_ai_inc_0_ai_human_lock == true || "
-            "current.x_2215032_ai_inc_0_ai_processing_state == 'failed' || "
-            "current.x_2215032_ai_inc_0_ai_processing_state == 'complete') && "
-            "(gs.hasRole('itil') || " + OPERATOR + ")"
-        ),
+        "condition": f"{CONTROL}.canHandBack(current)",
         "hint": (
             "Return this incident to BARQ AI Agent. Anything you typed in Work notes "
             "is passed to the agent as your instruction."
