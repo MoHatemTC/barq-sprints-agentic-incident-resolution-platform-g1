@@ -48,17 +48,22 @@ from agent.semantic_cache import (
 from app.core.config import Settings, get_settings
 from app.core.correlation import clear_correlation_id, get_correlation_id, set_correlation_id
 from app.db.redis.keys import INCIDENT_DLQ_QUEUE
+from app.events import is_observe_only, may_use_semantic_cache
 from app.models.semantic_cluster import AdmissionMode, AdmissionResult, ClusterStatus
 from app.workers.celery_app import celery_app
 from app.workers.cluster_runtime import (
+    ReuseVerdict,
     apply_follower_cluster_resolution,
     cacheable_result,
     dispatch_cluster_waiters,
+    follower_reuse_verdict,
+    leader_caller_id,
     load_cluster_incident,
 )
 from app.workers.db import WorkerRepo, build_worker_repo
 from app.workers.incident_state import (
     prepare_servicenow_retry_sync,
+    record_outcome_best_effort,
     write_final_failure_best_effort,
 )
 from app.workers.producer import CORRELATION_HEADER
@@ -130,6 +135,18 @@ def _stub_graph(payload: dict[str, Any]) -> dict[str, Any]:
     if number.startswith("INCBROKEN"):
         raise TerminalError(f"forced terminal failure for {number}")
     return {"draft": f"stub resolution for {number}"}
+
+
+def _safe_text(exc: BaseException, limit: int = 4000) -> str:
+    """``str(exc)`` with credentials and personal data masked, for anything persisted or logged.
+
+    Provider and transport errors can echo request data. The DLQ record and the
+    traceback were already redacted; the failure message, termination cause, cluster
+    failure reason and log reasons were not.
+    """
+    from observability.redaction import redact_text
+
+    return redact_text(str(exc))[:limit]
 
 
 def record_dead_letter(
@@ -283,6 +300,31 @@ def _run_incident(
 
     repo.ensure_retry_state(execution_uuid, max_attempts=cfg.max_retries)
 
+    event_type = str(payload.get("event_type") or "")
+    if is_observe_only(event_type):
+        # A person acted (engineer replied, ticket reopened or closed). The agent
+        # records it for learning and the audit trail; it never runs the graph or
+        # writes to ServiceNow for these.
+        active_settings = settings or getattr(task, "settings", None)
+        if graph_backend == "langgraph" and active_settings is not None:
+            record_outcome_best_effort(active_settings, payload, event_type)
+        repo.mark_succeeded(execution_uuid, termination_cause=f"observed:{event_type}")
+        logger.info("incident_event_observed", execution_id=execution_id, event_type=event_type)
+        return {"status": "observed", "execution_id": execution_id, "event_type": event_type}
+
+    # A newer run replaces any older run of this incident still paused for approval
+    # (the caller answered, or an engineer handed it back): that pause can no longer be
+    # approved, and ServiceNow and the backend agree on one live run.
+    incident_sys_id = str(payload.get("sys_id") or "")
+    if incident_sys_id:
+        superseded = repo.supersede_paused_runs(incident_sys_id, execution_uuid)
+        if superseded:
+            logger.info(
+                "paused_runs_superseded",
+                execution_id=execution_id,
+                superseded=[str(run) for run in superseded],
+            )
+
     admission = AdmissionResult(mode=AdmissionMode.INDEPENDENT, reason="not_admitted")
     candidate_draft = None
     try:
@@ -294,7 +336,17 @@ def _run_incident(
             else True
         )
 
-        if enable_cache:
+        if enable_cache and not may_use_semantic_cache(event_type):
+            logger.info(
+                "semantic_cache_skipped_for_conversation_event",
+                execution_id=execution_id,
+                event_type=event_type,
+            )
+            admission = AdmissionResult(
+                mode=AdmissionMode.INDEPENDENT,
+                reason="conversation_event_not_cacheable",
+            )
+        elif enable_cache:
             redis_client = getattr(task, "dlq_redis", None)
             cache = semantic_cache or get_semantic_cache(repo=repo, redis_client=redis_client)
             try:
@@ -347,36 +399,75 @@ def _run_incident(
                 cluster_status = cache.get_cluster_status(cluster_id)
                 if cluster_status == ClusterStatus.RESOLVED:
                     solution = cache.get_cluster_solution(cluster_id) or {}
-                    if graph_backend == "langgraph":
-                        apply_follower_cluster_resolution(
-                            payload,
+                    # Clustering says two incidents read alike, not that this one may be
+                    # auto-resolved: the follower must pass its own deterministic gates
+                    # (eligibility, screening, risk) first. See follower_reuse_verdict.
+                    verdict = (
+                        follower_reuse_verdict(
+                            incident,
                             solution,
-                            execution_id=execution_id,
-                            correlation_id=correlation_id or execution_id,
+                            leader_caller=leader_caller_id(
+                                admission.anchor_incident_sys_id,
+                                execution_id,
+                                correlation_id or execution_id,
+                            ),
                         )
-                    if repo is not None:
-                        repo.mark_member_applied(cluster_id, execution_uuid)
-                    repo.mark_succeeded(execution_uuid, **_execution_summary(solution))
+                        if graph_backend == "langgraph"
+                        else ReuseVerdict(True, "stub graph backend")
+                    )
+                    if verdict.allowed:
+                        if graph_backend == "langgraph":
+                            apply_follower_cluster_resolution(
+                                payload,
+                                solution,
+                                execution_id=execution_id,
+                                correlation_id=correlation_id or execution_id,
+                                raw_incident=incident,
+                            )
+                        if repo is not None:
+                            repo.mark_member_applied(cluster_id, execution_uuid)
+                        repo.mark_succeeded(execution_uuid, **_execution_summary(solution))
+                        logger.info(
+                            "incident_follower_resolved_from_cluster",
+                            execution_id=execution_id,
+                            cluster_id=str(cluster_id),
+                            anchor_incident=admission.anchor_incident_number,
+                        )
+                        return {
+                            "status": "succeeded",
+                            "execution_id": execution_id,
+                            "cluster_id": str(cluster_id),
+                            "cluster_role": "follower",
+                            "result": solution,
+                        }
+                    # Declined: run the full governed graph (risk routing, approval,
+                    # critic, safety, write). The cached draft is still offered, so only
+                    # the generate call is saved; every citation is re-checked against
+                    # this incident's own evidence.
                     logger.info(
-                        "incident_follower_resolved_from_cluster",
+                        "follower_cluster_reuse_declined",
+                        execution_id=execution_id,
+                        cluster_id=str(cluster_id),
+                        reason=verdict.reason,
+                    )
+                    candidate_draft = solution.get("cache_draft")
+                elif (
+                    cluster_status == ClusterStatus.AWAITING_APPROVAL
+                    and graph_backend == "langgraph"
+                ):
+                    # The leader is waiting for a person, which can take hours. A similar
+                    # incident must not wait behind someone else's approval (a P1 outage
+                    # report queued invisibly behind a parked low-priority ticket was seen
+                    # live): it runs its own governed graph — its own risk, approval and
+                    # write — now.
+                    logger.info(
+                        "follower_runs_independently_while_leader_awaits_a_person",
                         execution_id=execution_id,
                         cluster_id=str(cluster_id),
                         anchor_incident=admission.anchor_incident_number,
                     )
-                    return {
-                        "status": "succeeded",
-                        "execution_id": execution_id,
-                        "cluster_id": str(cluster_id),
-                        "cluster_role": "follower",
-                        "result": solution,
-                    }
                 elif (
-                    cluster_status
-                    in (
-                        ClusterStatus.RUNNING,
-                        ClusterStatus.CREATING,
-                        ClusterStatus.AWAITING_APPROVAL,
-                    )
+                    cluster_status in (ClusterStatus.RUNNING, ClusterStatus.CREATING)
                     and graph_backend == "langgraph"
                 ):
                     repo.mark_cluster_waiting(execution_uuid, correlation_id or execution_id)
@@ -387,7 +478,10 @@ def _run_incident(
                         "cluster_role": "follower",
                     }
 
-                if cluster_status == ClusterStatus.AWAITING_APPROVAL:
+                if (
+                    cluster_status == ClusterStatus.AWAITING_APPROVAL
+                    and graph_backend != "langgraph"
+                ):
                     repo.mark_awaiting_approval(execution_uuid)
                     logger.info(
                         "incident_follower_awaiting_cluster_approval",
@@ -419,7 +513,7 @@ def _run_incident(
                         execution_id=execution_id,
                         cluster_id=str(cluster_id),
                     )
-                else:
+                elif cluster_status != ClusterStatus.RESOLVED:
                     logger.warning(
                         "cluster_leader_decoupled_fallback_to_independent",
                         execution_id=execution_id,
@@ -475,7 +569,7 @@ def _run_incident(
             execution_id=execution_uuid,
             attempt=attempt,
             failure_type=_failure_type(exc),
-            message=str(exc),
+            message=_safe_text(exc),
             retryable=True,
             details=_failure_details(exc, execution_id, correlation_id),
         )
@@ -495,7 +589,7 @@ def _run_incident(
 
         # Budget consumed: exhausted ⟺ attempt_count == max_attempts.
         if admission.mode == AdmissionMode.LEADER and admission.cluster_id is not None:
-            cache.mark_cluster_failed(admission.cluster_id, str(exc))
+            cache.mark_cluster_failed(admission.cluster_id, _safe_text(exc))
         repo.mark_exhausted(
             execution_id=execution_uuid,
             max_attempts=cfg.max_retries,
@@ -505,12 +599,12 @@ def _run_incident(
         raise exc from exc
     except TerminalError as exc:
         if admission.mode == AdmissionMode.LEADER and admission.cluster_id is not None:
-            cache.mark_cluster_failed(admission.cluster_id, str(exc))
+            cache.mark_cluster_failed(admission.cluster_id, _safe_text(exc))
         failure_id = repo.log_failure(
             execution_id=execution_uuid,
             attempt=attempt,
             failure_type=_failure_type(exc),
-            message=str(exc),
+            message=_safe_text(exc),
             retryable=False,
             details=_failure_details(exc, execution_id, correlation_id),
         )
@@ -518,19 +612,19 @@ def _run_incident(
             execution_id=execution_uuid,
             attempt=attempt,
             last_failure_id=failure_id,
-            termination_cause=f"terminal failure: {exc}",
+            termination_cause=f"terminal failure: {_safe_text(exc, 500)}",
         )
-        logger.warning("terminal_failure", execution_id=execution_id, reason=str(exc))
+        logger.warning("terminal_failure", execution_id=execution_id, reason=_safe_text(exc))
         raise
     except Exception as exc:
         # Unknown exception: fail closed. A deterministic bug gets no retries.
         if admission.mode == AdmissionMode.LEADER and admission.cluster_id is not None:
-            cache.mark_cluster_failed(admission.cluster_id, str(exc))
+            cache.mark_cluster_failed(admission.cluster_id, _safe_text(exc))
         failure_id = repo.log_failure(
             execution_id=execution_uuid,
             attempt=attempt,
             failure_type=_failure_type(exc),
-            message=str(exc),
+            message=_safe_text(exc),
             retryable=False,
             details=_failure_details(exc, execution_id, correlation_id),
         )
@@ -538,9 +632,9 @@ def _run_incident(
             execution_id=execution_uuid,
             attempt=attempt,
             last_failure_id=failure_id,
-            termination_cause=f"unclassified failure: {exc}",
+            termination_cause=f"unclassified failure: {_safe_text(exc, 500)}",
         )
-        logger.error("unclassified_failure", execution_id=execution_id, reason=str(exc))
+        logger.error("unclassified_failure", execution_id=execution_id, reason=_safe_text(exc))
         raise
 
     if result.get("paused"):

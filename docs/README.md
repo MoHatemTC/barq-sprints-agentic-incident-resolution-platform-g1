@@ -12,6 +12,14 @@ layouts are indexed below, so a record is findable either way. See
 [ROADMAP.md](ROADMAP.md) for the full four-sprint PRD scope, and
 [../TEAM.md](../TEAM.md) for who owns what.
 
+## Admin chatbot — PR #213
+
+- [Implementation and continuation handoff](admin_chatbot_handoff.md): complete PR scope,
+  architecture, milestones, verification limits and the M4–M6 implementation queue.
+- [Setup and operation](admin_chatbot.md)
+- [Manual E2E suite](admin_chatbot_e2e_test_suite.md)
+- [M2 verification](chat_m2_verification.md) / [M3 verification](chat_m3_verification.md)
+
 ## Sprint 1 — Platform Build
 
 [docs/sprint-1/](sprint-1/) — status table and links for all five tasks.

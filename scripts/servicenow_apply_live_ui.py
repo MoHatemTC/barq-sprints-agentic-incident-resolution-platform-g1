@@ -1,0 +1,261 @@
+"""Apply the BARQ live ServiceNow UI (bridge + incident actions) to an instance.
+
+Setup only: uses the instance admin login from the environment (SN_INSTANCE_URL,
+SN_ADMIN_USER, SN_ADMIN_PASS); the agent never uses it. Idempotent: records are
+matched by name in the x_2215032_ai_inc_0 scope and updated in place. Every change is
+appended to a JSON-lines manifest (--manifest) with the previous values, so it can be
+reverted by deactivating what was created and restoring what was changed.
+
+    uv run python scripts/servicenow_apply_live_ui.py --manifest change_manifest.jsonl
+"""
+
+from __future__ import annotations
+
+import argparse
+import base64
+import json
+import os
+import urllib.parse
+import urllib.request
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+SCOPE = "51a63bbf738bc7502aedfed25ab8b789"
+#: ServiceNow keeps only 254 characters of a UI action condition (a longer one is cut and
+#: then ignored, so the button always shows); the rules live in BarqControl.
+CONTROL = "new x_2215032_ai_inc_0.BarqControl()"
+LIVE = Path(__file__).resolve().parents[1] / "servicenow/ai_incident_orchestrator/live"
+
+SCRIPT_INCLUDES = [
+    {
+        "name": "BarqBackend",
+        "api_name": "x_2215032_ai_inc_0.BarqBackend",
+        "access": "package_private",
+        "client_callable": "false",
+        "active": "true",
+        "description": "Server-side bridge from ServiceNow to the BARQ backend.",
+        "source": "BarqBackend.js",
+    },
+    {
+        "name": "BarqControl",
+        "api_name": "x_2215032_ai_inc_0.BarqControl",
+        "access": "package_private",
+        "client_callable": "false",
+        "active": "true",
+        "description": "When each BARQ button applies (conditions are limited to 254 characters).",
+        "source": "BarqControl.js",
+    },
+]
+
+UI_ACTIONS = [  # every condition must stay under 254 characters
+    {
+        "name": "Approve AI fix",
+        "action_name": "barq_approve_ai_fix",
+        "condition": f"{CONTROL}.canDecide(current)",
+        "hint": "Approve the paused BARQ AI run (or your own fix typed in Work notes).",
+        "order": "100",
+        "source": "ui_actions/approve_ai_fix.js",
+    },
+    {
+        "name": "Reject AI fix",
+        "action_name": "barq_reject_ai_fix",
+        "condition": f"{CONTROL}.canDecide(current)",
+        "hint": "Reject the paused BARQ AI run; nothing is applied.",
+        "order": "110",
+        "source": "ui_actions/reject_ai_fix.js",
+    },
+    {
+        "name": "Take over from AI",
+        "action_name": "barq_take_over_from_ai",
+        "condition": f"{CONTROL}.canTakeOver(current)",
+        "hint": "Lock BARQ AI Agent out of this incident and handle it yourself.",
+        "order": "120",
+        "source": "ui_actions/take_over_from_ai.js",
+    },
+]
+
+UI_ACTIONS.append(
+    {
+        "name": "Hand back to BARQ AI",
+        "action_name": "barq_hand_back_to_ai",
+        "condition": f"{CONTROL}.canHandBack(current)",
+        "hint": (
+            "Return this incident to BARQ AI Agent. Anything you typed in Work notes "
+            "is passed to the agent as your instruction."
+        ),
+        "order": "130",
+        "source": "ui_actions/hand_back_to_ai.js",
+    }
+)
+
+#: The event that carries contract v2, its sender, and the rule that raises it.
+EVENT_NAME = "x_2215032_ai_inc_0.barq_event"
+PROPERTIES = [
+    {
+        "name": "x_2215032_ai_inc_0.agent_user_name",
+        "value": "ai_orchestrator_svc",
+        "type": "string",
+        "description": "User name of BARQ AI Agent; its own writes never raise events.",
+    }
+]
+BUSINESS_RULES = [
+    {
+        "name": "BARQ AI - Conversation events",
+        "collection": "incident",
+        "when": "before",
+        "order": "1000",
+        "action_update": "true",
+        "action_insert": "false",
+        "advanced": "true",
+        "active": "true",
+        "description": "Turns caller, engineer, reopen and close actions into contract v2 events.",
+        "source": "business_rules/conversation_events.js",
+    }
+]
+SCRIPT_ACTIONS = [
+    {
+        "name": "BARQ AI - Send event v2",
+        "event_name": EVENT_NAME,
+        "active": "true",
+        "source": "script_actions/send_barq_event.js",
+    }
+]
+
+#: Superseded actions: deactivated, never deleted (they edited fields only, or embedded
+#: the operator secret in script text).
+RETIRE = ["Approve AI Suggestion", "Refuse AI Suggestion", "Approve & Capture to KB"]
+
+
+class Instance:
+    def __init__(self, url: str, user: str, password: str, manifest: Path) -> None:
+        self.url = url.rstrip("/")
+        token = base64.b64encode(f"{user}:{password}".encode()).decode()
+        self.auth = f"Basic {token}"
+        self.manifest = manifest
+
+    def request(self, method: str, path: str, body: dict[str, Any] | None = None) -> Any:
+        data = json.dumps(body).encode() if body is not None else None
+        req = urllib.request.Request(
+            f"{self.url}{path}",
+            data=data,
+            method=method,
+            headers={
+                "Authorization": self.auth,
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+            },
+        )
+        with urllib.request.urlopen(req, timeout=60) as resp:  # noqa: S310 - fixed https base
+            return json.load(resp).get("result")
+
+    def find(self, table: str, query: str, fields: str) -> list[dict[str, Any]]:
+        q = urllib.parse.urlencode({"sysparm_query": query, "sysparm_fields": fields})
+        return self.request("GET", f"/api/now/table/{table}?{q}") or []
+
+    def log(self, entry: dict[str, Any]) -> None:
+        entry["at"] = datetime.now(UTC).isoformat()
+        with self.manifest.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(entry) + "\n")
+
+    def upsert(self, table: str, query: str, fields: dict[str, Any]) -> str:
+        existing = self.find(table, query, "sys_id," + ",".join(k for k in fields if k != "script"))
+        if existing:
+            sys_id = existing[0]["sys_id"]
+            before = {k: v for k, v in existing[0].items() if k != "sys_id"}
+            self.request("PATCH", f"/api/now/table/{table}/{sys_id}", fields)
+            self.log({"op": "update", "table": table, "sys_id": sys_id, "before": before})
+            return str(sys_id)
+        created = self.request("POST", f"/api/now/table/{table}", fields)
+        self.log({"op": "create", "table": table, "sys_id": created["sys_id"]})
+        return str(created["sys_id"])
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--manifest", type=Path, required=True)
+    args = parser.parse_args()
+    instance = Instance(
+        os.environ["SN_INSTANCE_URL"],
+        os.environ["SN_ADMIN_USER"],
+        os.environ["SN_ADMIN_PASS"],
+        args.manifest,
+    )
+    for spec in SCRIPT_INCLUDES:
+        fields = {k: v for k, v in spec.items() if k != "source"}
+        fields["script"] = (LIVE / spec["source"]).read_text(encoding="utf-8")
+        fields["sys_scope"] = SCOPE
+        sys_id = instance.upsert(
+            "sys_script_include", f"name={spec['name']}^sys_scope={SCOPE}", fields
+        )
+        print(f"script include {spec['name']}: {sys_id}")
+    for spec in UI_ACTIONS:
+        fields = {k: v for k, v in spec.items() if k != "source"}
+        fields.update(
+            {
+                "script": (LIVE / spec["source"]).read_text(encoding="utf-8"),
+                "table": "incident",
+                "active": "true",
+                "form_button": "true",
+                "client": "false",
+                "sys_scope": SCOPE,
+            }
+        )
+        sys_id = instance.upsert(
+            "sys_ui_action", f"name={spec['name']}^table=incident^sys_scope={SCOPE}", fields
+        )
+        print(f"ui action {spec['name']}: {sys_id}")
+    for spec in PROPERTIES:
+        sys_id = instance.upsert(
+            "sys_properties", f"name={spec['name']}", {**spec, "sys_scope": SCOPE}
+        )
+        print(f"property {spec['name']}: {sys_id}")
+    sys_id = instance.upsert(
+        "sysevent_register",
+        f"event_name={EVENT_NAME}",
+        {
+            "event_name": EVENT_NAME,
+            "table": "incident",
+            "description": "BARQ contract v2 event (conversation, reopen, close, hand back).",
+            "sys_scope": SCOPE,
+        },
+    )
+    print(f"event {EVENT_NAME}: {sys_id}")
+    for spec in SCRIPT_ACTIONS:
+        fields = {k: v for k, v in spec.items() if k != "source"}
+        fields["script"] = (LIVE / spec["source"]).read_text(encoding="utf-8")
+        fields["sys_scope"] = SCOPE
+        sys_id = instance.upsert(
+            "sysevent_script_action", f"name={spec['name']}^sys_scope={SCOPE}", fields
+        )
+        print(f"script action {spec['name']}: {sys_id}")
+    for spec in BUSINESS_RULES:
+        fields = {k: v for k, v in spec.items() if k != "source"}
+        fields["script"] = (LIVE / spec["source"]).read_text(encoding="utf-8")
+        fields["sys_scope"] = SCOPE
+        sys_id = instance.upsert(
+            "sys_script", f"name={spec['name']}^collection=incident^sys_scope={SCOPE}", fields
+        )
+        print(f"business rule {spec['name']}: {sys_id}")
+    for name in RETIRE:
+        for record in instance.find(
+            "sys_ui_action", f"name={name}^table=incident^sys_scope={SCOPE}", "sys_id,active"
+        ):
+            if record["active"] == "true":
+                instance.request(
+                    "PATCH", f"/api/now/table/sys_ui_action/{record['sys_id']}", {"active": "false"}
+                )
+                instance.log(
+                    {
+                        "op": "update",
+                        "table": "sys_ui_action",
+                        "sys_id": record["sys_id"],
+                        "before": {"active": "true", "name": name},
+                    }
+                )
+                print(f"retired ui action {name}: {record['sys_id']}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

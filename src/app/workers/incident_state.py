@@ -4,14 +4,18 @@ from __future__ import annotations
 
 import asyncio
 import re
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
 import structlog
+from sqlalchemy import exists, select
 
 from app.clients.servicenow_client import ServiceNowClient
 from app.core.config import Settings
+from app.db.models import Approval, Execution, ExecutionNodeState
 from app.exceptions.app_errors import ConflictError
+from app.feedback import ArticleFeedbackStore, cited_articles
 from app.models.incident import AIProcessingState, IncidentUpdatePayload
 from observability.redaction import redact_text
 
@@ -19,6 +23,11 @@ logger = structlog.getLogger(__name__)
 
 _SYS_ID = re.compile(r"[0-9a-f]{32}\Z", re.IGNORECASE)
 _PREFIX = "x_2215032_ai_inc_0_ai_"
+# Same node name as ``agent.audit_store.HITL_NODE``; importing it would pull the
+# agent package into every worker hook.
+_HITL_NODE = "hitl.interrupt"
+
+PausedRunLookup = Callable[[str], bool]
 
 
 def incident_sys_id(payload: dict[str, Any]) -> str | None:
@@ -33,8 +42,18 @@ async def mark_incident_failed(
     execution_id: str,
     exc: Exception,
     attempt: int,
+    has_decidable_pause: PausedRunLookup | None = None,
 ) -> bool:
-    """Write a final failure once, without overwriting a human or completed run."""
+    """Write a final failure once, without overwriting a human or completed run.
+
+    ``awaiting_approval`` is normally left alone: an approver can still decide
+    it. But a run can fail after ServiceNow was told it is waiting and before a
+    pause was stored (INC0010252: the interrupt insert failed), leaving an
+    incident nobody can ever decide. ``has_decidable_pause(sys_id)`` answers
+    whether any run for the incident can still be decided; only a definite
+    ``False`` releases the incident. Without a lookup, or if it fails, the
+    incident is left as it is.
+    """
     sys_id = incident_sys_id(payload)
     if sys_id is None:
         return False
@@ -46,10 +65,17 @@ async def mark_incident_failed(
         if incident.ai_human_lock is not False:
             logger.warning("failure_write_skipped_human_lock", execution_id=execution_id)
             return False
-        if incident.ai_processing_state in {
-            AIProcessingState.COMPLETE,
-            AIProcessingState.AWAITING_APPROVAL,
-        }:
+        stuck_waiting = False
+        if incident.ai_processing_state is AIProcessingState.AWAITING_APPROVAL:
+            stuck_waiting = _no_decidable_pause(has_decidable_pause, sys_id, execution_id)
+            if not stuck_waiting:
+                logger.warning(
+                    "failure_write_skipped_finished_incident",
+                    execution_id=execution_id,
+                    state=incident.ai_processing_state.value,
+                )
+                return False
+        if incident.ai_processing_state is AIProcessingState.COMPLETE:
             logger.warning(
                 "failure_write_skipped_finished_incident",
                 execution_id=execution_id,
@@ -64,9 +90,15 @@ async def mark_incident_failed(
         if incident.ai_processing_start and ended_at < incident.ai_processing_start:
             ended_at = incident.ai_processing_start
         detail = redact_text(str(exc)).replace("\n", " ").strip()
+        released = (
+            " ServiceNow showed it awaiting approval, but no paused run exists to "
+            "decide, so it is released for an engineer."
+            if stuck_waiting
+            else ""
+        )
         reason = (
             f"Execution {execution_id} failed after {attempt} attempt(s): "
-            f"{type(exc).__name__}: {detail or 'no detail available'}"
+            f"{type(exc).__name__}: {detail or 'no detail available'}.{released}"
         )[:4000]
         await client.update_incident(
             sys_id,
@@ -76,8 +108,64 @@ async def mark_incident_failed(
                 ai_processing_end=ended_at,
             ),
         )
-        logger.warning("incident_marked_failed", execution_id=execution_id, incident_sys_id=sys_id)
+        logger.warning(
+            "incident_marked_failed",
+            execution_id=execution_id,
+            incident_sys_id=sys_id,
+            released_stuck_approval=stuck_waiting,
+        )
         return True
+
+
+def _no_decidable_pause(lookup: PausedRunLookup | None, sys_id: str, execution_id: str) -> bool:
+    """True only when the lookup positively says nothing can be decided."""
+    if lookup is None:
+        return False
+    try:
+        return lookup(sys_id) is False
+    except Exception as exc:  # noqa: BLE001 — unknown means leave the incident alone
+        logger.warning(
+            "failure_write_pause_lookup_failed",
+            execution_id=execution_id,
+            incident_sys_id=sys_id,
+            error=str(exc),
+        )
+        return False
+
+
+def postgres_pause_lookup(settings: Settings) -> PausedRunLookup:
+    """Ask PostgreSQL whether any run for an incident can still be decided.
+
+    Decidable means what ``POST /approvals/{id}/decide`` accepts: the execution
+    is ``awaiting_approval``, its pause was stored, and nobody has decided it.
+    """
+
+    def lookup(incident_sys_id: str) -> bool:
+        from app.workers.sync_engine import (
+            build_sync_database_url,
+            create_sync_engine,
+            create_sync_session_factory,
+            sync_session_scope,
+        )
+
+        engine = create_sync_engine(build_sync_database_url(settings))
+        try:
+            factory = create_sync_session_factory(engine)
+            with sync_session_scope(factory) as session:
+                paused = select(Execution.execution_id).where(
+                    Execution.incident_sys_id == incident_sys_id,
+                    Execution.status == "awaiting_approval",
+                    exists().where(
+                        ExecutionNodeState.execution_id == Execution.execution_id,
+                        ExecutionNodeState.node_name == _HITL_NODE,
+                    ),
+                    ~exists().where(Approval.execution_id == Execution.execution_id),
+                )
+                return session.scalar(paused.limit(1)) is not None
+        finally:
+            engine.dispose()
+
+    return lookup
 
 
 async def prepare_failed_incident_for_replay(settings: Settings, payload: dict[str, Any]) -> None:
@@ -141,7 +229,16 @@ def write_final_failure_best_effort(
 ) -> None:
     """Keep the DLQ hook alive even when ServiceNow itself is unavailable."""
     try:
-        asyncio.run(mark_incident_failed(settings, payload, execution_id, exc, attempt))
+        asyncio.run(
+            mark_incident_failed(
+                settings,
+                payload,
+                execution_id,
+                exc,
+                attempt,
+                has_decidable_pause=postgres_pause_lookup(settings),
+            )
+        )
     except Exception as write_exc:  # noqa: BLE001 — failure hook must preserve DLQ
         logger.exception(
             "incident_failure_write_failed",
@@ -149,6 +246,76 @@ def write_final_failure_best_effort(
             incident_sys_id=incident_sys_id(payload),
             error=str(write_exc),
         )
+
+
+#: Written by the conversation rule when an incident BARQ AI Agent resolved is reopened.
+REOPEN_AFTER_AI = "after a BARQ AI Agent resolution"
+
+
+def record_outcome_best_effort(settings: Settings, payload: dict[str, Any], event_type: str) -> int:
+    """Credit or penalise the articles behind an agent resolution (app.feedback).
+
+    ``incident.reopened`` counts against them when ServiceNow's conversation rule marked
+    the incident for review (it does so only for a reopened AI resolution);
+    ``incident.closed`` counts for them when the agent's fix completed without review.
+    Never raises: learning must not break event handling.
+    """
+    if event_type not in ("incident.reopened", "incident.closed"):
+        return 0
+    sys_id = incident_sys_id(payload)
+    if sys_id is None:
+        return 0
+    try:
+
+        async def read() -> Any:
+            async with ServiceNowClient(settings) as client:
+                incident = await client.get_incident(sys_id)
+                notes = ""
+                if event_type == "incident.reopened":
+                    conversation = await client.get_conversation(sys_id)
+                    notes = str((conversation or {}).get("work_notes") or "")
+                return incident, notes
+
+        incident, notes = asyncio.run(read())
+        articles = cited_articles(incident.ai_resolution)
+        if not articles:
+            return 0
+        if event_type == "incident.reopened":
+            # Only a reopened *AI* resolution counts: ServiceNow's conversation rule writes
+            # this note exactly then. A ticket an engineer resolved (review flag already
+            # set) must not count against the article the AI only suggested.
+            if not incident.ai_human_review_required or REOPEN_AFTER_AI not in notes:
+                return 0
+            outcome = "reopened"
+        else:
+            if (
+                incident.ai_processing_state is not AIProcessingState.COMPLETE
+                or incident.ai_human_review_required
+            ):
+                return 0
+            outcome = "confirmed"
+        from app.workers.sync_engine import (
+            build_sync_database_url,
+            create_sync_engine,
+            create_sync_session_factory,
+        )
+
+        engine = create_sync_engine(build_sync_database_url(settings))
+        try:
+            store = ArticleFeedbackStore(create_sync_session_factory(engine))
+            recorded = store.record(
+                incident_sys_id=sys_id,
+                articles=articles,
+                outcome=outcome,
+                event_id=str(payload.get("event_id") or ""),
+            )
+        finally:
+            engine.dispose()
+        logger.info("article_feedback_recorded", outcome=outcome, articles=articles)
+        return recorded
+    except Exception as exc:  # noqa: BLE001 - learning never breaks event handling
+        logger.warning("article_feedback_failed", error_type=type(exc).__name__)
+        return 0
 
 
 def reset_failed_incident_for_replay(settings: Settings, payload: dict[str, Any]) -> None:
@@ -185,6 +352,7 @@ def prepare_servicenow_retry_sync(settings: Settings, payload: dict[str, Any]) -
 __all__ = [
     "incident_sys_id",
     "mark_incident_failed",
+    "postgres_pause_lookup",
     "prepare_failed_incident_for_replay",
     "prepare_servicenow_retry",
     "prepare_servicenow_retry_sync",

@@ -1,4 +1,11 @@
-"""SQLAlchemy models for the seven PostgreSQL operational-state tables."""
+"""SQLAlchemy models for the platform's PostgreSQL operational-state tables.
+
+The incident-execution tables (events through semantic_cluster_members) are the
+Sprint 1-4 substrate; the chat_* tables back the admin chatbot's sessions,
+conversations, messages and turns. They are deliberately separate from the
+incident-execution tables: a conversation is never an execution and must not
+claim one to persist its state.
+"""
 
 from __future__ import annotations
 
@@ -26,18 +33,19 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.events import EVENT_TYPES
 
 _EXECUTION_TERMINAL_STATUSES = "'succeeded', 'failed', 'blocked', 'abandoned'"
 
 
 class Event(Base):
-    """Immutable copy of an accepted Sprint 1 four-field inbound event."""
+    """Immutable copy of an accepted inbound event (contract v1 or v2)."""
 
     __tablename__ = "events"
     __table_args__ = (
         UniqueConstraint("event_id", name="uq_events_event_id"),
         CheckConstraint(
-            "event_type IN ('incident.created', 'incident.updated')",
+            "event_type IN (" + ", ".join(f"'{value}'" for value in sorted(EVENT_TYPES)) + ")",
             name="event_type",
         ),
         Index("ix_events_incident_sys_id", "incident_sys_id"),
@@ -57,6 +65,7 @@ class Event(Base):
     received_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+    actor_sys_id: Mapped[str | None] = mapped_column(String(32))
 
     idempotency_key: Mapped[IdempotencyKey | None] = relationship(
         back_populates="event", uselist=False, passive_deletes=True
@@ -576,8 +585,206 @@ class SemanticClusterMember(Base):
     execution: Mapped[Execution] = relationship(back_populates="cluster_memberships")
 
 
+class ChatSession(Base):
+    """Server-issued admin-chat browser session.
+
+    The browser holds the raw secret; only its SHA-256 hash is stored. A
+    session binds one conversation set to one operator subject, so a stolen
+    conversation id alone is worthless without both the operator token and the
+    session secret.
+    """
+
+    __tablename__ = "chat_sessions"
+    __table_args__ = (Index("ix_chat_sessions_operator", "operator_subject"),)
+
+    id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    operator_subject: Mapped[str] = mapped_column(String(255), nullable=False)
+    secret_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    conversations: Mapped[list[ChatConversation]] = relationship(
+        back_populates="session", passive_deletes=True
+    )
+
+
+class ChatConversation(Base):
+    """One admin-chat conversation owned by a chat session."""
+
+    __tablename__ = "chat_conversations"
+    __table_args__ = (
+        CheckConstraint("btrim(title) <> ''", name="title_not_empty"),
+        Index("ix_chat_conversations_session", "session_id", "created_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    session_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey(
+            "chat_sessions.id",
+            name="fk_chat_conversations_session_id_chat_sessions",
+            ondelete="CASCADE",
+        ),
+        nullable=False,
+    )
+    operator_subject: Mapped[str] = mapped_column(String(255), nullable=False)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    # Added by migration 0007, after the original timestamp columns. Keep this
+    # order aligned with the migrated schema; summary_seq marks covered history.
+    history_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    summary_seq: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+
+    session: Mapped[ChatSession] = relationship(
+        back_populates="conversations", passive_deletes=True
+    )
+    messages: Mapped[list[ChatMessage]] = relationship(
+        back_populates="conversation", passive_deletes=True
+    )
+    turns: Mapped[list[ChatTurn]] = relationship(
+        back_populates="conversation", passive_deletes=True
+    )
+
+
+class ChatTurn(Base):
+    """One request/response cycle inside a conversation.
+
+    The (conversation_id, request_id) unique constraint is the idempotency
+    gate: a Streamlit rerun or a reconnected request that resubmits the same
+    request id gets the existing turn back instead of paying for a second
+    model run. The partial unique index on running turns enforces one active
+    turn per conversation at the database level.
+    """
+
+    __tablename__ = "chat_turns"
+    __table_args__ = (
+        UniqueConstraint(
+            "conversation_id", "request_id", name="uq_chat_turns_conversation_request"
+        ),
+        Index(
+            "uq_chat_turns_one_active",
+            "conversation_id",
+            unique=True,
+            postgresql_where=text("status = 'running'"),
+        ),
+        CheckConstraint(
+            "route IS NULL OR route IN ('knowledge', 'clarification', 'incident_read', "
+            "'work_note', 'unavailable')",
+            name="route",
+        ),
+        CheckConstraint("status IN ('running', 'succeeded', 'failed', 'blocked')", name="status"),
+        CheckConstraint(
+            "(status = 'running' AND completed_at IS NULL) "
+            "OR (status <> 'running' AND completed_at IS NOT NULL)",
+            name="terminal_state",
+        ),
+        CheckConstraint("usage IS NULL OR jsonb_typeof(usage) = 'object'", name="usage_object"),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    conversation_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey(
+            "chat_conversations.id",
+            name="fk_chat_turns_conversation_id_chat_conversations",
+            ondelete="CASCADE",
+        ),
+        nullable=False,
+    )
+    request_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    route: Mapped[str | None] = mapped_column(String(32))
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default=text("'running'")
+    )
+    error_category: Mapped[str | None] = mapped_column(String(64))
+    usage: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    conversation: Mapped[ChatConversation] = relationship(back_populates="turns")
+    messages: Mapped[list[ChatMessage]] = relationship(back_populates="turn", passive_deletes=True)
+
+
+class ChatMessage(Base):
+    """Sanitized chat content.
+
+    User text is stored only after deterministic redaction, enforced residual-PII
+    screening and injection screening; assistant text only after answer
+    verification. Citations carry the validated evidence references shown in the
+    UI.
+    """
+
+    __tablename__ = "chat_messages"
+    __table_args__ = (
+        UniqueConstraint("conversation_id", "seq", name="uq_chat_messages_conversation_seq"),
+        Index("ix_chat_messages_turn", "turn_id"),
+        CheckConstraint("seq >= 1", name="positive_seq"),
+        CheckConstraint("role IN ('user', 'assistant')", name="role"),
+        CheckConstraint(
+            "citations IS NULL OR jsonb_typeof(citations) = 'array'", name="citations_array"
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    conversation_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey(
+            "chat_conversations.id",
+            name="fk_chat_messages_conversation_id_chat_conversations",
+            ondelete="CASCADE",
+        ),
+        nullable=False,
+    )
+    turn_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey(
+            "chat_turns.id",
+            name="fk_chat_messages_turn_id_chat_turns",
+            ondelete="CASCADE",
+        ),
+        nullable=False,
+    )
+    seq: Mapped[int] = mapped_column(Integer, nullable=False)
+    role: Mapped[str] = mapped_column(String(16), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    citations: Mapped[list[dict[str, Any]] | None] = mapped_column(
+        JSONB(none_as_null=True), server_default=text("'[]'::jsonb")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    conversation: Mapped[ChatConversation] = relationship(back_populates="messages")
+    turn: Mapped[ChatTurn] = relationship(back_populates="messages")
+
+
 __all__ = [
     "Approval",
+    "ChatConversation",
+    "ChatMessage",
+    "ChatSession",
+    "ChatTurn",
     "Event",
     "Execution",
     "ExecutionNodeState",
@@ -587,3 +794,25 @@ __all__ = [
     "SemanticCluster",
     "SemanticClusterMember",
 ]
+
+
+class ArticleFeedback(Base):
+    """What happened after the agent resolved an incident citing this article."""
+
+    __tablename__ = "article_feedback"
+    __table_args__ = (
+        CheckConstraint("outcome IN ('confirmed', 'reopened')", name="outcome"),
+        UniqueConstraint("event_id", "article_number", name="uq_article_feedback_event_article"),
+        Index("ix_article_feedback_article", "article_number"),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    article_number: Mapped[str] = mapped_column(String(32), nullable=False)
+    incident_sys_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    outcome: Mapped[str] = mapped_column(String(16), nullable=False)
+    event_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )

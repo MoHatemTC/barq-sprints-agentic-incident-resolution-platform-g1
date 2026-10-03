@@ -29,6 +29,11 @@ APPLICATION_TABLES = {
     "retry_state",
     "semantic_clusters",
     "semantic_cluster_members",
+    "chat_sessions",
+    "chat_conversations",
+    "chat_turns",
+    "chat_messages",
+    "article_feedback",
 }
 
 TIMESTAMP_COLUMNS = {
@@ -53,6 +58,14 @@ TIMESTAMP_COLUMNS = {
     ("semantic_clusters", "expires_at"),
     ("semantic_cluster_members", "joined_at"),
     ("semantic_cluster_members", "applied_at"),
+    ("chat_sessions", "created_at"),
+    ("chat_sessions", "last_seen_at"),
+    ("chat_conversations", "created_at"),
+    ("chat_conversations", "updated_at"),
+    ("chat_turns", "created_at"),
+    ("chat_turns", "completed_at"),
+    ("chat_messages", "created_at"),
+    ("article_feedback", "created_at"),
 }
 
 JSONB_COLUMNS = {
@@ -63,6 +76,8 @@ JSONB_COLUMNS = {
     ("failures", "details"),
     ("semantic_clusters", "solution"),
     ("semantic_clusters", "anchor_vector"),
+    ("chat_turns", "usage"),
+    ("chat_messages", "citations"),
 }
 
 TASK_FUNCTIONS = {"barq_reject_approval_mutation", "barq_set_updated_at"}
@@ -190,7 +205,8 @@ async def _schema_evidence(url: URL) -> dict[str, Any]:
                     WHERE table_schema = 'public'
                       AND table_name IN (
                           'events', 'idempotency_keys', 'executions', 'workflow_state',
-                          'approvals', 'failures', 'retry_state'
+                          'approvals', 'failures', 'retry_state',
+                          'chat_sessions', 'chat_conversations', 'chat_turns', 'chat_messages'
                       )
                     """
                 )
@@ -439,9 +455,15 @@ def test_postgresql_migration_round_trip(
         ("approvals", "id"),
         ("failures", "failure_id"),
         ("retry_state", "retry_state_id"),
+        ("chat_sessions", "id"),
+        ("chat_conversations", "id"),
+        ("chat_turns", "id"),
+        ("chat_messages", "id"),
     }
     assert all(defaults[column] == "gen_random_uuid()" for column in uuid_primary_keys)
     assert defaults[("retry_state", "max_attempts")] is None
+    assert defaults[("chat_conversations", "summary_seq")] == "0"
+    assert defaults[("chat_messages", "citations")] == "'[]'::jsonb"
 
     asyncio.run(_exercise_database_triggers(url))
 

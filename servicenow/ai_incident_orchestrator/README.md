@@ -71,3 +71,19 @@ built records still match the exported update set.
 The remaining **7 moderates are accepted**. All are transitive dependencies of the SDK's CLI tooling, they run only at build time on developer machines and CI, and nothing from them is shipped to a ServiceNow instance — the deliverable is the exported XML. Overriding them further would mean major bumps deeper inside a vendor CLI for no change to what we ship. The real fix is a future SDK release that reproduces the export; that is Sprint 2 work, gated by `.github/workflows/servicenow-sdk.yml`.
 
 `npm audit --package-lock-only --audit-level=high` runs in that workflow, so a new high fails the build rather than going unnoticed. The four alerts Dependabot raised are fixed above; any new alert on this lockfile needs the same treatment (find the fixed line in OSV, override, re-run the build gate).
+
+### Advisories published 2026-09-18 (audit step failing since 2026-10-03)
+
+Three advisories published on 2026-09-18 made the audit step report **19 vulnerabilities, 16 high**. None of the vulnerable leaves has a patched release, so the leaves cannot be overridden; instead the packages that pull them in are moved to releases that no longer do:
+
+| Package | Was | Overridden to | Why |
+|---|---|---|---|
+| `node-gyp` | 11.5.0 | `^13.1.0` | 13.x no longer depends on `make-fetch-happen`, which removes `http-cache-semantics` (GHSA-ch52-4w7c-c8xp, `<=4.2.0`, no fix). Reached through `libxmljs2`. Needs Node `^22.22.2`, which CI's Node 22 satisfies. |
+| `livereload` | 0.9.3 | `^0.10.3` | 0.10.x uses `chokidar` 4, which no longer depends on `braces`. Reached through `rollup-plugin-livereload` in `@servicenow/isomorphic-rollup`. |
+| `fflate` | 0.8.2 | `^0.8.3` | GHSA-px8p-9vwx-vf98 (moderate), fixed in 0.8.3 — the same version SDK 4.13.3 pins. |
+
+Result: **19 → 9 vulnerabilities, 9 high, 0 moderate.** Same verification as above on Node 22.23.3: `npm ci`, `npx now-sdk build --frozenKeys` exits 0, the build leaves `git status` clean (`keys.ts` unchanged), 28/28 SDK tests pass, and the built records still match the exported update set.
+
+**Still open: `braces` (GHSA-vfj7-8cjw-p6xm, CVE-2026-93687, `<=3.0.3`).** The nine remaining highs are one chain: `@servicenow/sdk-build-core` pins `fast-glob` 3.3.3 → `micromatch` → `braces`. Every published `fast-glob` and `micromatch` depends on `braces`, and 3.0.3 is the latest `braces`; the upstream fix (micromatch/braces#72) is not merged or released. Upgrading the SDK does not help — 4.13.3 pins the same `fast-glob` 3.3.3. When a fixed `braces` is published, add it to `overrides`, delete its entry from `sdk-app/audit-exceptions.json` and re-run the gate above.
+
+Until then the advisory is accepted, and only that one. The audit step runs `sdk-app/audit-gate.cjs`, which applies the same bar as `npm audit --audit-level=high` but skips advisories listed in `sdk-app/audit-exceptions.json`. Each entry gives one GHSA id, the reason it cannot reach anything we ship, and an expiry date. Any other high or critical advisory still fails the build, an expired entry fails it again, and an entry that is no longer needed is reported. `braces` qualifies because it only expands glob patterns written in this repository, at build time, and nothing from it reaches the instance. Its entry expires on 2026-10-31.

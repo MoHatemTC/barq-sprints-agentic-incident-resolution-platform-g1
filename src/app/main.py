@@ -1,10 +1,13 @@
 from fastapi import FastAPI
 
 from api.routers.approvals import router as approvals_router
+from api.routers.assist import router as assist_router
+from api.routers.chat import router as chat_router
 from api.routers.config import router as config_router
 from api.routers.dlq import router as dlq_router
 from api.routers.eval import router as eval_router
 from api.routers.executions import router as executions_router
+from api.routers.feedback import router as feedback_router
 from api.routers.health import router as health_router
 from api.routers.review_ui import router as review_ui_router
 from api.routers.suggestions import router as suggestions_router
@@ -58,6 +61,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(config_router)
     app.include_router(dlq_router)
     app.include_router(eval_router)
+    app.include_router(chat_router)
+    app.include_router(assist_router)
+    app.include_router(feedback_router)
 
     return app
 

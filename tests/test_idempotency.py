@@ -129,6 +129,8 @@ def test_input_contract_and_ticket_reexport_are_exact() -> None:
         "sys_id",
         "number",
         "event_type",
+        "contract_version",
+        "actor_sys_id",
     )
     assert compatibility_idempotency.InboundEvent is InboundEvent
     assert compatibility_idempotency.accept_inbound_event is accept_inbound_event

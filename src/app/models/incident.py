@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -31,6 +31,10 @@ class Incident(BaseModel):
     priority: str | None = ""
     category: str | None = ""
     subcategory: str | None = ""
+    #: Reference sys_ids (read with ``sysparm_exclude_reference_link``). The caller is
+    #: who the agent may address; the group is never overwritten once a person set it.
+    caller_id: str | None = ""
+    assignment_group: str | None = ""
     active: bool = True
 
     # AI Fields
@@ -199,3 +203,57 @@ class IncidentUpdatePayload(BaseModel):
             else:
                 body[key] = str(value)
         return body
+
+
+#: ServiceNow incident states the agent moves through (internal choice values).
+INCIDENT_STATE_NEW: Literal["1"] = "1"
+INCIDENT_STATE_IN_PROGRESS: Literal["2"] = "2"
+INCIDENT_STATE_ON_HOLD: Literal["3"] = "3"
+#: Stock On hold reason "Awaiting Caller".
+HOLD_REASON_AWAITING_CALLER: Literal["1"] = "1"
+INCIDENT_STATE_RESOLVED: Literal["6"] = "6"
+INCIDENT_STATE_CLOSED: Literal["7"] = "7"
+
+_SYS_ID_PATTERN = r"^[0-9a-f]{32}$"
+
+
+class IncidentFulfilmentPayload(BaseModel):
+    """The standard incident fields the agent may set when it works an incident itself.
+
+    Separate from ``IncidentUpdatePayload`` (the AI fields) on purpose: each field here
+    has its own ServiceNow ACL, and the values are pinned so a model can never choose a
+    state, a close code or a free-text target. ``extra="forbid"`` keeps any other field
+    out of the PATCH.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    assignment_group: str | None = Field(default=None, pattern=_SYS_ID_PATTERN)
+    state: Literal["2", "3", "6"] | None = None
+    hold_reason: Literal["1"] | None = None
+    comments: str | None = Field(default=None, max_length=4000)
+    work_notes: str | None = Field(default=None, max_length=4000)
+    close_code: Literal["Solution provided"] | None = None
+    close_notes: str | None = Field(default=None, max_length=4000)
+
+    @model_validator(mode="after")
+    def _resolution_is_complete(self) -> IncidentFulfilmentPayload:
+        # ServiceNow requires close information when an incident is resolved.
+        if self.state == INCIDENT_STATE_RESOLVED and not (self.close_code and self.close_notes):
+            raise ValueError("resolving an incident requires close_code and close_notes")
+        # The agent only puts an incident On Hold to wait for the caller's answer, so
+        # the question itself must travel with it.
+        if self.state == INCIDENT_STATE_ON_HOLD and not (
+            self.hold_reason == HOLD_REASON_AWAITING_CALLER and self.comments
+        ):
+            raise ValueError("On Hold requires hold_reason Awaiting Caller and the question")
+        if self.hold_reason is not None and self.state != INCIDENT_STATE_ON_HOLD:
+            raise ValueError("hold_reason is only set together with On Hold")
+        return self
+
+    def to_table_api_body(self) -> dict[str, str]:
+        return {key: str(value) for key, value in self.model_dump(exclude_none=True).items()}
+
+
+#: Result of a fulfilment write, so a retry or a person's change is never an error.
+FulfilmentResult = Literal["applied", "already_applied", "skipped_state_changed"]

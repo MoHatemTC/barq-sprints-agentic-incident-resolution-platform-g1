@@ -1,0 +1,94 @@
+<div class="barq">
+  <div class="barq-side">
+    <button class="barq-ticket barq-chat-item" ng-class="{'is-open': !c.ticket && !c.drafting}" ng-click="c.close()">
+      <span class="barq-ticket-title">Chat with BARQ AI</span>
+      <span class="barq-ticket-meta">Ask a question or describe a problem</span>
+    </button>
+    <button class="barq-btn barq-new" ng-click="c.startNew()">+ New ticket</button>
+    <div class="barq-side-head">
+      <span>My tickets</span>
+      <button class="barq-link" ng-click="c.refresh()" aria-label="Refresh">Refresh</button>
+    </div>
+    <div class="barq-empty" ng-if="!c.openTickets().length">No open tickets. Press New ticket, or describe a problem in the chat.</div>
+    <button class="barq-ticket" ng-repeat="t in c.openTickets()" ng-class="{'is-open': c.ticket.sys_id == t.sys_id}" ng-click="c.open(t)">
+      <span class="barq-ticket-title">{{t.title}}</span>
+      <span class="barq-ticket-meta">{{t.number}} · <span class="barq-pill tone-{{t.tone}}">{{t.status}}</span></span>
+    </button>
+    <button class="barq-link barq-closed-toggle" ng-if="c.closedTickets().length" ng-click="c.showClosed = !c.showClosed">
+      {{c.showClosed ? 'Hide' : 'Show'}} closed tickets ({{c.closedTickets().length}})
+    </button>
+    <button class="barq-ticket barq-ticket-closed" ng-if="c.showClosed" ng-repeat="t in c.closedTickets()" ng-class="{'is-open': c.ticket.sys_id == t.sys_id}" ng-click="c.open(t)">
+      <span class="barq-ticket-title">{{t.title}}</span>
+      <span class="barq-ticket-meta">{{t.number}} · <span class="barq-pill tone-{{t.tone}}">{{t.status}}</span></span>
+    </button>
+  </div>
+
+  <div class="barq-main">
+    <div class="barq-head">
+      <div>
+        <div class="barq-title">BARQ AI</div>
+        <div class="barq-sub" ng-if="!c.ticket">Ask a question or describe a problem. BARQ AI remembers your conversations.</div>
+        <div class="barq-sub" ng-if="c.ticket">{{c.ticket.number}} · {{c.ticket.title}} · <span class="barq-pill tone-{{c.ticket.tone}}">{{c.ticket.status}}</span></div>
+      </div>
+
+    </div>
+
+    <div class="barq-thread" id="barq-thread">
+      <form class="barq-newform" ng-if="!c.ticket && c.drafting" ng-submit="c.createNew()">
+        <div class="barq-proposal-title">New ticket</div>
+        <label>What is the problem? (one line)</label>
+        <input type="text" ng-model="c.draft.short_description" maxlength="160" required placeholder="e.g. My mapped S: drive disappeared" />
+        <label>Details</label>
+        <textarea ng-model="c.draft.description" rows="4" maxlength="4000" placeholder="What happened, since when, what you already tried"></textarea>
+        <label>Type</label>
+        <select ng-model="c.draft.category">
+          <option value="inquiry">Not sure / question</option>
+          <option value="network">Network, VPN, Wi-Fi</option>
+          <option value="software">Software, email, apps</option>
+          <option value="hardware">Laptop, printer, devices</option>
+        </select>
+        <div class="barq-actions">
+          <button class="barq-btn" type="submit" ng-disabled="c.busy || !c.draft.short_description">Open the ticket</button>
+          <button class="barq-link" type="button" ng-click="c.drafting = false">Cancel</button>
+        </div>
+      </form>
+      <div ng-if="!c.ticket && !c.drafting">
+        <div class="barq-msg" ng-repeat="m in c.messages" ng-class="m.role == 'user' ? 'from-me' : 'from-ai'">
+          <div class="barq-bubble" ng-bind-html="m.html"></div>
+          <div class="barq-cites" ng-if="m.sources.length">Sources: {{m.sources.join(', ')}}</div>
+          <button class="barq-link barq-ask-ticket" ng-if="m.role != 'user' && $last && !c.proposal" ng-click="c.ticketFromChat()">Still need help? Open a ticket about this</button>
+        </div>
+        <div class="barq-msg from-ai" ng-if="c.proposal">
+          <div class="barq-bubble barq-proposal">
+            <div>Shall I open a ticket so BARQ AI Agent can work on it?</div>
+            <div class="barq-proposal-title">{{c.proposal.short_description}}</div>
+            <button class="barq-btn" ng-click="c.create()" ng-disabled="c.busy">Open the ticket</button>
+            <button class="barq-link" ng-click="c.proposal = null">Not now</button>
+          </div>
+        </div>
+      </div>
+      <div ng-if="c.ticket">
+        <div class="barq-msg from-me"><div class="barq-bubble">{{c.ticket.description}}</div></div>
+        <div class="barq-msg" ng-repeat="e in c.ticket.conversation" ng-class="e.mine ? 'from-me' : 'from-ai'">
+          <div class="barq-who" ng-if="!e.mine">{{e.agent ? 'BARQ AI Agent' : e.who}}</div>
+          <div class="barq-bubble" ng-bind-html="c.readable(e.text)"></div>
+        </div>
+        <div class="barq-actions barq-actions-quiet" ng-if="c.ticket.can_cancel">
+          <button class="barq-link" ng-if="c.ticket.can_ask_person" ng-click="c.act('person')" ng-disabled="c.busy">Talk to a person</button>
+          <button class="barq-link" ng-click="c.confirmCancel()" ng-disabled="c.busy">Cancel this ticket</button>
+        </div>
+        <div class="barq-actions" ng-if="c.ticket.can_confirm">
+          <button class="barq-btn" ng-click="c.act('confirm')" ng-disabled="c.busy">It works, close it</button>
+          <button class="barq-btn barq-btn-quiet" ng-click="c.act('not_fixed')" ng-disabled="c.busy">Still not working</button>
+        </div>
+      </div>
+      <div class="barq-typing" ng-if="c.busy">BARQ AI is thinking…</div>
+      <div class="barq-error" ng-if="c.data.error">{{c.data.error}}</div>
+    </div>
+
+    <form class="barq-input" ng-submit="c.send()" ng-if="!c.drafting && (!c.ticket || c.ticket.can_reply)">
+      <textarea ng-model="c.text" rows="2" maxlength="4000" placeholder="{{c.ticket ? 'Reply on this ticket…' : 'Type your question or describe the problem…'}}" ng-keydown="$event.keyCode == 13 && !$event.shiftKey && ($event.preventDefault() || c.send())"></textarea>
+      <button class="barq-btn" type="submit" ng-disabled="c.busy || !c.text">Send</button>
+    </form>
+  </div>
+</div>

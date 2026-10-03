@@ -16,8 +16,9 @@ import operator
 from enum import StrEnum
 from typing import Annotated, Any, Literal, TypedDict
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.events import EVENT_TYPES
 from app.models.knowledge import Classification
 
 
@@ -37,6 +38,8 @@ class Outcome(StrEnum):
     ESCALATED_BLOCKED = "escalated_blocked"
     SKIPPED_INELIGIBLE = "skipped_ineligible"
     SKIPPED_HUMAN_LOCK = "skipped_human_lock"
+    #: No confident fix yet; the agent asked the caller one question and waits.
+    ASKED_CALLER = "asked_caller"
 
 
 class _Section(BaseModel):
@@ -59,8 +62,16 @@ class EventPayload(_Section):
     event_id: str
     sys_id: str = Field(..., pattern=r"^[0-9a-fA-F]{32}$")
     number: str = Field(..., pattern=r"^INC\d{7,}$", max_length=32)
-    event_type: Literal["incident.created", "incident.updated"] = "incident.created"
+    event_type: str = "incident.created"
+    actor_sys_id: str | None = Field(default=None, pattern=r"^[0-9a-fA-F]{32}$")
     prefetched_incident: dict[str, Any] | None = None
+
+    @field_validator("event_type")
+    @classmethod
+    def _registered(cls, value: str) -> str:
+        if value not in EVENT_TYPES:
+            raise ValueError(f"unregistered event type '{value}'")
+        return value
 
 
 class IncidentSnapshot(_Section):
@@ -82,9 +93,19 @@ class IncidentSnapshot(_Section):
     #: ``service is None`` with this False, which means no service was set at all.
     service_unresolved: bool = False
     active: bool = True
+    #: Reference sys_ids. Empty means not set on the record.
+    caller_id: str = ""
+    assignment_group: str = ""
     ai_enabled: bool = False
     ai_human_lock: bool | None = None
     ai_processing_state: str = "pending"
+    #: The redacted conversation so far (caller, agent, engineers), oldest first; empty
+    #: on a first run. Also appended to ``description`` for the model (see ``load``).
+    conversation: str = ""
+    #: How many clarifying questions the agent has already asked the caller.
+    questions_asked: int = 0
+    #: How many messages the agent has already written to the caller.
+    agent_replies: int = 0
 
 
 class Eligibility(_Section):
@@ -103,6 +124,8 @@ class RiskAssessment(_Section):
     reasons: list[str]
     approval_required: bool
     service_tier: int | None = None
+    #: True when the agent handled a priority-high incident as low risk (design 6.3).
+    reassessed: bool = False
 
 
 class EvidenceItem(_Section):
@@ -212,6 +235,11 @@ class FinalOutput(_Section):
     approval_required: bool = False
     processing_state: str
     actions: list[str] = Field(default_factory=list)
+    #: Fulfilment steps the agent took on the incident itself, as ``tool:result``
+    #: (for example ``resolve_incident:applied``), in order. Empty at ``suggest``.
+    fulfilment: list[str] = Field(default_factory=list)
+    #: The comment asking the caller one question (outcome ``asked_caller`` only).
+    caller_question: str | None = None
     write_back: Literal["written", "dry_run", "skipped"] = "skipped"
 
 

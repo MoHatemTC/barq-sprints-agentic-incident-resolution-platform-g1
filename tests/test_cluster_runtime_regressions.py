@@ -17,6 +17,13 @@ from app.workers.retry_policy import RetryConfig
 from tests.agent_support import MFA, ORDER_P1, VPN, FakeServiceNow, event_for, make_deps
 
 
+@pytest.fixture(autouse=True)
+def _leader_has_another_caller(monkeypatch):
+    # The leader incident is not readable in these tests; it was reported by someone
+    # else, so the same-caller rule does not apply unless a test says so.
+    monkeypatch.setattr(tasks, "leader_caller_id", lambda *args, **kwargs: "f" * 32)
+
+
 def graph_run(deps, record, cached=None):
     return run_graph(
         build_graph(deps, checkpointer=InMemorySaver()),
@@ -192,16 +199,18 @@ def test_database_failure_cannot_publish_resolved_redis_anchor(monkeypatch):
 
 
 def test_follower_resolves_with_zero_llm_calls_and_writes_to_servicenow(monkeypatch):
-    repo, cache, _, eid, payload, incident, cluster = setup_pair()
-    follower_inc = {**incident, "sys_id": payload["sys_id"], "number": payload["number"]}
+    repo, cache, _, eid, payload, _incident, cluster = setup_pair()
+    # A production-shaped record read through the real loader: the follower is only
+    # reused if it passes its own eligibility, screening and risk gates, which a
+    # minimal dict with no ai_enabled/category/priority fields would not.
+    follower_inc = {
+        **VPN,
+        "sys_id": payload["sys_id"],
+        "number": payload["number"],
+    }
     service = FakeServiceNow({"follower": follower_inc})
     deps = make_deps(servicenow=service, agent_confidence_floor=0.1)
     monkeypatch.setattr(cluster_runtime, "get_agent_dependencies", lambda: deps)
-    monkeypatch.setattr(
-        tasks,
-        "load_cluster_incident",
-        lambda *args: follower_inc,
-    )
     solution = {
         "outcome": "suggested",
         "summary": "AI Suggested Response drafted. Confidence 0.95.",
@@ -241,3 +250,55 @@ def test_follower_resolves_with_zero_llm_calls_and_writes_to_servicenow(monkeypa
     update = service.updates[0][1]
     assert update.ai_processing_state.value == "complete"
     assert update.ai_resolution == "1. Reset VPN profile"
+
+
+@pytest.mark.parametrize("already_waiting", [False, True])
+def test_a_follower_never_waits_behind_a_leader_parked_for_a_person(monkeypatch, already_waiting):
+    # Seen live: a P1 outage report sat queued behind a similar low-priority ticket that
+    # was waiting for an engineer's approval. It must run its own governed graph now.
+    repo, cache, _, eid, payload, incident, cluster = setup_pair()
+    monkeypatch.setattr(
+        tasks,
+        "load_cluster_incident",
+        lambda *args: {**incident, "sys_id": payload["sys_id"], "number": payload["number"]},
+    )
+    graph_calls: list[dict] = []
+
+    def fake_graph(event, **kwargs):
+        graph_calls.append(event)
+        return {"outcome": "escalated_high_risk", "paused": False, "processing_state": "pending"}
+
+    monkeypatch.setattr(tasks, "invoke_graph", fake_graph)
+    task = SimpleNamespace(request=SimpleNamespace(retries=0))
+    if already_waiting:
+        waiting = tasks._run_incident(
+            task,
+            payload,
+            str(eid),
+            RetryConfig(3, 1.0, 60.0, False),
+            repo,
+            semantic_cache=cache,
+            graph_backend="langgraph",
+            correlation_id="follower-of-parked-leader",
+        )
+        assert waiting["status"] == "cluster_waiting"
+        assert graph_calls == []
+        assert repo.ready_cluster_waiters() == []
+    cache.mark_cluster_awaiting_approval(cluster)
+    if already_waiting:
+        sent = []
+        monkeypatch.setattr(cluster_runtime, "send_incident_event", lambda *args: sent.append(args))
+        assert cluster_runtime.dispatch_cluster_waiters(repo) == 1
+        assert sent == [(payload, str(eid), "follower-of-parked-leader")]
+    result = tasks._run_incident(
+        task,
+        payload,
+        str(eid),
+        RetryConfig(3, 1.0, 60.0, False),
+        repo,
+        semantic_cache=cache,
+        graph_backend="langgraph",
+        correlation_id="follower-of-parked-leader",
+    )
+    assert result["status"] != "cluster_waiting"
+    assert len(graph_calls) == 1

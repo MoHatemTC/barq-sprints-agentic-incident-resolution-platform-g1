@@ -251,14 +251,14 @@ async def test_extra_fields_are_rejected_not_silently_ignored(client) -> None:
 
 @pytest.mark.asyncio
 async def test_unsupported_contract_versions_rejected_with_distinct_code(client) -> None:
-    for version in ["v2", "v2-draft", "v1.1", "unknown", "", "V1"]:
+    for version in ["v3", "v2-draft", "v1.1", "unknown", "", "V1"]:
         payload = {**VALID_PAYLOAD, "contract_version": version}
         resp = await client.post("/api/v1/webhook/incident", json=payload, headers=AUTH)
         assert resp.status_code == 422, f"contract_version={version!r} must return 422"
         body = resp.json()
         # Distinct code: version mismatch must not look like a missing-field failure.
         assert body["error"]["code"] == "UNKNOWN_CONTRACT_VERSION", body
-        assert "v1" in body["error"]["message"]
+        assert "v1" in body["error"]["message"] and "v2" in body["error"]["message"]
 
 
 @pytest.mark.asyncio
@@ -878,3 +878,51 @@ async def test_integration_concurrent_duplicates_single_row_single_enqueue(integ
         key_count = await conn.scalar(sa.text("SELECT COUNT(*) FROM idempotency_keys"))
     assert (event_count, execution_count, key_count) == (1, 1, 1)
     assert await redis.llen(QUEUE) == 1
+
+
+@pytest.mark.asyncio
+async def test_v2_conversation_event_with_actor_is_accepted_and_queued(client) -> None:
+    payload = {
+        **VALID_PAYLOAD,
+        "contract_version": "v2",
+        "event_type": "incident.caller_replied",
+        "actor_sys_id": "b" * 32,
+    }
+    with (
+        patch(
+            "api.routers.webhook.accept_inbound_event",
+            new_callable=AsyncMock,
+            return_value=_accepted(),
+        ) as accept,
+        patch("api.routers.webhook.send_incident_event") as producer,
+    ):
+        resp = await client.post("/api/v1/webhook/incident", json=payload, headers=AUTH)
+    assert resp.status_code == 202, resp.text
+    inbound = accept.await_args.args[1]
+    assert (inbound.event_type, inbound.contract_version, inbound.actor_sys_id) == (
+        "incident.caller_replied",
+        "v2",
+        "b" * 32,
+    )
+    assert producer.call_args.args[0]["actor_sys_id"] == "b" * 32
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        # A v2 event type sent as v1 is refused: v1 stays exactly what it was.
+        {"event_type": "incident.caller_replied"},
+        # The actor is not part of v1.
+        {"actor_sys_id": "b" * 32},
+        # Unregistered types are refused in every version.
+        {"contract_version": "v2", "event_type": "incident.deleted"},
+        # The actor is an identifier, never text.
+        {"contract_version": "v2", "event_type": "incident.reopened", "actor_sys_id": "Abel"},
+    ],
+)
+async def test_event_types_are_held_to_their_contract_version(client, overrides) -> None:
+    resp = await client.post(
+        "/api/v1/webhook/incident", json={**VALID_PAYLOAD, **overrides}, headers=AUTH
+    )
+    assert resp.status_code == 422

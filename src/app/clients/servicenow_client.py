@@ -28,7 +28,12 @@ from app.models.execution_log import (
     ExecutionLogCreatePayload,
     ExecutionLogEntry,
 )
-from app.models.incident import Incident, IncidentUpdatePayload
+from app.models.incident import (
+    FulfilmentResult,
+    Incident,
+    IncidentFulfilmentPayload,
+    IncidentUpdatePayload,
+)
 from app.models.work_note import WorkNoteUpdate
 from app.utils.servicenow import parse_retry_after, values_equal
 
@@ -81,6 +86,65 @@ class ServiceNowClient:
     async def get_incident(self, sys_id: str) -> Incident:
         result = await self._request("GET", f"/api/now/table/incident/{sys_id}")
         return self._parse_incident(result, sys_id)
+
+    async def get_conversation(self, sys_id: str) -> dict[str, str]:
+        """The incident's journal as ServiceNow renders it, plus the caller's name.
+
+        Returns the display values of ``comments`` (customer visible) and
+        ``work_notes`` (engineers only), newest entry first, and ``caller_name`` so the
+        caller's own entries can be told apart. Parsing is done by the agent.
+        """
+        result = await self._request(
+            "GET",
+            f"/api/now/table/incident/{sys_id}",
+            params={
+                "sysparm_fields": "comments,work_notes,caller_id",
+                "sysparm_display_value": "true",
+                "sysparm_exclude_reference_link": "true",
+            },
+        )
+        record = result if isinstance(result, dict) else {}
+        return {
+            "comments": str(record.get("comments") or ""),
+            "work_notes": str(record.get("work_notes") or ""),
+            "caller_name": str(record.get("caller_id") or ""),
+        }
+
+    async def related_incidents(
+        self, sys_id: str, *, category: str, caller_id: str
+    ) -> dict[str, list[dict[str, str]]]:
+        """Incidents around this one: open in the same category in the last hour, and the
+        caller's other incidents in the last seven days. Short fields only."""
+        fields = "sys_id,number,short_description,state,opened_at,category"
+
+        async def query(text: str) -> list[dict[str, str]]:
+            result = await self._request(
+                "GET",
+                "/api/now/table/incident",
+                params={
+                    "sysparm_query": text,
+                    "sysparm_fields": fields,
+                    "sysparm_limit": 50,
+                    "sysparm_exclude_reference_link": "true",
+                },
+            )
+            rows = result if isinstance(result, list) else []
+            return [{key: str(row.get(key) or "") for key in fields.split(",")} for row in rows]
+
+        recent: list[dict[str, str]] = []
+        history: list[dict[str, str]] = []
+        if category:
+            recent = await query(
+                # Open and not yet resolved: resolved incidents are not evidence of an
+                # ongoing outage.
+                f"active=true^stateNOT IN6,7,8^category={category}^sys_id!={sys_id}"
+                "^opened_at>javascript:gs.minutesAgoStart(60)"
+            )
+        if caller_id:
+            history = await query(
+                f"caller_id={caller_id}^sys_id!={sys_id}^opened_at>javascript:gs.daysAgoStart(7)"
+            )
+        return {"recent_same_category": recent, "caller_recent": history}
 
     async def find_incident_by_number(self, number: str) -> Incident | None:
         if not _INCIDENT_NUMBER_RE.fullmatch(number):
@@ -171,6 +235,41 @@ class ServiceNowClient:
         body = WorkNoteUpdate(note=note).to_table_api_body()
         result = await self._request("PATCH", f"/api/now/table/incident/{sys_id}", json=body)
         return Incident.model_validate(result)
+
+    async def fulfil_incident(
+        self,
+        sys_id: str,
+        payload: IncidentFulfilmentPayload,
+        *,
+        expected_states: frozenset[str],
+        done_states: frozenset[str],
+    ) -> FulfilmentResult:
+        """Apply one fulfilment step (assign, start, resolve) only if it is still safe.
+
+        The incident is re-read first. A Human Lock refuses the write, as for every agent
+        write. If the incident is already in a ``done_states`` value the step landed on
+        an earlier attempt and is not repeated (journal fields would otherwise be
+        appended twice). If it is in neither set, a person moved it on while the agent
+        was working, and the agent leaves it alone. A group a person already set is
+        never overwritten.
+        """
+        current = await self.get_incident(sys_id)
+        if current.ai_human_lock is not False:
+            raise ServiceNowHumanLockError(
+                f"Incident {sys_id} is locked for human review and cannot be updated by the agent",
+                details={"sys_id": sys_id, "ai_human_lock": current.ai_human_lock},
+            )
+        current_state = str(current.state or "")
+        if current_state in done_states:
+            return "already_applied"
+        if current_state not in expected_states:
+            return "skipped_state_changed"
+        if payload.assignment_group and current.assignment_group:
+            payload = payload.model_copy(update={"assignment_group": None})
+        body = payload.to_table_api_body()
+        result = await self._request("PATCH", f"/api/now/table/incident/{sys_id}", json=body)
+        self._verify_write_persisted(requested=body, persisted=result, sys_id=sys_id)
+        return "applied"
 
     async def write_execution_log(
         self, payload: ExecutionLogCreatePayload

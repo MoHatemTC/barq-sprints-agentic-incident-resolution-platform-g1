@@ -201,7 +201,7 @@ services:
       - barq-network
 
   # ---------------------------------------------------------------------------
-  # 6. PostgreSQL Web UI (pgweb)
+  # 7. PostgreSQL Web UI (pgweb)
   # ---------------------------------------------------------------------------
   pgweb:
     image: sosedoff/pgweb:latest

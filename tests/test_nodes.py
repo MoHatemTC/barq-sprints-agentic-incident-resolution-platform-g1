@@ -7,9 +7,10 @@ no graph, no model, no network, no database.
 from __future__ import annotations
 
 import asyncio
+import sys
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, call, patch
 
 import pytest
 
@@ -140,7 +141,7 @@ class TestLoad:
         assert incident["service"] == "corporate-vpn"
         assert incident["ai_enabled"] is True
         assert incident["ai_human_lock"] is False
-        assert backend.calls == ["read_incident"]
+        assert backend.calls == ["read_incident", "read_conversation"]
 
     def test_registry_invocation_uses_authoritative_context_and_sys_id(self) -> None:
         deps = make_deps()
@@ -150,11 +151,12 @@ class TestLoad:
         update = load(base_state(), deps)
 
         assert update["incident"]["sys_id"] == VPN["sys_id"]
-        invoke.assert_awaited_once_with(
-            "read_incident",
-            context=ToolCallContext(EXECUTION_ID, correlation_id="corr-1"),
-            arguments={"sys_id": VPN["sys_id"]},
-        )
+        context = ToolCallContext(EXECUTION_ID, correlation_id="corr-1")
+        arguments = {"sys_id": VPN["sys_id"]}
+        assert invoke.await_args_list == [
+            call("read_incident", context=context, arguments=arguments),
+            call("read_conversation", context=context, arguments=arguments),
+        ]
 
     def test_transient_servicenow_failure_is_retryable(self) -> None:
         backend = FakeServiceNow()
@@ -246,9 +248,14 @@ class TestDetermineRisk:
         risk = determine_risk(state, make_deps())["risk"]
         assert risk == {
             "level": "low",
-            "reasons": ["Priority 3, service tier 2"],
+            "reasons": [
+                "Priority 3, service tier 2",
+                "Looked around: 0 similar open incident(s) in the last hour, "
+                "0 similar incident(s) from this caller in 7 days.",
+            ],
             "approval_required": False,
             "service_tier": 2,
+            "reassessed": False,
         }
 
     def test_unresolved_service_reference_fails_closed(self) -> None:
@@ -288,7 +295,8 @@ class TestDetermineRisk:
         risk = determine_risk(state, make_deps())["risk"]
         assert risk["level"] == "elevated"
         assert risk["approval_required"] is True
-        assert len(risk["reasons"]) == 2
+        # The two record reasons plus what the look-around saw.
+        assert len(risk["reasons"]) == 3
 
     def test_security_classification_is_high(self) -> None:
         state = base_state(incident=snapshot(VPN), classification=classification("security"))
@@ -857,6 +865,19 @@ class TestConfidenceCheck:
 
 
 class TestAct:
+    @pytest.fixture(autouse=True)
+    def _operator_approves(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """These tests call ``act`` outside a compiled graph, where nobody can be asked.
+
+        ``act`` now fails closed there, so each test states the human decision it
+        assumes instead of relying on an implicit approval.
+        """
+        monkeypatch.setattr(
+            sys.modules["agent.nodes.act"],
+            "_request_human_decision",
+            lambda payload: {"decision": "approved", "decided_by": "test", "source": "no_graph"},
+        )
+
     def test_suggestion_completes_without_an_unresumable_review_flag(self) -> None:
         backend = FakeServiceNow()
         deps = make_deps(servicenow=backend)
@@ -1075,12 +1096,15 @@ class TestAct:
         assert output["outcome"] == "escalated_blocked"
         assert "safety_check check: secret in draft" in output["work_note"]
 
-    def test_forbidden_action_does_not_exist(self) -> None:
+    @pytest.mark.parametrize("tool", ["close_incident", "delete_incident", "cancel_incident"])
+    def test_forbidden_action_does_not_exist(self, tool: str) -> None:
+        # The agent may resolve (the caller can reopen), but it never closes, deletes
+        # or cancels an incident: those tools are not registered at all.
         deps = make_deps()
         with pytest.raises(RegistryRefusalError):
             asyncio.run(
                 deps.tools.invoke(
-                    "resolve_incident",
+                    tool,
                     context=ToolCallContext(EXECUTION_ID),
                     arguments={"sys_id": VPN["sys_id"]},
                 )

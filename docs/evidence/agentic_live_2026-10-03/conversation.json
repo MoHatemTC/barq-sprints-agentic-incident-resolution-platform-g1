@@ -1,0 +1,263 @@
+{
+  "started_at": "2026-10-03T11:52:49.241827+00:00",
+  "scenarios": {
+    "ask_then_continue": {
+      "incident": "INC0010361",
+      "sys_id": "c33f668c47ff0710c148497f316d43ff",
+      "runs": [
+        {
+          "execution_id": "ab62b2a4-10cd-4294-ba43-1d3565b59a40",
+          "event_record_id": "6a38766b-b21d-4f40-856a-fac525c9a57d",
+          "incident_sys_id": "c33f668c47ff0710c148497f316d43ff",
+          "status": "succeeded",
+          "node_reached": "act",
+          "model_name": null,
+          "agent_version": "s3.4-graph-1.0.0",
+          "started_at": "2026-10-03T11:53:53.712398Z",
+          "ended_at": "2026-10-03T11:54:46.646536Z",
+          "termination_cause": "suggested",
+          "updated_at": "2026-10-03T11:54:46.647506Z"
+        },
+        {
+          "execution_id": "dc6e8f21-8c57-4f2e-ba17-9c51566789b1",
+          "event_record_id": "6d45318f-0099-416c-8b17-6ddd0d585633",
+          "incident_sys_id": "c33f668c47ff0710c148497f316d43ff",
+          "status": "succeeded",
+          "node_reached": "act",
+          "model_name": null,
+          "agent_version": "s3.4-graph-1.0.0",
+          "started_at": "2026-10-03T11:53:23.684240Z",
+          "ended_at": "2026-10-03T11:53:44.222173Z",
+          "termination_cause": "asked_caller",
+          "updated_at": "2026-10-03T11:53:44.223531Z"
+        }
+      ],
+      "final": {
+        "close_code": "Solution provided",
+        "assignment_group": "Network",
+        "x_2215032_ai_inc_0_ai_failure_reason": "",
+        "x_2215032_ai_inc_0_ai_suggestion": "1. Ask whether colleagues are affected. If more than one user in the same area is affected, treat it as a service event and stop. [KB0002 v3.0 \u00a7Resolution]\n2. Check whether webmail works for this user to determine if the fault is client-side. [KB0002 v3.0 \u00a7Resolution]\n3. For a client-side fault, close the client fully and reopen it. [KB0002 v3.0 \u00a7Resolution]\n4. If it still fails, recreate the mail profile and allow the cache to rebuild. [KB0002 v3.0 \u00a7Resolution]\n5. Confirm mail flow before closing. [KB0002 v3.0 \u00a7Resolution]\n\nSources: KB0002 v3.0 \u2014 OUTLOOK SHOWS DISCONNECTED AND NO MAIL IS DELIVERED",
+        "priority": "5 - Planning",
+        "x_2215032_ai_inc_0_ai_human_review_required": "false",
+        "close_notes": "Resolved by BARQ AI Agent with confidence 0.95.\n\n1. Ask whether colleagues are affected. If more than one user in the same area is affected, treat it as a service event and stop. [KB0002 v3.0 \u00a7Resolution]\n2. Check whether webmail works for this user to determine if the fault is client-side. [KB0002 v3.0 \u00a7Resolution]\n3. For a client-side fault, close the client fully and reopen it. [KB0002 v3.0 \u00a7Resolution]\n4. If it still fails, recreate the mail profile and allow the cache to rebuild. [KB0002 v3.0 \u00a7Resolution]\n5. Confirm mail flow before closing. [KB0002 v3.0 \u00a7Resolution]\n\nSources: KB0002 v3.0 \u2014 OUTLOOK SHOWS DISCONNECTED AND NO MAIL IS DELIVERED",
+        "number": "INC0010361",
+        "resolved_by": "BARQ AI Agent",
+        "x_2215032_ai_inc_0_ai_human_lock": "false",
+        "x_2215032_ai_inc_0_ai_resolution": "1. Ask whether colleagues are affected. If more than one user in the same area is affected, treat it as a service event and stop. [KB0002 v3.0 \u00a7Resolution]\n2. Check whether webmail works for this user to determine if the fault is client-side. [KB0002 v3.0 \u00a7Resolution]\n3. For a client-side fault, close the client fully and reopen it. [KB0002 v3.0 \u00a7Resolution]\n4. If it still fails, recreate the mail profile and allow the cache to rebuild. [KB0002 v3.0 \u00a7Resolution]\n5. Confirm mail flow before closing. [KB0002 v3.0 \u00a7Resolution]\n\nSources: KB0002 v3.0 \u2014 OUTLOOK SHOWS DISCONNECTED AND NO MAIL IS DELIVERED",
+        "x_2215032_ai_inc_0_ai_classification": "software",
+        "state": "Resolved",
+        "x_2215032_ai_inc_0_ai_confidence": "0.95",
+        "x_2215032_ai_inc_0_ai_processing_state": "Complete"
+      },
+      "checks": {
+        "first_run_finished": true,
+        "asked_one_question": true,
+        "waited_on_hold": true,
+        "reply_queued_the_agent_again": true,
+        "agent_continued_to_a_result": true,
+        "no_question_repeated": true
+      },
+      "passed": true
+    },
+    "engineer_takes_over_then_hands_back": {
+      "incident": "INC0010362",
+      "sys_id": "e99fe2cc47ff0710c148497f316d4316",
+      "runs": [
+        {
+          "execution_id": "f9364dc7-af17-4ef0-a4ef-05773d1bc372",
+          "event_record_id": "e1233c9c-a999-47e4-8a2a-bf84bd70c404",
+          "incident_sys_id": "e99fe2cc47ff0710c148497f316d4316",
+          "status": "awaiting_approval",
+          "node_reached": "act",
+          "model_name": null,
+          "agent_version": "s3.4-graph-1.0.0",
+          "started_at": "2026-10-03T11:55:34.067313Z",
+          "ended_at": null,
+          "termination_cause": null,
+          "updated_at": "2026-10-03T11:56:49.308183Z"
+        },
+        {
+          "execution_id": "0e68c3e0-b834-4c14-ba3d-1cc43330e0e3",
+          "event_record_id": "9e030b14-360b-44fc-8405-bfbcf5ebaffc",
+          "incident_sys_id": "e99fe2cc47ff0710c148497f316d4316",
+          "status": "succeeded",
+          "node_reached": null,
+          "model_name": null,
+          "agent_version": null,
+          "started_at": "2026-10-03T11:55:14.191922Z",
+          "ended_at": "2026-10-03T11:55:14.207496Z",
+          "termination_cause": "observed:incident.engineer_replied",
+          "updated_at": "2026-10-03T11:55:14.208758Z"
+        },
+        {
+          "execution_id": "40310229-d4ce-4717-872a-3598333b2486",
+          "event_record_id": "25ef485f-28bb-461c-9c3c-1ef21af6bae7",
+          "incident_sys_id": "e99fe2cc47ff0710c148497f316d4316",
+          "status": "succeeded",
+          "node_reached": "act",
+          "model_name": null,
+          "agent_version": "s3.4-graph-1.0.0",
+          "started_at": "2026-10-03T11:55:03.946775Z",
+          "ended_at": "2026-10-03T11:55:09.354038Z",
+          "termination_cause": "suggested",
+          "updated_at": "2026-10-03T11:55:09.355347Z"
+        }
+      ],
+      "final": {
+        "close_code": null,
+        "assignment_group": "Network",
+        "x_2215032_ai_inc_0_ai_failure_reason": "",
+        "x_2215032_ai_inc_0_ai_suggestion": "1. Confirm with the user that they changed their password within the last 24 hours. [KB0001 v2.0 \u00a7Resolution]\n2. Verify the user's identity following the identity verification procedure. [KB0005 v4.0 \u00a7Resolution]\n3. Unlock the account in the identity console. [KB0005 v4.0 \u00a7Resolution]\n4. Ask the user to sign out of the VPN client completely, including the system tray icon. [KB0001 v2.0 \u00a7Resolution]\n5. Clear the cached credential for the VPN profile from the credential store. [KB0001 v2.0 \u00a7Resolution]\n6. Ask the user to sign out of the corporate mail profile on their mobile device. [KB0005 v4.0 \u00a7Resolution]\n7. Clear cached credentials on the laptop, including VPN and mapped drives. [KB0005 v4.0 \u00a7Resolution]\n8. Ask the user to sign in again and confirm access to two different services. [KB0005 v4.0 \u00a7Resolution]\n9. If the account locks again within minutes, identify the device retrying the old credential from the lockout source before unlocking a third time. [KB0005 v4.0 \u00a7Resolution]\n\nSources: KB0001 v2.0 \u2014 VPN AUTHENTICATION FAILS AFTER A PASSWORD CHANGE; KB0005 v4.0 \u2014 ACCOUNT IS LOCKED AFTER REPEATED FAILED SIGN-INS",
+        "priority": "5 - Planning",
+        "x_2215032_ai_inc_0_ai_human_review_required": "true",
+        "close_notes": "",
+        "number": "INC0010362",
+        "resolved_by": "",
+        "x_2215032_ai_inc_0_ai_human_lock": "false",
+        "x_2215032_ai_inc_0_ai_resolution": "1. Confirm with the user that they changed their password within the last 24 hours. [KB0001 v2.0 \u00a7Resolution]\n2. Verify the user's identity following the identity verification procedure. [KB0005 v4.0 \u00a7Resolution]\n3. Unlock the account in the identity console. [KB0005 v4.0 \u00a7Resolution]\n4. Ask the user to sign out of the VPN client completely, including the system tray icon. [KB0001 v2.0 \u00a7Resolution]\n5. Clear the cached credential for the VPN profile from the credential store. [KB0001 v2.0 \u00a7Resolution]\n6. Ask the user to sign out of the corporate mail profile on their mobile device. [KB0005 v4.0 \u00a7Resolution]\n7. Clear cached credentials on the laptop, including VPN and mapped drives. [KB0005 v4.0 \u00a7Resolution]\n8. Ask the user to sign in again and confirm access to two different services. [KB0005 v4.0 \u00a7Resolution]\n9. If the account locks again within minutes, identify the device retrying the old credential from the lockout source before unlocking a third time. [KB0005 v4.0 \u00a7Resolution]\n\nSources: KB0001 v2.0 \u2014 VPN AUTHENTICATION FAILS AFTER A PASSWORD CHANGE; KB0005 v4.0 \u2014 ACCOUNT IS LOCKED AFTER REPEATED FAILED SIGN-INS",
+        "x_2215032_ai_inc_0_ai_classification": "access",
+        "state": "In Progress",
+        "x_2215032_ai_inc_0_ai_confidence": "0.95",
+        "x_2215032_ai_inc_0_ai_processing_state": "Awaiting Approval"
+      },
+      "checks": {
+        "engineer_reply_locked_the_agent_out": true,
+        "stood_down_note": true,
+        "engineer_reply_recorded": true,
+        "hand_back_button_offered_and_pressed": true,
+        "hand_back_note_with_instruction": true,
+        "agent_resumed": true,
+        "lock_cleared": true
+      },
+      "passed": true
+    },
+    "caller_reopens_ai_resolution": {
+      "incident": "INC0010363",
+      "sys_id": "a720ba0047334710c148497f316d4312",
+      "runs": [
+        {
+          "execution_id": "2c1c8174-ddea-45d1-a40f-8887e0d9c064",
+          "event_record_id": "e989cc8f-e26b-425c-9e4f-cf3805463347",
+          "incident_sys_id": "a720ba0047334710c148497f316d4312",
+          "status": "succeeded",
+          "node_reached": null,
+          "model_name": null,
+          "agent_version": null,
+          "started_at": "2026-10-03T11:58:14.364543Z",
+          "ended_at": "2026-10-03T11:58:15.048212Z",
+          "termination_cause": "observed:incident.reopened",
+          "updated_at": "2026-10-03T11:58:15.049714Z"
+        },
+        {
+          "execution_id": "f5ee4092-9f00-4f24-84f7-1cab387ac659",
+          "event_record_id": "3742ca5b-09e2-44b4-9e25-789cf50960d6",
+          "incident_sys_id": "a720ba0047334710c148497f316d4312",
+          "status": "succeeded",
+          "node_reached": "act",
+          "model_name": null,
+          "agent_version": "s3.4-graph-1.0.0",
+          "started_at": "2026-10-03T11:57:34.343150Z",
+          "ended_at": "2026-10-03T11:58:04.360897Z",
+          "termination_cause": "suggested",
+          "updated_at": "2026-10-03T11:58:04.361757Z"
+        }
+      ],
+      "final": {
+        "close_code": "Solution provided",
+        "assignment_group": "Software",
+        "x_2215032_ai_inc_0_ai_failure_reason": "",
+        "x_2215032_ai_inc_0_ai_suggestion": "1. Ask whether colleagues are affected to rule out a service event. [KB0002 v3.0 \u00a7Resolution]\n2. Check whether webmail works for this user to confirm the fault is client-side. [KB0002 v3.0 \u00a7Resolution]\n3. Close the mail client fully and reopen it. [KB0002 v3.0 \u00a7Resolution]\n4. If the client still fails to connect, recreate the mail profile and allow the cache to rebuild. [KB0002 v3.0 \u00a7Resolution]\n5. Confirm mail flow. [KB0002 v3.0 \u00a7Resolution]\n\nSources: KB0002 v3.0 \u2014 OUTLOOK SHOWS DISCONNECTED AND NO MAIL IS DELIVERED",
+        "priority": "5 - Planning",
+        "x_2215032_ai_inc_0_ai_human_review_required": "true",
+        "close_notes": "Resolved by BARQ AI Agent with confidence 0.95.\n\n1. Ask whether colleagues are affected to rule out a service event. [KB0002 v3.0 \u00a7Resolution]\n2. Check whether webmail works for this user to confirm the fault is client-side. [KB0002 v3.0 \u00a7Resolution]\n3. Close the mail client fully and reopen it. [KB0002 v3.0 \u00a7Resolution]\n4. If the client still fails to connect, recreate the mail profile and allow the cache to rebuild. [KB0002 v3.0 \u00a7Resolution]\n5. Confirm mail flow. [KB0002 v3.0 \u00a7Resolution]\n\nSources: KB0002 v3.0 \u2014 OUTLOOK SHOWS DISCONNECTED AND NO MAIL IS DELIVERED",
+        "number": "INC0010363",
+        "resolved_by": "BARQ AI Agent",
+        "x_2215032_ai_inc_0_ai_human_lock": "true",
+        "x_2215032_ai_inc_0_ai_resolution": "1. Ask whether colleagues are affected to rule out a service event. [KB0002 v3.0 \u00a7Resolution]\n2. Check whether webmail works for this user to confirm the fault is client-side. [KB0002 v3.0 \u00a7Resolution]\n3. Close the mail client fully and reopen it. [KB0002 v3.0 \u00a7Resolution]\n4. If the client still fails to connect, recreate the mail profile and allow the cache to rebuild. [KB0002 v3.0 \u00a7Resolution]\n5. Confirm mail flow. [KB0002 v3.0 \u00a7Resolution]\n\nSources: KB0002 v3.0 \u2014 OUTLOOK SHOWS DISCONNECTED AND NO MAIL IS DELIVERED",
+        "x_2215032_ai_inc_0_ai_classification": "software",
+        "state": "In Progress",
+        "x_2215032_ai_inc_0_ai_confidence": "0.95",
+        "x_2215032_ai_inc_0_ai_processing_state": "Complete"
+      },
+      "checks": {
+        "was_resolved_by_agent": true,
+        "reopened_to_in_progress": true,
+        "engineer_has_it": true,
+        "hand_over_note": true,
+        "reopen_recorded": true
+      },
+      "passed": true
+    },
+    "approver_approves_on_page": {
+      "incident": "INC0010364",
+      "sys_id": "7e90ba4047334710c148497f316d43bb",
+      "message": "Approved. BARQ AI Agent resumed and is applying the decision.",
+      "runs": [
+        {
+          "execution_id": "a4f1852c-27bd-4159-a8a3-c03e432e5403",
+          "event_record_id": "f6bc4237-9fdf-487d-9fcc-ca6bc637761a",
+          "incident_sys_id": "7e90ba4047334710c148497f316d43bb",
+          "status": "succeeded",
+          "node_reached": "act",
+          "model_name": null,
+          "agent_version": "s3.4-graph-1.0.0",
+          "started_at": "2026-10-03T11:59:24.375217Z",
+          "ended_at": "2026-10-03T12:00:17.598816Z",
+          "termination_cause": "interrupt_resume:escalated_high_risk",
+          "updated_at": "2026-10-03T12:00:17.599887Z"
+        }
+      ],
+      "checks": {
+        "parked": true,
+        "engineer_has_no_approve_button": true,
+        "approver_pressed_approve": true,
+        "resolved_after_approval": true,
+        "edited_fix_applied": true,
+        "backend_run_finished": true
+      },
+      "passed": true
+    },
+    "engineer_takes_over_parked": {
+      "incident": "INC0010365",
+      "sys_id": "ea01be8047334710c148497f316d4305",
+      "message": "You have taken over this incident from BARQ AI Agent.",
+      "runs": [
+        {
+          "execution_id": "e0ce4a2a-c00d-41e3-bc4c-75ad211f8924",
+          "event_record_id": "b85de954-00b0-4868-9aa8-581ef53f6847",
+          "incident_sys_id": "ea01be8047334710c148497f316d4305",
+          "status": "failed",
+          "node_reached": null,
+          "model_name": null,
+          "agent_version": null,
+          "started_at": "2026-10-03T12:02:03.417130Z",
+          "ended_at": "2026-10-03T12:02:04.795038Z",
+          "termination_cause": "unclassified failure: [409] Incident has a Human Lock; replay requires human intervention.",
+          "updated_at": "2026-10-03T12:02:04.795912Z"
+        },
+        {
+          "execution_id": "8e1cfbcb-578a-43eb-ad2a-b3cf6f41dba1",
+          "event_record_id": "5f088102-984c-404b-b855-cb9bb32c6d1c",
+          "incident_sys_id": "ea01be8047334710c148497f316d4305",
+          "status": "failed",
+          "node_reached": "act",
+          "model_name": null,
+          "agent_version": "s3.4-graph-1.0.0",
+          "started_at": "2026-10-03T12:01:24.213224Z",
+          "ended_at": "2026-10-03T12:01:58.955447Z",
+          "termination_cause": "human_rejected:interrupt_resume:escalated_high_risk",
+          "updated_at": "2026-10-03T12:01:58.956351Z"
+        }
+      ],
+      "checks": {
+        "parked": true,
+        "take_over_pressed": true,
+        "paused_run_closed": true,
+        "locked": true,
+        "nothing_resolved": true
+      },
+      "passed": true
+    }
+  },
+  "finished_at": "2026-10-03T12:02:04.952037+00:00"
+}

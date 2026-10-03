@@ -53,3 +53,7 @@ HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
 
 # Production ASGI Entrypoint
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips=*"]
+
+# Production target stays LAST so a targetless `docker build .` still yields
+# the api/worker image; the ui stage above is opt-in via build target.
+FROM base AS api

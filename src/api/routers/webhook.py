@@ -44,7 +44,7 @@ router = APIRouter(
     response_model=WebhookAcceptedResponse,
     summary="Ingest inbound ServiceNow incident event",
     description=(
-        "Validates Outbound Event Contract v1, persists idempotently, and enqueues to Redis."
+        "Validates Outbound Event Contract v1 or v2, persists idempotently, and enqueues to Redis."
     ),
     responses={
         401: {"model": ErrorResponse, "description": "Missing or invalid webhook bearer token."},
@@ -93,6 +93,8 @@ async def _ingest(
         sys_id=payload.sys_id,
         number=payload.number,
         event_type=payload.event_type,
+        contract_version=payload.contract_version,
+        actor_sys_id=payload.actor_sys_id,
     )
 
     try:
@@ -133,7 +135,7 @@ async def _ingest(
             ):
                 await asyncio.to_thread(
                     send_incident_event,
-                    payload.model_dump(),
+                    payload.model_dump(exclude_none=True),
                     str(acceptance.execution_id),
                     correlation_id=correlation_id,
                 )

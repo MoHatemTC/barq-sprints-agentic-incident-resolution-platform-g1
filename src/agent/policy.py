@@ -105,6 +105,13 @@ def service_reference_unresolved(raw: Mapping[str, Any]) -> bool:
     return False
 
 
+def _reference_id(value: Any) -> str:
+    """A reference field's sys_id, whether ServiceNow returned it bare or as a link object."""
+    if isinstance(value, Mapping):
+        value = value.get("value")
+    return str(value or "").strip()
+
+
 def snapshot_incident(raw: Mapping[str, Any]) -> IncidentSnapshot:
     """Project a validated ``app.models.incident.Incident`` dump onto the graph."""
     lock = raw.get("ai_human_lock")
@@ -122,6 +129,8 @@ def snapshot_incident(raw: Mapping[str, Any]) -> IncidentSnapshot:
         service=service_name(raw),
         service_unresolved=service_reference_unresolved(raw),
         active=bool(raw.get("active", True)),
+        caller_id=_reference_id(raw.get("caller_id")),
+        assignment_group=_reference_id(raw.get("assignment_group")),
         ai_enabled=bool(raw.get("ai_enabled", False)),
         ai_human_lock=lock if isinstance(lock, bool) else None,
         ai_processing_state=str(raw.get("ai_processing_state") or "pending"),

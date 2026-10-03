@@ -40,6 +40,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.sql import func
 
 from app.db.models import (
+    Approval,
     Event,
     Execution,
     Failure,
@@ -155,6 +156,12 @@ class WorkerRepo(Protocol):
         agent_version: str | None = None,
     ) -> None:
         """Park a HITL interrupt: non-terminal, no ServiceNow write yet."""
+        ...
+
+    def supersede_paused_runs(self, incident_sys_id: str, keep: UUID) -> list[UUID]:
+        """Close older runs of this incident still paused for approval: a newer run
+        (caller answer, hand-back) replaces them. Each gets a 'cancelled' decision, so
+        it can never be approved later, and ends 'abandoned'. Returns their ids."""
         ...
 
     def mark_succeeded(
@@ -470,6 +477,44 @@ class PostgresRepo:
             session.execute(
                 update(Execution).where(Execution.execution_id == execution_id).values(**values)
             )
+
+    def supersede_paused_runs(self, incident_sys_id: str, keep: UUID) -> list[UUID]:
+        with self._session_factory() as session, session.begin():
+            paused = list(
+                session.scalars(
+                    select(Execution.execution_id)
+                    .where(
+                        Execution.incident_sys_id == incident_sys_id,
+                        Execution.status == "awaiting_approval",
+                        Execution.execution_id != keep,
+                    )
+                    .with_for_update(skip_locked=True)
+                )
+            )
+            for execution_id in paused:
+                session.execute(
+                    pg_insert(Approval)
+                    .values(
+                        execution_id=execution_id,
+                        decision="cancelled",
+                        decided_by="barq-agent",
+                        reason=f"superseded by newer run {keep}",
+                    )
+                    .on_conflict_do_nothing()
+                )
+                session.execute(
+                    update(Execution)
+                    .where(
+                        Execution.execution_id == execution_id,
+                        Execution.status == "awaiting_approval",
+                    )
+                    .values(
+                        status="abandoned",
+                        ended_at=func.now(),
+                        termination_cause="superseded_by_newer_run",
+                    )
+                )
+        return paused
 
     def mark_succeeded(
         self,
@@ -799,7 +844,11 @@ class PostgresRepo:
                 .where(
                     Execution.status.in_(("queued", "accepted")),
                     Execution.node_reached.in_(("semantic_cluster_wait", "semantic_cluster_ready")),
-                    (SemanticCluster.status.in_(("resolved", "failed", "expired")))
+                    (
+                        SemanticCluster.status.in_(
+                            ("resolved", "failed", "expired", "awaiting_approval")
+                        )
+                    )
                     | (SemanticCluster.expires_at <= _utcnow()),
                 )
                 .with_for_update(of=Execution, skip_locked=True)
@@ -844,11 +893,13 @@ class InMemoryRepo:
         status: str,
         event_id: str | None = None,
         payload: dict | None = None,
+        incident_sys_id: str | None = None,
     ) -> None:
         self.executions[execution_id] = {
             "status": status,
             "ended_at": None,
             "termination_cause": None,
+            "incident_sys_id": incident_sys_id,
         }
         if event_id is not None:
             self.executions[execution_id]["event_id"] = event_id
@@ -983,6 +1034,21 @@ class InMemoryRepo:
             row["attempt_count"] = max_attempts
         elif attempt_count is not None:
             row["attempt_count"] = attempt_count
+
+    def supersede_paused_runs(self, incident_sys_id: str, keep: UUID) -> list[UUID]:
+        paused = [
+            execution_id
+            for execution_id, row in self.executions.items()
+            if execution_id != keep
+            and row["status"] == "awaiting_approval"
+            and row.get("incident_sys_id") == incident_sys_id
+        ]
+        for execution_id in paused:
+            row = self.executions[execution_id]
+            row["status"] = "abandoned"
+            row["ended_at"] = _utcnow()
+            row["termination_cause"] = "superseded_by_newer_run"
+        return paused
 
     def mark_awaiting_approval(
         self,
@@ -1210,7 +1276,7 @@ class InMemoryRepo:
         for cluster_id, members in self.cluster_members.items():
             cluster = self.clusters[cluster_id]
             if (
-                cluster.status not in ("resolved", "failed", "expired")
+                cluster.status not in ("resolved", "failed", "expired", "awaiting_approval")
                 and cluster.expires_at > _utcnow()
             ):
                 continue

@@ -1,0 +1,63 @@
+{
+  "started_at": "2026-10-03T11:52:38.777660+00:00",
+  "incident": "1c1f6e4c47ff0710c148497f316d43b1",
+  "seen": {
+    "abel.tuter": {
+      "read": true,
+      "comments_read": true,
+      "work_notes_read": false,
+      "lock_write": false,
+      "enabled_write": false,
+      "resolution_write": false,
+      "itil": false,
+      "operator": false,
+      "app_admin": false,
+      "reply": true
+    },
+    "David.Miller": {
+      "read": false,
+      "itil": false,
+      "operator": false,
+      "app_admin": false
+    },
+    "beth.anglin": {
+      "read": true,
+      "comments_read": true,
+      "work_notes_read": true,
+      "lock_write": false,
+      "enabled_write": false,
+      "resolution_write": false,
+      "itil": true,
+      "operator": false,
+      "app_admin": false
+    },
+    "incident_operator": {
+      "read": false,
+      "itil": false,
+      "operator": true,
+      "app_admin": false
+    },
+    "barq.admin": {
+      "read": false,
+      "itil": false,
+      "operator": false,
+      "app_admin": true
+    }
+  },
+  "checks": {
+    "caller_reads_own_ticket": true,
+    "other_user_cannot_read_it": true,
+    "caller_reads_comments": true,
+    "caller_can_reply": true,
+    "caller_cannot_read_work_notes": true,
+    "caller_has_no_engineer_or_approver_role": true,
+    "caller_cannot_lock_or_enable_ai": true,
+    "engineer_reads_any_ticket": true,
+    "engineer_reads_work_notes": true,
+    "engineer_is_not_approver": true,
+    "approver_has_operator_role": true,
+    "barq_admin_has_app_admin_role": true
+  },
+  "passed": true,
+  "finished_at": "2026-10-03T11:52:42.994708+00:00"
+}

@@ -4,13 +4,15 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
 import tests.helpers as h
+from agent.audit_store import MemoryGraphAuditStore
+from api.routers import approvals as approvals_router
 from app.db.models import Approval, Execution
 from app.main import create_app
 from tests.helpers import mock_settings
@@ -365,14 +367,26 @@ async def test_decide_approval_creates_for_existing_execution(app_with_db) -> No
         "reason": "Risk threshold exceeded",
     }
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.post(
-            f"/api/v1/approvals/{target_id}/decide",
-            json=payload,
-            headers=AUTH_HEADERS,
-        )
+    # A decision is applied to a paused thread, so the run must really be parked:
+    # an interrupt is on file. (Without one the route refuses with 409; see
+    # tests/test_approvals_no_interrupt.py.)
+    store = MemoryGraphAuditStore()
+    store.save_interrupt(str(target_id), {"outcome": "escalated_high_risk", "draft": None})
+    with (
+        patch.object(approvals_router, "get_audit_store", return_value=store),
+        patch.object(
+            approvals_router, "resume_incident_graph", return_value={"paused": False}
+        ) as resume,
+    ):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                f"/api/v1/approvals/{target_id}/decide",
+                json=payload,
+                headers=AUTH_HEADERS,
+            )
 
     assert resp.status_code == 200
+    assert resume.call_count == 1
     mock_session.add.assert_called_once()
     mock_session.commit.assert_awaited_once()
     created_approval = mock_session.add.call_args[0][0]

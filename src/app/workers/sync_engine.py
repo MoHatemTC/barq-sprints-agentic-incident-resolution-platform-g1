@@ -19,6 +19,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.engine import URL, Engine
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.db.json_codec import pg_json_dumps
+
 
 class SyncPostgreSQLSettings(Protocol):
     """Settings surface needed to build the sync PostgreSQL URL.
@@ -66,6 +68,7 @@ def create_sync_engine(
         echo=echo,
         pool_pre_ping=True,
         connect_args={"connect_timeout": connect_timeout_seconds},
+        json_serializer=pg_json_dumps,
     )
 
 

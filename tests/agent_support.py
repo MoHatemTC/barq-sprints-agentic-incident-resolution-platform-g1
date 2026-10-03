@@ -31,6 +31,7 @@ from agent.servicenow import AsyncRunner, IncidentGateway
 from agent.state import EvidenceItem, RetrievalResult
 from agent.tools import build_servicenow_tool_registry
 from agent.tools.registry import ApprovalCheckResult
+from app.exceptions.servicenow import ServiceNowHumanLockError
 from app.models.execution_log import ExecutionLogCreatePayload
 from app.models.incident import Incident, IncidentUpdatePayload
 from app.models.knowledge import Classification
@@ -203,6 +204,8 @@ class FakeLLM:
         model: str | None = None,
         trace_content: bool = True,
         max_retries: int | None = None,
+        max_completion_tokens: int | None = None,
+        usage_sink: Any = None,
     ) -> Any:
         selected_model = self.model_for_purpose(purpose, model)
         self.last_model_used = selected_model
@@ -216,8 +219,21 @@ class FakeLLM:
                 "model": selected_model,
                 "trace_content": trace_content,
                 "max_retries": max_retries,
+                "max_completion_tokens": max_completion_tokens,
             }
         )
+        if usage_sink is not None:
+            # Mirror the FakeOpenAISDK usage shape so chat budget reconciliation
+            # is exercisable without a network.
+            usage_sink(
+                {
+                    "purpose": purpose,
+                    "input_tokens": 900,
+                    "output_tokens": 150,
+                    "cost_usd": None,
+                    "model": selected_model,
+                }
+            )
         answer = self.answers.get(purpose)
         if answer is None and purpose == "approval_brief":
             from agent.prompts import ApprovalBriefOutput
@@ -228,6 +244,30 @@ class FakeLLM:
                 planned_action="Write the composed work note to ServiceNow.",
                 judgment_required="Approve or reject the planned write.",
             )
+        if answer is None and purpose == "caller_message":
+            from agent.caller_message import CallerMessageOutput
+
+            answer = CallerMessageOutput(
+                caller_can_do_it=True,
+                steps=["Sign out of the VPN client completely.", "Sign in with your new password."],
+                reason="Both steps are on the caller's own device.",
+            )
+        if answer is None and purpose == "triage":
+            from agent.triage import TriageOutput
+
+            # Default: conservative, so nothing is lowered unless a test opts in.
+            answer = TriageOutput(
+                affects_one_person=False,
+                business_critical=True,
+                outage_likely=False,
+                security_related=False,
+            )
+        if answer is None and purpose == "clarifying_question":
+            from agent.conversation import ClarifyingQuestionOutput
+
+            # Default: nothing the caller could add, so behaviour is unchanged unless a
+            # test opts in by setting an answer.
+            answer = ClarifyingQuestionOutput(useful=False)
         if isinstance(answer, list):
             answer = answer.pop(0)
         if isinstance(answer, BaseException):
@@ -418,6 +458,23 @@ class FakeServiceNow:
         self.crash_before_log_recorded: BaseException | None = None
         self.on_update: Callable[[str], None] | None = None
         self.write_calls: list[tuple[str, IncidentUpdatePayload]] = []  # Track AI field writes
+        self.fulfilments: list[tuple[str, Any]] = []
+        self.journal: list[tuple[str, str, str]] = []
+        #: Display-form journals per incident, as ``read_conversation`` returns them.
+        self.conversations: dict[str, dict[str, str]] = {}
+
+    #: What ``find_related_incidents`` returns; tests fill it to build a situation.
+    related: dict[str, list[dict[str, str]]] = {"recent_same_category": [], "caller_recent": []}
+
+    async def related_incidents(
+        self, sys_id: str, *, category: str, caller_id: str
+    ) -> dict[str, list[dict[str, str]]]:
+        self.calls.append("find_related_incidents")
+        return self.related
+
+    async def get_conversation(self, sys_id: str) -> dict[str, str]:
+        self.calls.append("read_conversation")
+        return self.conversations.get(sys_id, {"comments": "", "work_notes": "", "caller_name": ""})
 
     async def get_incident(self, sys_id: str) -> Incident:
         self.calls.append("read_incident")
@@ -451,6 +508,35 @@ class FakeServiceNow:
             # cannot describe, and the one that used to duplicate the log.
             raise self.crash_before_log_recorded
         self.execution_logs.append(payload)
+
+    async def fulfil_incident(
+        self,
+        sys_id: str,
+        payload: Any,
+        *,
+        expected_states: frozenset[str],
+        done_states: frozenset[str],
+    ) -> str:
+        """Mirror ``ServiceNowClient.fulfil_incident`` over the in-memory record."""
+        self.calls.append("fulfil_incident")
+        record = self.records[sys_id]
+        lock = record.get("x_2215032_ai_inc_0_ai_human_lock")
+        if lock not in (False, "false"):
+            raise ServiceNowHumanLockError(f"Incident {sys_id} is locked")
+        state = str(record.get("state") or "")
+        if state in done_states:
+            return "already_applied"
+        if state not in expected_states:
+            return "skipped_state_changed"
+        if payload.assignment_group and record.get("assignment_group"):
+            payload = payload.model_copy(update={"assignment_group": None})
+        self.fulfilments.append((sys_id, payload))
+        body = payload.to_table_api_body()
+        for journal in ("comments", "work_notes"):
+            if journal in body:
+                self.journal.append((sys_id, journal, body.pop(journal)))
+        record.update(body)
+        return "applied"
 
     async def write_ai_fields(self, sys_id: str, payload: IncidentUpdatePayload) -> None:
         """Track AI field writes for crash-recovery idempotency tests."""

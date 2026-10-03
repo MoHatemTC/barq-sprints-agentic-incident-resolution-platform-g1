@@ -157,6 +157,21 @@ an attempt to defeat deliberate `object.__setattr__` or other Python reflection.
 | `write_ai_fields` | `low_risk_write` |
 | `write_work_note` | `low_risk_write` |
 | `write_execution_log` | `low_risk_write` |
+| `assign_incident` | `low_risk_write` |
+| `resolve_incident` | `low_risk_write` |
+
+`assign_incident` and `resolve_incident` (added 2026-10-03, see
+`docs/barq_agentic_platform_design.md` §6–§7) let the agent work the incident itself:
+route it to the category's group and set it In Progress; give the caller the fix as a
+customer-visible comment and resolve it with close code *Solution provided*. They are
+`low_risk_write` at the registry because whether the agent may use them on a given
+incident is decided before the call, in `agent.nodes.act.fulfil_applied_fix`, from the
+autonomy level (`AGENT_AUTONOMY_LEVEL`) and the decision table: only an applied fix (a
+low-risk draft that passed every gate, or a fix a person approved) is fulfilled, and only
+an incident with a real caller is resolved, so the caller can always reopen it. Both
+tools re-read the incident, refuse a Human Lock, never overwrite a group a person chose,
+do nothing when a person moved the incident on, and are not repeated after a crash.
+The agent still has no tool to close, cancel or delete an incident.
 
 `write_ai_fields` preserves the current combined incident PATCH behavior. The `act`
 node puts the work note, human-review flag, and AI fields into one

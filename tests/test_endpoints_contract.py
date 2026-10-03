@@ -139,6 +139,14 @@ DOCUMENTED_ENDPOINTS = {
     "GET /health",
     "GET /ready",
     "POST /api/v1/webhook/incident",
+    "POST /api/v1/chat/sessions",
+    "GET /api/v1/chat/conversations",
+    "POST /api/v1/chat/conversations",
+    "PATCH /api/v1/chat/conversations/{conversation_id}",
+    "DELETE /api/v1/chat/conversations/{conversation_id}",
+    "GET /api/v1/chat/conversations/{conversation_id}/messages",
+    "POST /api/v1/chat/conversations/{conversation_id}/messages",
+    "GET /api/v1/chat/conversations/{conversation_id}/turns/{turn_id}",
 }
 
 
@@ -163,6 +171,14 @@ async def test_every_protected_endpoint_rejects_missing_auth_with_401(client) ->
         ("GET", "/api/v1/eval/results"),
         ("POST", "/api/v1/eval/run"),
         ("GET", "/api/v1/config"),
+        ("POST", "/api/v1/chat/sessions"),
+        ("GET", "/api/v1/chat/conversations"),
+        ("POST", "/api/v1/chat/conversations"),
+        ("PATCH", f"/api/v1/chat/conversations/{uuid4()}"),
+        ("DELETE", f"/api/v1/chat/conversations/{uuid4()}"),
+        ("GET", f"/api/v1/chat/conversations/{uuid4()}/messages"),
+        ("POST", f"/api/v1/chat/conversations/{uuid4()}/messages"),
+        ("GET", f"/api/v1/chat/conversations/{uuid4()}/turns/{uuid4()}"),
     ]
     for method, url in protected:
         resp = await client.request(method, url)

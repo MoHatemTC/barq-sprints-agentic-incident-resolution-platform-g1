@@ -406,3 +406,66 @@ class TestBackoffSecondsTruncation:
         # But the DB stores int(0.2) = 0.
         snapshot = repo.get_retry_state(EXECUTION_ID)
         assert snapshot["backoff_seconds"] == 0  # <-- the truncation
+
+
+@pytest.mark.parametrize(
+    "event_type", ["incident.engineer_replied", "incident.reopened", "incident.closed"]
+)
+def test_observe_only_events_are_recorded_without_running_the_agent(event_type: str) -> None:
+    repo = make_repo()
+    with mock.patch.object(tasks_module, "invoke_graph") as graph:
+        result = _run_incident(
+            FakeTask(), {**PAYLOAD_OK, "event_type": event_type}, str(EXECUTION_ID), CFG, repo
+        )
+    graph.assert_not_called()
+    assert result["status"] == "observed"
+    assert repo.get_status(EXECUTION_ID) == "succeeded"
+    assert repo.get_termination_cause(EXECUTION_ID) == f"observed:{event_type}"
+
+
+@pytest.mark.parametrize(
+    "event_type,admitted",
+    [
+        ("incident.created", True),
+        ("incident.updated", False),
+        ("", True),
+        ("incident.caller_replied", False),
+        ("incident.caller_updated", False),
+        ("incident.handed_back", False),
+    ],
+)
+def test_conversation_runs_never_share_or_reuse_a_cached_fix(
+    event_type: str, admitted: bool
+) -> None:
+    """The cache compares ticket text only. A fix that rests on a caller's answer or an
+    engineer's instruction must not reach a ticket that merely reads alike (live:
+    INC0010339 got INC0010338's Outlook fix for a vague VPN ticket). Hand-backs arrive as
+    v1 updates, so only new tickets use the cache."""
+    repo = make_repo()
+    cache = MagicMock()
+    cache.admit.return_value = tasks_module.AdmissionResult(
+        mode=tasks_module.AdmissionMode.INDEPENDENT, reason="no_match"
+    )
+    with mock.patch.object(tasks_module, "invoke_graph", return_value={"outcome": "suggested"}):
+        result = _run_incident(
+            FakeTask(),
+            {**PAYLOAD_OK, "event_type": event_type},
+            str(EXECUTION_ID),
+            CFG,
+            repo,
+            semantic_cache=cache,
+        )
+    assert result["status"] == "succeeded"
+    assert cache.admit.called is admitted
+
+
+def test_a_new_run_supersedes_an_older_paused_run_of_the_same_incident() -> None:
+    repo = make_repo()
+    older, other = uuid4(), uuid4()
+    repo.seed_execution(older, status="awaiting_approval", incident_sys_id=PAYLOAD_OK["sys_id"])
+    repo.seed_execution(other, status="awaiting_approval", incident_sys_id="f" * 32)
+    with mock.patch.object(tasks_module, "invoke_graph", return_value={"outcome": "suggested"}):
+        _run_incident(FakeTask(), PAYLOAD_OK, str(EXECUTION_ID), CFG, repo)
+    assert repo.get_status(older) == "abandoned"
+    assert repo.get_termination_cause(older) == "superseded_by_newer_run"
+    assert repo.get_status(other) == "awaiting_approval"

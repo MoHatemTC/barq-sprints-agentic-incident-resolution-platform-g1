@@ -198,3 +198,45 @@ async def test_original_event_does_not_reset_a_failed_incident() -> None:
         )
     assert prepared is False
     client.get_incident.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_stuck_awaiting_approval_without_a_decidable_pause_is_released() -> None:
+    # INC0010252: ServiceNow said "awaiting approval" but no pause was ever stored.
+    client = _client()
+    client.get_incident.return_value = _incident(
+        ai_processing_state=AIProcessingState.AWAITING_APPROVAL
+    )
+    with patch("app.workers.incident_state.ServiceNowClient", return_value=client):
+        written = await mark_incident_failed(
+            mock_settings(),
+            PAYLOAD,
+            str(uuid4()),
+            RuntimeError("insert failed"),
+            1,
+            has_decidable_pause=lambda sys_id: False,
+        )
+    assert written is True
+    update = client.update_incident.await_args.args[1]
+    assert update.ai_processing_state is AIProcessingState.FAILED
+    assert "released for an engineer" in update.ai_failure_reason
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("lookup", [lambda sys_id: True, lambda sys_id: 1 / 0])
+async def test_a_real_or_unknown_pause_is_never_released(lookup) -> None:
+    client = _client()
+    client.get_incident.return_value = _incident(
+        ai_processing_state=AIProcessingState.AWAITING_APPROVAL
+    )
+    with patch("app.workers.incident_state.ServiceNowClient", return_value=client):
+        written = await mark_incident_failed(
+            mock_settings(),
+            PAYLOAD,
+            str(uuid4()),
+            RuntimeError("error"),
+            1,
+            has_decidable_pause=lookup,
+        )
+    assert written is False
+    client.update_incident.assert_not_awaited()
