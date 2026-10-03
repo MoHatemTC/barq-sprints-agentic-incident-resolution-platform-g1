@@ -301,11 +301,13 @@ def _slim_retrieval(section: Any) -> dict[str, Any] | None:
 
 
 def _request_human_decision(payload: dict[str, Any]) -> dict[str, Any]:
-    """Pause inside a compiled graph; unit tests that call ``act`` directly write."""
+    """Pause inside a compiled graph and return the human decision it resumes with."""
     try:
         value = interrupt(payload)
-    except RuntimeError:
-        return {"decision": "approved", "decided_by": "direct-node-call", "source": "no_graph"}
+    except RuntimeError as exc:
+        # Outside a compiled graph there is nobody to ask. Failing closed means a
+        # paused outcome can never be written as if a human had approved it.
+        raise RuntimeError("act reached a human decision outside a compiled graph") from exc
     if isinstance(value, dict):
         return value
     return {"decision": str(value), "decided_by": "operator"}

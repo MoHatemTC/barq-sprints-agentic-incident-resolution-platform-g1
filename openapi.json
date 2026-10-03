@@ -1749,7 +1749,8 @@
           "reason": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 4000
               },
               {
                 "type": "null"
@@ -1769,7 +1770,7 @@
               }
             ],
             "title": "Evidence",
-            "description": "Optional structured evidence or parameter overrides"
+            "description": "Optional structured evidence or parameter overrides, at most 16384 bytes serialised"
           },
           "solution": {
             "anyOf": [

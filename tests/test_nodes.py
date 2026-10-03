@@ -7,6 +7,7 @@ no graph, no model, no network, no database.
 from __future__ import annotations
 
 import asyncio
+import sys
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, patch
@@ -857,6 +858,19 @@ class TestConfidenceCheck:
 
 
 class TestAct:
+    @pytest.fixture(autouse=True)
+    def _operator_approves(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """These tests call ``act`` outside a compiled graph, where nobody can be asked.
+
+        ``act`` now fails closed there, so each test states the human decision it
+        assumes instead of relying on an implicit approval.
+        """
+        monkeypatch.setattr(
+            sys.modules["agent.nodes.act"],
+            "_request_human_decision",
+            lambda payload: {"decision": "approved", "decided_by": "test", "source": "no_graph"},
+        )
+
     def test_suggestion_completes_without_an_unresumable_review_flag(self) -> None:
         backend = FakeServiceNow()
         deps = make_deps(servicenow=backend)
