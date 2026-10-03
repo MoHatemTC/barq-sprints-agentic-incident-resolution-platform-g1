@@ -653,8 +653,8 @@ Caller-side steps (accept / reopen) are performed through the portal as an exist
 
 ## 16. Delivery plan
 
-The plan to execute is [barq_agentic_plan.md](barq_agentic_plan.md). Earlier versions of this
-section are superseded. The scenario tables below stay as the reference it tests against.
+The plan to execute is [barq_target_and_changes.md](barq_target_and_changes.md). Earlier versions
+of this section are superseded. The scenario tables below stay as the reference it tests against.
 
 ### New scenarios for the intelligent agent
 | ID | Scenario | Expected |
