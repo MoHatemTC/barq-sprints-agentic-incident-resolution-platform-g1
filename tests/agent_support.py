@@ -244,6 +244,14 @@ class FakeLLM:
                 planned_action="Write the composed work note to ServiceNow.",
                 judgment_required="Approve or reject the planned write.",
             )
+        if answer is None and purpose == "caller_message":
+            from agent.caller_message import CallerMessageOutput
+
+            answer = CallerMessageOutput(
+                caller_can_do_it=True,
+                steps=["Sign out of the VPN client completely.", "Sign in with your new password."],
+                reason="Both steps are on the caller's own device.",
+            )
         if isinstance(answer, list):
             answer = answer.pop(0)
         if isinstance(answer, BaseException):

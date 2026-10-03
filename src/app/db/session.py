@@ -15,6 +15,8 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
+from app.db.json_codec import pg_json_dumps
+
 
 class PostgreSQLSettings(Protocol):
     """Settings surface needed to construct the PostgreSQL URL."""
@@ -58,6 +60,7 @@ def create_database_engine(database_url: str | URL, *, echo: bool = False) -> As
         pool_size=50,
         max_overflow=25,
         pool_pre_ping=False,
+        json_serializer=pg_json_dumps,
     )
 
 

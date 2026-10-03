@@ -53,7 +53,12 @@ class ServiceNow:
 
     def query(self, table: str, query: str, fields: str, display: str = "false") -> list[Any]:
         q = urllib.parse.urlencode(
-            {"sysparm_query": query, "sysparm_fields": fields, "sysparm_display_value": display}
+            {
+                "sysparm_query": query,
+                "sysparm_fields": fields,
+                "sysparm_display_value": display,
+                "sysparm_exclude_reference_link": "true",
+            }
         )
         return self._call("GET", f"/api/now/table/{table}?{q}") or []
 

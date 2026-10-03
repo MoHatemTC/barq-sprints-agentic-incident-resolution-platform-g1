@@ -2,6 +2,7 @@
 
 from unittest.mock import patch
 
+from app.db.json_codec import pg_json_dumps
 from app.workers.sync_engine import create_sync_engine
 
 
@@ -18,4 +19,5 @@ def test_sync_engine_bounds_initial_connection_attempt() -> None:
         echo=False,
         pool_pre_ping=True,
         connect_args={"connect_timeout": 7},
+        json_serializer=pg_json_dumps,
     )

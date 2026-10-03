@@ -17,6 +17,7 @@ import structlog
 from langgraph.types import interrupt
 
 from agent.approval_brief import render_brief
+from agent.caller_message import compose_caller_message
 from agent.dependencies import AgentDependencies
 from agent.errors import HumanLockedError
 from agent.state import (
@@ -679,17 +680,24 @@ def fulfil_applied_fix(
     ]
     caller = incident.caller_id
     caller_can_confirm = bool(caller) and caller not in deps.settings.agent_service_account_ids
+    needs_engineer = False
     if level == "autonomous" and caller_can_confirm:
-        calls.append(
-            (
-                "resolve_incident",
-                {
-                    "sys_id": incident.sys_id,
-                    "caller_comment": caller_comment(resolution),
-                    "close_notes": close_notes(resolution, confidence),
-                },
+        # Resolve only when the caller can carry out the fix alone; a fix that needs IT
+        # staff stays In Progress with the cited steps for an engineer.
+        message = compose_caller_message(deps, incident.short_description, resolution)
+        if message is None:
+            needs_engineer = True
+        else:
+            calls.append(
+                (
+                    "resolve_incident",
+                    {
+                        "sys_id": incident.sys_id,
+                        "caller_comment": caller_comment(message),
+                        "close_notes": close_notes(resolution, confidence),
+                    },
+                )
             )
-        )
     for tool, arguments in calls:
         try:
             result = run_blocking(deps.tools.invoke(tool, context=context, arguments=arguments))
@@ -705,6 +713,8 @@ def fulfil_applied_fix(
             return steps
     if level == "autonomous" and not caller_can_confirm:
         steps.append("resolve_incident:skipped_no_caller")
+    elif needs_engineer:
+        steps.append("resolve_incident:skipped_needs_engineer")
     return steps
 
 
