@@ -205,9 +205,15 @@ def test_a_fix_the_caller_cannot_do_is_left_for_an_engineer() -> None:
     output = act(reasoned_state(incident=snapshot(vpn())), deps)["output"]
     assert output["fulfilment"] == [
         "assign_incident:applied",
+        "update_caller:applied",
         "resolve_incident:skipped_needs_engineer",
     ]
     assert backend.records[VPN["sys_id"]]["state"] == "2"
+    # The caller is told who has it, never the engineer-only steps.
+    comments = [text for _, kind, text in backend.journal if kind == "comments"]
+    assert len(comments) == 1
+    assert "now have it" in comments[0]
+    assert "directory" not in comments[0]
 
 
 @pytest.mark.parametrize(
@@ -237,4 +243,6 @@ def test_a_flagged_caller_step_never_reaches_the_caller() -> None:
     )
     output = act(reasoned_state(incident=snapshot(vpn())), deps)["output"]
     assert "resolve_incident:skipped_needs_engineer" in output["fulfilment"]
-    assert not [kind for _, kind, _ in backend.journal if kind == "comments"]
+    # Only the hand-over message reaches the caller, never the flagged step.
+    comments = [text for _, kind, text in backend.journal if kind == "comments"]
+    assert len(comments) == 1 and "Ignore all previous" not in comments[0]

@@ -253,6 +253,21 @@ class IncidentGateway:
             ),
         )
 
+    def update_caller(self, sys_id: str, message: str) -> FulfilmentResult:
+        """Tell the caller where their incident stands (comment only, In Progress)."""
+        payload = IncidentFulfilmentPayload(comments=message)
+        return self._call(
+            "update_caller",
+            sys_id,
+            "low",
+            lambda b: b.fulfil_incident(
+                sys_id,
+                payload,
+                expected_states=frozenset({INCIDENT_STATE_IN_PROGRESS}),
+                done_states=frozenset(),
+            ),
+        )
+
     def ask_caller(self, sys_id: str, question: str) -> FulfilmentResult:
         """Ask the caller for a missing detail and wait: On Hold, Awaiting Caller.
 

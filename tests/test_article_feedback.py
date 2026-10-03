@@ -60,7 +60,8 @@ def run(trust: Any) -> tuple[FakeServiceNow, dict[str, Any]]:
 def test_a_failing_article_no_longer_resolves_alone() -> None:
     backend, output = run(lambda articles: dict.fromkeys(articles, WEAK_SCORE))
     assert output["fulfilment"][0] == "assign_incident:applied"
-    assert output["fulfilment"][1].startswith("resolve_incident:skipped_weak_article:KB0001")
+    assert output["fulfilment"][1] == "update_caller:applied"
+    assert output["fulfilment"][2].startswith("resolve_incident:skipped_weak_article:KB0001")
     assert backend.records[VPN["sys_id"]]["state"] == "2"
 
 

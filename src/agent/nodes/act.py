@@ -788,6 +788,32 @@ def fulfil_applied_fix(
         steps.append(f"{tool}:{result}")
         if result == "skipped_state_changed":
             return steps
+    if (
+        level == "autonomous"
+        and caller_can_confirm
+        and (needs_engineer or weak)
+        and not reply_limit
+    ):
+        # The caller is never left in silence: say who has it and that they will hear back.
+        team = f"the {category} team" if group else "an engineer"
+        try:
+            result = run_blocking(
+                deps.tools.invoke(
+                    "update_caller",
+                    context=context,
+                    arguments={
+                        "sys_id": incident.sys_id,
+                        "message": (
+                            f"Hello, this is {AGENT_NAME}. I looked into your incident. The fix "
+                            f"needs {team}, who now have it together with the steps to fix it. "
+                            "You will hear from them here, and you can add details at any time."
+                        ),
+                    },
+                )
+            )
+            steps.append(f"update_caller:{result}")
+        except Exception as exc:  # noqa: BLE001 - the fix is with the engineer already
+            steps.append(f"update_caller:failed:{type(exc).__name__}")
     if level == "autonomous" and not caller_can_confirm:
         steps.append("resolve_incident:skipped_no_caller")
     elif level == "autonomous" and reply_limit:

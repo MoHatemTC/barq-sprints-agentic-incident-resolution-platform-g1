@@ -74,6 +74,11 @@ def build_servicenow_tool_registry(
             gateway.resolve_incident,
         ),
         ToolRegistration(
+            "update_caller",
+            PermissionClass.LOW_RISK_WRITE,
+            gateway.update_caller,
+        ),
+        ToolRegistration(
             "ask_caller",
             PermissionClass.LOW_RISK_WRITE,
             gateway.ask_caller,
