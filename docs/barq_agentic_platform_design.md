@@ -135,8 +135,58 @@ changed, so the S1.3 eligibility rule and older data keep working.
 | any | no relevant knowledge ("new kind of incident") | any | park → engineer writes the fix → becomes a knowledge-article proposal (section 9) |
 | any | guardrail block (injection, unsafe output) | any | park with the block reason; nothing from the model is written |
 
-The risk verdict is never lowered by retrieval or model output (unchanged design). Priority 1
-always goes to a person.
+The first risk verdict is deterministic and is never lowered by retrieval or model output.
+Section 6.3 adds one controlled exception: a reassessment step that can lower how a HIGH
+incident is *handled* (never its ServiceNow priority), only on evidence, under hard rules
+enforced in code, and always visible to an engineer, who can undo it.
+
+### 6.3 An intelligent agent with the human kept (Ali, 2026-10-03)
+
+Ali's direction: the agent should be very intelligent and autonomous — understand the whole
+situation, talk naturally, see what is attached, act on what it sees, and recognise that a
+"critical" ticket may not be critical — while a human stays in the loop. Ali chose that a P1
+the agent judges to be low risk is handled like any low-risk incident (option a), with the
+human kept through the safeguards below.
+
+**Investigate before acting (T16).** Inside the fixed pipeline's gates the agent gets a
+bounded loop — observe, reason, call a READ tool, observe again — over: the incident and its
+journal, the caller's recent incidents, similar open incidents (a possible wider outage), the
+affected CI/service, recent changes, attachments and knowledge. It stops when it has enough
+evidence or after a fixed step budget, and every observation it relies on is recorded as
+evidence. It never gains write tools this way: writes still go through `act` and the registry.
+
+**Reassess risk in both directions (T17).** After investigating, the agent may propose a
+different handling class, with the evidence:
+- *Lower* (e.g. a P1 "can't log in" that is one user and a password problem). Allowed only if
+  all of these hold, checked in code: no security, data-loss or outage signal in the text or
+  investigation; no other open incident with the same symptom; the CI is not a critical/Tier-1
+  service; the caller is not flagged VIP; a second, independent model check agrees; and the
+  reassessment setting is on. Then the incident follows the LOW row of 6.2.
+- *Higher* (e.g. a "minor" ticket matching five others → likely outage): always allowed; the
+  agent parks it for an engineer and proposes a Problem (T11).
+- The ServiceNow priority field is never changed silently. The agent writes a work note
+  "Handled as low risk because …" with the evidence, the incident is flagged *AI reassessed*,
+  and it appears in the console's *Needs me* view for the confirmation window, where an engineer
+  can *Undo* (reopen, hand over, lock) with one click.
+
+**How the human stays in the loop.** Engineers see every reassessment and can undo it; the
+caller confirms or reopens every resolution (T6); P1 parks still need an engineer whenever any
+rule above fails; the kill switch and the reassessment switch are admin settings; and the
+intelligence test set (T21) must show zero wrong downgrades before the switch is on by default.
+
+**Talk naturally (T18).** With the caller, in incident comments: ask one clarifying question
+when information is missing (incident On Hold – Awaiting Caller), read the reply, continue,
+and confirm the fix worked — this is the conversation behind T6. With engineers, in the
+console chat (T9): explain decisions, accept instructions ("try X", "take this one") as
+proposals that go through the same gates. Agent and chat share the memory of section 10.
+
+**See (T19).** Screenshots and log files attached to an incident are read through the
+current model's vision input (via the LiteLLM proxy), redacted and screened like any input,
+and quoted as evidence.
+
+**Learn from outcomes (T20).** Reopens count against the article and the decision path that
+led to them, confirmations count for them, and past outcomes for similar incidents feed the
+confidence score.
 
 ## 7. Agent abilities (registered tools)
 
@@ -295,7 +345,9 @@ reused in the test plan (section 15). "Card" = the AI Assistant card on the inci
   describe procedures, not fixes) but available to the chatbot.
 
 ### C. Risk and safety
-- **C1 Priority 1.** Parks before any retrieval; approver decides.
+- **C1 Priority 1.** Parks before any retrieval; approver decides — unless the reassessment of
+  6.3 (T17) finds it low risk under every hard rule, in which case it is handled as low risk,
+  flagged *AI reassessed*, and an engineer can undo it.
 - **C2 Security category.** Same as C1.
 - **C3 Elevated** (Tier-1 service, MFA reset). Draft produced, parks for approval.
 - **C4 Priority raised after the agent resolved it.** The resolution stands but the card shows
@@ -568,6 +620,15 @@ live model latency, builds and deploys rather than writing code.
 | T13 | Remediation phase 2: lab runner with verify/rollback | live | K5 |
 | T14 | Instance clean-up (per Ali's decisions) + sync report reconciliation | report clean | J1, J2, G7 |
 | T15 | Docs: design status, operations runbook, evidence, PR description | PR ready for review | — |
+| T16 | Investigation loop: bounded observe → reason → READ tool → observe, over journal, caller history, similar open incidents, CI, recent changes, attachments, knowledge | unit (step budget, read-only tools, evidence recorded) + live | A, C, F |
+| T17 | Risk reassessment both ways (6.3): code-enforced downgrade rules, independent second check, visible note + *AI reassessed* flag + one-click Undo, upgrade → park + Problem proposal; admin switch | unit per rule + live (fake P1 resolved, real outage escalated) | C, F |
+| T18 | Natural conversation: clarifying question to the caller (On Hold – Awaiting Caller), read reply and continue, confirm fix; engineer instructions in chat as gated proposals | unit + live | D, H |
+| T19 | Vision: read screenshot/log attachments, redacted and screened, quoted as evidence | unit + live | A, B |
+| T20 | Learning from outcomes: reopen/confirm credit to article and decision path, outcome history in confidence | unit + live | B, D |
+| T21 | Intelligence test set: fake P1s, outages that look minor, missing information, misleading attachments; scored; zero wrong downgrades required | runs in CI on recorded cases and live on the shared system | all |
+
+**Execution order:** T5 → T6 with T18 → T16 with T17 → T7, T8, T9 → T19, T20 → T10–T15.
+T21 grows with each step and gates T17's switch.
 
 ## 17. Open decisions
 
@@ -584,6 +645,9 @@ live model latency, builds and deploys rather than writing code.
    scope.
 9. Test requests and changes created on the shared instance are real records; they will be
    labelled and cancelled after testing (never deleted).
+10. Reassessment (6.3): decided 2026-10-03 — a P1 judged low risk is handled as low risk
+    (option a), with the safeguards in 6.3. Still open: whether the switch is on by default
+    before T21 has enough cases.
 
 ## 18. Deadline handling
 
