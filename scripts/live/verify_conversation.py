@@ -153,19 +153,37 @@ def work_notes(sn: ServiceNow, sys_id: str) -> list[str]:
 
 
 VAGUE = "It does not work since this morning. Please help."
+#: A case the agent resolves for the caller (core suite, scenario A1): only the caller's
+#: own mail client is affected and webmail works.
+OUTLOOK = (
+    "Outlook on my laptop displays Disconnected and no new mail arrives. Webmail works "
+    "normally for me, and my colleagues receive mail normally. Only my desktop mail "
+    "client is affected."
+)
+
+
+def fresh_caller(sn: ServiceNow) -> dict[str, Any]:
+    from verify_triage import fresh_callers
+
+    name = fresh_callers(sn, 1)[0]
+    return sn.query("sys_user", f"user_name={name}", "sys_id,user_name")[0]
 
 
 def scenario_ask_then_continue(sn, be, admin, caller, engineer) -> dict[str, Any]:
-    """A3 + U5: vague ticket → one question, On Hold; the caller's answer continues the AI."""
+    """A3 + U5: vague ticket → one question, On Hold; the caller's answer continues the AI.
+
+    Truly vague (no product named), from a fresh caller, so the agent cannot match an
+    article before it asks."""
+    caller = fresh_caller(sn)
     inc = sn.create_incident(
-        incident_fields(caller["sys_id"], short="VPN problem", description=VAGUE)
+        incident_fields(caller["sys_id"], short="Something is not working", description=VAGUE)
     )
     first = wait_for(settled_after(be, inc["sys_id"], 1), 300)
     asked = sn.incident(inc["sys_id"])
     admin.comment(
         caller["user_name"],
         inc["sys_id"],
-        "The VPN client says 'invalid credentials'. I changed my password yesterday.",
+        OUTLOOK,
     )
     second = wait_for(settled_after(be, inc["sys_id"], 2), 300)
     final = sn.incident(inc["sys_id"])
@@ -235,20 +253,14 @@ def scenario_engineer_takes_over_then_hands_back(sn, be, admin, caller, engineer
 def scenario_caller_reopens_ai_resolution(sn, be, admin, caller, engineer) -> dict[str, Any]:
     """U8/D: a reply on an AI-resolved incident reopens it for an engineer, with the AI fix.
 
-    A fresh caller and a topic no other open test incident shares, so neither the
-    repeat rule nor the outage rule applies."""
-    from verify_triage import fresh_callers
-
-    name = fresh_callers(sn, 1)[0]
-    caller = sn.query("sys_user", f"user_name={name}", "sys_id,user_name")[0]
+    A fresh caller and the case the agent resolves for the caller (core scenario A1);
+    resolved incidents do not count towards the outage rule."""
+    caller = fresh_caller(sn)
     inc = sn.create_incident(
         incident_fields(
             caller["sys_id"],
-            short="Mapped shared drive missing after sign-in",
-            description=(
-                "After I sign in this morning my mapped S: drive is missing from File "
-                "Explorer. Other drives are fine and I can browse the internet."
-            ),
+            short="Only my Outlook client is disconnected; webmail works",
+            description=OUTLOOK,
             category="software",
         )
     )

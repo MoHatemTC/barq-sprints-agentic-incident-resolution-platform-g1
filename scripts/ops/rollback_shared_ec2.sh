@@ -28,9 +28,21 @@ target_sha="$(cat "$backup_dir/deployed_sha.txt")"
 target_revision="$(cat "$backup_dir/alembic_version.txt")"
 echo "==> Rolling back to $target_sha (schema $target_revision)"
 
+# Neither the old nor the new application may write while tables are being changed.
+# Keep a fresh recovery point: downgrade removes branch-only chat/feedback data and
+# the event actor column even when it preserves the incident event rows themselves.
+recovery_dir="$HOME/barq-backups/pre-rollback-$(date -u +%Y%m%dT%H%M%SZ)"
+umask 077
+mkdir -p "$recovery_dir"
+git rev-parse HEAD > "$recovery_dir/deployed_sha.txt"
+cp .env "$recovery_dir/env.backup"
+docker compose stop -t 180 api celery-worker
+docker exec barq-postgres sh -c 'exec pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' \
+  > "$recovery_dir/current.dump"
+echo "==> Fresh recovery snapshot saved to $recovery_dir"
+
 if [ "$restore_db" = true ]; then
   echo "==> Restoring PostgreSQL from $backup_dir/barq_incident_dev.dump"
-  docker compose stop api celery-worker
   docker exec -i barq-postgres pg_restore -U postgres -d barq_incident_dev --clean --if-exists \
     < "$backup_dir/barq_incident_dev.dump"
 else
