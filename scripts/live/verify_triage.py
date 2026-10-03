@@ -141,7 +141,7 @@ def scenario_p1_single_user_is_reassessed(sn, be, names) -> dict[str, Any]:
     checks = {
         "handled_without_waiting_for_approval": bool(run) and run.get("status") == "succeeded",
         "reassessment_explained": any("Reassessed by BARQ AI Agent" in n for n in notes),
-        "priority_field_unchanged": final.get("state") is not None,
+        "priority_field_unchanged": str(final.get("priority", "")).startswith("1"),
     }
     return {
         "incident": final["number"],

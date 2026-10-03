@@ -73,6 +73,7 @@ class ServiceNow:
         fields = ",".join(
             [
                 "number",
+                "priority",
                 "state",
                 "assignment_group",
                 "resolved_by",
@@ -192,7 +193,14 @@ def scenario_low_risk_resolved(sn: ServiceNow, be: Backend, caller: str) -> dict
     """A1/D1: a low-risk incident with a real caller is routed, started and resolved."""
     inc = sn.create_incident(
         incident_fields(
-            caller, short="VPN invalid credentials after password reset", description=VPN_TEXT
+            caller,
+            short="Only my Outlook client is disconnected; webmail works",
+            description=(
+                "Outlook on my laptop displays Disconnected and no new mail arrives. "
+                "Webmail works normally for me, and my colleagues receive mail normally. "
+                "Only my desktop mail client is affected."
+            ),
+            category="software",
         )
     )
     run = wait_for(settled(be, inc["sys_id"]))
@@ -202,9 +210,31 @@ def scenario_low_risk_resolved(sn: ServiceNow, be: Backend, caller: str) -> dict
         "run_succeeded": bool(run) and run.get("status") == "succeeded",
         "resolved": record["state"] == "Resolved",
         "resolved_by_agent": record["resolved_by"] == "BARQ AI Agent",
-        "routed_to_network": record["assignment_group"] == "Network",
+        "routed": bool(record["assignment_group"]),
         "ai_complete": record[f"{P}processing_state"] == "Complete",
         "caller_got_the_fix": any("BARQ AI Agent" in c["value"] for c in comments),
+    }
+    return {"incident": record["number"], "sys_id": inc["sys_id"], "run": run, "checks": checks}
+
+
+def scenario_engineer_fix_handed_over(sn: ServiceNow, be: Backend, caller: str) -> dict[str, Any]:
+    """D7: an identity-console fix belongs to an engineer, with a caller update."""
+    inc = sn.create_incident(
+        incident_fields(
+            caller,
+            short="VPN invalid credentials and account needs an identity-console check",
+            description=VPN_TEXT + " The VPN says my account is locked; IT needs to check it.",
+        )
+    )
+    run = wait_for(settled(be, inc["sys_id"]))
+    record = sn.incident(inc["sys_id"])
+    comments = [j["value"] for j in sn.journal(inc["sys_id"]) if j["element"] == "comments"]
+    checks = {
+        "run_succeeded": bool(run) and run.get("status") == "succeeded",
+        "in_progress": record["state"] == "In Progress",
+        "engineer_has_it": record[f"{P}human_review_required"] == "true",
+        "fix_recorded": bool(record[f"{P}resolution"]),
+        "caller_told_about_handoff": any("team" in c and "steps to fix it" in c for c in comments),
     }
     return {"incident": record["number"], "sys_id": inc["sys_id"], "run": run, "checks": checks}
 
@@ -341,6 +371,7 @@ def scenario_locked_untouched(sn: ServiceNow, be: Backend, caller: str) -> dict[
 
 SCENARIOS: dict[str, Callable[[ServiceNow, Backend, str], dict[str, Any]]] = {
     "low_risk_resolved": scenario_low_risk_resolved,
+    "engineer_fix_handed_over": scenario_engineer_fix_handed_over,
     "p1_parks_then_approved": scenario_p1_parks_then_approved,
     "p1_rejected": scenario_p1_rejected,
     "injection_blocked": scenario_injection_blocked,
