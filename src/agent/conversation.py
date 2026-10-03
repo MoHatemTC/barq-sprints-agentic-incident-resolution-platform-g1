@@ -111,6 +111,10 @@ _LABEL = {
 }
 
 
+#: Separates the incident text from the transcript appended to it (``load``).
+CONVERSATION_MARKER = "\n\nConversation so far (oldest first):\n"
+
+
 def render_for_model(entries: list[Entry], limit: int = MAX_CONVERSATION_CHARS) -> str:
     """Redacted transcript, newest entries kept when it is too long."""
     lines: list[str] = []
@@ -186,6 +190,7 @@ def compose_clarifying_question(
 
 
 __all__ = [
+    "CONVERSATION_MARKER",
     "AGENT_NAME",
     "MAX_AGENT_REPLIES",
     "MAX_QUESTIONS",

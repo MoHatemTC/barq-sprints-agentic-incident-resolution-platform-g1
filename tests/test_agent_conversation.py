@@ -225,3 +225,29 @@ def test_the_agent_stops_writing_to_the_caller_after_the_reply_limit() -> None:
         "resolve_incident:skipped_reply_limit",
     ]
     assert not [kind for _, kind, _ in backend.journal if kind == "comments"]
+
+
+def test_the_search_uses_what_people_said_not_the_agents_questions() -> None:
+    from agent.conversation import CONVERSATION_MARKER
+    from agent.nodes.retrieve import build_query
+    from agent.state import IncidentSnapshot
+
+    transcript = (
+        "[BARQ AI Agent to caller] Hello, this is BARQ AI Agent. To help you, I need one more "
+        "detail:\n\nCould you share the exact VPN error message?\n\nPlease reply here.\n"
+        "[Caller] I can't use vpn\n"
+        "[BARQ AI Agent to caller] Hello, this is BARQ AI Agent. Which device?\n"
+        "[Caller] My Outlook says Disconnected since this morning, webmail works"
+    )
+    incident = IncidentSnapshot.model_validate(
+        {
+            "sys_id": "a" * 32,
+            "number": "INC0010371",
+            "short_description": "test",
+            "description": "test" + CONVERSATION_MARKER + transcript,
+        }
+    )
+    query = build_query(incident)
+    assert query.startswith("My Outlook says Disconnected")  # newest answer first
+    assert "I can't use vpn" in query
+    assert "BARQ AI Agent" not in query and "error message" not in query

@@ -23,6 +23,7 @@ WIDGET_DIR = (
     / "servicenow/ai_incident_orchestrator/live/widgets/barq_ai_assistant"
 )
 WIDGET_ID = "x_2215032_ai_inc_0_barq_ai_assistant"
+MENU_LABEL = "BARQ AI"
 PAGE_ID = "barq_ai"
 
 
@@ -74,7 +75,47 @@ def apply(instance: Instance) -> None:
         f"sp_column={column}^sp_widget={widget}",
         {"sp_column": column, "sp_widget": widget, "order": "1", "active": "true"},
     )
-    print(f"widget {widget}; page {page} -> /esc?id={PAGE_ID}")
+    # Employee Center top menu (next to "Get support"): one item, removed by --disable.
+    menu = instance.find("sp_portal", "url_suffix=esc", "sp_rectangle_menu")[0]["sp_rectangle_menu"]
+    item = instance.upsert(
+        "sp_rectangle_menu_item",
+        f"sp_rectangle_menu={menu}^label={MENU_LABEL}",
+        {
+            "sp_rectangle_menu": menu,
+            "label": MENU_LABEL,
+            "type": "url",
+            "url": f"?id={PAGE_ID}",
+            "order": "100",
+            "active": "true",
+            "sys_scope": SCOPE,
+        },
+    )
+    # Employee Center draws the second header row from its navigation items; this one
+    # shows the menu item beside "Get support".
+    nav = instance.find(
+        "sn_ex_sp_portal_extensible_navigation_item", "menu_title=Get support^position=right"
+    )[0]
+    navigation = instance.find(
+        "sn_ex_sp_portal_extensible_navigation_item",
+        f"sys_id={nav['sys_id']}",
+        "portal_extensible_navigation",
+    )[0]["portal_extensible_navigation"]
+    instance.upsert(
+        "sn_ex_sp_portal_extensible_navigation_item",
+        f"menu={item}",
+        {
+            "portal_extensible_navigation": navigation,
+            "navigation_item_type": "menu",
+            "menu": item,
+            "menu_title": MENU_LABEL,
+            "render_as": "menu",
+            "position": "right",
+            "order": "160",
+            "active": "true",
+            # Created in Employee Center's own scope (its table refuses other scopes).
+        },
+    )
+    print(f"widget {widget}; page {page} -> /esc?id={PAGE_ID}; menu item {item}")
 
 
 def disable(instance: Instance) -> None:
@@ -84,6 +125,27 @@ def disable(instance: Instance) -> None:
             {"op": "update", "table": "sp_page", "sys_id": page["sys_id"], "before": {"roles": ""}}
         )
         print(f"page {PAGE_ID} limited to admins")
+    for item in instance.find("sp_rectangle_menu_item", f"label={MENU_LABEL}^sys_scope={SCOPE}"):
+        instance.request(
+            "PATCH", f"/api/now/table/sp_rectangle_menu_item/{item['sys_id']}", {"active": "false"}
+        )
+        instance.log(
+            {
+                "op": "update",
+                "table": "sp_rectangle_menu_item",
+                "sys_id": item["sys_id"],
+                "before": {"active": "true"},
+            }
+        )
+        print(f"menu item {item['sys_id']} hidden")
+        for nav in instance.find(
+            "sn_ex_sp_portal_extensible_navigation_item", f"menu={item['sys_id']}"
+        ):
+            instance.request(
+                "PATCH",
+                f"/api/now/table/sn_ex_sp_portal_extensible_navigation_item/{nav['sys_id']}",
+                {"active": "false"},
+            )
 
 
 def main() -> int:

@@ -13,6 +13,7 @@ import structlog
 
 from agent.config import PIIDetectionMode
 from agent.conversation import (
+    CONVERSATION_MARKER,
     agent_replies,
     conversation_entries,
     questions_asked,
@@ -90,9 +91,7 @@ def _with_conversation(
             "conversation": transcript,
             "questions_asked": questions_asked(entries),
             "agent_replies": agent_replies(entries),
-            "description": (
-                f"{incident.description}\n\nConversation so far (oldest first):\n{transcript}"
-            ),
+            "description": (f"{incident.description}{CONVERSATION_MARKER}{transcript}"),
         }
     )
 

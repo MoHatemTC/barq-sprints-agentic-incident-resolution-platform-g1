@@ -156,8 +156,19 @@
         var text = String(input.text || '').replace(/^\s+|\s+$/g, '').substring(0, 4000);
         if (action == 'not_fixed' && !text) text = 'This did not fix my problem.';
         if (!text) return;
-        ticket.comments = text;
-        ticket.update();
+        if (action == 'not_fixed' && ticket.getValue('state') == '6') {
+            // Reopening a solved ticket is the caller's decision (ownership checked above),
+            // whoever resolved it; the conversation rule then gives it back to the engineers.
+            var reopen = new GlideRecord('incident');
+            if (reopen.get(ticket.getUniqueValue())) {
+                reopen.state = 2;
+                reopen.comments = text;
+                reopen.update();
+            }
+        } else {
+            ticket.comments = text;
+            ticket.update();
+        }
     } else if (action == 'person' || action == 'cancel') {
         // Ownership was checked above. Both are the caller's own decisions about their
         // ticket, applied server-side with a fixed set of fields (the caller cannot edit

@@ -137,6 +137,9 @@ api.controller = function($scope, $timeout, $interval) {
         if (c.ticket) c.open(c.ticket);
     };
 
+    // The page opens on a new ticket ready to fill; the chat is one click away.
+    c.startNew();
+
     // While a ticket is open, pick up new messages from BARQ AI Agent or an engineer.
     var poll = $interval(function() {
         if (c.ticket && !c.busy) {
