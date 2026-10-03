@@ -428,6 +428,7 @@ def act(state: AgentState, deps: AgentDependencies) -> dict[str, Any]:
 
     outcome = decide_outcome(state)
     output = compose(state, outcome)
+    output = _explain_reassessment(state, output)
     if outcome is Outcome.SKIPPED_INELIGIBLE:
         if deps.settings.agent_write_back_enabled:
             incident = IncidentSnapshot.model_validate(state["incident"])
@@ -464,6 +465,17 @@ def act(state: AgentState, deps: AgentDependencies) -> dict[str, Any]:
         output = _apply_human_decision(output, decision)
 
     return _perform_write(state, deps, output)
+
+
+def _explain_reassessment(state: AgentState, output: FinalOutput) -> FinalOutput:
+    """Put the reasons first in the work note when the agent lowered a priority-high risk."""
+    risk = state.get("risk")
+    if not risk or not RiskAssessment.model_validate(risk).reassessed:
+        return output
+    reasons = " ".join(RiskAssessment.model_validate(risk).reasons)
+    note = f"{reasons}\nAn engineer can undo this with Take over from AI."
+    work_note = f"{note}\n\n{output.work_note}" if output.work_note else note
+    return output.model_copy(update={"work_note": work_note[:4000]})
 
 
 #: Outcomes where the caller may hold the missing detail. High risk and blocked runs

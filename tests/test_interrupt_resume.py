@@ -258,7 +258,12 @@ def test_interrupt_at_high_risk() -> None:
     assert len(backend.updates) == 1
     body = backend.updates[0][1].to_table_api_body()
     assert body["x_2215032_ai_inc_0_ai_processing_state"] == "awaiting_approval"
-    assert backend.calls == ["read_incident", "read_conversation", "write_ai_fields"]
+    assert backend.calls == [
+        "read_incident",
+        "read_conversation",
+        "find_related_incidents",
+        "write_ai_fields",
+    ]
 
     payload = deps.audit.get_interrupt(EXECUTION_ID)
     assert payload is not None

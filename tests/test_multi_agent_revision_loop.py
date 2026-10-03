@@ -427,7 +427,7 @@ class TestScenarioDStateAuditabilityAndResilience:
             "verify_evidence",
             "generate",
         ]
-        assert backend.calls == ["read_incident", "read_conversation"]
+        assert backend.calls == ["read_incident", "read_conversation", "find_related_incidents"]
 
         # Attempt 2: Resume with model recovered
         answers_attempt2 = vpn_answers()
@@ -447,6 +447,7 @@ class TestScenarioDStateAuditabilityAndResilience:
         assert backend.calls == [
             "read_incident",
             "read_conversation",
+            "find_related_incidents",
             "write_ai_fields",
             "write_execution_log",
         ]

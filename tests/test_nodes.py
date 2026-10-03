@@ -248,9 +248,14 @@ class TestDetermineRisk:
         risk = determine_risk(state, make_deps())["risk"]
         assert risk == {
             "level": "low",
-            "reasons": ["Priority 3, service tier 2"],
+            "reasons": [
+                "Priority 3, service tier 2",
+                "Looked around: 0 similar open incident(s) in the last hour, "
+                "0 similar incident(s) from this caller in 7 days.",
+            ],
             "approval_required": False,
             "service_tier": 2,
+            "reassessed": False,
         }
 
     def test_unresolved_service_reference_fails_closed(self) -> None:
@@ -290,7 +295,8 @@ class TestDetermineRisk:
         risk = determine_risk(state, make_deps())["risk"]
         assert risk["level"] == "elevated"
         assert risk["approval_required"] is True
-        assert len(risk["reasons"]) == 2
+        # The two record reasons plus what the look-around saw.
+        assert len(risk["reasons"]) == 3
 
     def test_security_classification_is_high(self) -> None:
         state = base_state(incident=snapshot(VPN), classification=classification("security"))

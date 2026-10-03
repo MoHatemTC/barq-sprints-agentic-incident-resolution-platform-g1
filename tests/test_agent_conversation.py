@@ -75,11 +75,11 @@ def test_transcript_is_redacted_and_bounded() -> None:
         {
             "caller_name": "Abel Tuter",
             "comments": "2026-10-03 09:05:00 - Abel Tuter (Additional comments)\n"
-            "my password: Hunter2!secret and " + "x" * 5000 + "\n\n",
+            "write to abel.tuter@example.com and " + "x" * 5000 + "\n\n",
         }
     )
     rendered = render_for_model(entries, limit=500)
-    assert "Hunter2!secret" not in rendered
+    assert "abel.tuter@example.com" not in rendered
     assert len(rendered) <= 500
 
 

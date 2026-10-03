@@ -70,6 +70,10 @@ class IncidentBackend(Protocol):
 
     def get_conversation(self, sys_id: str) -> Awaitable[dict[str, str]]: ...
 
+    def related_incidents(
+        self, sys_id: str, *, category: str, caller_id: str
+    ) -> Awaitable[dict[str, list[dict[str, str]]]]: ...
+
     def update_incident(self, sys_id: str, payload: IncidentUpdatePayload) -> Awaitable[Any]: ...
 
     def add_work_note(self, sys_id: str, note: str) -> Awaitable[Any]: ...
@@ -206,6 +210,17 @@ class IncidentGateway:
     def read_conversation(self, sys_id: str) -> dict[str, str]:
         """The incident's comments and work notes (display form) and the caller's name."""
         return self._call("read_conversation", sys_id, "read", lambda b: b.get_conversation(sys_id))
+
+    def find_related_incidents(
+        self, sys_id: str, category: str, caller_id: str
+    ) -> dict[str, list[dict[str, str]]]:
+        """Similar open incidents in the last hour and the caller's recent incidents."""
+        return self._call(
+            "find_related_incidents",
+            sys_id,
+            "read",
+            lambda b: b.related_incidents(sys_id, category=category, caller_id=caller_id),
+        )
 
     def write_ai_fields(self, sys_id: str, payload: IncidentUpdatePayload) -> None:
         action = "flag_human_review" if _only_review_flag(payload) else "write_ai_fields"

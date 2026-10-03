@@ -136,6 +136,20 @@ class AgentSettings(BaseSettings):
         default_factory=lambda: [1],
         description="Priorities that leave the automated path before any search runs.",
     )
+    agent_reassess_priority: bool = Field(
+        default=False,
+        description=(
+            "Let the agent handle a priority-1/2 incident as low risk when every hard rule "
+            "holds (no security or outage signal, no burst of similar incidents, no repeat "
+            "caller, no Tier-1 service) and a model check agrees it affects one person. "
+            "Always explained in a work note; the priority field is never changed."
+        ),
+    )
+    agent_outage_threshold: int = Field(
+        default=3,
+        ge=2,
+        description="Similar open incidents in the last hour that make a likely outage.",
+    )
 
     # -- manual §11.3: eligibility -------------------------------------------------
     agent_supported_categories: list[str] = Field(

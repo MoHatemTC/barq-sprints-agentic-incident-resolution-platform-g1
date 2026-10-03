@@ -110,6 +110,40 @@ class ServiceNowClient:
             "caller_name": str(record.get("caller_id") or ""),
         }
 
+    async def related_incidents(
+        self, sys_id: str, *, category: str, caller_id: str
+    ) -> dict[str, list[dict[str, str]]]:
+        """Incidents around this one: open in the same category in the last hour, and the
+        caller's other incidents in the last seven days. Short fields only."""
+        fields = "sys_id,number,short_description,state,opened_at,category"
+
+        async def query(text: str) -> list[dict[str, str]]:
+            result = await self._request(
+                "GET",
+                "/api/now/table/incident",
+                params={
+                    "sysparm_query": text,
+                    "sysparm_fields": fields,
+                    "sysparm_limit": 50,
+                    "sysparm_exclude_reference_link": "true",
+                },
+            )
+            rows = result if isinstance(result, list) else []
+            return [{key: str(row.get(key) or "") for key in fields.split(",")} for row in rows]
+
+        recent: list[dict[str, str]] = []
+        history: list[dict[str, str]] = []
+        if category:
+            recent = await query(
+                f"active=true^category={category}^sys_id!={sys_id}"
+                "^opened_at>javascript:gs.minutesAgoStart(60)"
+            )
+        if caller_id:
+            history = await query(
+                f"caller_id={caller_id}^sys_id!={sys_id}^opened_at>javascript:gs.daysAgoStart(7)"
+            )
+        return {"recent_same_category": recent, "caller_recent": history}
+
     async def find_incident_by_number(self, number: str) -> Incident | None:
         if not _INCIDENT_NUMBER_RE.fullmatch(number):
             raise ValueError(f"Invalid incident number format: {number!r}")

@@ -124,6 +124,8 @@ class RiskAssessment(_Section):
     reasons: list[str]
     approval_required: bool
     service_tier: int | None = None
+    #: True when the agent handled a priority-high incident as low risk (design 6.3).
+    reassessed: bool = False
 
 
 class EvidenceItem(_Section):

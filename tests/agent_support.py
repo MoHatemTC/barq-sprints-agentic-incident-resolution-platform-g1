@@ -252,6 +252,16 @@ class FakeLLM:
                 steps=["Sign out of the VPN client completely.", "Sign in with your new password."],
                 reason="Both steps are on the caller's own device.",
             )
+        if answer is None and purpose == "triage":
+            from agent.triage import TriageOutput
+
+            # Default: conservative, so nothing is lowered unless a test opts in.
+            answer = TriageOutput(
+                affects_one_person=False,
+                business_critical=True,
+                outage_likely=False,
+                security_related=False,
+            )
         if answer is None and purpose == "clarifying_question":
             from agent.conversation import ClarifyingQuestionOutput
 
@@ -452,6 +462,15 @@ class FakeServiceNow:
         self.journal: list[tuple[str, str, str]] = []
         #: Display-form journals per incident, as ``read_conversation`` returns them.
         self.conversations: dict[str, dict[str, str]] = {}
+
+    #: What ``find_related_incidents`` returns; tests fill it to build a situation.
+    related: dict[str, list[dict[str, str]]] = {"recent_same_category": [], "caller_recent": []}
+
+    async def related_incidents(
+        self, sys_id: str, *, category: str, caller_id: str
+    ) -> dict[str, list[dict[str, str]]]:
+        self.calls.append("find_related_incidents")
+        return self.related
 
     async def get_conversation(self, sys_id: str) -> dict[str, str]:
         self.calls.append("read_conversation")
