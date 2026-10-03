@@ -543,30 +543,31 @@ E1–E4, E7–E9, E11, F1–F2, F4, G2, G4, G6–G7, H1–H5, I1, L1–L4, L8, a
 read-back, the PostgreSQL rows and the Langfuse trace, and is labelled `[BARQ-TEST-…]`.
 Caller-side steps (accept / reopen) are performed through the portal as an existing demo user.
 
-## 16. Delivery plan
+## 16. Delivery plan — tasks in priority order
 
-| # | Step | Estimate |
-|---|---|---|
-| 0 | Snapshots and a rehearsed rollback | 45 min |
-| 1 | Bring the hidden ServiceNow records into the repo | 45 min |
-| 2 | Audit fixes with tests | 3–4 h |
-| 3 | Agent tools, ACLs, display name, decision table, autonomy | 5–6 h |
-| 4 | Caller loop, reopen hand-over, clustering → Problem, split / duplicate | 4–5 h |
-| 5 | Knowledge publish/retire sync, feedback counters, proposals | 2–3 h |
-| 6 | ServiceNow UI: form view, card, timeline, lists, menu, console, bridge, roles | 6–7 h |
-| 7 | Chat in the console, incident memory, engineer memory, confirmed actions | 3–4 h |
-| 8 | Operations: memory-safe workers, full knowledge index, sync report | 1–1.5 h |
-| 9 | Clean-up of the instance (per Ali's decisions) | 1–1.5 h |
-| 10 | Deploy to the shared system without touching `main` | 45 min |
-| 11 | Live tests | 5–6 h |
-| 12 | Docs, runbook, PR | 1 h |
-|  | **Core total** | **≈ 34–42 h** |
-| 13 | Remediation phase 1 — runbook catalog, `run_runbook` tool, ServiceNow fulfilment runbooks (catalog orders, standard changes, incident tasks, account unlock), scenarios K1–K4, K6–K10 | 6–8 h |
-| 14 | Remediation phase 2 — lab runner on the backend host with execute/verify/rollback, scenario K5 | 5–7 h |
-|  | **Total with remediation** | **≈ 45–57 h** |
+Work is tracked as tasks, not hours. Each task is done only when its tests pass (unit, then
+live where listed). Tasks are ordered so that whatever point is reached, everything before it
+is complete, tested and deployable. Estimated total ≈ 16 h of continuous work, dominated by
+live model latency, builds and deploys rather than writing code.
 
-Remediation is built after the core (steps 0–12) is working and tested, because it depends on
-the decision table, approvals, caller loop and audit from the core.
+| ID | Task | Done when | Scenarios proven |
+|---|---|---|---|
+| T0 | Safety: DB dump, Qdrant snapshot, `.env` copy, SHA, ServiceNow config snapshot, rollback script | backups on EC2 + local; script passes shellcheck — **done 2026-10-03 05:10** | — |
+| T1 | Critical fixes: follower governance + no silent follower success (F-1/F-2); no decision without a paused interrupt (F-8); secrets inside JSON redacted (F-4); approval path cannot default to approved | unit tests for each | C6, F1, F2, E7 |
+| T2 | Agent tools: assign, set In Progress, comment to caller, resolve, hand over; decision table; autonomy setting (Suggest / Assist / Autonomous / off); pre-write re-read | unit tests; registry permit/refuse tests | A1, A3, A7, D1, D7, L2, L4 |
+| T3 | ServiceNow foundation (one update set): field ACLs for new writes, agent display name, bridge script include reading the secret from the property, Approve / Reject / Take over / Retry actions calling the backend with the engineer's name, roles on actions, old actions deactivated | actions work from a ServiceNow session | E1, E3, E4, E8, E11, G6 |
+| T4 | Gate + hand deploy to the shared EC2 (worker concurrency 2) + rollback rehearsal | all suites green; `/ready`; rollback proven once | G5 |
+| T5 | Live core tests | evidence for each | A1, A3, A4, C1, C5, C6, D1, E1, E3, F2 |
+| T6 | Caller loop: confirmation window (in-instance job), accept/silent → confirmed + close, reopen → hand-over brief + lock + article penalty; vague incident → ask caller (On Hold) | unit + live | D2, D3, D4, D8, L1, B6 |
+| T7 | Incident form: *BARQ AI* view with AI card, timeline tab, diagnostics tab, list status column + filters, one BARQ AI menu | visible and working on the instance | 11.1–11.3 |
+| T8 | BARQ AI Console (React UI page + scripted REST): Live, Needs me, Results, Failed & sync, Settings | page works with real data | G7, I1, I2 |
+| T9 | Chat in the console + memory (incident, engineer, team) + confirmed actions; Streamlit removed | unit + live | H1–H8 |
+| T10 | Knowledge: publish/retire sync event, full KB ingestion, proposals from human fixes, article credit/penalty | live | B3, B7, B6 |
+| T11 | Multi-ticket: cluster → Problem + parent links, problem resolved → linked incidents through caller loop, split, duplicate | unit + live | F1, F3, F4, F5 |
+| T12 | Remediation phase 1: runbook catalog, `run_runbook`, catalog orders, standard changes, incident task, account unlock | unit + live | K1–K4, K6–K10 |
+| T13 | Remediation phase 2: lab runner with verify/rollback | live | K5 |
+| T14 | Instance clean-up (per Ali's decisions) + sync report reconciliation | report clean | J1, J2, G7 |
+| T15 | Docs: design status, operations runbook, evidence, PR description | PR ready for review | — |
 
 ## 17. Open decisions
 
@@ -584,40 +585,16 @@ the decision table, approvals, caller loop and audit from the core.
 9. Test requests and changes created on the shared instance are real records; they will be
    labelled and cancelled after testing (never deleted).
 
-## 18. Delivery under the 12:00 deadline (2026-10-03)
+## 18. Deadline handling
 
-At 05:03 Cairo there are 6 h 56 min to 12:00. The full design is ≈45–57 h, so it **cannot** be
-finished today. What follows is the slice that is real, tested and reversible by 12:00, chosen
-so that nothing built today is thrown away later: every item is a piece of the full design,
-built the way the full design needs it.
+Tasks are executed strictly in the order of section 16. If the deadline arrives part-way, the
+completed prefix is deployed, tested and documented; the rest stays planned here. Checkpoints
+after T1, T4 and T5: if one fails, later tasks wait — tests are never cut.
 
-### 18.1 Must ship by 12:00 (the "agentic core" slice)
-
-| Time (Cairo) | Work | Done when |
-|---|---|---|
-| 05:10–05:40 | **Step 0 — safety.** `pg_dump`, Qdrant snapshot, `.env` copy, recorded SHA, dump of every scoped ServiceNow record; rollback script written | backups exist on the EC2 and locally; script reviewed |
-| 05:40–07:10 | **Backend.** Port and re-test the critical audit fixes (follower governance F-1/F-2, no decision without a paused interrupt F-8, secrets inside JSON redacted F-4). New registered tools: `assign_incident`, `set_in_progress`, `comment_to_caller`, `resolve_incident`; decision table at the *Autonomous* level for LOW risk + verified evidence + caller present; everything else unchanged (parks for approval). Autonomy level setting with *Suggest only* as the instant fallback | unit tests for every new path pass; full suite green |
-| 07:10–08:10 | **ServiceNow** (one named update set). Field ACLs for the new writes; agent display name *BARQ AI Agent*; one script include that calls the backend with the secret read from the property; **Approve / Reject UI actions that really resume the agent** and record the engineer's name; duplicate and broken actions deactivated (not deleted); roles on the actions | actions work against the backend from a ServiceNow session |
-| 08:10–08:40 | **Gate.** Ruff, format, mypy, full pytest, DB/integration suites; push the branch (never `main`) | all green |
-| 08:40–09:10 | **Deploy by hand** to the shared EC2 (same steps as the CI deploy), worker concurrency 2 (out-of-memory fix) | `/ready` 200, worker ping, migrations at head |
-| 09:10–10:30 | **Live tests**: low-risk incident fully resolved by the agent (assigned, In Progress, caller comment, Resolved by BARQ AI Agent); P1 parks → approved in ServiceNow → resumes once with the engineer's name; reject; P1 follower of a solved cluster parks; fake secret in JSON absent from Langfuse; duplicate event ignored; human-locked incident untouched | evidence recorded per test |
-| 10:30–11:15 | **If everything is green:** a simple AI card on a separate *BARQ AI* form view. **If not:** fix what failed | — |
-| 11:15–12:00 | Evidence, docs, draft PR; leave deployed or roll back — Ali decides | PR open; rollback ready |
-
-Buffer: ≈45 min is inside the 11:15–12:00 block. Go/no-go checkpoints: 07:10 (backend green?),
-08:40 (gate green?), 10:30 (live core works?). If a checkpoint fails, later items are cut, never
-the tests.
-
-### 18.2 Deferred (designed here, built in the next sessions)
-Console page, chatbot inside ServiceNow with the three memory layers, caller confirmation
-window + reopen hand-over job, knowledge publish/retire sync, clustering → Problem, split /
-duplicate, remediation runbooks and lab runner, instance clean-up, full knowledge-base
-ingestion, CI evaluation gate, secret rotation.
-
-### 18.3 Risks and how they are handled
-- **Shared system during a deadline.** Our branch runs on the shared EC2 from ≈08:40; the
-  rollback script returns it to `main` in minutes. Team asked not to merge to `main` meanwhile.
-- **ServiceNow changes affect everyone.** All in one update set; old actions deactivated not
-  deleted; new form view separate from the default.
+### Risks and how they are handled
+- **Shared system during a deadline.** Our branch runs on the shared EC2 from T4; the rollback
+  script returns it to `main` in minutes. The team is asked not to merge to `main` meanwhile.
+- **ServiceNow changes affect everyone.** All in one update set; old actions deactivated, not
+  deleted; the new form view is separate from the default.
 - **New permissions for the agent user.** Field-level only, in the update set, backed out with it.
 - **Approvals tomorrow.** Nothing merges today; the PR is ready for review.
