@@ -201,30 +201,6 @@ services:
       - barq-network
 
   # ---------------------------------------------------------------------------
-  # 6. Admin chatbot UI (Streamlit) — optional, profile "ui"
-  #    Start with: docker compose --profile ui up -d chat-ui
-  #    Requires CHAT_ENABLED=true (and the chat price rates) in .env.
-  # ---------------------------------------------------------------------------
-  chat-ui:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: ui
-    container_name: barq-chat-ui
-    restart: unless-stopped
-    profiles: ["ui"]
-    ports:
-      - "${BIND_IP:-127.0.0.1}:${CHAT_UI_PORT:-8501}:8501"
-    environment:
-      # The Streamlit client talks to the API over the compose network.
-      CHAT_UI_API_BASE: http://barq-api:8000
-    depends_on:
-      api:
-        condition: service_healthy
-    networks:
-      - barq-network
-
-  # ---------------------------------------------------------------------------
   # 7. PostgreSQL Web UI (pgweb)
   # ---------------------------------------------------------------------------
   pgweb:

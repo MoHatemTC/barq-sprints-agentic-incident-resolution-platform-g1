@@ -1,5 +1,7 @@
 # Admin chatbot (internal demo)
 
+> **Update 2026-10-03:** the Streamlit frontend was removed. Users now chat on the ServiceNow Employee Center page **BARQ AI** (`/esc?id=barq_ai`), which calls the same chat API server-side through the `BarqBackend` bridge with the user's own identity (`/api/v1/assist/*`). The API sections below still apply; the Streamlit run and build steps are history. See `barq_agentic_system.md`.
+
 For the complete PR scope and next implementation milestones, read the
 [implementation and continuation handoff](admin_chatbot_handoff.md).
 

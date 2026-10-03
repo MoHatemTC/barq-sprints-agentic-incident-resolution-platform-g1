@@ -51,7 +51,7 @@ even by asking the AI.
 |---|---|---|---|
 | Caller | Abel Tuter, David Miller (no roles) | chat; create, follow, add to, reopen, close **own** tickets | see others' tickets; approve; see work notes or AI reasoning |
 | Engineer | Beth Anglin (`itil`) + an assignment group | lists and form; create; take over; hand back / run AI again; write to caller | approve AI fixes (unless also approver); change AI rules |
-| Approver | `incident_operator` (`x_2215032_ai_inc_0.operator`) | approve / reject risky AI fixes | change AI rules |
+| Approver | `barq.approver` (`itil` + `x_2215032_ai_inc_0.operator`); `incident_operator` holds the role but no `itil`, so it cannot open the form | approve / reject risky AI fixes | change AI rules |
 | BARQ admin | a user with `x_2215032_ai_inc_0.admin` (to create) | rules, autonomy, kill switch, approve knowledge proposals | — |
 | The agent | `ai_orchestrator_svc` (BARQ AI Agent) | write only the allowed fields, never on a locked ticket | anything else; never an admin login |
 

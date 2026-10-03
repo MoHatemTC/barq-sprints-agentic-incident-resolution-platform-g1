@@ -36,7 +36,7 @@ attachments and individual SSO are outside the current release plan.
 4. [Chat service](../src/app/chat/service.py) and [graph](../src/app/chat/graph.py): lifecycle.
 5. [Nodes](../src/app/chat/nodes.py), [prompts](../src/app/chat/prompts.py),
    [store](../src/app/chat/store.py), [cache](../src/app/chat/cache.py).
-6. [API router](../src/api/routers/chat.py), [UI](../src/app/chat_ui/app.py),
+6. [API router](../src/api/routers/chat.py), UI (Streamlit, removed 2026-10-03: users chat on the ServiceNow BARQ AI page),
    [tests](../tests/chat/).
 
 Older local GLM briefs and review notes are historical snapshots. This guide and
@@ -87,7 +87,7 @@ category/service restrictions, while retaining lifecycle and security filters.
 | `chat/store.py` | Ordered sanitized messages, atomic publication, summary cursor |
 | `chat/cache.py` | Bounded exact/semantic Redis answer cache |
 | `retrieval/corpus_revision.py` | Cache-enabled ingestion locking and revision changes |
-| `chat_ui/app.py` / `state.py` | UI, per-conversation pending requests and pagination |
+| `chat_ui/` (removed 2026-10-03) | was the Streamlit UI; replaced by the ServiceNow BARQ AI page |
 
 `src/agent/llm.py` gained optional completion limits and a usage callback; existing
 incident callers keep their original defaults. Preserve this backward compatibility.

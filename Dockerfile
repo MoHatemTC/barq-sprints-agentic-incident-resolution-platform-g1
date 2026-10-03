@@ -54,29 +54,6 @@ HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
 # Production ASGI Entrypoint
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips=*"]
 
-# =============================================================================
-# UI stage — base image plus the optional chat dependency group (Streamlit).
-# Built only for the chat-ui compose service (profile "ui"); the api/worker
-# image above never carries the UI stack.
-# =============================================================================
-FROM base AS ui
-
-USER root
-RUN uv export --frozen --no-dev --no-hashes --no-emit-project --group chat -o /tmp/requirements.txt && \
-    uv pip install --system --no-cache -r /tmp/requirements.txt && \
-    rm /tmp/requirements.txt
-USER appuser
-
-EXPOSE 8501
-
-# Override the inherited api health check: Streamlit serves its liveness
-# endpoint on 8501, so the base check against :8000/health would mark a
-# perfectly working UI container unhealthy.
-HEALTHCHECK --interval=10s --timeout=3s --start-period=15s --retries=3 \
-    CMD curl -f http://127.0.0.1:8501/_stcore/health || exit 1
-
-CMD ["streamlit", "run", "src/app/chat_ui/app.py", "--server.address", "0.0.0.0", "--server.port", "8501", "--browser.gatherUsageStats", "false"]
-
 # Production target stays LAST so a targetless `docker build .` still yields
 # the api/worker image; the ui stage above is opt-in via build target.
 FROM base AS api
