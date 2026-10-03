@@ -36,6 +36,11 @@ def build_servicenow_tool_registry(
             gateway.read_incident,
         ),
         ToolRegistration(
+            "read_conversation",
+            PermissionClass.READ,
+            gateway.read_conversation,
+        ),
+        ToolRegistration(
             "write_ai_fields",
             PermissionClass.LOW_RISK_WRITE,
             gateway.write_ai_fields,
@@ -62,6 +67,11 @@ def build_servicenow_tool_registry(
             "resolve_incident",
             PermissionClass.LOW_RISK_WRITE,
             gateway.resolve_incident,
+        ),
+        ToolRegistration(
+            "ask_caller",
+            PermissionClass.LOW_RISK_WRITE,
+            gateway.ask_caller,
         ),
         *extra_registrations,
     )

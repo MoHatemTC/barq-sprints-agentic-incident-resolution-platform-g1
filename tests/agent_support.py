@@ -252,6 +252,12 @@ class FakeLLM:
                 steps=["Sign out of the VPN client completely.", "Sign in with your new password."],
                 reason="Both steps are on the caller's own device.",
             )
+        if answer is None and purpose == "clarifying_question":
+            from agent.conversation import ClarifyingQuestionOutput
+
+            # Default: nothing the caller could add, so behaviour is unchanged unless a
+            # test opts in by setting an answer.
+            answer = ClarifyingQuestionOutput(useful=False)
         if isinstance(answer, list):
             answer = answer.pop(0)
         if isinstance(answer, BaseException):
@@ -444,6 +450,12 @@ class FakeServiceNow:
         self.write_calls: list[tuple[str, IncidentUpdatePayload]] = []  # Track AI field writes
         self.fulfilments: list[tuple[str, Any]] = []
         self.journal: list[tuple[str, str, str]] = []
+        #: Display-form journals per incident, as ``read_conversation`` returns them.
+        self.conversations: dict[str, dict[str, str]] = {}
+
+    async def get_conversation(self, sys_id: str) -> dict[str, str]:
+        self.calls.append("read_conversation")
+        return self.conversations.get(sys_id, {"comments": "", "work_notes": "", "caller_name": ""})
 
     async def get_incident(self, sys_id: str) -> Incident:
         self.calls.append("read_incident")

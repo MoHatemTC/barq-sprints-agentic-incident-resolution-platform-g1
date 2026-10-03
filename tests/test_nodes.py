@@ -10,7 +10,7 @@ import asyncio
 import sys
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, call, patch
 
 import pytest
 
@@ -141,7 +141,7 @@ class TestLoad:
         assert incident["service"] == "corporate-vpn"
         assert incident["ai_enabled"] is True
         assert incident["ai_human_lock"] is False
-        assert backend.calls == ["read_incident"]
+        assert backend.calls == ["read_incident", "read_conversation"]
 
     def test_registry_invocation_uses_authoritative_context_and_sys_id(self) -> None:
         deps = make_deps()
@@ -151,11 +151,12 @@ class TestLoad:
         update = load(base_state(), deps)
 
         assert update["incident"]["sys_id"] == VPN["sys_id"]
-        invoke.assert_awaited_once_with(
-            "read_incident",
-            context=ToolCallContext(EXECUTION_ID, correlation_id="corr-1"),
-            arguments={"sys_id": VPN["sys_id"]},
-        )
+        context = ToolCallContext(EXECUTION_ID, correlation_id="corr-1")
+        arguments = {"sys_id": VPN["sys_id"]}
+        assert invoke.await_args_list == [
+            call("read_incident", context=context, arguments=arguments),
+            call("read_conversation", context=context, arguments=arguments),
+        ]
 
     def test_transient_servicenow_failure_is_retryable(self) -> None:
         backend = FakeServiceNow()

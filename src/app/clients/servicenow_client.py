@@ -87,6 +87,29 @@ class ServiceNowClient:
         result = await self._request("GET", f"/api/now/table/incident/{sys_id}")
         return self._parse_incident(result, sys_id)
 
+    async def get_conversation(self, sys_id: str) -> dict[str, str]:
+        """The incident's journal as ServiceNow renders it, plus the caller's name.
+
+        Returns the display values of ``comments`` (customer visible) and
+        ``work_notes`` (engineers only), newest entry first, and ``caller_name`` so the
+        caller's own entries can be told apart. Parsing is done by the agent.
+        """
+        result = await self._request(
+            "GET",
+            f"/api/now/table/incident/{sys_id}",
+            params={
+                "sysparm_fields": "comments,work_notes,caller_id",
+                "sysparm_display_value": "true",
+                "sysparm_exclude_reference_link": "true",
+            },
+        )
+        record = result if isinstance(result, dict) else {}
+        return {
+            "comments": str(record.get("comments") or ""),
+            "work_notes": str(record.get("work_notes") or ""),
+            "caller_name": str(record.get("caller_id") or ""),
+        }
+
     async def find_incident_by_number(self, number: str) -> Incident | None:
         if not _INCIDENT_NUMBER_RE.fullmatch(number):
             raise ValueError(f"Invalid incident number format: {number!r}")

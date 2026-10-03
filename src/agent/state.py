@@ -38,6 +38,8 @@ class Outcome(StrEnum):
     ESCALATED_BLOCKED = "escalated_blocked"
     SKIPPED_INELIGIBLE = "skipped_ineligible"
     SKIPPED_HUMAN_LOCK = "skipped_human_lock"
+    #: No confident fix yet; the agent asked the caller one question and waits.
+    ASKED_CALLER = "asked_caller"
 
 
 class _Section(BaseModel):
@@ -97,6 +99,13 @@ class IncidentSnapshot(_Section):
     ai_enabled: bool = False
     ai_human_lock: bool | None = None
     ai_processing_state: str = "pending"
+    #: The redacted conversation so far (caller, agent, engineers), oldest first; empty
+    #: on a first run. Also appended to ``description`` for the model (see ``load``).
+    conversation: str = ""
+    #: How many clarifying questions the agent has already asked the caller.
+    questions_asked: int = 0
+    #: How many messages the agent has already written to the caller.
+    agent_replies: int = 0
 
 
 class Eligibility(_Section):
@@ -227,6 +236,8 @@ class FinalOutput(_Section):
     #: Fulfilment steps the agent took on the incident itself, as ``tool:result``
     #: (for example ``resolve_incident:applied``), in order. Empty at ``suggest``.
     fulfilment: list[str] = Field(default_factory=list)
+    #: The comment asking the caller one question (outcome ``asked_caller`` only).
+    caller_question: str | None = None
     write_back: Literal["written", "dry_run", "skipped"] = "skipped"
 
 

@@ -98,7 +98,7 @@ class TestRoutes:
             "approval_brief",
         ]
         assert len(backend.updates) == 1
-        assert backend.calls == ["read_incident", "write_ai_fields"]
+        assert backend.calls == ["read_incident", "read_conversation", "write_ai_fields"]
 
     def test_no_evidence_escalates_after_retrieve(self) -> None:
         llm = FakeLLM(vpn_answers() | label("hardware"))
@@ -407,7 +407,7 @@ class TestCheckpointing:
             "diagnose",
             "generate",
         ]
-        assert backend.calls == ["read_incident"]
+        assert backend.calls == ["read_incident", "read_conversation"]
 
         answers["generate"] = good_generate
         result = run(VPN, deps, checkpointer=saver, attempt=2)
@@ -426,6 +426,7 @@ class TestCheckpointing:
         ]
         assert backend.calls == [
             "read_incident",
+            "read_conversation",
             "write_ai_fields",
             "write_execution_log",
         ]

@@ -9,7 +9,15 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
+import structlog
+
 from agent.config import PIIDetectionMode
+from agent.conversation import (
+    agent_replies,
+    conversation_entries,
+    questions_asked,
+    render_for_model,
+)
 from agent.dependencies import AgentDependencies
 from agent.guardrails.input_screening import screen_text
 from agent.guardrails.pii_detection import PIIProtectionOutcome, protect_residual_pii
@@ -22,6 +30,8 @@ from agent.prompts import PIIText
 from agent.state import AgentState, EventPayload, GateResult, IncidentSnapshot
 from agent.tools import ToolCallContext
 from observability.redaction import REDACTED, redact_text_with_count
+
+logger = structlog.getLogger(__name__)
 
 
 def load(state: AgentState, deps: AgentDependencies) -> dict[str, Any]:
@@ -39,12 +49,52 @@ def load(state: AgentState, deps: AgentDependencies) -> dict[str, Any]:
                 arguments={"sys_id": event.sys_id},
             )
         )
-    incident = snapshot_incident(raw)
+    incident = _with_conversation(snapshot_incident(raw), state, deps)
     sanitized_incident, gate = _run_input_guardrails(incident, deps)
     return {
         "incident": sanitized_incident.model_dump(mode="json"),
         "input_guardrail": gate.model_dump(mode="json"),
     }
+
+
+def _with_conversation(
+    incident: IncidentSnapshot, state: AgentState, deps: AgentDependencies
+) -> IncidentSnapshot:
+    """Add what the caller, the agent and engineers said so far (design 2A).
+
+    The transcript is appended to the description the model reasons over, so every
+    later step (classification, retrieval, diagnosis, the caller message) sees the
+    caller's answers and an engineer's hand-back instruction, and it passes the same
+    input screening as the incident text. A failed read leaves a first-run view.
+    """
+    try:
+        raw = asyncio.run(
+            deps.tools.invoke(
+                "read_conversation",
+                context=ToolCallContext(
+                    execution_id=state["execution_id"],
+                    correlation_id=state.get("correlation_id"),
+                ),
+                arguments={"sys_id": incident.sys_id},
+            )
+        )
+    except Exception as exc:  # noqa: BLE001 - the incident itself is still readable
+        logger.warning("conversation_read_failed", error_type=type(exc).__name__)
+        return incident
+    entries = conversation_entries(raw if isinstance(raw, dict) else {})
+    if not entries:
+        return incident
+    transcript = render_for_model(entries)
+    return incident.model_copy(
+        update={
+            "conversation": transcript,
+            "questions_asked": questions_asked(entries),
+            "agent_replies": agent_replies(entries),
+            "description": (
+                f"{incident.description}\n\nConversation so far (oldest first):\n{transcript}"
+            ),
+        }
+    )
 
 
 def _run_input_guardrails(

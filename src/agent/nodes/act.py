@@ -18,6 +18,7 @@ from langgraph.types import interrupt
 
 from agent.approval_brief import render_brief
 from agent.caller_message import compose_caller_message
+from agent.conversation import MAX_AGENT_REPLIES, MAX_QUESTIONS, compose_clarifying_question
 from agent.dependencies import AgentDependencies
 from agent.errors import HumanLockedError
 from agent.state import (
@@ -439,6 +440,10 @@ def act(state: AgentState, deps: AgentDependencies) -> dict[str, Any]:
             )
         return {"output": output.model_dump(mode="json")}
 
+    asked = _ask_caller_instead(state, deps, outcome, output)
+    if asked is not None:
+        return _perform_write(state, deps, asked)
+
     if outcome in INTERRUPT_OUTCOMES or output.approval_required:
         payload = interrupt_payload(state, output, outcome)
         payload["brief"] = render_brief(payload, deps)
@@ -459,6 +464,53 @@ def act(state: AgentState, deps: AgentDependencies) -> dict[str, Any]:
         output = _apply_human_decision(output, decision)
 
     return _perform_write(state, deps, output)
+
+
+#: Outcomes where the caller may hold the missing detail. High risk and blocked runs
+#: always go to a person; they are never turned into a question.
+ASKABLE_OUTCOMES = frozenset({Outcome.ESCALATED_NO_EVIDENCE, Outcome.ESCALATED_LOW_CONFIDENCE})
+
+
+def _ask_caller_instead(
+    state: AgentState, deps: AgentDependencies, outcome: Outcome, output: FinalOutput
+) -> FinalOutput | None:
+    """Ask the caller one question instead of parking for an engineer, when that can help.
+
+    Only at the autonomous level, only for a real caller, only for the outcomes in
+    ``ASKABLE_OUTCOMES`` and at most ``MAX_QUESTIONS`` times per incident; after that
+    the incident parks for an engineer exactly as before.
+    """
+    if outcome not in ASKABLE_OUTCOMES or output.approval_required:
+        return None
+    if deps.settings.agent_autonomy_level != "autonomous":
+        return None
+    incident = IncidentSnapshot.model_validate(state["incident"])
+    caller = incident.caller_id
+    if not caller or caller in deps.settings.agent_service_account_ids:
+        return None
+    if incident.questions_asked >= MAX_QUESTIONS or incident.agent_replies >= MAX_AGENT_REPLIES:
+        return None
+    question = compose_clarifying_question(
+        deps, incident.short_description, incident.description, output.summary
+    )
+    if question is None:
+        return None
+    return FinalOutput(
+        outcome=Outcome.ASKED_CALLER,
+        summary="No confident fix yet; asked the caller for one missing detail.",
+        classification=output.classification,
+        confidence=output.confidence,
+        work_note=(
+            f"{AGENT_NAME} asked the caller for more detail before suggesting a fix "
+            f"(question {incident.questions_asked + 1} of {MAX_QUESTIONS}). "
+            f"Reason: {output.summary}"
+        )[:4000],
+        human_review_required=False,
+        # In progress, not complete: there is no resolution yet, and the caller's
+        # answer brings the incident back to the agent.
+        processing_state=AIProcessingState.IN_PROGRESS.value,
+        caller_question=question,
+    )
 
 
 def _perform_write(
@@ -579,6 +631,7 @@ def _perform_write(
     log_status = (
         ExecutionStatus.SUCCEEDED
         if output.processing_state == AIProcessingState.COMPLETE.value
+        or output.outcome is Outcome.ASKED_CALLER
         else ExecutionStatus.FAILED
         if output.processing_state == AIProcessingState.FAILED.value
         else ExecutionStatus.AWAITING_APPROVAL
@@ -634,6 +687,8 @@ def _fulfil(
     Runs only for an applied fix (processing state ``complete`` with a resolution),
     which is either a low-risk draft that passed every gate or a fix a person approved.
     """
+    if output.outcome is Outcome.ASKED_CALLER and output.caller_question:
+        return _fulfil_question(deps, incident, output.caller_question, _tool_context(state))
     if output.processing_state != AIProcessingState.COMPLETE.value or not output.resolution:
         return []
     return fulfil_applied_fix(
@@ -681,7 +736,8 @@ def fulfil_applied_fix(
     caller = incident.caller_id
     caller_can_confirm = bool(caller) and caller not in deps.settings.agent_service_account_ids
     needs_engineer = False
-    if level == "autonomous" and caller_can_confirm:
+    reply_limit = incident.agent_replies >= MAX_AGENT_REPLIES
+    if level == "autonomous" and caller_can_confirm and not reply_limit:
         # Resolve only when the caller can carry out the fix alone; a fix that needs IT
         # staff stays In Progress with the cited steps for an engineer.
         message = compose_caller_message(deps, incident.short_description, resolution)
@@ -713,8 +769,45 @@ def fulfil_applied_fix(
             return steps
     if level == "autonomous" and not caller_can_confirm:
         steps.append("resolve_incident:skipped_no_caller")
+    elif level == "autonomous" and reply_limit:
+        steps.append("resolve_incident:skipped_reply_limit")
     elif needs_engineer:
         steps.append("resolve_incident:skipped_needs_engineer")
+    return steps
+
+
+def _fulfil_question(
+    deps: AgentDependencies, incident: IncidentSnapshot, question: str, context: ToolCallContext
+) -> list[str]:
+    """Route and start the incident, then ask the caller and wait (On Hold, Awaiting Caller)."""
+    category = incident.category
+    group = deps.settings.agent_assignment_groups.get(category)
+    route = f"routed it to the {category} group and " if group else ""
+    calls: list[tuple[str, dict[str, Any]]] = [
+        (
+            "assign_incident",
+            {
+                "sys_id": incident.sys_id,
+                "assignment_group": group,
+                "work_note": f"{AGENT_NAME} {route}started work on this incident.",
+            },
+        ),
+        ("ask_caller", {"sys_id": incident.sys_id, "question": question}),
+    ]
+    steps: list[str] = []
+    for tool, arguments in calls:
+        try:
+            result = run_blocking(deps.tools.invoke(tool, context=context, arguments=arguments))
+        except HumanLockedError:
+            steps.append(f"{tool}:skipped_human_lock")
+            return steps
+        except Exception as exc:  # noqa: BLE001 - recorded; an engineer sees the note
+            logger.warning("fulfilment_step_failed", tool=tool, error_type=type(exc).__name__)
+            steps.append(f"{tool}:failed:{type(exc).__name__}")
+            return steps
+        steps.append(f"{tool}:{result}")
+        if result == "skipped_state_changed":
+            return steps
     return steps
 
 

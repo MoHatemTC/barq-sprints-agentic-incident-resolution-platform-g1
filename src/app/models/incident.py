@@ -208,6 +208,9 @@ class IncidentUpdatePayload(BaseModel):
 #: ServiceNow incident states the agent moves through (internal choice values).
 INCIDENT_STATE_NEW: Literal["1"] = "1"
 INCIDENT_STATE_IN_PROGRESS: Literal["2"] = "2"
+INCIDENT_STATE_ON_HOLD: Literal["3"] = "3"
+#: Stock On hold reason "Awaiting Caller".
+HOLD_REASON_AWAITING_CALLER: Literal["1"] = "1"
 INCIDENT_STATE_RESOLVED: Literal["6"] = "6"
 INCIDENT_STATE_CLOSED: Literal["7"] = "7"
 
@@ -226,7 +229,8 @@ class IncidentFulfilmentPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     assignment_group: str | None = Field(default=None, pattern=_SYS_ID_PATTERN)
-    state: Literal["2", "6"] | None = None
+    state: Literal["2", "3", "6"] | None = None
+    hold_reason: Literal["1"] | None = None
     comments: str | None = Field(default=None, max_length=4000)
     work_notes: str | None = Field(default=None, max_length=4000)
     close_code: Literal["Solution provided"] | None = None
@@ -237,6 +241,14 @@ class IncidentFulfilmentPayload(BaseModel):
         # ServiceNow requires close information when an incident is resolved.
         if self.state == INCIDENT_STATE_RESOLVED and not (self.close_code and self.close_notes):
             raise ValueError("resolving an incident requires close_code and close_notes")
+        # The agent only puts an incident On Hold to wait for the caller's answer, so
+        # the question itself must travel with it.
+        if self.state == INCIDENT_STATE_ON_HOLD and not (
+            self.hold_reason == HOLD_REASON_AWAITING_CALLER and self.comments
+        ):
+            raise ValueError("On Hold requires hold_reason Awaiting Caller and the question")
+        if self.hold_reason is not None and self.state != INCIDENT_STATE_ON_HOLD:
+            raise ValueError("hold_reason is only set together with On Hold")
         return self
 
     def to_table_api_body(self) -> dict[str, str]:

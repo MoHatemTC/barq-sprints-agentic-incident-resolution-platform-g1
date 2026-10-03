@@ -31,9 +31,11 @@ from app.exceptions.servicenow import (
 )
 from app.models.execution_log import ExecutionLogCreatePayload
 from app.models.incident import (
+    HOLD_REASON_AWAITING_CALLER,
     INCIDENT_STATE_CLOSED,
     INCIDENT_STATE_IN_PROGRESS,
     INCIDENT_STATE_NEW,
+    INCIDENT_STATE_ON_HOLD,
     INCIDENT_STATE_RESOLVED,
     FulfilmentResult,
     IncidentFulfilmentPayload,
@@ -65,6 +67,8 @@ class IncidentBackend(Protocol):
     """The subset of ``ServiceNowClient`` the gateway calls."""
 
     def get_incident(self, sys_id: str) -> Awaitable[Any]: ...
+
+    def get_conversation(self, sys_id: str) -> Awaitable[dict[str, str]]: ...
 
     def update_incident(self, sys_id: str, payload: IncidentUpdatePayload) -> Awaitable[Any]: ...
 
@@ -199,6 +203,10 @@ class IncidentGateway:
             incident.model_dump(mode="json") if hasattr(incident, "model_dump") else dict(incident)
         )
 
+    def read_conversation(self, sys_id: str) -> dict[str, str]:
+        """The incident's comments and work notes (display form) and the caller's name."""
+        return self._call("read_conversation", sys_id, "read", lambda b: b.get_conversation(sys_id))
+
     def write_ai_fields(self, sys_id: str, payload: IncidentUpdatePayload) -> None:
         action = "flag_human_review" if _only_review_flag(payload) else "write_ai_fields"
         self._call(action, sys_id, "low", lambda b: b.update_incident(sys_id, payload))
@@ -227,6 +235,29 @@ class IncidentGateway:
                 payload,
                 expected_states=frozenset({INCIDENT_STATE_NEW}),
                 done_states=frozenset({INCIDENT_STATE_IN_PROGRESS}),
+            ),
+        )
+
+    def ask_caller(self, sys_id: str, question: str) -> FulfilmentResult:
+        """Ask the caller for a missing detail and wait: On Hold, Awaiting Caller.
+
+        The caller's answer brings the incident back to the agent (ServiceNow's
+        conversation rule returns it to In Progress and queues the agent again).
+        """
+        payload = IncidentFulfilmentPayload(
+            state=INCIDENT_STATE_ON_HOLD,
+            hold_reason=HOLD_REASON_AWAITING_CALLER,
+            comments=question,
+        )
+        return self._call(
+            "ask_caller",
+            sys_id,
+            "low",
+            lambda b: b.fulfil_incident(
+                sys_id,
+                payload,
+                expected_states=frozenset({INCIDENT_STATE_IN_PROGRESS}),
+                done_states=frozenset({INCIDENT_STATE_ON_HOLD}),
             ),
         )
 
