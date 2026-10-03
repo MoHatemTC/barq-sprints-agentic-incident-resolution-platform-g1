@@ -429,12 +429,22 @@ def _run_incident(
                     )
                     candidate_draft = solution.get("cache_draft")
                 elif (
-                    cluster_status
-                    in (
-                        ClusterStatus.RUNNING,
-                        ClusterStatus.CREATING,
-                        ClusterStatus.AWAITING_APPROVAL,
+                    cluster_status == ClusterStatus.AWAITING_APPROVAL
+                    and graph_backend == "langgraph"
+                ):
+                    # The leader is waiting for a person, which can take hours. A similar
+                    # incident must not wait behind someone else's approval (a P1 outage
+                    # report queued invisibly behind a parked low-priority ticket was seen
+                    # live): it runs its own governed graph — its own risk, approval and
+                    # write — now.
+                    logger.info(
+                        "follower_runs_independently_while_leader_awaits_a_person",
+                        execution_id=execution_id,
+                        cluster_id=str(cluster_id),
+                        anchor_incident=admission.anchor_incident_number,
                     )
+                elif (
+                    cluster_status in (ClusterStatus.RUNNING, ClusterStatus.CREATING)
                     and graph_backend == "langgraph"
                 ):
                     repo.mark_cluster_waiting(execution_uuid, correlation_id or execution_id)
@@ -445,7 +455,10 @@ def _run_incident(
                         "cluster_role": "follower",
                     }
 
-                if cluster_status == ClusterStatus.AWAITING_APPROVAL:
+                if (
+                    cluster_status == ClusterStatus.AWAITING_APPROVAL
+                    and graph_backend != "langgraph"
+                ):
                     repo.mark_awaiting_approval(execution_uuid)
                     logger.info(
                         "incident_follower_awaiting_cluster_approval",

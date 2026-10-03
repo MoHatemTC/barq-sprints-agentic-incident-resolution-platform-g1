@@ -250,3 +250,35 @@ def test_follower_resolves_with_zero_llm_calls_and_writes_to_servicenow(monkeypa
     update = service.updates[0][1]
     assert update.ai_processing_state.value == "complete"
     assert update.ai_resolution == "1. Reset VPN profile"
+
+
+def test_a_follower_never_waits_behind_a_leader_parked_for_a_person(monkeypatch):
+    # Seen live: a P1 outage report sat queued behind a similar low-priority ticket that
+    # was waiting for an engineer's approval. It must run its own governed graph now.
+    repo, cache, _, eid, payload, incident, cluster = setup_pair()
+    cache.mark_cluster_awaiting_approval(cluster)
+    monkeypatch.setattr(
+        tasks,
+        "load_cluster_incident",
+        lambda *args: {**incident, "sys_id": payload["sys_id"], "number": payload["number"]},
+    )
+    graph_calls: list[dict] = []
+
+    def fake_graph(event, **kwargs):
+        graph_calls.append(event)
+        return {"outcome": "escalated_high_risk", "paused": False, "processing_state": "pending"}
+
+    monkeypatch.setattr(tasks, "invoke_graph", fake_graph)
+    task = SimpleNamespace(request=SimpleNamespace(retries=0))
+    result = tasks._run_incident(
+        task,
+        payload,
+        str(eid),
+        RetryConfig(3, 1.0, 60.0, False),
+        repo,
+        semantic_cache=cache,
+        graph_backend="langgraph",
+        correlation_id="follower-of-parked-leader",
+    )
+    assert result["status"] != "cluster_waiting"
+    assert len(graph_calls) == 1
