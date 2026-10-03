@@ -1,5 +1,8 @@
 # Chat milestones 1–2: review and verification
 
+This is the historical M2 checkpoint. M3 was implemented afterward; read the
+[current PR handoff](admin_chatbot_handoff.md) for the latest milestone status.
+
 Reviewed GLM's working changes on `feat/admin-chatbot`, based on `946a158`.
 The older `chat_review_and_glm_handoff.md` describes the pre-fix snapshot; it is
 not a list of currently failing cases.

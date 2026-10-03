@@ -1,5 +1,8 @@
 # Admin chatbot (internal demo)
 
+For the complete PR scope and next implementation milestones, read the
+[implementation and continuation handoff](admin_chatbot_handoff.md).
+
 A knowledge-base assistant for trusted project admins: Streamlit frontend, the
 existing FastAPI app, and a **separate LangGraph chat workflow**. It answers
 questions over the full permitted KB — including the `category="process"`
