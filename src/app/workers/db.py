@@ -799,7 +799,11 @@ class PostgresRepo:
                 .where(
                     Execution.status.in_(("queued", "accepted")),
                     Execution.node_reached.in_(("semantic_cluster_wait", "semantic_cluster_ready")),
-                    (SemanticCluster.status.in_(("resolved", "failed", "expired")))
+                    (
+                        SemanticCluster.status.in_(
+                            ("resolved", "failed", "expired", "awaiting_approval")
+                        )
+                    )
                     | (SemanticCluster.expires_at <= _utcnow()),
                 )
                 .with_for_update(of=Execution, skip_locked=True)
@@ -1210,7 +1214,7 @@ class InMemoryRepo:
         for cluster_id, members in self.cluster_members.items():
             cluster = self.clusters[cluster_id]
             if (
-                cluster.status not in ("resolved", "failed", "expired")
+                cluster.status not in ("resolved", "failed", "expired", "awaiting_approval")
                 and cluster.expires_at > _utcnow()
             ):
                 continue

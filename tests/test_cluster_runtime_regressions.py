@@ -252,11 +252,11 @@ def test_follower_resolves_with_zero_llm_calls_and_writes_to_servicenow(monkeypa
     assert update.ai_resolution == "1. Reset VPN profile"
 
 
-def test_a_follower_never_waits_behind_a_leader_parked_for_a_person(monkeypatch):
+@pytest.mark.parametrize("already_waiting", [False, True])
+def test_a_follower_never_waits_behind_a_leader_parked_for_a_person(monkeypatch, already_waiting):
     # Seen live: a P1 outage report sat queued behind a similar low-priority ticket that
     # was waiting for an engineer's approval. It must run its own governed graph now.
     repo, cache, _, eid, payload, incident, cluster = setup_pair()
-    cache.mark_cluster_awaiting_approval(cluster)
     monkeypatch.setattr(
         tasks,
         "load_cluster_incident",
@@ -270,6 +270,26 @@ def test_a_follower_never_waits_behind_a_leader_parked_for_a_person(monkeypatch)
 
     monkeypatch.setattr(tasks, "invoke_graph", fake_graph)
     task = SimpleNamespace(request=SimpleNamespace(retries=0))
+    if already_waiting:
+        waiting = tasks._run_incident(
+            task,
+            payload,
+            str(eid),
+            RetryConfig(3, 1.0, 60.0, False),
+            repo,
+            semantic_cache=cache,
+            graph_backend="langgraph",
+            correlation_id="follower-of-parked-leader",
+        )
+        assert waiting["status"] == "cluster_waiting"
+        assert graph_calls == []
+        assert repo.ready_cluster_waiters() == []
+    cache.mark_cluster_awaiting_approval(cluster)
+    if already_waiting:
+        sent = []
+        monkeypatch.setattr(cluster_runtime, "send_incident_event", lambda *args: sent.append(args))
+        assert cluster_runtime.dispatch_cluster_waiters(repo) == 1
+        assert sent == [(payload, str(eid), "follower-of-parked-leader")]
     result = tasks._run_incident(
         task,
         payload,

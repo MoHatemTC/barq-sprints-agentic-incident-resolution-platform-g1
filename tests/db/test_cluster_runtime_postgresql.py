@@ -41,9 +41,13 @@ def test_api_closure_releases_waiters_without_inheriting_approval(approval_datab
         repo.create_cluster(cluster, INCIDENT_SYS_ID, "INC0010991", leader, leader, 0.76, "test")
         # A later event for the same incident must be allowed; execution uniqueness remains.
         repo.add_cluster_member(cluster, follower, INCIDENT_SYS_ID, "INC0010991", 1.0)
-        repo.update_cluster_status(cluster, "awaiting_approval")
         repo.mark_cluster_waiting(follower, "original-follower-correlation")
         assert repo.ready_cluster_waiters() == []
+        repo.update_cluster_status(cluster, "awaiting_approval")
+        parked_waiters = repo.ready_cluster_waiters()
+        assert len(parked_waiters) == 1
+        assert parked_waiters[0]["execution_id"] == str(follower)
+        assert parked_waiters[0]["correlation_id"] == "original-follower-correlation"
 
         async def decide():
             async_engine = create_async_engine(approval_database)
