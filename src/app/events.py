@@ -28,10 +28,11 @@ OBSERVE_EVENT_TYPES: frozenset[str] = frozenset(
 
 EVENT_TYPES: frozenset[str] = ACT_EVENT_TYPES | OBSERVE_EVENT_TYPES
 
-#: Events whose run may share or reuse a fix through the semantic cache. The cache
-#: compares incident text only; after a caller's answer or an engineer's hand-back the
-#: fix also rests on the conversation, so a ticket that merely reads alike must not get it.
-CACHEABLE_EVENT_TYPES: frozenset[str] = V1_EVENT_TYPES
+#: Events whose run may share or reuse a fix through the semantic cache: a brand-new
+#: ticket only. The cache compares incident text; any later event (a caller's answer, an
+#: engineer's hand-back with an instruction, which ServiceNow sends as a v1 update when it
+#: clears the lock) means the fix also rests on history a look-alike ticket does not have.
+CACHEABLE_EVENT_TYPES: frozenset[str] = frozenset({"incident.created"})
 
 CONTRACT_EVENT_TYPES: dict[str, frozenset[str]] = {"v1": V1_EVENT_TYPES, "v2": EVENT_TYPES}
 
@@ -41,7 +42,7 @@ def is_observe_only(event_type: str | None) -> bool:
 
 
 def may_use_semantic_cache(event_type: str | None) -> bool:
-    """Original v1 events (and payloads with no type, which are v1) may use the cache."""
+    """New tickets (and payloads with no type, which predate event types) may use the cache."""
     return not event_type or event_type in CACHEABLE_EVENT_TYPES
 
 

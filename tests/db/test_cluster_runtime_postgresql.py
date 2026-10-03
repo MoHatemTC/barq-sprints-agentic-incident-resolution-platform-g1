@@ -105,3 +105,38 @@ def test_execution_guard_excludes_concurrent_delivery_and_releases(approval_data
             assert recovered
     finally:
         engine.dispose()
+
+
+def test_a_newer_run_supersedes_an_older_paused_run(approval_database):
+    """A hand-back or caller answer starts a new run; the older pause can no longer be
+    approved (a 'cancelled' decision is stored) and ends abandoned."""
+
+    async def seed():
+        engine = create_async_engine(approval_database)
+        try:
+            async with engine.begin() as conn:
+                return (
+                    await _seed_execution(conn, uuid4().hex[:12]),
+                    await _seed_execution(conn, uuid4().hex[:12]),
+                )
+        finally:
+            await engine.dispose()
+
+    paused, newer = asyncio.run(seed())
+    engine = sa.create_engine(approval_database.set(drivername="postgresql+psycopg"))
+    repo = PostgresRepo(create_sync_session_factory(engine))
+    try:
+        repo.mark_awaiting_approval(paused)
+        assert repo.supersede_paused_runs(INCIDENT_SYS_ID, newer) == [paused]
+        assert repo.get_status(paused) == "abandoned"
+        assert repo.get_termination_cause(paused) == "superseded_by_newer_run"
+        with engine.connect() as conn:
+            decisions = conn.execute(
+                sa.text("SELECT decision FROM approvals WHERE execution_id = :e"), {"e": paused}
+            ).scalars()
+            assert list(decisions) == ["cancelled"]
+        # Nothing left to supersede; the newer run itself is never touched.
+        assert repo.supersede_paused_runs(INCIDENT_SYS_ID, newer) == []
+        assert repo.get_status(newer) != "abandoned"
+    finally:
+        engine.dispose()

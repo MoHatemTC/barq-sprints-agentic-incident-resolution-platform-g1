@@ -312,6 +312,19 @@ def _run_incident(
         logger.info("incident_event_observed", execution_id=execution_id, event_type=event_type)
         return {"status": "observed", "execution_id": execution_id, "event_type": event_type}
 
+    # A newer run replaces any older run of this incident still paused for approval
+    # (the caller answered, or an engineer handed it back): that pause can no longer be
+    # approved, and ServiceNow and the backend agree on one live run.
+    incident_sys_id = str(payload.get("sys_id") or "")
+    if incident_sys_id:
+        superseded = repo.supersede_paused_runs(incident_sys_id, execution_uuid)
+        if superseded:
+            logger.info(
+                "paused_runs_superseded",
+                execution_id=execution_id,
+                superseded=[str(run) for run in superseded],
+            )
+
     admission = AdmissionResult(mode=AdmissionMode.INDEPENDENT, reason="not_admitted")
     candidate_draft = None
     try:
