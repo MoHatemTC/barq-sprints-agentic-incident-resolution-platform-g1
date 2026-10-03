@@ -376,6 +376,7 @@ def _run_incident(
                                 solution,
                                 execution_id=execution_id,
                                 correlation_id=correlation_id or execution_id,
+                                raw_incident=incident,
                             )
                         if repo is not None:
                             repo.mark_member_applied(cluster_id, execution_uuid)

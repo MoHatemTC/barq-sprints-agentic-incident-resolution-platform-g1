@@ -31,6 +31,7 @@ from agent.servicenow import AsyncRunner, IncidentGateway
 from agent.state import EvidenceItem, RetrievalResult
 from agent.tools import build_servicenow_tool_registry
 from agent.tools.registry import ApprovalCheckResult
+from app.exceptions.servicenow import ServiceNowHumanLockError
 from app.models.execution_log import ExecutionLogCreatePayload
 from app.models.incident import Incident, IncidentUpdatePayload
 from app.models.knowledge import Classification
@@ -433,6 +434,8 @@ class FakeServiceNow:
         self.crash_before_log_recorded: BaseException | None = None
         self.on_update: Callable[[str], None] | None = None
         self.write_calls: list[tuple[str, IncidentUpdatePayload]] = []  # Track AI field writes
+        self.fulfilments: list[tuple[str, Any]] = []
+        self.journal: list[tuple[str, str, str]] = []
 
     async def get_incident(self, sys_id: str) -> Incident:
         self.calls.append("read_incident")
@@ -466,6 +469,35 @@ class FakeServiceNow:
             # cannot describe, and the one that used to duplicate the log.
             raise self.crash_before_log_recorded
         self.execution_logs.append(payload)
+
+    async def fulfil_incident(
+        self,
+        sys_id: str,
+        payload: Any,
+        *,
+        expected_states: frozenset[str],
+        done_states: frozenset[str],
+    ) -> str:
+        """Mirror ``ServiceNowClient.fulfil_incident`` over the in-memory record."""
+        self.calls.append("fulfil_incident")
+        record = self.records[sys_id]
+        lock = record.get("x_2215032_ai_inc_0_ai_human_lock")
+        if lock not in (False, "false"):
+            raise ServiceNowHumanLockError(f"Incident {sys_id} is locked")
+        state = str(record.get("state") or "")
+        if state in done_states:
+            return "already_applied"
+        if state not in expected_states:
+            return "skipped_state_changed"
+        if payload.assignment_group and record.get("assignment_group"):
+            payload = payload.model_copy(update={"assignment_group": None})
+        self.fulfilments.append((sys_id, payload))
+        body = payload.to_table_api_body()
+        for journal in ("comments", "work_notes"):
+            if journal in body:
+                self.journal.append((sys_id, journal, body.pop(journal)))
+        record.update(body)
+        return "applied"
 
     async def write_ai_fields(self, sys_id: str, payload: IncidentUpdatePayload) -> None:
         """Track AI field writes for crash-recovery idempotency tests."""

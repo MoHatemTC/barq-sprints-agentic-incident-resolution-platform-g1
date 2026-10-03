@@ -1089,12 +1089,15 @@ class TestAct:
         assert output["outcome"] == "escalated_blocked"
         assert "safety_check check: secret in draft" in output["work_note"]
 
-    def test_forbidden_action_does_not_exist(self) -> None:
+    @pytest.mark.parametrize("tool", ["close_incident", "delete_incident", "cancel_incident"])
+    def test_forbidden_action_does_not_exist(self, tool: str) -> None:
+        # The agent may resolve (the caller can reopen), but it never closes, deletes
+        # or cancels an incident: those tools are not registered at all.
         deps = make_deps()
         with pytest.raises(RegistryRefusalError):
             asyncio.run(
                 deps.tools.invoke(
-                    "resolve_incident",
+                    tool,
                     context=ToolCallContext(EXECUTION_ID),
                     arguments={"sys_id": VPN["sys_id"]},
                 )

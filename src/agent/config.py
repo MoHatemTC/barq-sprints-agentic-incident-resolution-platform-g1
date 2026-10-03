@@ -161,6 +161,34 @@ class AgentSettings(BaseSettings):
         description="False = dry run: the act node records what it would write.",
     )
 
+    # -- autonomy (docs/barq_agentic_platform_design.md §6) -------------------------
+    agent_autonomy_level: Literal["off", "suggest", "assist", "autonomous"] = Field(
+        default="suggest",
+        description=(
+            "How far the agent goes on its own. off = kill switch, events are recorded "
+            "but not processed; suggest = write the cited fix only (the behaviour before "
+            "autonomy existed); assist = also route the incident to its group and set it "
+            "In Progress; autonomous = also give the caller the fix and resolve the "
+            "incident, so the caller can confirm or reopen. High risk, low confidence, "
+            "no evidence and guardrail blocks always wait for a person at every level."
+        ),
+    )
+    agent_assignment_groups: dict[str, str] = Field(
+        default_factory=dict,
+        description=(
+            "Incident category -> assignment group sys_id. A category with no entry is "
+            "left for a person to route."
+        ),
+    )
+    agent_service_account_ids: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Caller sys_ids that are not people (integration and publisher accounts). "
+            "Nobody can confirm a fix for them, so their incidents are never resolved by "
+            "the agent."
+        ),
+    )
+
     # -- Agent Specifications
     agent_max_revisions: int = Field(
         default=2,

@@ -28,7 +28,12 @@ from app.models.execution_log import (
     ExecutionLogCreatePayload,
     ExecutionLogEntry,
 )
-from app.models.incident import Incident, IncidentUpdatePayload
+from app.models.incident import (
+    FulfilmentResult,
+    Incident,
+    IncidentFulfilmentPayload,
+    IncidentUpdatePayload,
+)
 from app.models.work_note import WorkNoteUpdate
 from app.utils.servicenow import parse_retry_after, values_equal
 
@@ -171,6 +176,41 @@ class ServiceNowClient:
         body = WorkNoteUpdate(note=note).to_table_api_body()
         result = await self._request("PATCH", f"/api/now/table/incident/{sys_id}", json=body)
         return Incident.model_validate(result)
+
+    async def fulfil_incident(
+        self,
+        sys_id: str,
+        payload: IncidentFulfilmentPayload,
+        *,
+        expected_states: frozenset[str],
+        done_states: frozenset[str],
+    ) -> FulfilmentResult:
+        """Apply one fulfilment step (assign, start, resolve) only if it is still safe.
+
+        The incident is re-read first. A Human Lock refuses the write, as for every agent
+        write. If the incident is already in a ``done_states`` value the step landed on
+        an earlier attempt and is not repeated (journal fields would otherwise be
+        appended twice). If it is in neither set, a person moved it on while the agent
+        was working, and the agent leaves it alone. A group a person already set is
+        never overwritten.
+        """
+        current = await self.get_incident(sys_id)
+        if current.ai_human_lock is not False:
+            raise ServiceNowHumanLockError(
+                f"Incident {sys_id} is locked for human review and cannot be updated by the agent",
+                details={"sys_id": sys_id, "ai_human_lock": current.ai_human_lock},
+            )
+        current_state = str(current.state or "")
+        if current_state in done_states:
+            return "already_applied"
+        if current_state not in expected_states:
+            return "skipped_state_changed"
+        if payload.assignment_group and current.assignment_group:
+            payload = payload.model_copy(update={"assignment_group": None})
+        body = payload.to_table_api_body()
+        result = await self._request("PATCH", f"/api/now/table/incident/{sys_id}", json=body)
+        self._verify_write_persisted(requested=body, persisted=result, sys_id=sys_id)
+        return "applied"
 
     async def write_execution_log(
         self, payload: ExecutionLogCreatePayload

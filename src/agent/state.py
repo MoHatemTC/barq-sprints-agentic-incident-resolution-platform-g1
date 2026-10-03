@@ -82,6 +82,9 @@ class IncidentSnapshot(_Section):
     #: ``service is None`` with this False, which means no service was set at all.
     service_unresolved: bool = False
     active: bool = True
+    #: Reference sys_ids. Empty means not set on the record.
+    caller_id: str = ""
+    assignment_group: str = ""
     ai_enabled: bool = False
     ai_human_lock: bool | None = None
     ai_processing_state: str = "pending"
@@ -212,6 +215,9 @@ class FinalOutput(_Section):
     approval_required: bool = False
     processing_state: str
     actions: list[str] = Field(default_factory=list)
+    #: Fulfilment steps the agent took on the incident itself, as ``tool:result``
+    #: (for example ``resolve_incident:applied``), in order. Empty at ``suggest``.
+    fulfilment: list[str] = Field(default_factory=list)
     write_back: Literal["written", "dry_run", "skipped"] = "skipped"
 
 

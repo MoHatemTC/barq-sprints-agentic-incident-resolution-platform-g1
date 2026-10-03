@@ -26,7 +26,12 @@ from app.exceptions.servicenow import (
     ServiceNowWriteRejectedError,
 )
 from app.models.execution_log import ExecutionLogCreatePayload, ExecutionStatus
-from app.models.incident import _SCOPE, AIProcessingState, IncidentUpdatePayload
+from app.models.incident import (
+    _SCOPE,
+    AIProcessingState,
+    IncidentFulfilmentPayload,
+    IncidentUpdatePayload,
+)
 from tests.helpers import mock_settings
 
 
@@ -1153,3 +1158,71 @@ class TestCrossWriteTimingAndParseErrors:
         assert exc_info.value.details["sys_id"] == "abc"
         assert exc_info.value.details["errors"], "the underlying errors must be retained"
         assert exc_info.value.__cause__ is None
+
+
+class TestFulfilIncident:
+    """``fulfil_incident``: the agent's own assign/start/resolve writes (design §7)."""
+
+    GROUP = "e" * 32
+    START = {"expected_states": frozenset({"1"}), "done_states": frozenset({"2"})}
+
+    def _start(self, group: str | None = None) -> IncidentFulfilmentPayload:
+        return IncidentFulfilmentPayload(assignment_group=group, state="2", work_notes="started")
+
+    async def test_patches_only_the_pinned_fields(self) -> None:
+        responses = [
+            _api_response(result=_incident_result()),
+            _api_response(result=_incident_result(state="2", assignment_group=self.GROUP)),
+        ]
+        client, http, _ = _build_client(responses=responses)
+        result = await client.fulfil_incident("abc123", self._start(self.GROUP), **self.START)
+        assert result == "applied"
+        call = http.request.call_args
+        assert call.args[0] == "PATCH"
+        assert call.kwargs["json"] == {
+            "assignment_group": self.GROUP,
+            "state": "2",
+            "work_notes": "started",
+        }
+
+    async def test_keeps_a_group_a_person_set(self) -> None:
+        responses = [
+            _api_response(result=_incident_result(assignment_group="a" * 32)),
+            _api_response(result=_incident_result(state="2", assignment_group="a" * 32)),
+        ]
+        client, http, _ = _build_client(responses=responses)
+        await client.fulfil_incident("abc123", self._start(self.GROUP), **self.START)
+        assert "assignment_group" not in http.request.call_args.kwargs["json"]
+
+    async def test_already_done_is_not_repeated(self) -> None:
+        client, http, _ = _build_client(
+            responses=[_api_response(result=_incident_result(state="2"))]
+        )
+        result = await client.fulfil_incident("abc123", self._start(), **self.START)
+        assert result == "already_applied"
+        assert http.request.call_count == 1  # the read only
+
+    async def test_moved_on_by_a_person_is_left_alone(self) -> None:
+        client, http, _ = _build_client(
+            responses=[_api_response(result=_incident_result(state="3"))]
+        )
+        result = await client.fulfil_incident("abc123", self._start(), **self.START)
+        assert result == "skipped_state_changed"
+        assert http.request.call_count == 1
+
+    async def test_human_lock_refuses(self) -> None:
+        locked = _incident_result(**{f"{_SCOPE}_ai_human_lock": "true"})
+        client, http, _ = _build_client(responses=[_api_response(result=locked)])
+        with pytest.raises(ServiceNowHumanLockError):
+            await client.fulfil_incident("abc123", self._start(), **self.START)
+        assert http.request.call_count == 1
+
+    async def test_a_field_servicenow_silently_drops_is_an_error(self) -> None:
+        # ServiceNow answers 200 but drops a field the ACL does not allow.
+        responses = [
+            _api_response(result=_incident_result()),
+            _api_response(result=_incident_result(state="1")),
+        ]
+        client, _, _ = _build_client(responses=responses)
+        with pytest.raises(ServiceNowWriteRejectedError, match="state"):
+            await client.fulfil_incident("abc123", self._start(), **self.START)

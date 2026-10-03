@@ -30,7 +30,15 @@ from app.exceptions.servicenow import (
     ServiceNowTimeoutError,
 )
 from app.models.execution_log import ExecutionLogCreatePayload
-from app.models.incident import IncidentUpdatePayload
+from app.models.incident import (
+    INCIDENT_STATE_CLOSED,
+    INCIDENT_STATE_IN_PROGRESS,
+    INCIDENT_STATE_NEW,
+    INCIDENT_STATE_RESOLVED,
+    FulfilmentResult,
+    IncidentFulfilmentPayload,
+    IncidentUpdatePayload,
+)
 from app.workers.retry_policy import RetryableError, TerminalError
 from observability.tracing import Tracer
 
@@ -63,6 +71,15 @@ class IncidentBackend(Protocol):
     def add_work_note(self, sys_id: str, note: str) -> Awaitable[Any]: ...
 
     def write_execution_log(self, payload: ExecutionLogCreatePayload) -> Awaitable[Any]: ...
+
+    def fulfil_incident(
+        self,
+        sys_id: str,
+        payload: IncidentFulfilmentPayload,
+        *,
+        expected_states: frozenset[str],
+        done_states: frozenset[str],
+    ) -> Awaitable[FulfilmentResult]: ...
 
 
 class AsyncRunner:
@@ -191,6 +208,49 @@ class IncidentGateway:
 
     def write_execution_log(self, sys_id: str, payload: ExecutionLogCreatePayload) -> None:
         self._call("write_execution_log", sys_id, "low", lambda b: b.write_execution_log(payload))
+
+    def assign_incident(
+        self, sys_id: str, assignment_group: str | None, work_note: str
+    ) -> FulfilmentResult:
+        """Take a new incident: route it to its group and move it to In Progress."""
+        payload = IncidentFulfilmentPayload(
+            assignment_group=assignment_group,
+            state=INCIDENT_STATE_IN_PROGRESS,
+            work_notes=work_note,
+        )
+        return self._call(
+            "assign_incident",
+            sys_id,
+            "low",
+            lambda b: b.fulfil_incident(
+                sys_id,
+                payload,
+                expected_states=frozenset({INCIDENT_STATE_NEW}),
+                done_states=frozenset({INCIDENT_STATE_IN_PROGRESS}),
+            ),
+        )
+
+    def resolve_incident(
+        self, sys_id: str, caller_comment: str, close_notes: str
+    ) -> FulfilmentResult:
+        """Give the caller the fix and resolve the incident; the caller can reopen it."""
+        payload = IncidentFulfilmentPayload(
+            state=INCIDENT_STATE_RESOLVED,
+            comments=caller_comment,
+            close_code="Solution provided",
+            close_notes=close_notes,
+        )
+        return self._call(
+            "resolve_incident",
+            sys_id,
+            "low",
+            lambda b: b.fulfil_incident(
+                sys_id,
+                payload,
+                expected_states=frozenset({INCIDENT_STATE_IN_PROGRESS}),
+                done_states=frozenset({INCIDENT_STATE_RESOLVED, INCIDENT_STATE_CLOSED}),
+            ),
+        )
 
 
 def _only_review_flag(payload: IncidentUpdatePayload) -> bool:

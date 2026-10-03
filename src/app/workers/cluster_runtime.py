@@ -130,15 +130,16 @@ def apply_follower_cluster_resolution(
     solution: dict[str, Any],
     execution_id: str,
     correlation_id: str,
-) -> None:
+    raw_incident: Mapping[str, Any] | None = None,
+) -> list[str]:
     """Apply the leader's resolution to a follower incident without executing LLMs (0x LLM)."""
     deps = get_agent_dependencies()
     if not deps.settings.agent_write_back_enabled:
-        return
+        return []
 
     sys_id = payload.get("sys_id")
     if not sys_id:
-        return
+        return []
 
     work_note = (
         solution.get("work_note")
@@ -196,6 +197,21 @@ def apply_follower_cluster_resolution(
         # ``succeeded`` and its cluster membership applied with nothing written to
         # ServiceNow.
 
+        steps: list[str] = []
+        if raw_incident is not None and resolution:
+            # The follower passed its own gates (follower_reuse_verdict), so it is
+            # worked exactly like a low-risk incident the graph resolved itself.
+            from agent.nodes.act import fulfil_applied_fix
+
+            confidence = solution.get("confidence")
+            steps = fulfil_applied_fix(
+                deps,
+                snapshot_incident(raw_incident),
+                resolution=str(resolution),
+                confidence=float(confidence) if isinstance(confidence, int | float) else None,
+                context=tool_context,
+            )
+
         log_payload = ExecutionLogCreatePayload(
             incident_sys_id=sys_id,
             execution_id=execution_id,
@@ -219,3 +235,4 @@ def apply_follower_cluster_resolution(
                 sys_id=sys_id,
                 error=redact_text(str(exc))[:500],
             )
+    return steps

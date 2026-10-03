@@ -27,7 +27,7 @@ def build_servicenow_tool_registry(
 
     ``extra_registrations`` lets callers extend the registry (e.g. S3.5's
     ``publish_kb_article``) without editing this builder; duplicates of the
-    four names below raise at ToolRegistry construction.
+    names below raise at ToolRegistry construction.
     """
     registrations = (
         ToolRegistration(
@@ -49,6 +49,19 @@ def build_servicenow_tool_registry(
             "write_execution_log",
             PermissionClass.LOW_RISK_WRITE,
             gateway.write_execution_log,
+        ),
+        # Fulfilment writes. Low-risk at the registry: whether the agent may use them
+        # on a given incident is decided before the call by the autonomy level and the
+        # decision table in ``agent.nodes.act`` (risk, evidence, caller present).
+        ToolRegistration(
+            "assign_incident",
+            PermissionClass.LOW_RISK_WRITE,
+            gateway.assign_incident,
+        ),
+        ToolRegistration(
+            "resolve_incident",
+            PermissionClass.LOW_RISK_WRITE,
+            gateway.resolve_incident,
         ),
         *extra_registrations,
     )

@@ -41,6 +41,7 @@ from app.models.execution_log import (
     ExecutionStatus,
 )
 from app.models.incident import AIProcessingState, IncidentUpdatePayload
+from app.utils.async_bridge import run_blocking
 
 PREFIX = "AI Suggested Response"
 logger = structlog.getLogger(__name__)
@@ -523,7 +524,7 @@ def _perform_write(
     # one. The duplicate is an extra audit row; the authoritative record of the run
     # is executions + workflow_state. See docs/sprint3_recovery_design.md.
     write_fields = True
-    if resume_phase in ("fields_written", "logged"):
+    if resume_phase in ("fields_written", "fulfilled", "logged"):
         write_fields = False
     elif resume_phase is not None:
         write_fields = not _write_already_landed(state, deps, incident, payload)
@@ -566,6 +567,14 @@ def _perform_write(
             execution_id,
             {**receipt_base, "phase": "fields_written", "output": in_flight},
         )
+    if resume_phase not in ("fulfilled", "logged"):
+        steps = _fulfil(state, deps, incident, output)
+        if steps:
+            output = output.model_copy(update={"fulfilment": steps})
+            deps.audit.save_receipt(
+                execution_id,
+                {**receipt_base, "phase": "fulfilled", "output": output.model_dump(mode="json")},
+            )
     log_status = (
         ExecutionStatus.SUCCEEDED
         if output.processing_state == AIProcessingState.COMPLETE.value
@@ -587,6 +596,116 @@ def _perform_write(
     deps.audit.save_receipt(execution_id, {**receipt_base, "phase": "logged", "output": dumped})
     deps.audit.save_receipt(execution_id, {**receipt_base, "phase": "written", "output": dumped})
     return {"output": dumped}
+
+
+AGENT_NAME = "BARQ AI Agent"
+_COMMENT_HEAD = (
+    f"Hello, this is {AGENT_NAME}. I looked into your incident and this is how to fix it:\n\n"
+)
+_COMMENT_TAIL = "\n\nIf this did not fix it, reply on this incident and an engineer will take over."
+
+
+def _bounded(head: str, body: str, tail: str, limit: int = 4000) -> str:
+    room = limit - len(head) - len(tail)
+    if len(body) > room:
+        body = body[: max(room - 1, 0)].rstrip() + "…"
+    return f"{head}{body}{tail}"
+
+
+def caller_comment(fix: str) -> str:
+    """The customer-visible comment that carries the fix and the way back to a person."""
+    return _bounded(_COMMENT_HEAD, fix.strip(), _COMMENT_TAIL)
+
+
+def close_notes(fix: str, confidence: float | None) -> str:
+    score = f" with confidence {confidence:.2f}" if confidence is not None else ""
+    return _bounded(f"Resolved by {AGENT_NAME}{score}.\n\n", fix.strip(), "")
+
+
+def _fulfil(
+    state: AgentState,
+    deps: AgentDependencies,
+    incident: IncidentSnapshot,
+    output: FinalOutput,
+) -> list[str]:
+    """Work the incident itself after the graph applied a fix (see ``fulfil_applied_fix``).
+
+    Runs only for an applied fix (processing state ``complete`` with a resolution),
+    which is either a low-risk draft that passed every gate or a fix a person approved.
+    """
+    if output.processing_state != AIProcessingState.COMPLETE.value or not output.resolution:
+        return []
+    return fulfil_applied_fix(
+        deps,
+        incident,
+        resolution=output.resolution,
+        confidence=output.confidence,
+        context=_tool_context(state),
+    )
+
+
+def fulfil_applied_fix(
+    deps: AgentDependencies,
+    incident: IncidentSnapshot,
+    *,
+    resolution: str,
+    confidence: float | None,
+    context: ToolCallContext,
+) -> list[str]:
+    """Route, start and resolve the incident as far as the autonomy level allows.
+
+    Shared by the graph and by a semantic-cache follower that passed its own gates, so
+    both paths behave the same. Each step is a registered tool that re-reads the
+    incident and stops if a person locked it or moved it on, so it is safe to repeat
+    after a crash. A failed step is recorded and the run continues: the cited fix is
+    already on the incident.
+    """
+    level = deps.settings.agent_autonomy_level
+    if level not in ("assist", "autonomous") or not resolution:
+        return []
+    steps: list[str] = []
+    category = incident.category
+    group = deps.settings.agent_assignment_groups.get(category)
+    route = f"routed it to the {category} group and " if group else ""
+    calls: list[tuple[str, dict[str, Any]]] = [
+        (
+            "assign_incident",
+            {
+                "sys_id": incident.sys_id,
+                "assignment_group": group,
+                "work_note": f"{AGENT_NAME} {route}started work on this incident.",
+            },
+        )
+    ]
+    caller = incident.caller_id
+    caller_can_confirm = bool(caller) and caller not in deps.settings.agent_service_account_ids
+    if level == "autonomous" and caller_can_confirm:
+        calls.append(
+            (
+                "resolve_incident",
+                {
+                    "sys_id": incident.sys_id,
+                    "caller_comment": caller_comment(resolution),
+                    "close_notes": close_notes(resolution, confidence),
+                },
+            )
+        )
+    for tool, arguments in calls:
+        try:
+            result = run_blocking(deps.tools.invoke(tool, context=context, arguments=arguments))
+        except HumanLockedError:
+            steps.append(f"{tool}:skipped_human_lock")
+            return steps
+        except Exception as exc:  # noqa: BLE001 - the fix is already on the incident
+            logger.warning("fulfilment_step_failed", tool=tool, error_type=type(exc).__name__)
+            steps.append(f"{tool}:failed:{type(exc).__name__}")
+            return steps
+        steps.append(f"{tool}:{result}")
+        if result == "skipped_state_changed":
+            return steps
+    if level == "autonomous" and not caller_can_confirm:
+        steps.append("resolve_incident:skipped_no_caller")
+    return steps
 
 
 #: Fields whose ServiceNow-side values describe this attempt's PATCH, used to prove a

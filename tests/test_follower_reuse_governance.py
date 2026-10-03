@@ -51,7 +51,7 @@ def follower_record(**overrides):
     return incident_record("INC0010991", **base)
 
 
-def run_follower(monkeypatch, record, *, write_error=None):
+def run_follower(monkeypatch, record, *, write_error=None, **settings):
     """Run one follower against a RESOLVED cluster.
 
     Returns (result-or-exception, service, graph_calls, repo, follower_id).
@@ -72,7 +72,7 @@ def run_follower(monkeypatch, record, *, write_error=None):
 
     service = FakeServiceNow({"follower": record})
     service.write_error = write_error
-    deps = make_deps(servicenow=service, agent_confidence_floor=0.1)
+    deps = make_deps(servicenow=service, agent_confidence_floor=0.1, **settings)
     monkeypatch.setattr(cluster_runtime, "get_agent_dependencies", lambda: deps)
     graph_calls: list[dict] = []
 
@@ -141,3 +141,21 @@ def test_a_failed_servicenow_write_is_not_reported_as_a_successful_follower(monk
 
     assert isinstance(outcome, Exception), "the write failure must surface, not be swallowed"
     assert repo.get_status(follower_id) != "succeeded"
+
+
+def test_an_autonomous_follower_is_worked_like_a_graph_resolution(monkeypatch):
+    # A follower that passed its own gates is routed, started and resolved with the
+    # caller loop, exactly as the graph would (design §6, §8 F1).
+    record = {**follower_record(), "caller_id": "c" * 32}
+    result, service, graph_calls, _, _ = run_follower(
+        monkeypatch,
+        record,
+        agent_autonomy_level="autonomous",
+        agent_assignment_groups={"network": "e" * 32},
+    )
+    assert graph_calls == []
+    assert result["status"] == "succeeded"
+    stored = service.records["b" * 32]
+    assert stored["state"] == "6"
+    assert stored["assignment_group"] == "e" * 32
+    assert [kind for _, kind, _ in service.journal].count("comments") == 1
