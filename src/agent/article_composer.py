@@ -42,8 +42,10 @@ _FAITHFULNESS_STOPWORDS = frozenset(
         "been",
         "being",
         "both",
+        "cause",
         "done",
         "each",
+        "escalation",
         "every",
         "from",
         "have",
@@ -54,11 +56,13 @@ _FAITHFULNESS_STOPWORDS = frozenset(
         "only",
         "onto",
         "over",
+        "resolution",
         "same",
         "should",
         "since",
         "some",
         "such",
+        "symptom",
         "than",
         "that",
         "their",
@@ -136,7 +140,7 @@ def compose_article(
     """
     if not solution_text or not solution_text.strip():
         raise ValueError("solution text is empty; nothing to compose from")
-    if len(solution_text.strip()) < 3:
+    if len(solution_text.strip()) < 5:
         raise ValueError("solution text is too short to compose from")
 
     answer: ComposedArticle = deps.llm.structured(

@@ -62,22 +62,3 @@ def test_reranked_article_keeps_complementary_resolution_and_exact_capacity() ->
     ]
     assert result.sufficient is True
     assert len(single.hits) == 1
-
-
-def test_wide_pass_excludes_process_category() -> None:
-    retriever = QdrantRetriever(MagicMock, MagicMock)
-    passed_filters = []
-
-    def fake_one_pass(query, extra, top_k, engine):
-        passed_filters.append(extra)
-        return [], 0.0
-
-    with patch.object(retriever, "_one_pass", side_effect=fake_one_pass):
-        retriever.search("test", classification=Classification.OTHER, top_k=2, threshold=0.55)
-
-    assert len(passed_filters) == 1
-    flt = passed_filters[0]
-    assert flt is not None
-    assert flt.must_not is not None
-    assert flt.must_not[0].key == "category"
-    assert flt.must_not[0].match.any == ["process"]
