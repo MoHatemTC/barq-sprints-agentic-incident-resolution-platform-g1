@@ -23,6 +23,7 @@ from agent.llm import get_llm
 from app.api.dependencies import get_app_settings, get_db_session
 from app.auth.auth import verify_bearer_token
 from app.chat.budget import RedisChatBudget
+from app.chat.cache import RedisAnswerCache, digest
 from app.chat.config import ChatSettings
 from app.chat.retrieval import build_chat_retriever
 from app.chat.service import ChatTurnService
@@ -112,17 +113,74 @@ def get_chat_budget(
     )
 
 
-def get_chat_service(
-    request: Request,
-    settings: Annotated[ChatSettings, Depends(require_chat_enabled)],
-) -> ChatTurnService:
-    """Assemble the turn service from process-wide singletons.
+def get_chat_service(request: Request) -> ChatTurnService:
+    """Assemble the turn service from THIS app's effective settings.
 
-    Note: pydantic settings instances are unhashable, so the singletons below
-    must never be ``lru_cache``d *through* a settings argument — they build
-    from the process-wide cached settings instead.
+    ``app.state.chat_service`` is built once per app lifespan from
+    ``app.state.chat_settings`` (which tests may override); the expensive
+    clients underneath stay process-wide singletons. Settings instances are
+    unhashable, so nothing may be ``lru_cache``d *through* a settings
+    argument.
     """
-    return _service_singleton()
+    service: ChatTurnService | None = getattr(request.app.state, "chat_service", None)
+    if service is not None:
+        return service
+    service = build_chat_service(get_chat_settings(request))
+    request.app.state.chat_service = service
+    return service
+
+
+def build_chat_service(settings: ChatSettings) -> ChatTurnService:
+    """Wire a turn service for one app from its effective chat settings."""
+    from agent.config import get_agent_settings
+    from app.chat.prompts import CHAT_ANSWER_SYSTEM, CHAT_ROUTE_SYSTEM
+    from app.core.config import get_retrieval_settings
+    from observability.tracing import get_tracer
+
+    budget = RedisChatBudget(
+        _sync_redis_singleton(), daily_limit_usd=settings.chat_daily_budget_usd
+    )
+    retriever = build_chat_retriever(settings)
+    cache = None
+    scope = ""
+    if settings.chat_cache_enabled:
+        retrieval_settings = get_retrieval_settings()
+        agent_settings = get_agent_settings()
+        cache = RedisAnswerCache(
+            _sync_redis_singleton(),
+            embed=retriever.embed_query,
+            validate_sources=retriever.validate_sources,
+            collection=retrieval_settings.qdrant_collection_name,
+            threshold=settings.chat_cache_similarity_threshold,
+            ttl_seconds=settings.chat_cache_ttl_seconds,
+            max_entries=settings.chat_cache_max_entries,
+        )
+        scope = digest(
+            [
+                settings.chat_max_security_level,
+                settings.chat_model or agent_settings.agent_llm_model,
+                settings.chat_cache_prompt_version,
+                CHAT_ANSWER_SYSTEM,
+                CHAT_ROUTE_SYSTEM,
+                agent_settings.agent_prompt_version,
+                retrieval_settings.qdrant_url,
+                retrieval_settings.dense_embedding_model,
+                retrieval_settings.sparse_embedding_model,
+                retrieval_settings.retrieval_mode.value,
+                settings.chat_evidence_chunk_limit,
+                settings.chat_max_evidence_chars,
+            ]
+        )
+    return ChatTurnService(
+        llm=get_llm(),
+        retriever=retriever,
+        store=_chat_store_singleton(),
+        budget=budget,
+        settings=settings,
+        tracer=get_tracer(),
+        cache=cache,
+        cache_scope=scope,
+    )
 
 
 # -- singletons -----------------------------------------------------------------
@@ -150,27 +208,10 @@ def _sync_redis_singleton() -> redis_sync.Redis:
     )
 
 
-@lru_cache
-def _service_singleton() -> ChatTurnService:
-    from observability.tracing import get_tracer
-
-    settings = _cached_chat_settings()
-    budget = RedisChatBudget(
-        _sync_redis_singleton(), daily_limit_usd=settings.chat_daily_budget_usd
-    )
-    return ChatTurnService(
-        llm=get_llm(),
-        retriever=build_chat_retriever(settings),
-        store=_chat_store_singleton(),
-        budget=budget,
-        settings=settings,
-        tracer=get_tracer(),
-    )
-
-
 __all__ = [
     "CHAT_SESSION_ID_HEADER",
     "CHAT_SESSION_SECRET_HEADER",
+    "build_chat_service",
     "get_chat_service",
     "get_chat_settings",
     "require_chat_enabled",

@@ -29,10 +29,13 @@ class ChatState(TypedDict, total=False):
     history_summary: str  # rolling summary of messages older than the window
 
     # resolve_and_route
-    route: str  # "knowledge" | "unavailable" | "blocked"
+    route: str  # "knowledge" | "clarification" | "unavailable" | "blocked"
     route_reason: str
     unavailable_message: str
     search_query: str  # reference-resolved question actually sent to retrieval
+    context_decision: str  # "standalone" | "follow_up" | "topic_change"
+    cache_status: str  # disabled | bypass | miss | unavailable | exact | semantic
+    cache_revision: str | None
 
     # retrieve_knowledge
     evidence: list[dict[str, Any]]
@@ -47,8 +50,13 @@ class ChatState(TypedDict, total=False):
     missing_evidence_note: str | None
     repair_count: int
     repair_pending: bool
+    rejected_citations: list[str]  # invalid chunk ids fed back to the repair call
     citations: list[dict[str, Any]]
     verification: dict[str, Any]
+
+    # persist_turn
+    published: bool  # False when the turn was reclaimed before publication
+    terminal_status: str  # the status publish_turn actually persisted
 
 
 def evidence_key(item: dict[str, Any]) -> str:

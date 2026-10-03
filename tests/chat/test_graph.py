@@ -238,10 +238,11 @@ def test_history_flows_into_route_and_answer_prompts() -> None:
 
 
 def test_follow_up_searches_the_rewritten_self_contained_question() -> None:
+    """A genuine 'why?' follow-up resolves to the same intent, not a new one."""
     llm = FakeLLM(
         answers=_answers(
             AnswerDraft(
-                answer_markdown="The KER owner is the problem manager.",
+                answer_markdown="Because it links symptoms to a fix.",
                 cited_chunk_ids=["KB0704-v1.0::chunk::0"],
                 sufficient_evidence=True,
             ),
@@ -251,7 +252,8 @@ def test_follow_up_searches_the_rewritten_self_contained_question() -> None:
             "chat_route": RouteDecision(
                 request_type="knowledge",
                 reason="follow-up",
-                search_question="Who owns the known error register?",
+                context="follow_up",
+                search_question="Why should incidents be linked to a known error record?",
             )
         }
     )
@@ -261,12 +263,47 @@ def test_follow_up_searches_the_rewritten_self_contained_question() -> None:
         _deps(llm, retriever, store),
     )
 
-    state = _state(user_message="why?", history=[{"role": "user", "content": "Explain the KER."}])
-    graph.invoke(state)
+    state = _state(
+        user_message="why?",
+        history=[
+            {"role": "user", "content": "Should I link this incident to a known error record?"},
+            {"role": "assistant", "content": "Yes, link it when the same fault recurs."},
+        ],
+    )
+    final = graph.invoke(state)
 
-    assert retriever.calls[0]["query"] == "Who owns the known error register?"
+    assert retriever.calls[0]["query"] == "Why should incidents be linked to a known error record?"
+    assert final["route"] == "knowledge"
     answer_call = next(call for call in llm.calls if call["purpose"] == "chat_answer")
-    assert "Who owns the known error register?" in answer_call["prompt"]
+    assert "known error record" in answer_call["prompt"]
+
+
+def test_follow_up_about_ownership_resolves_to_the_ownership_question() -> None:
+    llm = FakeLLM(
+        answers=_answers(
+            AnswerDraft(
+                answer_markdown="The problem manager owns it.",
+                cited_chunk_ids=["KB0704-v1.0::chunk::0"],
+                sufficient_evidence=True,
+            ),
+            route="knowledge",
+        )
+        | {
+            "chat_route": RouteDecision(
+                request_type="knowledge",
+                reason="follow-up",
+                context="follow_up",
+                search_question="Who owns the known error register process?",
+            )
+        }
+    )
+    store = FakeChatStore()
+    retriever = FakeChatRetriever([hit_for("KB0704")])
+    graph = build_chat_graph(_deps(llm, retriever, store))
+
+    graph.invoke(_state(user_message="and who owns it?"))
+
+    assert retriever.calls[0]["query"] == "Who owns the known error register process?"
 
 
 def test_topic_change_searches_the_raw_message_unchanged() -> None:
@@ -283,6 +320,7 @@ def test_topic_change_searches_the_raw_message_unchanged() -> None:
             "chat_route": RouteDecision(
                 request_type="knowledge",
                 reason="new topic",
+                context="topic_change",
                 search_question=None,
             )
         }
@@ -303,6 +341,74 @@ def test_topic_change_searches_the_raw_message_unchanged() -> None:
     assert retriever.calls[0]["query"] == "Who is responsible for escalating a P1?"
 
 
+def test_model_rewrite_never_overrides_a_standalone_message() -> None:
+    llm = FakeLLM(
+        answers=_answers(
+            AnswerDraft(
+                answer_markdown="Answer.",
+                cited_chunk_ids=["KB0704-v1.0::chunk::0"],
+                sufficient_evidence=True,
+            ),
+            route="knowledge",
+        )
+        | {
+            "chat_route": RouteDecision(
+                request_type="knowledge",
+                reason="standalone",
+                context="standalone",
+                search_question="a model-invented rewrite that must be ignored",
+            )
+        }
+    )
+    store = FakeChatStore()
+    retriever = FakeChatRetriever([hit_for("KB0704")])
+    graph = build_chat_graph(_deps(llm, retriever, store))
+
+    graph.invoke(_state(user_message="What belongs in a work note?"))
+
+    assert retriever.calls[0]["query"] == "What belongs in a work note?"
+
+
+def test_ambiguous_message_asks_for_clarification_without_retrieval() -> None:
+    llm = FakeLLM(
+        answers=_answers(
+            AnswerDraft(answer_markdown="", cited_chunk_ids=[], sufficient_evidence=True),
+            route="knowledge",
+        )
+        | {
+            "chat_route": RouteDecision(
+                request_type="knowledge",
+                reason="missing referent",
+                context="ambiguous",
+                clarification_question="Do you mean the KER or the service catalogue?",
+            )
+        }
+    )
+    store = FakeChatStore()
+    retriever = FakeChatRetriever([hit_for("KB0704")])
+    graph = build_chat_graph(_deps(llm, retriever, store))
+
+    final = graph.invoke(
+        _state(
+            user_message="what about it?",
+            history=[
+                {"role": "user", "content": "Explain the KER."},
+                {"role": "assistant", "content": "The KER tracks recurring faults."},
+                {"role": "user", "content": "And the service catalogue?"},
+                {"role": "assistant", "content": "It lists offerings."},
+            ],
+        )
+    )
+
+    assert final["route"] == "clarification"
+    assert retriever.calls == [], "ambiguous asks must not retrieve"
+    assert "chat_answer" not in llm.purposes()
+    completion = store.calls_named("publish_turn")[0]
+    assert completion["status"] == "blocked"
+    assert completion["route"] == "clarification"
+    assert "which subject" in completion["content"] or "KER" in completion["content"]
+
+
 def test_summary_flows_into_route_and_answer_prompts() -> None:
     llm = FakeLLM(
         answers=_answers(
@@ -313,6 +419,12 @@ def test_summary_flows_into_route_and_answer_prompts() -> None:
             )
         )
     )
+    llm.answers["chat_route"] = RouteDecision(
+        request_type="knowledge",
+        reason="follow-up",
+        context="follow_up",
+        search_question="Why must the incident be linked to the known error register?",
+    )
     store = FakeChatStore()
     graph = build_chat_graph(_deps(llm, FakeChatRetriever([hit_for("KB0704")]), store))
 
@@ -322,3 +434,121 @@ def test_summary_flows_into_route_and_answer_prompts() -> None:
     assert "the operator asked about the KER" in route_call["prompt"]
     answer_call = next(call for call in llm.calls if call["purpose"] == "chat_answer")
     assert "the operator asked about the KER" in answer_call["prompt"]
+
+
+def test_follow_up_without_a_rewrite_asks_instead_of_searching_why() -> None:
+    llm = FakeLLM(
+        answers={
+            **_answers(AnswerDraft(answer_markdown="", sufficient_evidence=False)),
+            "chat_route": RouteDecision(
+                request_type="knowledge", reason="follow-up", context="follow_up"
+            ),
+        }
+    )
+    retriever = FakeChatRetriever()
+    final = build_chat_graph(_deps(llm, retriever, FakeChatStore())).invoke(
+        _state(user_message="why?")
+    )
+    assert final["route"] == "clarification"
+    assert retriever.calls == []
+    assert "chat_answer" not in llm.purposes()
+
+
+def test_warm_cache_skips_generation_but_still_screens_and_routes():
+    from tests.chat.test_answer_cache import cache
+
+    llm = FakeLLM(
+        answers=_answers(
+            AnswerDraft(
+                answer_markdown="Use the known error register.",
+                cited_chunk_ids=["KB0704-v1.0::chunk::0"],
+                sufficient_evidence=True,
+            )
+        )
+    )
+    store = FakeChatStore()
+    retriever = FakeChatRetriever([hit_for("KB0704")])
+    deps = _deps(llm, retriever, store)
+    deps.cache, _ = cache()
+    deps.cache_scope = "scope"
+    graph = build_chat_graph(deps)
+    first = graph.invoke(_state())
+    second = graph.invoke(_state(history=[{"role": "user", "content": "An unrelated topic"}]))
+    assert first["cache_status"] == "miss"
+    assert second["cache_status"] == "exact"
+    assert second["terminal_status"] == "succeeded"
+    assert len(retriever.calls) == 1
+    assert llm.purposes().count("chat_answer") == 1
+    assert llm.purposes().count("pii_detection") == 2
+    assert llm.purposes().count("chat_route") == 2
+
+
+def test_follow_up_and_personal_question_bypass_shared_cache():
+    from tests.chat.test_answer_cache import cache
+
+    for context, question, rewrite in [
+        ("follow_up", "why?", "Why link the incident to the known error register?"),
+        ("standalone", "How do I change my VPN password?", None),
+    ]:
+        llm = FakeLLM(
+            answers=_answers(
+                AnswerDraft(
+                    answer_markdown="Answer.",
+                    cited_chunk_ids=["KB0704-v1.0::chunk::0"],
+                    sufficient_evidence=True,
+                )
+            )
+        )
+        llm.answers["chat_route"] = RouteDecision(
+            request_type="knowledge", reason="test", context=context, search_question=rewrite
+        )
+        deps = _deps(llm, FakeChatRetriever(), FakeChatStore())
+        deps.cache, embeddings = cache()
+        final = build_chat_graph(deps).invoke(_state(user_message=question))
+        assert final["cache_status"] == "bypass"
+        assert embeddings == []
+
+
+def test_cache_outage_falls_back_to_retrieval_and_answering():
+    from tests.chat.test_answer_cache import cache
+
+    class BrokenRedis:
+        def get(self, key):
+            raise ConnectionError("offline")
+
+    llm = FakeLLM(
+        answers=_answers(
+            AnswerDraft(
+                answer_markdown="Answer.",
+                cited_chunk_ids=["KB0704-v1.0::chunk::0"],
+                sufficient_evidence=True,
+            )
+        )
+    )
+    retriever = FakeChatRetriever()
+    deps = _deps(llm, retriever, FakeChatStore())
+    deps.cache, _ = cache(redis=BrokenRedis())
+    result = build_chat_graph(deps).invoke(_state())
+    assert result["cache_status"] == "unavailable"
+    assert result["terminal_status"] == "succeeded"
+    assert len(retriever.calls) == 1
+
+
+def test_unverified_answer_is_never_admitted_to_the_cache():
+    from tests.chat.test_answer_cache import cache
+
+    llm = FakeLLM(
+        answers=_answers(
+            AnswerDraft(
+                answer_markdown="Unsupported draft.",
+                cited_chunk_ids=[],
+                sufficient_evidence=False,
+            )
+        )
+    )
+    deps = _deps(llm, FakeChatRetriever(), FakeChatStore())
+    deps.cache, embeddings = cache()
+    result = build_chat_graph(deps).invoke(_state())
+    assert result["terminal_status"] == "blocked"
+    assert embeddings == []
+    assert deps.cache.lookup("", deps.cache.revision(), _CLEAN) == (None, "miss")

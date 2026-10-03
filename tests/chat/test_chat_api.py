@@ -181,8 +181,8 @@ async def test_create_session_returns_secret_once() -> None:
 
 
 @pytest.mark.asyncio
-async def test_new_session_adopts_the_operators_previous_conversations() -> None:
-    """History survives re-login: the new session re-parents old conversations."""
+async def test_new_session_does_not_adopt_previous_conversations() -> None:
+    """Login in another browser must not steal or gain existing chats."""
     db = _db_session({})
     app = _app(db, _fake_service())
     async with await _client(app) as client:
@@ -194,8 +194,24 @@ async def test_new_session_adopts_the_operators_previous_conversations() -> None
         for call in db.execute.await_args_list
         if isinstance(call.args[0], Update) and call.args[0].table.name == "chat_conversations"
     ]
-    assert updates, "session creation must re-parent the operator's conversations"
-    assert "session_id" in updates[0].compile().params
+    assert updates == [], "session creation must never reassign conversation ownership"
+
+
+@pytest.mark.asyncio
+async def test_list_is_scoped_to_the_calling_session_not_the_operator() -> None:
+    """A second session of the same operator must not list session 1's chats."""
+    session_two = _session_row()
+    db = _db_session({ChatSession: session_two})
+    db.execute = AsyncMock(return_value=_execute_result([]))
+    app = _app(db, _fake_service())
+
+    async with await _client(app) as client:
+        resp = await client.get("/api/v1/chat/conversations", headers=_session_headers(session_two))
+
+    assert resp.status_code == 200
+    statement = db.execute.await_args_list[0].args[0]
+    compiled = str(statement.compile())
+    assert "session_id" in compiled, "listing must filter by chat session id"
 
 
 @pytest.mark.asyncio
@@ -272,6 +288,42 @@ async def test_delete_conversation_returns_204() -> None:
         )
 
     assert resp.status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_delete_conversation_with_running_turn_answers_409() -> None:
+    session_row = _session_row()
+    conversation = _conversation_row(session_row.id)
+    running = _turn_row(conversation.id, status="running")
+    db = _db_session({ChatSession: session_row, ChatConversation: conversation})
+    db.execute = AsyncMock(return_value=_execute_result([running.id]))
+    app = _app(db, _fake_service())
+
+    async with await _client(app) as client:
+        resp = await client.delete(
+            f"/api/v1/chat/conversations/{conversation.id}", headers=_session_headers(session_row)
+        )
+
+    assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_roleless_token_is_rejected_on_chat_endpoints() -> None:
+    """A valid signed token without the operator role must not use chat."""
+    session_row = _session_row()
+    app = _app(_db_session({ChatSession: session_row}), _fake_service())
+    roleless = {"Authorization": f"Bearer {h.make_operator_token(roles=['approver'])}"}
+
+    async with await _client(app) as client:
+        listed = await client.get("/api/v1/chat/conversations", headers=roleless)
+        submitted = await client.post(
+            f"/api/v1/chat/conversations/{uuid4()}/messages",
+            json={"content": "hi", "request_id": REQUEST_ID},
+            headers=roleless,
+        )
+
+    assert listed.status_code == 403
+    assert submitted.status_code == 403
 
 
 @pytest.mark.asyncio
@@ -369,6 +421,37 @@ async def test_duplicate_request_id_returns_existing_turn_without_rerun() -> Non
         side_effect=[None, _integrity_error("uq_chat_turns_conversation_request")]
     )
     reclaim_update = MagicMock()  # stale-turn reclamation; no rows consumed
+    claim_select = MagicMock()
+    claim_select.scalar_one_or_none.return_value = existing_turn
+    empty_messages = MagicMock()
+    empty_messages.scalars.return_value.all.return_value = []
+    session.execute = AsyncMock(side_effect=[reclaim_update, claim_select, empty_messages])
+    service = _fake_service()
+    app = _app(session, service)
+
+    async with await _client(app) as client:
+        resp = await client.post(
+            f"/api/v1/chat/conversations/{conversation.id}/messages",
+            json={"content": "again", "request_id": REQUEST_ID},
+            headers=_session_headers(session_row),
+        )
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["request_id"] == REQUEST_ID
+    service.handle_turn.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_idempotent_lookup_precedes_constraint_ordering() -> None:
+    """Either unique index may fire first; an existing request_id still wins."""
+    session_row = _session_row()
+    conversation = _conversation_row(session_row.id)
+    existing_turn = _turn_row(conversation.id)
+    session = _db_session(
+        {ChatSession: session_row, ChatConversation: conversation, ChatTurn: existing_turn}
+    )
+    session.commit = AsyncMock(side_effect=[None, _integrity_error("uq_chat_turns_one_active")])
+    reclaim_update = MagicMock()
     claim_select = MagicMock()
     claim_select.scalar_one_or_none.return_value = existing_turn
     empty_messages = MagicMock()

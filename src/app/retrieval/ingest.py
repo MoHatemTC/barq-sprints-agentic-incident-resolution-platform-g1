@@ -30,6 +30,7 @@ from qdrant_client.models import (
 from app.clients.qdrant import ensure_collection
 from app.models.knowledge import Article, KnowledgePayload
 from app.retrieval.chunking import chunk_article
+from app.retrieval.corpus_revision import advance_chat_revision, chat_corpus_write_lock
 from app.retrieval.embedding import EmbeddedText, EmbeddingEngine, FastEmbedEngine
 
 logger = structlog.get_logger(__name__)
@@ -139,7 +140,7 @@ def _purge_unknown_article_points(client: QdrantClient, name: str, known_ids: se
     return len(removed_ids)
 
 
-def ingest_articles(
+def _ingest_articles(
     articles: Sequence[Article],
     client: QdrantClient,
     collection_name: str | None = None,
@@ -180,6 +181,9 @@ def ingest_articles(
 
     name = collection_name or _get_default_collection_name()
     engine = embedding_engine or FastEmbedEngine()
+    # Invalidate before any mutation (including recreation) and after success.
+    # The first advance also protects against partial/failed ingestion runs.
+    advance_chat_revision(name, pending=True)
     # Derive the collection dimension from the engine (NFR-09): a swapped model
     # re-configures fresh collections, and a mismatched existing collection
     # fails here with the remedy instead of at upsert time after full embedding.
@@ -244,4 +248,38 @@ def ingest_articles(
         total_upserted += len(batch)
 
     logger.info("points_upserted", count=total_upserted, collection=name)
+    advance_chat_revision(name)
     return total_upserted
+
+
+def ingest_articles(
+    articles: Sequence[Article],
+    client: QdrantClient,
+    collection_name: str | None = None,
+    embedding_engine: EmbeddingEngine | None = None,
+    batch_size: int = DEFAULT_BATCH_SIZE,
+    chunk_size: int = 700,
+    chunk_overlap: int = 120,
+    force_recreate: bool = False,
+    purge_unknown_articles: bool = False,
+    split_on_headers: bool = True,
+) -> int:
+    """Ingest articles; serialize writers when chat answer caching is enabled.
+
+    See ``_ingest_articles`` for replacement, chunking and embedding semantics.
+    Cache-disabled ingestion retains its original behavior without Redis.
+    """
+    name = collection_name or _get_default_collection_name()
+    with chat_corpus_write_lock(name):
+        return _ingest_articles(
+            articles,
+            client,
+            name,
+            embedding_engine,
+            batch_size,
+            chunk_size,
+            chunk_overlap,
+            force_recreate,
+            purge_unknown_articles,
+            split_on_headers,
+        )

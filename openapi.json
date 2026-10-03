@@ -1428,6 +1428,18 @@
             }
           },
           {
+            "name": "latest",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Fetch the NEWEST page instead of offset-from-first.",
+              "default": false,
+              "title": "Latest"
+            },
+            "description": "Fetch the NEWEST page instead of offset-from-first."
+          },
+          {
             "name": "X-Chat-Session-Id",
             "in": "header",
             "required": false,

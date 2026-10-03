@@ -21,7 +21,7 @@ from typing import Annotated
 from uuid import UUID, uuid4
 
 import structlog
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -68,9 +68,14 @@ _STALE_TURN_GRACE_SECONDS = 60.0
 router = APIRouter(
     prefix="/api/v1/chat",
     tags=["Chat"],
-    # Auth first (401), then the feature gate (503) — a disabled chat must
-    # still reject anonymous requests as anonymous.
-    dependencies=[Depends(verify_bearer_token), Depends(require_chat_enabled)],
+    # Auth first (401), then role (403), then the feature gate (503) — a
+    # disabled chat must still reject anonymous requests as anonymous, and a
+    # role-less token must not use an older session either.
+    dependencies=[
+        Depends(verify_bearer_token),
+        Depends(require_role("operator")),
+        Depends(require_chat_enabled),
+    ],
 )
 
 
@@ -99,29 +104,21 @@ async def create_chat_session(
 ) -> ChatSessionCreatedResponse:
     """Issue a browser chat session bound to the token's operator subject.
 
-    Conversations are owned by one session at a time; creating a new session
-    re-parents the operator's previous conversations to it so history survives
-    a page refresh / re-login (the last login owns the history — acceptable
-    for the single shared operator account).
+    Conversations stay owned by the session that created them: the shared
+    operator subject is never treated as proof of ownership, so logging in
+    from another browser neither gains nor steals another session's history.
     """
-    subject = str(claims.get("sub") or "")
     secret = secrets.token_urlsafe(32)
     session_row = ChatSession(
         id=uuid4(),
-        operator_subject=subject,
+        operator_subject=str(claims.get("sub") or ""),
         secret_hash=hashlib.sha256(secret.encode("utf-8")).hexdigest(),
     )
     try:
         db.add(session_row)
-        await db.flush()
-        await db.execute(
-            update(ChatConversation)
-            .where(ChatConversation.operator_subject == subject)
-            .values(session_id=session_row.id)
-        )
         await db.commit()
     except SQLAlchemyError as exc:
-        logger.exception("chat_session_create_failed", error=str(exc))
+        logger.exception("chat_session_create_failed", error=type(exc).__name__)
         raise ServiceUnavailableError("Database unavailable to create the chat session.") from exc
     return ChatSessionCreatedResponse(session_id=session_row.id, chat_secret=secret)
 
@@ -154,7 +151,7 @@ async def create_conversation(
         await db.commit()
         await db.refresh(conversation)
     except SQLAlchemyError as exc:
-        logger.exception("chat_conversation_create_failed", error=str(exc))
+        logger.exception("chat_conversation_create_failed", error=type(exc).__name__)
         raise ServiceUnavailableError("Database unavailable to create the conversation.") from exc
     return ChatConversationResponse.model_validate(conversation)
 
@@ -184,7 +181,7 @@ async def rename_conversation(
         await db.commit()
         await db.refresh(conversation)
     except SQLAlchemyError as exc:
-        logger.exception("chat_conversation_rename_failed", error=str(exc))
+        logger.exception("chat_conversation_rename_failed", error=type(exc).__name__)
         raise ServiceUnavailableError("Database unavailable to rename the conversation.") from exc
     return ChatConversationResponse.model_validate(conversation)
 
@@ -212,7 +209,7 @@ async def list_conversations(
             .all()
         )
     except SQLAlchemyError as exc:
-        logger.exception("chat_conversations_query_failed", error=str(exc))
+        logger.exception("chat_conversations_query_failed", error=type(exc).__name__)
         raise ServiceUnavailableError("Database unavailable to list conversations.") from exc
     return [ChatConversationResponse.model_validate(row) for row in rows]
 
@@ -231,11 +228,25 @@ async def delete_conversation(
     session: Annotated[ChatSession, Depends(require_chat_session)],
 ) -> None:
     conversation = await _owned_conversation(db, conversation_id, session)
+    running = (
+        await db.execute(
+            select(ChatTurn.id)
+            .where(ChatTurn.conversation_id == conversation.id)
+            .where(ChatTurn.status == "running")
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if running is not None:
+        # Deleting under a live worker would strand its writes; refusal is the
+        # bounded policy for this release (no cancellation machinery).
+        raise ConflictError(
+            "This conversation has an answer in progress; try deleting it again shortly."
+        )
     try:
         await db.delete(conversation)
         await db.commit()
     except SQLAlchemyError as exc:
-        logger.exception("chat_conversation_delete_failed", error=str(exc))
+        logger.exception("chat_conversation_delete_failed", error=type(exc).__name__)
         raise ServiceUnavailableError("Database unavailable to delete the conversation.") from exc
 
 
@@ -250,28 +261,41 @@ async def delete_conversation(
 )
 async def list_messages(
     conversation_id: UUID,
+    response: Response,
     db: Annotated[AsyncSession, Depends(get_db_session)],
     session: Annotated[ChatSession, Depends(require_chat_session)],
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
+    latest: Annotated[
+        bool,
+        Query(description="Fetch the NEWEST page instead of offset-from-first."),
+    ] = False,
 ) -> list[ChatMessageResponse]:
     await _owned_conversation(db, conversation_id, session)
     try:
-        rows = (
-            (
-                await db.execute(
-                    select(ChatMessage)
-                    .where(ChatMessage.conversation_id == conversation_id)
-                    .order_by(ChatMessage.seq)
-                    .offset(offset)
-                    .limit(limit)
-                )
+        total = (
+            await db.execute(
+                select(func.count())
+                .select_from(ChatMessage)
+                .where(ChatMessage.conversation_id == conversation_id)
             )
-            .scalars()
-            .all()
+        ).scalar_one()
+        response.headers["X-Total-Count"] = str(total)
+        query = (
+            select(ChatMessage)
+            .where(ChatMessage.conversation_id == conversation_id)
+            .order_by(ChatMessage.seq)
         )
+        if latest:
+            # History is stored ascending, so the newest page is the tail:
+            # without this, conversations beyond one page silently hide the
+            # newest messages.
+            query = query.offset(max(0, total - limit)).limit(limit)
+        else:
+            query = query.offset(offset).limit(limit)
+        rows = (await db.execute(query)).scalars().all()
     except SQLAlchemyError as exc:
-        logger.exception("chat_messages_query_failed", error=str(exc))
+        logger.exception("chat_messages_query_failed", error=type(exc).__name__)
         raise ServiceUnavailableError("Database unavailable to read messages.") from exc
     return [ChatMessageResponse.model_validate(row) for row in rows]
 
@@ -368,7 +392,7 @@ async def _owned_conversation(
     try:
         conversation = await db.get(ChatConversation, conversation_id)
     except SQLAlchemyError as exc:
-        logger.exception("chat_conversation_query_failed", error=str(exc))
+        logger.exception("chat_conversation_query_failed", error=type(exc).__name__)
         raise ServiceUnavailableError("Database unavailable to read the conversation.") from exc
     if conversation is None or conversation.session_id != session.id:
         raise ResourceNotFoundError(f"Conversation '{conversation_id}' not found")
@@ -408,27 +432,29 @@ async def _claim_turn(
         await db.commit()
     except IntegrityError as exc:
         await db.rollback()
+        # Which unique index fires first is not deterministic when a duplicate
+        # request_id races an active turn: look up the idempotent case first,
+        # then treat any remaining uniqueness conflict as "one active turn".
+        existing = (
+            await db.execute(
+                select(ChatTurn)
+                .where(ChatTurn.conversation_id == conversation.id)
+                .where(ChatTurn.request_id == request_id)
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if existing is not None:
+            return existing, False
         constraint = _postgres_constraint_name(exc)
-        if constraint == _IDEMPOTENCY_CONSTRAINT:
-            existing = (
-                await db.execute(
-                    select(ChatTurn)
-                    .where(ChatTurn.conversation_id == conversation.id)
-                    .where(ChatTurn.request_id == request_id)
-                    .limit(1)
-                )
-            ).scalar_one_or_none()
-            if existing is not None:
-                return existing, False
-        if constraint == _ACTIVE_TURN_CONSTRAINT:
+        if constraint in (_IDEMPOTENCY_CONSTRAINT, _ACTIVE_TURN_CONSTRAINT) or constraint is None:
             raise ConflictError(
                 "A turn is already running for this conversation; wait for it to finish."
             ) from exc
-        logger.exception("chat_turn_claim_failed", constraint=constraint, error=str(exc))
+        logger.exception("chat_turn_claim_failed", constraint=constraint, error=type(exc).__name__)
         raise ServiceUnavailableError("Database unavailable to claim the turn.") from exc
     except SQLAlchemyError as exc:
         await db.rollback()
-        logger.exception("chat_turn_claim_failed", error=str(exc))
+        logger.exception("chat_turn_claim_failed", error=type(exc).__name__)
         raise ServiceUnavailableError("Database unavailable to claim the turn.") from exc
     return turn, True
 
@@ -462,7 +488,7 @@ async def _turn_response(db: AsyncSession, turn: ChatTurn) -> ChatTurnResponse:
             .all()
         )
     except SQLAlchemyError as exc:
-        logger.exception("chat_turn_messages_query_failed", error=str(exc))
+        logger.exception("chat_turn_messages_query_failed", error=type(exc).__name__)
         raise ServiceUnavailableError("Database unavailable to read the turn.") from exc
     return ChatTurnResponse(
         id=turn.id,

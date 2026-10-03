@@ -7,12 +7,15 @@ workflow-state and security filters stay in force.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock
 
+from app.chat.cache import source_fingerprint
 from app.chat.retrieval import QdrantChatRetriever
 from app.models.knowledge import SecurityLevel
 from app.retrieval.embedding import EmbeddedText
+from app.retrieval.ingest import build_point_id
 
 
 class _FakeEmbeddingEngine:
@@ -88,3 +91,30 @@ def test_chat_retrieval_security_ceiling_is_server_selected() -> None:
         c for c in client.calls[0]["query_filter"].must if c.key == "security_level"
     )
     assert security_condition.match.any == ["public", "internal"]
+
+
+def test_source_validation_rejects_modified_retired_and_invisible_chunks():
+    fake = _FakeQdrant()
+    hit = QdrantChatRetriever(fake, engine=_FakeEmbeddingEngine()).search("KER", limit=1)[0]
+    raw = dict(fake.query_points().points[0].payload)
+    raw["article_id"] = hit.article_id
+    client = MagicMock()
+    point = SimpleNamespace(id=build_point_id(hit.article_id, hit.chunk_index), payload=raw)
+    client.retrieve.return_value = [point]
+    retriever = QdrantChatRetriever(client, engine=_FakeEmbeddingEngine())
+    source = [
+        {
+            "article_id": hit.article_id,
+            "chunk_index": hit.chunk_index,
+            "fingerprint": source_fingerprint(hit.model_dump(mode="json")),
+        }
+    ]
+    assert retriever.validate_sources(source)
+    for field, value in [("chunk_text", "Different"), ("workflow_state", "retired")]:
+        point.payload = {**raw, field: value}
+        assert not retriever.validate_sources(source)
+    point.payload = raw
+    internal = QdrantChatRetriever(client, max_security_level=SecurityLevel.INTERNAL)
+    assert not internal.validate_sources(source)
+    client.retrieve.return_value = []
+    assert not retriever.validate_sources(source)

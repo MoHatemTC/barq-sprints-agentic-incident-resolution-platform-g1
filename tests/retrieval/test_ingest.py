@@ -159,6 +159,48 @@ def test_ingest_articles_with_mock_embedding(
     assert "chunk_text" in p
 
 
+def test_ingestion_advances_cache_revision_before_mutation_and_after_success(
+    memory_qdrant, sample_articles, monkeypatch
+):
+    from app.retrieval import ingest as module
+
+    events = []
+    real_upsert = memory_qdrant.upsert
+
+    def upsert(**kwargs):
+        events.append("upsert")
+        return real_upsert(**kwargs)
+
+    monkeypatch.setattr(
+        module,
+        "advance_chat_revision",
+        lambda name, **kwargs: events.append("pending" if kwargs.get("pending") else "revision"),
+    )
+    monkeypatch.setattr(memory_qdrant, "upsert", upsert)
+    engine = MagicMock(dense_vector_size=384)
+    engine.embed_documents.side_effect = lambda texts: [
+        EmbeddedText(dense=[0.1] * 384, sparse_indices=[1], sparse_values=[1.0]) for _ in texts
+    ]
+    count = ingest_articles(sample_articles, memory_qdrant, "revision_test", engine)
+    assert count > 0
+    assert events[0] == "pending" and events[-1] == "revision"
+    assert "upsert" in events[1:-1]
+
+
+def test_revision_outage_aborts_before_collection_mutation(sample_articles, monkeypatch):
+    from app.retrieval import ingest as module
+
+    def unavailable(name, **kwargs):
+        raise ConnectionError("revision store unavailable")
+
+    monkeypatch.setattr(module, "advance_chat_revision", unavailable)
+    client = MagicMock()
+    engine = MagicMock(dense_vector_size=384)
+    with pytest.raises(ConnectionError):
+        ingest_articles(sample_articles, client, "revision_test", engine, force_recreate=True)
+    assert client.mock_calls == []
+
+
 def test_ingest_idempotency(memory_qdrant: QdrantClient, sample_articles: list[Article]) -> None:
     col_name = "idempotent_test"
     ensure_collection(memory_qdrant, col_name)

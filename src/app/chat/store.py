@@ -20,6 +20,9 @@ from app.workers.sync_engine import SyncSessionFactory, sync_session_scope
 
 logger = structlog.get_logger(__name__)
 
+#: Upper bound on messages folded into one summarization call.
+_BATCH_MESSAGE_COUNT = 20
+
 
 class ChatStore(Protocol):
     """Sync persistence seam for the chat graph and turn service."""
@@ -66,22 +69,15 @@ class ChatStore(Protocol):
         usage: dict[str, object] | None,
     ) -> None: ...
 
-    def attach_usage(
-        self,
-        turn_id: UUID,
-        *,
-        status: str,
-        route: str | None,
-        usage: dict[str, object] | None,
-    ) -> None: ...
+    def attach_usage(self, turn_id: UUID, *, usage: dict[str, object] | None) -> None: ...
 
     def get_summary(self, conversation_id: UUID) -> tuple[str, int]: ...
 
     def save_summary(self, conversation_id: UUID, *, summary: str, through_seq: int) -> None: ...
 
     def unsummarized_messages(
-        self, conversation_id: UUID, *, after_seq: int, history_limit: int
-    ) -> list[dict[str, str]]: ...
+        self, conversation_id: UUID, *, after_seq: int, history_limit: int, batch: int
+    ) -> list[dict[str, Any]]: ...
 
     def fail_turn(self, turn_id: UUID, *, error_category: str) -> None: ...
 
@@ -142,6 +138,7 @@ class SQLAlchemyChatStore:
         autotitle: bool = False,
     ) -> None:
         with sync_session_scope(self._factory) as session:
+            _lock_conversation(session, conversation_id)
             seq = _next_seq(session, conversation_id)
             session.add(
                 ChatMessage(
@@ -186,6 +183,7 @@ class SQLAlchemyChatStore:
                 session.rollback()
                 logger.warning("chat_turn_publish_skipped_not_running", turn_id=str(turn_id))
                 return False
+            _lock_conversation(session, conversation_id)
             seq = _next_seq(session, conversation_id)
             session.add(
                 ChatMessage(
@@ -216,24 +214,18 @@ class SQLAlchemyChatStore:
             )
             session.commit()
 
-    def attach_usage(
-        self,
-        turn_id: UUID,
-        *,
-        status: str,
-        route: str | None,
-        usage: dict[str, object] | None,
-    ) -> None:
-        """Attach final usage to an already-published turn (never resurrect one).
+    def attach_usage(self, turn_id: UUID, *, usage: dict[str, object] | None) -> None:
+        """Attach reconciled usage to an already-published turn — usage only.
 
-        Guarded to turns ``publish_turn`` already closed, so a reclaimed or
-        failed turn keeps its terminal status.
+        Route, status and timestamps are set exclusively by publish_turn (the
+        only writer that can satisfy the route/status CHECK constraints for
+        every terminal path); this write must never alter the outcome.
         """
         with sync_session_scope(self._factory) as session:
             session.execute(
                 update(ChatTurn)
                 .where(ChatTurn.id == turn_id, ChatTurn.status.in_(("succeeded", "blocked")))
-                .values(status=status, route=route, usage=usage, completed_at=func.now())
+                .values(usage=usage)
             )
             session.commit()
 
@@ -245,18 +237,25 @@ class SQLAlchemyChatStore:
             return conversation.history_summary or "", int(conversation.summary_seq or 0)
 
     def save_summary(self, conversation_id: UUID, *, summary: str, through_seq: int) -> None:
+        """Monotonic cursor advance: a stale writer can never regress memory."""
         with sync_session_scope(self._factory) as session:
             session.execute(
                 update(ChatConversation)
                 .where(ChatConversation.id == conversation_id)
+                .where(ChatConversation.summary_seq < through_seq)
                 .values(history_summary=summary, summary_seq=through_seq, updated_at=func.now())
             )
             session.commit()
 
     def unsummarized_messages(
-        self, conversation_id: UUID, *, after_seq: int, history_limit: int
-    ) -> list[dict[str, str]]:
-        """Sanitized messages older than the recent window and not yet summarized."""
+        self, conversation_id: UUID, *, after_seq: int, history_limit: int, batch: int
+    ) -> list[dict[str, Any]]:
+        """Sanitized messages older than the recent window and not yet summarized.
+
+        Returns one item per message with its real ``seq`` so the summary
+        cursor advances only over messages actually included, bounded to one
+        ``batch`` of characters per summarization call.
+        """
         with sync_session_scope(self._factory) as session:
             newest = session.scalar(
                 select(func.max(ChatMessage.seq)).where(
@@ -272,8 +271,21 @@ class SQLAlchemyChatStore:
                 .where(ChatMessage.seq > after_seq)
                 .where(ChatMessage.seq <= boundary)
                 .order_by(ChatMessage.seq)
+                .limit(_BATCH_MESSAGE_COUNT)
             ).all()
-            return [{"role": row.role, "content": row.content} for row in rows]
+            items: list[dict[str, Any]] = [
+                {"seq": row.seq, "role": row.role, "content": row.content} for row in rows
+            ]
+            # Keep whole messages within the batch char budget.
+            bounded: list[dict[str, Any]] = []
+            used = 0
+            for item in items:
+                size = len(str(item["content"]))
+                if bounded and used + size > batch:
+                    break
+                bounded.append(item)
+                used += size
+            return bounded
 
     def fail_turn(self, turn_id: UUID, *, error_category: str) -> None:
         with sync_session_scope(self._factory) as session:
@@ -283,6 +295,17 @@ class SQLAlchemyChatStore:
                 .values(status="failed", error_category=error_category, completed_at=func.now())
             )
             session.commit()
+
+
+def _lock_conversation(session: Any, conversation_id: UUID) -> None:
+    """Serialize message-sequence allocation per conversation.
+
+    ``max(seq)+1`` is only safe when writers queue behind a row lock; without
+    it, a stale worker and the current worker can compute the same seq.
+    """
+    session.execute(
+        select(ChatConversation.id).where(ChatConversation.id == conversation_id).with_for_update()
+    )
 
 
 def _next_seq(session: Any, conversation_id: UUID) -> int:

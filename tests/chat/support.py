@@ -68,8 +68,8 @@ class FakeChatStore:
         )
 
     def unsummarized_messages(
-        self, conversation_id: UUID, *, after_seq: int, history_limit: int
-    ) -> list[dict[str, str]]:
+        self, conversation_id: UUID, *, after_seq: int, history_limit: int, batch: int
+    ) -> list[dict[str, Any]]:
         return list(self._unsummarized)
 
     def get_history(self, conversation_id: UUID, *, limit: int) -> list[dict[str, str]]:
@@ -150,20 +150,8 @@ class FakeChatStore:
             )
         )
 
-    def attach_usage(
-        self,
-        turn_id: UUID,
-        *,
-        status: str,
-        route: str | None,
-        usage: dict[str, object] | None,
-    ) -> None:
-        self.events.append(
-            (
-                "attach_usage",
-                {"status": status, "route": route, "usage": usage, "turn_id": turn_id},
-            )
-        )
+    def attach_usage(self, turn_id: UUID, *, usage: dict[str, object] | None) -> None:
+        self.events.append(("attach_usage", {"usage": usage, "turn_id": turn_id}))
 
     def fail_turn(self, turn_id: UUID, *, error_category: str) -> None:
         self.events.append(("fail_turn", {"error_category": error_category, "turn_id": turn_id}))

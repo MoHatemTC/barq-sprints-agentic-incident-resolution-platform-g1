@@ -26,15 +26,18 @@ from app.chat.budget import (
     ChatBudget,
     ChatBudgetExceeded,
     ChatBudgetUnavailable,
-    UsageRecordingLLM,
+    ChatModelGateway,
+    Reservation,
     actual_usage_cost,
     estimate_turn_reserve,
 )
+from app.chat.cache import RedisAnswerCache
 from app.chat.config import ChatSettings
 from app.chat.graph import build_chat_graph
 from app.chat.nodes import ChatGraphDeps
 from app.chat.prompts import (
     CHAT_SUMMARIZE_SYSTEM,
+    HISTORY_SUMMARY_CHARS,
     HistorySummary,
     chat_summarize_prompt,
 )
@@ -90,6 +93,8 @@ class ChatTurnService:
         budget: ChatBudget,
         settings: ChatSettings,
         tracer: Tracer,
+        cache: RedisAnswerCache | None = None,
+        cache_scope: str = "",
     ) -> None:
         self._llm = llm
         self._retriever = retriever
@@ -97,6 +102,8 @@ class ChatTurnService:
         self._budget = budget
         self._settings = settings
         self._tracer = tracer
+        self._cache = cache
+        self._cache_scope = cache_scope
 
     def handle_turn(self, request: TurnRequest) -> TurnOutcome:
         if not self._settings.budget_configured:
@@ -106,10 +113,10 @@ class ChatTurnService:
                 usage={"blocked_layer": "budget_unconfigured"},
             )
 
-        usage_records: list[dict[str, Any]] = []
         try:
-            reserve = estimate_turn_reserve(self._settings, len(request.user_message))
-            self._budget.reserve(reserve)
+            reservation = self._budget.reserve(
+                estimate_turn_reserve(self._settings, len(request.user_message))
+            )
         except ChatBudgetExceeded:
             return self._blocked_turn(
                 request, _RESERVE_BUDGET_REFUSAL, usage={"blocked_layer": "budget_exceeded"}
@@ -120,30 +127,37 @@ class ChatTurnService:
                 request, _UNCONFIGURED_BUDGET_REFUSAL, usage={"blocked_layer": "budget_unavailable"}
             )
 
-        recorder = UsageRecordingLLM(self._llm, usage_records)
-        history = self._store.get_history(request.conversation_id, limit=HISTORY_MESSAGE_LIMIT)
-        summary = self._refresh_summary(request.conversation_id, history, recorder)
-        state: ChatState = {
-            "conversation_id": str(request.conversation_id),
-            "turn_id": str(request.turn_id),
-            "operator_subject": request.operator_subject,
-            "user_message": request.user_message,
-            "history": history,
-            "history_summary": summary,
-        }
-        graph = build_chat_graph(
-            ChatGraphDeps(
-                llm=recorder,
-                retriever=self._retriever,
-                store=self._store,
-                settings=self._settings,
-                tracer=self._tracer,
-            )
-        )
+        # Everything from the first context read to the final graph state is
+        # one lifecycle: any failure reconciles the reservation and closes the
+        # turn — a storage outage must never leave a running turn or a live
+        # reservation behind.
+        gateway = ChatModelGateway(self._llm, self._settings)
         try:
-            final = graph.invoke(state, config={"recursion_limit": 12})
+            history = self._store.get_history(
+                request.conversation_id, limit=self._settings.chat_history_message_limit
+            )
+            summary = self._refresh_summary(request.conversation_id, history, gateway)
+            state: ChatState = {
+                "conversation_id": str(request.conversation_id),
+                "turn_id": str(request.turn_id),
+                "operator_subject": request.operator_subject,
+                "user_message": request.user_message,
+                "history": history,
+                "history_summary": summary,
+            }
+            final = build_chat_graph(
+                ChatGraphDeps(
+                    llm=gateway,
+                    retriever=self._retriever,
+                    store=self._store,
+                    settings=self._settings,
+                    tracer=self._tracer,
+                    cache=self._cache,
+                    cache_scope=self._cache_scope + ":" + request.operator_subject,
+                )
+            ).invoke(state, config={"recursion_limit": 12})
         except Exception as exc:
-            self._reconcile(usage_records, reserve)
+            self._reconcile(reservation, gateway.records)
             category = _error_category(exc)
             logger.warning(
                 "chat_turn_failed", turn_id=str(request.turn_id), error_category=category
@@ -151,35 +165,60 @@ class ChatTurnService:
             self._store.fail_turn(request.turn_id, error_category=category)
             return TurnOutcome(status="failed", route=None, error_category=category)
 
-        self._reconcile(usage_records, reserve)
-        # publish_turn already closed the row without usage (so a crash between
-        # graph and reconcile cannot leave the turn 'running'); this guarded
-        # write attaches the reconciled usage summary.
-        status = "succeeded" if final.get("route") == "knowledge" else "blocked"
+        self._reconcile(reservation, gateway.records)
+        # The graph's publish_turn owns route/status; this guarded write only
+        # attaches the reconciled usage summary and never changes the outcome.
         self._store.attach_usage(
             request.turn_id,
-            status=status,
-            route=final.get("route"),
-            usage=_usage_summary(self._settings, usage_records),
+            usage=_usage_summary(
+                self._settings, gateway.records, final.get("cache_status", "none")
+            ),
         )
-        return TurnOutcome(status=status, route=final.get("route"), error_category=None)
+        published = bool(final.get("published"))
+        return TurnOutcome(
+            status=str(final.get("terminal_status") or "failed"),
+            route=final.get("route") if published else None,
+            error_category=None if published else "stale_reclaimed",
+        )
 
     def _refresh_summary(
         self,
         conversation_id: UUID,
         history: list[dict[str, str]],
-        llm: UsageRecordingLLM,
+        llm: ChatModelGateway,
     ) -> str:
         """Extend the persisted rolling summary with messages that aged out.
 
-        One bounded model call, made only when messages older than the recent
-        window are not covered by the stored summary yet; failures never block
-        the turn — the turn just runs without the older context.
+        One bounded model call per turn, made only when messages older than
+        the recent window are not covered by the stored summary yet. A blank
+        or failed summary leaves the cursor untouched — unsummarized messages
+        are never silently marked as processed. Memory is best-effort: any
+        failure falls back to the summary already loaded for this turn.
         """
+        summary = ""
         try:
             summary, summary_seq = self._store.get_summary(conversation_id)
+            # Messages omitted by the memory budget must enter the summary too,
+            # even when they are still among the last six database messages.
+            recent_budget = max(
+                0,
+                self._settings.chat_memory_budget_chars
+                - min(HISTORY_SUMMARY_CHARS, self._settings.chat_memory_budget_chars // 4)
+                - 64,
+            )
+            used = 0
+            retained = 0
+            for message in reversed(history):
+                size = len(message["content"]) + len(message["role"]) + 3
+                if retained and used + size > recent_budget:
+                    break
+                retained += 1
+                used += size
             older = self._store.unsummarized_messages(
-                conversation_id, after_seq=summary_seq, history_limit=HISTORY_MESSAGE_LIMIT
+                conversation_id,
+                after_seq=summary_seq,
+                history_limit=max(1, retained),
+                batch=self._settings.chat_memory_budget_chars,
             )
             if not older:
                 return summary
@@ -192,17 +231,17 @@ class ChatTurnService:
                 model=self._settings.chat_model,
                 max_completion_tokens=self._settings.chat_max_output_tokens,
             )
-            new_summary = result.summary.strip() or summary
-            # seq of the newest message just summarized: all messages minus the
-            # recent window (and never below what was already covered).
-            newest = summary_seq + len(older)
+            new_summary = result.summary.strip()
+            if not new_summary:
+                logger.warning("chat_summary_blank_output", turn_conversation=str(conversation_id))
+                return summary
             self._store.save_summary(
-                conversation_id, summary=new_summary, through_seq=max(newest, summary_seq)
+                conversation_id, summary=new_summary, through_seq=int(older[-1]["seq"])
             )
             return new_summary
         except Exception as exc:  # noqa: BLE001 — memory is best-effort context
             logger.warning("chat_summary_refresh_failed", error=type(exc).__name__)
-            return self._store.get_summary(conversation_id)[0]
+            return summary
 
     def _blocked_turn(
         self, request: TurnRequest, refusal: str, *, usage: dict[str, object]
@@ -226,12 +265,14 @@ class ChatTurnService:
         self._store.complete_turn(request.turn_id, status="blocked", route=None, usage=usage)
         return TurnOutcome(status="blocked", route=None, error_category=None)
 
-    def _reconcile(self, usage_records: list[dict[str, Any]], reserve: float) -> None:
+    def _reconcile(self, reservation: Reservation, usage_records: list[dict[str, Any]]) -> None:
         actual = actual_usage_cost(self._settings, usage_records)
-        self._budget.reconcile(actual, reserve)
+        self._budget.reconcile(reservation, actual)
 
 
-def _usage_summary(settings: ChatSettings, usage_records: list[dict[str, Any]]) -> dict[str, Any]:
+def _usage_summary(
+    settings: ChatSettings, usage_records: list[dict[str, Any]], cache_status: str = "none"
+) -> dict[str, Any]:
     reported = [float(r["cost_usd"]) for r in usage_records if r.get("cost_usd") is not None]
     return {
         "model_calls": len(usage_records),
@@ -241,7 +282,7 @@ def _usage_summary(settings: ChatSettings, usage_records: list[dict[str, Any]]) 
         "reported_cost_usd": sum(reported)
         if reported and len(reported) == len(usage_records)
         else None,
-        "cache_status": "none",
+        "cache_status": cache_status,
     }
 
 

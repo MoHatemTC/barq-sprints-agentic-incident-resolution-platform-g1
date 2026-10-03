@@ -9,11 +9,13 @@ repair attempt first.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 import structlog
 
 from agent.llm import LLMClient
+from app.chat.cache import CachedAnswer, RedisAnswerCache, source_fingerprint
 from app.chat.citations import Citation, build_citation, chunk_identity
 from app.chat.config import ChatSettings
 from app.chat.prompts import (
@@ -23,6 +25,9 @@ from app.chat.prompts import (
     RouteDecision,
     chat_answer_prompt,
     chat_route_prompt,
+)
+from app.chat.prompts import (
+    EVIDENCE_ITEM_CHARS as _EVIDENCE_ITEM_CHARS,
 )
 from app.chat.retrieval import ChatRetriever
 from app.chat.screening import screen_chat_input
@@ -97,19 +102,38 @@ def route(state: ChatState, deps: ChatGraphDeps) -> dict[str, Any]:
             state["sanitized_message"],
             state.get("history", []),
             summary=state.get("history_summary") or None,
+            memory_budget_chars=deps.settings.chat_memory_budget_chars,
         ),
         schema=RouteDecision,
         model=deps.settings.chat_model,
         max_completion_tokens=deps.settings.chat_max_output_tokens,
     )
+    if decision.request_type == "knowledge" and (
+        decision.context == "ambiguous"
+        or (decision.context == "follow_up" and not (decision.search_question or "").strip())
+    ):
+        # No safe rewrite exists: ask, never guess — and spend no retrieval or
+        # answer-generation calls until the referent is clear.
+        return {
+            "route": "clarification",
+            "route_reason": decision.reason,
+            "unavailable_message": decision.clarification_question
+            or "Could you say which subject you mean?",
+        }
     if decision.request_type == "knowledge":
-        # Reference resolution: the rewritten, self-contained question drives
-        # retrieval; a topic change or standalone question keeps the raw text.
-        search_query = (decision.search_question or "").strip()
+        # Reference resolution: only a follow_up uses the model's rewrite; a
+        # standalone message or topic change keeps the sanitized original, so
+        # a model rewrite can never override the trusted text.
+        rewrite = (decision.search_question or "").strip()
+        if decision.context == "follow_up" and rewrite:
+            search_query = rewrite
+        else:
+            search_query = state["sanitized_message"]
         return {
             "route": "knowledge",
             "route_reason": decision.reason,
-            "search_query": search_query or state["sanitized_message"],
+            "search_query": search_query,
+            "context_decision": decision.context,
         }
     return {
         "route": "unavailable",
@@ -122,7 +146,14 @@ def retrieve_knowledge(state: ChatState, deps: ChatGraphDeps) -> dict[str, Any]:
     query = state.get("search_query") or state["sanitized_message"]
     hits = deps.retriever.search(query, limit=deps.settings.chat_evidence_chunk_limit)
     evidence = []
+    remaining = deps.settings.chat_max_evidence_chars
     for hit in hits:
+        if remaining <= 0:
+            break
+        # Aggregate bound: the configured evidence budget covers the total
+        # text presented to the model, not just each chunk in isolation.
+        text = str(hit.chunk_text)[: min(_EVIDENCE_ITEM_CHARS, remaining)]
+        remaining -= len(text)
         citation = build_citation(hit)
         evidence.append(
             {
@@ -133,21 +164,89 @@ def retrieve_knowledge(state: ChatState, deps: ChatGraphDeps) -> dict[str, Any]:
                 "section": citation.section,
                 "chunk_index": citation.chunk_index,
                 "manual_section": citation.manual_section,
-                "chunk_text": hit.chunk_text,
+                "chunk_text": text,
+                "fingerprint": source_fingerprint(hit.model_dump(mode="json")),
             }
         )
     return {"evidence": evidence}
 
 
+def cache_lookup(state: ChatState, deps: ChatGraphDeps) -> dict[str, Any]:
+    if deps.cache is None:
+        return {"cache_status": "disabled"}
+    # Shared cache admission is intentionally conservative. History-dependent
+    # answers and personal/redacted questions stay within their conversation.
+    question = state.get("search_query") or state["sanitized_message"]
+    if (
+        state.get("context_decision") not in ("standalone", "topic_change")
+        or state["sanitized_message"] != state["user_message"]
+        or re.search(
+            r"\b(i|my|our|me|mine|ours|us|we|(?:INC|PRB|CHG|RITM)\d+|[\w.-]+@[\w.-]+)\b"
+            r"|\*\*\*|REDACTED",
+            question,
+            re.I,
+        )
+    ):
+        return {"cache_status": "bypass"}
+    revision = deps.cache.revision()
+    answer, status = deps.cache.lookup(deps.cache_scope, revision, question)
+    update: dict[str, Any] = {"cache_status": status, "cache_revision": revision}
+    if answer is not None:
+        update.update(
+            answer_markdown=answer.answer_markdown,
+            citations=answer.citations,
+            verification={"passed": True, "cache_sources_revalidated": True},
+        )
+    return update
+
+
+def _cache_published_answer(state: ChatState, deps: ChatGraphDeps) -> None:
+    if deps.cache is None or state.get("cache_status") != "miss":
+        return
+    try:
+        cited = set(state.get("cited_chunk_ids", []))
+        sources = [
+            {
+                "article_id": item["chunk_id"].split("::chunk::")[0],
+                "chunk_index": item["chunk_index"],
+                "fingerprint": item["fingerprint"],
+            }
+            for item in state.get("evidence", [])
+            if item["chunk_id"] in cited
+        ]
+        deps.cache.save(
+            deps.cache_scope,
+            state.get("cache_revision"),
+            CachedAnswer(
+                question=state.get("search_query") or state["sanitized_message"],
+                answer_markdown=state["answer_markdown"],
+                citations=state["citations"],
+                sources=sources,
+            ),
+        )
+    except Exception as exc:
+        logger.warning("chat_cache_admission_failed", error=type(exc).__name__)
+
+
 def generate_answer(state: ChatState, deps: ChatGraphDeps) -> dict[str, Any]:
+    context_free = state.get("context_decision") in ("standalone", "topic_change")
+    feedback = None
+    rejected = state.get("rejected_citations") or []
+    if state.get("repair_count", 0) > 0 and rejected:
+        feedback = (
+            "Your previous draft cited evidence it was not shown "
+            f"({', '.join(rejected)}). Use ONLY chunk_ids from the evidence blocks."
+        )
     draft = deps.llm.structured(
         purpose="chat_answer",
         system=CHAT_ANSWER_SYSTEM,
         prompt=chat_answer_prompt(
             state.get("search_query") or state["sanitized_message"],
             state.get("evidence", []),
-            state.get("history", []),
-            summary=state.get("history_summary") or None,
+            [] if context_free else state.get("history", []),
+            summary=None if context_free else (state.get("history_summary") or None),
+            memory_budget_chars=deps.settings.chat_memory_budget_chars,
+            repair_feedback=feedback,
         ),
         schema=AnswerDraft,
         model=deps.settings.chat_model,
@@ -173,8 +272,10 @@ _EVIDENCE_GAP_FALLBACK = (
 def verify_answer(state: ChatState, deps: ChatGraphDeps) -> dict[str, Any]:
     """Code-only citation validation; one bounded repair on unknown chunk ids.
 
-    Fail-closed: a draft that still names evidence it was not shown — or that
-    cites nothing at all — is replaced by an explicit evidence-gap response.
+    Fail-closed: a draft that still names evidence it was not shown, cites
+    nothing at all, or declares its own evidence insufficient is replaced by
+    an explicit evidence-gap response. ID validation checks that citations
+    come from the presented evidence; it is not a faithfulness judgment.
     """
     cited = state.get("cited_chunk_ids", [])
     valid_ids = {evidence_key(item) for item in state.get("evidence", [])}
@@ -183,14 +284,19 @@ def verify_answer(state: ChatState, deps: ChatGraphDeps) -> dict[str, Any]:
         logger.info(
             "chat_answer_repair", invalid_citations=len(invalid), turn_id=state.get("turn_id")
         )
-        return {"repair_count": state.get("repair_count", 0) + 1, "repair_pending": True}
+        return {
+            "repair_count": state.get("repair_count", 0) + 1,
+            "repair_pending": True,
+            "rejected_citations": invalid,
+        }
 
     citations = [
         _citation_for(chunk_id, state.get("evidence", []))
         for chunk_id in dict.fromkeys(cited)
         if chunk_id in valid_ids
     ]
-    passed = not invalid and bool(citations)
+    sufficient = bool(state.get("sufficient_evidence", True))
+    passed = not invalid and bool(citations) and sufficient
     if passed:
         return {
             "repair_pending": False,
@@ -204,6 +310,7 @@ def verify_answer(state: ChatState, deps: ChatGraphDeps) -> dict[str, Any]:
         "chat_answer_unverified",
         invalid_citations=invalid,
         cited_count=len(cited),
+        sufficient=sufficient,
         turn_id=state.get("turn_id"),
     )
     return {
@@ -225,10 +332,15 @@ def unavailable_notice(state: ChatState, deps: ChatGraphDeps) -> dict[str, Any]:
 
 
 def persist_turn(state: ChatState, deps: ChatGraphDeps) -> dict[str, Any]:
-    """Record the assistant message and close the turn (the graph's only writes)."""
+    """Record the assistant message and close the turn (the graph's only writes).
+
+    Returns the terminal outcome the publication actually produced, so the
+    service reports the persisted status instead of re-deriving it — and a
+    stale worker whose turn was reclaimed cannot claim success.
+    """
     screening = state.get("screening", {})
     if screening.get("blocked"):
-        deps.store.publish_turn(
+        published = deps.store.publish_turn(
             state["conversation_id"],
             state["turn_id"],
             content=str(screening.get("reason") or "This message was withheld."),
@@ -237,11 +349,11 @@ def persist_turn(state: ChatState, deps: ChatGraphDeps) -> dict[str, Any]:
             route=None,
             usage={"blocked_layer": screening.get("layer")},
         )
-        return {"route": "blocked"}
+        return {"terminal_status": "blocked" if published else "failed", "published": published}
 
     verification_passed = (state.get("verification") or {}).get("passed", True)
     status = "succeeded" if state.get("route") == "knowledge" and verification_passed else "blocked"
-    deps.store.publish_turn(
+    published = deps.store.publish_turn(
         state["conversation_id"],
         state["turn_id"],
         content=state["answer_markdown"],
@@ -250,7 +362,9 @@ def persist_turn(state: ChatState, deps: ChatGraphDeps) -> dict[str, Any]:
         route=state.get("route"),
         usage=state.get("usage_summary"),
     )
-    return {}
+    if published and status == "succeeded":
+        _cache_published_answer(state, deps)
+    return {"terminal_status": status, "published": published}
 
 
 class ChatGraphDeps:
@@ -263,12 +377,16 @@ class ChatGraphDeps:
         store: Any,
         settings: ChatSettings,
         tracer: Tracer,
+        cache: RedisAnswerCache | None = None,
+        cache_scope: str = "",
     ) -> None:
         self.llm = llm
         self.retriever = retriever
         self.store = store
         self.settings = settings
         self.tracer = tracer
+        self.cache = cache
+        self.cache_scope = cache_scope
 
 
 def _citation_for(chunk_id: str, evidence: list[dict[str, Any]]) -> Citation:

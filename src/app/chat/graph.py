@@ -21,17 +21,22 @@ def _after_screen(state: ChatState) -> str:
 
 
 def _after_route(state: ChatState) -> str:
-    return "knowledge" if state.get("route") == "knowledge" else "unavailable"
+    return "knowledge" if state.get("route") == "knowledge" else "notice"
 
 
 def _after_verify(state: ChatState) -> str:
     return "repair" if state.get("repair_pending") else "done"
 
 
+def _after_cache(state: ChatState) -> str:
+    return "hit" if state.get("cache_status") in ("exact", "semantic") else "miss"
+
+
 def build_chat_graph(deps: ChatGraphDeps) -> CompiledStateGraph:
     builder = StateGraph(ChatState)
     builder.add_node("screen_input", lambda state: nodes.screen_input(state, deps))
     builder.add_node("route", lambda state: nodes.route(state, deps))
+    builder.add_node("cache_lookup", lambda state: nodes.cache_lookup(state, deps))
     builder.add_node("retrieve_knowledge", lambda state: nodes.retrieve_knowledge(state, deps))
     builder.add_node("generate_answer", lambda state: nodes.generate_answer(state, deps))
     builder.add_node("verify_answer", lambda state: nodes.verify_answer(state, deps))
@@ -45,7 +50,10 @@ def build_chat_graph(deps: ChatGraphDeps) -> CompiledStateGraph:
     builder.add_conditional_edges(
         "route",
         _after_route,
-        {"knowledge": "retrieve_knowledge", "unavailable": "unavailable_notice"},
+        {"knowledge": "cache_lookup", "notice": "unavailable_notice"},
+    )
+    builder.add_conditional_edges(
+        "cache_lookup", _after_cache, {"hit": "persist_turn", "miss": "retrieve_knowledge"}
     )
     builder.add_edge("retrieve_knowledge", "generate_answer")
     builder.add_edge("generate_answer", "verify_answer")

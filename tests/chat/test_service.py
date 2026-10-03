@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from agent.llm import TerminalError
 from agent.prompts import PIIDetectionOutput
-from app.chat.budget import ChatBudgetExceeded
+from app.chat.budget import ChatBudgetExceeded, Reservation
 from app.chat.config import ChatSettings
 from app.chat.prompts import AnswerDraft, RouteDecision
 from app.chat.service import ChatTurnService, TurnRequest
@@ -28,13 +28,14 @@ class FakeBudget:
         self.reconciles: list[tuple[float, float]] = []
         self.fail_reserve = False
 
-    def reserve(self, amount_usd: float) -> None:
+    def reserve(self, amount_usd: float) -> Reservation:
         if self.fail_reserve:
             raise ChatBudgetExceeded("daily chat budget exhausted")
         self.reserves.append(amount_usd)
+        return Reservation(id="fake", day_key="day", reserved_usd=amount_usd)
 
-    def reconcile(self, actual_usd: float, reserved_usd: float) -> None:
-        self.reconciles.append((actual_usd, reserved_usd))
+    def reconcile(self, reservation: Reservation, actual_usd: float) -> None:
+        self.reconciles.append((actual_usd, reservation.reserved_usd))
 
 
 def _answers() -> dict:
@@ -97,7 +98,7 @@ def test_successful_turn_reserves_and_reconciles() -> None:
     assert usage["model_calls"] == 4
     assert usage["input_tokens"] == 3600  # FakeLLM records 900 in / 150 out per call
     assert usage["estimated_cost_usd"] > 0
-    assert usage["cache_status"] == "none"
+    assert usage["cache_status"] == "disabled"
 
 
 def test_budget_exhausted_blocks_without_any_model_call() -> None:
@@ -191,8 +192,8 @@ def test_older_history_is_summarized_and_persisted() -> None:
         }
     )
     older = [
-        {"role": "user", "content": "What is a KER?"},
-        {"role": "assistant", "content": "A known error record."},
+        {"seq": 1, "role": "user", "content": "What is a KER?"},
+        {"seq": 2, "role": "assistant", "content": "A known error record."},
     ]
     store = FakeChatStore(unsummarized=older)
     budget = FakeBudget()
@@ -208,7 +209,7 @@ def test_older_history_is_summarized_and_persisted() -> None:
 
 def test_summary_failure_never_blocks_the_turn() -> None:
     llm = FakeLLM(answers={**_answers(), "chat_summarize": TerminalError("model down")})
-    store = FakeChatStore(unsummarized=[{"role": "user", "content": "What is a KER?"}])
+    store = FakeChatStore(unsummarized=[{"seq": 1, "role": "user", "content": "What is a KER?"}])
     budget = FakeBudget()
 
     outcome = _service(llm, store, budget).handle_turn(_request())
@@ -225,3 +226,38 @@ def test_no_older_history_skips_the_summarize_call() -> None:
     _service(llm, store, budget).handle_turn(_request())
 
     assert "chat_summarize" not in llm.purposes()
+
+
+def test_summary_read_failure_falls_back_without_failing_the_turn() -> None:
+    class UnavailableSummaryStore(FakeChatStore):
+        def get_summary(self, conversation_id):
+            raise ConnectionError("summary read unavailable")
+
+    llm = FakeLLM(answers=_answers())
+    budget = FakeBudget()
+    outcome = _service(llm, UnavailableSummaryStore(), budget).handle_turn(_request())
+    assert outcome.status == "succeeded"
+    assert "chat_summarize" not in llm.purposes()
+    assert len(budget.reconciles) == 1
+
+
+def test_cache_hit_reduces_recorded_calls_and_cost_without_bypassing_budget():
+    from tests.chat.test_answer_cache import cache
+
+    llm = FakeLLM(answers=_answers())
+    store = FakeChatStore()
+    budget = FakeBudget()
+    service = _service(llm, store, budget)
+    service._cache, _ = cache()
+    first = service.handle_turn(_request())
+    second = service.handle_turn(_request())
+    assert first.status == second.status == "succeeded"
+    usages = store.calls_named("attach_usage")
+    assert usages[0]["usage"]["model_calls"] == 4
+    assert usages[1]["usage"]["model_calls"] == 3
+    assert usages[1]["usage"]["cache_status"] == "exact"
+    assert budget.reconciles[1][0] < budget.reconciles[0][0]
+    budget.fail_reserve = True
+    third = service.handle_turn(_request())
+    assert third.status == "blocked"
+    assert len(llm.calls) == 7  # No cached answer may bypass unavailable budget accounting.

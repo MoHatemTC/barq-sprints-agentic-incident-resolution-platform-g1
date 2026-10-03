@@ -55,6 +55,28 @@ class ChatSettings(BaseSettings):
         gt=0,
         description="Worst-case output tokens per chat model call; sizes the budget reserve.",
     )
+    chat_max_prompt_chars: int = Field(
+        default=60000,
+        gt=0,
+        description="Hard upper bound on system+prompt chars for any single chat model "
+        "call; the gateway refuses larger dispatches instead of sending them.",
+    )
+    chat_history_message_limit: int = Field(
+        default=6,
+        gt=0,
+        description="Recent messages rehydrated verbatim as conversation context.",
+    )
+    chat_cache_enabled: bool = False
+    chat_cache_similarity_threshold: float = Field(default=0.95, gt=0, le=1)
+    chat_cache_ttl_seconds: int = Field(default=3600, gt=0)
+    chat_cache_max_entries: int = Field(default=64, gt=0, le=256)
+    chat_cache_prompt_version: str = "chat-v1"
+    chat_memory_budget_chars: int = Field(
+        default=16000,
+        gt=0,
+        description="Approximate memory budget (~4k tokens) for the summary plus "
+        "recent messages included in route/answer prompts.",
+    )
     chat_turn_timeout_seconds: float = Field(
         default=120.0,
         gt=0,
@@ -66,7 +88,7 @@ class ChatSettings(BaseSettings):
     # guessed list prices is not a budget. The values must be the verified
     # Sprints proxy rates (see eval/README.md for how they are obtained).
     chat_daily_budget_usd: float = Field(
-        default=6.0,
+        default=1.0,
         gt=0,
         description="Chat-specific daily model allowance, reset at 00:00 UTC.",
     )

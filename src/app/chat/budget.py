@@ -15,12 +15,13 @@ out of scope.
 from __future__ import annotations
 
 import secrets
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
 import structlog
 
-from agent.llm import LLMClient, UsageSink
+from agent.llm import LLMClient, TerminalError, UsageSink
 from app.chat.config import ChatSettings
 
 logger = structlog.get_logger(__name__)
@@ -36,8 +37,9 @@ _BUDGET_KEY_TTL_SECONDS = 172800
 #: prompts, the evidence block (``chat_max_evidence_chars``) and up to 6
 #: history messages of 6,000 chars each — 12,000 + 36,000 + ~4,000 chars.
 _EXPECTED_MODEL_CALLS = 6
-_PROMPT_OVERHEAD_CHARS = 52_000
-_CHARS_PER_TOKEN = 4.0
+# Upper byte bound per Unicode character, plus schema/chat framing allowance.
+# This is deliberately conservative for unknown billed usage, not a tokenizer estimate.
+_REQUEST_OVERHEAD_TOKENS = 4096
 
 _RESERVE_LUA = """
 local current = tonumber(redis.call('GET', KEYS[1]) or '0')
@@ -52,6 +54,20 @@ return 1
 """
 
 
+@dataclass(frozen=True, slots=True)
+class Reservation:
+    """One atomic reserve against a specific budget day.
+
+    Reconciliation must go back to this exact day's key — a turn that crosses
+    UTC midnight must refund the day that was charged, not the new one. The
+    id keys the once-only reconciliation marker.
+    """
+
+    id: str
+    day_key: str
+    reserved_usd: float
+
+
 class ChatBudgetExceeded(Exception):
     """The day's chat allocation is spent."""
 
@@ -63,9 +79,9 @@ class ChatBudgetUnavailable(Exception):
 class ChatBudget(Protocol):
     """Budget seam; production is RedisChatBudget, tests script outcomes."""
 
-    def reserve(self, amount_usd: float) -> None: ...
+    def reserve(self, amount_usd: float) -> Reservation: ...
 
-    def reconcile(self, actual_usd: float, reserved_usd: float) -> None: ...
+    def reconcile(self, reservation: Reservation, actual_usd: float) -> None: ...
 
 
 class RedisChatBudget:
@@ -78,10 +94,11 @@ class RedisChatBudget:
     def _key(self) -> str:
         return BUDGET_KEY_PREFIX + datetime.now(UTC).strftime("%Y%m%d")
 
-    def reserve(self, amount_usd: float) -> None:
+    def reserve(self, amount_usd: float) -> Reservation:
+        key = self._key()
         try:
             result = self._redis.eval(
-                _RESERVE_LUA, 1, self._key(), self._limit, amount_usd, _BUDGET_KEY_TTL_SECONDS
+                _RESERVE_LUA, 1, key, self._limit, amount_usd, _BUDGET_KEY_TTL_SECONDS
             )
         except Exception as exc:  # fail closed: no accounting, no paid processing
             raise ChatBudgetUnavailable(
@@ -89,12 +106,21 @@ class RedisChatBudget:
             ) from exc
         if result == -1:
             raise ChatBudgetExceeded("daily chat budget exhausted")
+        return Reservation(id=secrets.token_urlsafe(8), day_key=key, reserved_usd=amount_usd)
 
-    def reconcile(self, actual_usd: float, reserved_usd: float) -> None:
-        delta = actual_usd - reserved_usd
+    def reconcile(self, reservation: Reservation, actual_usd: float) -> None:
+        """Reconcile once against the reserved day's key.
+
+        A SET-NX marker makes a repeated reconciliation a no-op so the refund
+        can never be applied twice (e.g. a retried finalization path).
+        """
+        delta = actual_usd - reservation.reserved_usd
+        marker = reservation.day_key + ":reconciled:" + reservation.id
         try:
-            self._redis.incrbyfloat(self._key(), delta)
-            self._redis.expire(self._key(), _BUDGET_KEY_TTL_SECONDS)
+            if not self._redis.set(marker, 1, nx=True, ex=_BUDGET_KEY_TTL_SECONDS):
+                return
+            self._redis.incrbyfloat(reservation.day_key, delta)
+            self._redis.expire(reservation.day_key, _BUDGET_KEY_TTL_SECONDS)
         except Exception as exc:
             # The reserve already bounded worst-case spend; a failed reconcile
             # must never fail the completed turn. It only skews the counter
@@ -108,7 +134,7 @@ def estimate_turn_reserve(settings: ChatSettings, input_chars: int) -> float:
         raise ChatBudgetUnavailable("verified chat price rates are not configured")
     assert settings.chat_price_input_per_mtok is not None
     assert settings.chat_price_output_per_mtok is not None
-    input_tokens = (input_chars + _PROMPT_OVERHEAD_CHARS) / _CHARS_PER_TOKEN
+    input_tokens = settings.chat_max_prompt_chars * 4 + _REQUEST_OVERHEAD_TOKENS
     per_call = (
         input_tokens * settings.chat_price_input_per_mtok
         + settings.chat_max_output_tokens * settings.chat_price_output_per_mtok
@@ -121,14 +147,16 @@ def actual_usage_cost(settings: ChatSettings, usage_records: list[dict[str, Any]
 
     Proxy-reported costs win when every call reported one; otherwise the
     configured rates price the observed tokens. Estimates and reported costs
-    are distinguishable by the ``cost_usd`` field each record carries.
+    are distinguishable by the ``cost_usd`` field each record carries. Records
+    for dispatches whose billed usage never arrived keep their conservative
+    pre-dispatch estimate, so unknown usage is never refunded as zero.
     """
-    if usage_records and all(record.get("cost_usd") is not None for record in usage_records):
-        return float(sum(float(record["cost_usd"]) for record in usage_records))
     input_rate = settings.chat_price_input_per_mtok or 0.0
     output_rate = settings.chat_price_output_per_mtok or 0.0
     return sum(
-        (
+        float(record["cost_usd"])
+        if record.get("cost_usd") is not None
+        else (
             float(record.get("input_tokens", 0)) * input_rate
             + float(record.get("output_tokens", 0)) * output_rate
         )
@@ -137,18 +165,22 @@ def actual_usage_cost(settings: ChatSettings, usage_records: list[dict[str, Any]
     )
 
 
-class UsageRecordingLLM:
-    """LLMClient wrapper that records per-call usage for reconciliation.
+class ChatModelGateway:
+    """The single dispatch point for every chat model call.
 
-    Wrapping (rather than editing call sites) is what captures the screening
-    calls made inside the guardrail helpers: every ``structured`` call through
-    this wrapper — including PII detection and injection classification —
-    lands a usage record.
+    Wraps the shared LLM client and bounds each purpose: output is capped at
+    ``chat_max_output_tokens``, implicit SDK retries are disabled (one billed
+    attempt per dispatch), total prompt size is hard-bounded, and usage is
+    recorded per attempt. A conservative pre-dispatch estimate is recorded
+    first and replaced by the billed usage when the call returns — a call that
+    fails before reporting usage keeps the estimate, so reconciliation never
+    treats unknown spend as zero.
     """
 
-    def __init__(self, base: LLMClient, records: list[dict[str, Any]]) -> None:
+    def __init__(self, base: LLMClient, settings: ChatSettings) -> None:
         self._base = base
-        self._records = records
+        self._settings = settings
+        self.records: list[dict[str, Any]] = []
 
     @property
     def model_name(self) -> str:
@@ -170,8 +202,32 @@ class UsageRecordingLLM:
         max_completion_tokens: int | None = None,
         usage_sink: UsageSink | None = None,
     ) -> Any:
-        def _record(entry: dict[str, Any]) -> None:
-            self._records.append(entry)
+        if len(system) + len(prompt) > self._settings.chat_max_prompt_chars:
+            raise TerminalError(
+                f"chat prompt exceeds the configured bound "
+                f"({self._settings.chat_max_prompt_chars} chars)"
+            )
+
+        resolved_model = model or self._settings.chat_model or self._base.model_for_purpose(purpose)
+        if len(self.records) >= _EXPECTED_MODEL_CALLS:
+            raise TerminalError("chat model-call allowance exhausted")
+        input_tokens = self._settings.chat_max_prompt_chars * 4 + _REQUEST_OVERHEAD_TOKENS
+        output_tokens = min(
+            max_completion_tokens or self._settings.chat_max_output_tokens,
+            self._settings.chat_max_output_tokens,
+        )
+        record: dict[str, Any] = {
+            "purpose": purpose,
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "cost_usd": None,
+            "model": resolved_model,
+        }
+        self.records.append(record)
+
+        def _sink(entry: dict[str, Any]) -> None:
+            # Billed usage arrived: replace the conservative estimate in place.
+            record.update(entry)
             if usage_sink is not None:
                 usage_sink(entry)
 
@@ -180,11 +236,11 @@ class UsageRecordingLLM:
             system=system,
             prompt=prompt,
             schema=schema,
-            model=model,
+            model=resolved_model,
             trace_content=trace_content,
-            max_retries=max_retries,
-            max_completion_tokens=max_completion_tokens,
-            usage_sink=_record,
+            max_retries=0,
+            max_completion_tokens=output_tokens,
+            usage_sink=_sink,
         )
 
 
@@ -198,8 +254,9 @@ __all__ = [
     "ChatBudget",
     "ChatBudgetExceeded",
     "ChatBudgetUnavailable",
+    "ChatModelGateway",
     "RedisChatBudget",
-    "UsageRecordingLLM",
+    "Reservation",
     "actual_usage_cost",
     "estimate_turn_reserve",
     "new_turn_idempotency_token",
