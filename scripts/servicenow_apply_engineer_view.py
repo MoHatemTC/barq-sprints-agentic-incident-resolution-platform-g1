@@ -38,6 +38,7 @@ P = "x_2215032_ai_inc_0_ai_"
 VIEW = "barq_engineer"
 LIVE = Path(__file__).resolve().parents[1] / "servicenow/ai_incident_orchestrator/live"
 MACRO = "barq_ai_card"
+#: Retired 2026-10-03 (the field left the view); removed by apply().
 RESOLUTION_POLICY = "BARQ AI - AI Resolution only while awaiting approval"
 
 ELEMENTS: list[tuple[str, str]] = [
@@ -60,7 +61,6 @@ ELEMENTS: list[tuple[str, str]] = [
     (".end_split", ".end_split"),
     ("short_description", ""),
     ("description", ""),
-    (f"{P}resolution", ""),
     ("close_code", ""),
     ("close_notes", ""),
     ("comments", ""),
@@ -201,34 +201,13 @@ def apply(instance: Instance) -> None:
             f"list_id={related}^related_list={name}",
             {"list_id": related, "related_list": name, "position": str(position)},
         )
-    # The card already shows the fix. The editable AI Resolution field appears only while
-    # an approver reviews it (they may edit the fix before approving).
-    policy = instance.upsert(
-        "sys_ui_policy",
-        f"table=incident^short_description={RESOLUTION_POLICY}",
-        {
-            "table": "incident",
-            "short_description": RESOLUTION_POLICY,
-            "conditions": f"{P}processing_state=awaiting_approval^EQ",
-            "global": "false",
-            "view": VIEW,
-            "on_load": "true",
-            "reverse_if_false": "true",
-            "active": "true",
-            "sys_scope": SCOPE,
-        },
-    )
-    instance.upsert(
-        "sys_ui_policy_action",
-        f"ui_policy={policy}^field={P}resolution",
-        {
-            "ui_policy": policy,
-            "table": "incident",
-            "field": f"{P}resolution",
-            "visible": "true",
-            "sys_scope": SCOPE,
-        },
-    )
+    # The card shows the fix; approvers type their own fix in Work notes. An earlier
+    # view-only policy for AI Resolution is retired with the field.
+    retired = f"table=incident^short_description={RESOLUTION_POLICY}"
+    for old in instance.find("sys_ui_policy", retired):
+        for action in instance.find("sys_ui_policy_action", f"ui_policy={old['sys_id']}"):
+            instance.delete("sys_ui_policy_action", action["sys_id"])
+        instance.delete("sys_ui_policy", old["sys_id"])
     rule = instance.upsert(
         "sysrule_view",
         "table=incident^name=BARQ AI engineer view",
@@ -251,7 +230,6 @@ def apply(instance: Instance) -> None:
                 "form": form,
                 "formatter": formatter,
                 "view_rule": rule,
-                "resolution_policy": policy,
                 "elements": len(ELEMENTS),
             }
         )

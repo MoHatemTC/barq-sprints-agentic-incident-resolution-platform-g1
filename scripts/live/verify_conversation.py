@@ -352,7 +352,7 @@ APPROVER = os.environ.get("APPROVER_USER_NAME", "barq.approver")
 
 def scenario_approver_approves_on_page(sn, be, admin, caller, engineer) -> dict[str, Any]:
     """E2 on the real page: a P1 parks; the engineer has no Approve button; the approver
-    edits AI Resolution and presses Approve AI fix; the edited fix is applied once."""
+    types their fix in Work notes and presses Approve AI fix; that fix is applied once."""
     caller = fresh_caller(sn)
     inc = sn.create_incident(
         incident_fields(
@@ -369,9 +369,8 @@ def scenario_approver_approves_on_page(sn, be, admin, caller, engineer) -> dict[
         "1. Ask the user to sign out of the VPN client completely. 2. Clear the saved "
         "credentials in the VPN client. 3. Sign in again with the new password."
     )
-    message = Desk(sn, APPROVER).press(
-        inc["sys_id"], "barq_approve_ai_fix", **{f"{P}resolution": fix}
-    )
+    # The approver types their own fix in Work notes and presses Approve AI fix.
+    message = Desk(sn, APPROVER).press(inc["sys_id"], "barq_approve_ai_fix", work_notes=fix)
     final = wait_for(
         lambda: (r := sn.incident(inc["sys_id"]))["state"] == "Resolved" and r, 180
     ) or sn.incident(inc["sys_id"])

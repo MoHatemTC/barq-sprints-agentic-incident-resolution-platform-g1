@@ -53,7 +53,8 @@ try {
             status = 'BARQ AI is working on it'; tone = 'info'; owner = 'BARQ AI Agent';
         } else if (aiState == 'awaiting_approval') {
             status = 'Waiting for an engineer to approve'; tone = 'warn'; owner = 'Waiting for approval';
-            hint = 'Review the fix, then Approve AI fix or Reject AI fix. To send your own fix, edit AI Resolution first.';
+            hint = fix ? 'Review the fix, then Approve AI fix or Reject AI fix. To approve your own fix instead, type it in Work notes, then press Approve AI fix.' :
+                'BARQ AI stopped before drafting a fix (raised risk). Type the fix in Work notes and press Approve AI fix, or Reject AI fix / Take over.';
         } else if (aiState == 'failed') {
             status = 'BARQ AI could not finish'; tone = 'bad'; owner = 'Engineers';
             hint = 'Handle it yourself, or Hand back to BARQ AI with an instruction.';

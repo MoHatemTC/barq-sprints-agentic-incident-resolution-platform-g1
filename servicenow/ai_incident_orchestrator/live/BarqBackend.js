@@ -72,7 +72,7 @@ BarqBackend.prototype = {
      * The backend writes the incident itself, so nothing here touches the record and a
      * failed call changes nothing in ServiceNow.
      */
-    decide: function(incident, decision, why) {
+    decide: function(incident, decision, why, solution) {
         var execution = this.pausedExecution(incident.getUniqueValue());
         if (!execution)
             return {ok: false, message: 'No paused BARQ AI run was found for this incident.'};
@@ -87,12 +87,12 @@ BarqBackend.prototype = {
                 actor_sys_id: gs.getUserID()
             }
         };
-        // Edit & approve: an engineer who changed the AI Resolution field approves
-        // their own text, which also becomes a knowledge-article proposal.
-        var edited = String(incident.getValue('x_2215032_ai_inc_0_ai_resolution') || '').trim();
-        var suggested = String(incident.getValue('x_2215032_ai_inc_0_ai_suggestion') || '').trim();
-        if (decision == 'approved' && edited && edited != suggested)
-            body.solution = edited;
+        // Approve your own fix: what the approver typed in Work notes is sent as the
+        // solution (and becomes a knowledge-article proposal). Without it the AI's draft
+        // is approved; a run paused before any draft needs the approver's fix.
+        var typed = String(solution || '').trim();
+        if (decision == 'approved' && typed)
+            body.solution = typed;
         var result = this.call('POST', '/api/v1/approvals/' + execution + '/decide', body);
         if (result.status >= 200 && result.status < 300)
             return {ok: true, message: verb + '. BARQ AI Agent resumed and is applying the decision.'};

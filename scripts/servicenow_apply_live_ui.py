@@ -53,7 +53,7 @@ UI_ACTIONS = [  # every condition must stay under 254 characters
         "name": "Approve AI fix",
         "action_name": "barq_approve_ai_fix",
         "condition": f"{CONTROL}.canDecide(current)",
-        "hint": "Approve the paused BARQ AI run. Edit AI Resolution first to approve your own fix.",
+        "hint": "Approve the paused BARQ AI run (or your own fix typed in Work notes).",
         "order": "100",
         "source": "ui_actions/approve_ai_fix.js",
     },

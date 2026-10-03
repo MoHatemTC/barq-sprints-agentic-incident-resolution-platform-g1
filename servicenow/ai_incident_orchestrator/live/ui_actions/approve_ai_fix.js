@@ -6,7 +6,8 @@
         action.setRedirectURL(current);
         return;
     }
-    var result = new BarqBackend().decide(current, 'approved');
+    // What the approver typed in Work notes is their own fix (optional when the AI drafted one).
+    var result = new BarqBackend().decide(current, 'approved', '', String(current.work_notes || ''));
     if (result.ok)
         gs.addInfoMessage(result.message);
     else
