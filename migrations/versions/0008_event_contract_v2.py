@@ -37,14 +37,15 @@ def _in(values: Sequence[str]) -> str:
 
 
 def upgrade() -> None:
-    op.drop_constraint("ck_events_event_type", "events", type_="check")
-    op.create_check_constraint("ck_events_event_type", "events", _in(V2_TYPES))
+    # op.f(): the name is already final; the naming convention must not prefix it again.
+    op.drop_constraint(op.f("ck_events_event_type"), "events", type_="check")
+    op.create_check_constraint(op.f("ck_events_event_type"), "events", _in(V2_TYPES))
     op.add_column("events", sa.Column("actor_sys_id", sa.String(length=32), nullable=True))
 
 
 def downgrade() -> None:
     op.drop_column("events", "actor_sys_id")
-    op.drop_constraint("ck_events_event_type", "events", type_="check")
+    op.drop_constraint(op.f("ck_events_event_type"), "events", type_="check")
     op.execute(
         "ALTER TABLE events ADD CONSTRAINT ck_events_event_type CHECK ("
         + _in(V2_TYPES[:2])
